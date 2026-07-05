@@ -17,10 +17,14 @@ string SelectTemplateName()
     return needsGA ? "経費_課長＋総務" : "経費_課長のみ";
 }
 
-// 承認ルートの判定額: 立替精算は実費、事前申請は見込み額
+// 承認ルートの判定額: 立替精算は実費。事前申請は見込み額、実費確定後は実費
 int GetJudgeAmount()
 {
-    if (RequestType.Value == "advance") return EstimatedAmount.Value ?? 0;
+    if (RequestType.Value == "advance")
+    {
+        if (Amount.Value != null && Amount.Value > 0) return Amount.Value;
+        return EstimatedAmount.Value ?? 0;
+    }
     return Amount.Value ?? 0;
 }
 
@@ -131,9 +135,49 @@ void UpdateAccountingButtons()
     var st = SettlementStatus.Value;
     SettlementStatusLabel.IsVisible = !IsNewData;
     SettlementStatus.IsVisible = !IsNewData;
-    GenerateJournalButton.IsVisible = !IsNewData && (st == "approved");
+
+    // 事前申請は承認後に実費を確定してから仕訳生成に進む
+    var isAdvance = (RequestType.Value == "advance");
+    var actualConfirmed = (Amount.Value != null && Amount.Value > 0);
+    var needsActual = !IsNewData && (st == "approved") && isAdvance && !actualConfirmed;
+    ActualAmountLabel.IsVisible = needsActual;
+    ActualAmountInput.IsVisible = needsActual;
+    ConfirmActualButton.IsVisible = needsActual;
+
+    GenerateJournalButton.IsVisible = !IsNewData && (st == "approved") && !needsActual;
     SettleButton.IsVisible = !IsNewData && (st == "accounting");
     CompleteButton.IsVisible = !IsNewData && (st == "settled");
+}
+
+// 事前申請の実費確定: 見込みとの乖離が大きければ再承認、問題なければそのまま経理処理へ
+// 超過判定: (a) 承認ルートの区分（3万/20万）を跨ぐ (b) 実費 > 見込み × EXP_OVERRUN_RATE(%)
+void ConfirmActual_OnClick()
+{
+    if (SettlementStatus.Value != "approved" || RequestType.Value != "advance") return;
+    var actual = ActualAmountInput.Value ?? 0;
+    if (actual <= 0) { Toaster.Error("実費（税込）を入力してください"); return; }
+    var estimated = EstimatedAmount.Value ?? 0;
+
+    var routeBefore = SelectTemplateName();
+    Amount.Value = actual;
+    var routeAfter = SelectTemplateName();
+
+    var overRate = GetThresholdAmount("EXP_OVERRUN_RATE");
+    var crossed = (routeBefore != routeAfter);
+    var overLimit = (overRate > 0) && (actual * 100 > estimated * overRate);
+
+    if (crossed || overLimit)
+    {
+        // 再承認: フローを Pending に戻し実費でルート再解決（精算ステータスは通知で applying に戻る）
+        ApprovalFlow.ChildModule.ReapproveForOverrun($"実費 {actual:#,0} 円が見込み {estimated:#,0} 円を超過したため再承認");
+    }
+    else
+    {
+        var ret = this.Submit();
+        if (ret != true) { Toaster.Error("実費の保存に失敗しました"); return; }
+        Toaster.Success($"実費 {actual:#,0} 円を確定しました。仕訳を生成できます");
+    }
+    UpdateAccountingButtons();
 }
 
 // 経理: 仕訳を生成 (approved → accounting)

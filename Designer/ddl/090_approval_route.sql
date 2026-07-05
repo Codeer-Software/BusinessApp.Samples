@@ -18,6 +18,10 @@ WHERE NOT EXISTS (SELECT 1 FROM system_thresholds WHERE code = 'EXP_APPROVAL_MID
 INSERT INTO system_thresholds (code, name, amount, valid_from, valid_to)
 SELECT 'EXP_APPROVAL_HIGH', '経費承認: 総務併載となる下限額', 200000, NULL, NULL
 WHERE NOT EXISTS (SELECT 1 FROM system_thresholds WHERE code = 'EXP_APPROVAL_HIGH');
+-- B2-5: 事前申請の実費が見込み×この率(%)を超えたら再承認
+INSERT INTO system_thresholds (code, name, amount, valid_from, valid_to)
+SELECT 'EXP_OVERRUN_RATE', '経費精算: 実費超過の再承認率(%)', 110, NULL, NULL
+WHERE NOT EXISTS (SELECT 1 FROM system_thresholds WHERE code = 'EXP_OVERRUN_RATE');
 
 -- ---- テンプレ4種 seed（既存 SimpleExpense は過去データが参照するため残置・未使用化） ----
 -- 経費_課長のみ

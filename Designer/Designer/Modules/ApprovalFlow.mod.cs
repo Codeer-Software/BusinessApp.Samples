@@ -513,7 +513,20 @@ void Resubmit_OnClick()
     AttemptNo.Value = (AttemptNo.Value ?? 0) + 1;
     Status.Value = "Pending";
 
-    // 古い Orders を削除してテンプレから再構築
+    if (!RebuildOrdersFromTemplate()) return;
+    AddHistory("Resubmit", "");
+    NotifyParentStatusChanged();
+
+    var ret = parent.Submit();
+    if (ret == true) Toaster.Success("再申請しました");
+    else if (ret == false) Toaster.Error("再申請に失敗しました");
+}
+
+// 古い Orders を削除し、親のテンプレ再解決 → Orders/Members を再構築する
+bool RebuildOrdersFromTemplate()
+{
+    var parent = GetParentModule();
+
     var rowsToDelete = new List<ApprovalFlowOrder>();
     foreach (var o in Orders.Rows) rowsToDelete.Add(o);
     foreach (var o in rowsToDelete) Orders.DeleteRow(o);
@@ -522,15 +535,30 @@ void Resubmit_OnClick()
     var ts = new ModuleSearcher<ApprovalFlowTemplate>();
     ts.AddEquals(t => t.Name.Value, tmplName);
     var tmpls = ts.Execute();
-    if (tmpls.Count == 0) { Toaster.Error("テンプレートが見つかりません"); return; }
+    if (tmpls.Count == 0) { Toaster.Error($"承認テンプレート '{tmplName}' が見つかりません"); return false; }
     TemplateId.Value = tmpls[0].Id.Value;
-    if (!LoadFromTemplate()) return;
-    AddHistory("Resubmit", "");
+    return LoadFromTemplate();
+}
+
+// 実費超過の再承認 (親モジュールの実費確定処理から呼ばれる)
+// 承認済フローを Pending に戻し、実費でテンプレを再解決して承認をやり直す
+void ReapproveForOverrun(string reason)
+{
+    var parent = GetParentModule();
+
+    using var suspend = parent.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    AttemptNo.Value = (AttemptNo.Value ?? 0) + 1;
+    Status.Value = "Pending";
+
+    if (!RebuildOrdersFromTemplate()) return;
+    AddHistory("Resubmit", reason);
     NotifyParentStatusChanged();
 
     var ret = parent.Submit();
-    if (ret == true) Toaster.Success("再申請しました");
-    else if (ret == false) Toaster.Error("再申請に失敗しました");
+    if (ret == true) Toaster.Success("実費が見込みを超過したため再承認を依頼しました");
+    else Toaster.Error("再承認の依頼に失敗しました");
 }
 
 // ============================================================
