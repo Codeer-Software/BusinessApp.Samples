@@ -1,9 +1,75 @@
-// 金額をベースにテンプレートを選択 (ApprovalFlow から呼ばれる)
-// B2-3 で費目×金額×例外ルール（3万/20万・交際費=総務必須）に拡張予定
+// 費目×金額でテンプレートを選択 (ApprovalFlow の申請/再申請から呼ばれる)
+// ルート: 判定額 < EXP_APPROVAL_MID(3万) = 課長 / MID〜HIGH(20万) = 部長 / HIGH以上 = 部長＋総務
+//         交際費は金額によらず総務を併載。閾値は system_thresholds 参照（ハードコード禁止）
 string SelectTemplateName()
 {
-    var amount = Amount.Value ?? 0;
-    return (amount < 50000) ? "SimpleExpense" : "FullExpense";
+    var amount = GetJudgeAmount();
+    var mid = GetThresholdAmount("EXP_APPROVAL_MID");
+    var high = GetThresholdAmount("EXP_APPROVAL_HIGH");
+    var cat = FindSelectedCategory();
+    var isEnt = (cat != null) && (cat.IsEntertainment.Value == true);
+    var needsGA = isEnt || (high > 0 && amount >= high);
+
+    if (mid > 0 && amount >= mid)
+    {
+        return needsGA ? "経費_部長＋総務" : "経費_部長のみ";
+    }
+    return needsGA ? "経費_課長＋総務" : "経費_課長のみ";
+}
+
+// 承認ルートの判定額: 立替精算は実費、事前申請は見込み額
+int GetJudgeAmount()
+{
+    if (RequestType.Value == "advance") return EstimatedAmount.Value ?? 0;
+    return Amount.Value ?? 0;
+}
+
+// 申請前の業務チェック (ApprovalFlow の申請/再申請から呼ばれる契約メソッド)
+bool ValidateForApply()
+{
+    if (this.ValidateInput() != true)
+    {
+        Toaster.Error("入力内容を確認してください");
+        return false;
+    }
+    if (RequestType.Value == "advance" && GetJudgeAmount() <= 0)
+    {
+        Toaster.Error("事前申請では見込み額を入力してください");
+        return false;
+    }
+    if (RequestType.Value == "reimburse" && GetJudgeAmount() <= 0)
+    {
+        Toaster.Error("金額を入力してください");
+        return false;
+    }
+    if (PayeeType.Value == "partner" && PayeePartner.Value == null)
+    {
+        Toaster.Error("支払取引先を選択してください");
+        return false;
+    }
+    if (PayeeType.Value != "partner" && PayeeUser.Value == null)
+    {
+        Toaster.Error("精算対象者を選択してください");
+        return false;
+    }
+    var cat = FindSelectedCategory();
+    if (cat == null)
+    {
+        Toaster.Error("費目を選択してください");
+        return false;
+    }
+    if (cat.IsEntertainment.Value == true)
+    {
+        var guestOk = !string.IsNullOrEmpty(EntertainmentGuest.Value);
+        var countOk = (EntertainmentCount.Value ?? 0) > 0;
+        var purposeOk = !string.IsNullOrEmpty(EntertainmentPurpose.Value);
+        if (!guestOk || !countOk || !purposeOk)
+        {
+            Toaster.Error("交際費は相手先・参加人数・目的の入力が必須です");
+            return false;
+        }
+    }
+    return true;
 }
 
 void OnAfterInitialization()
@@ -129,6 +195,12 @@ void UpdateFixedAssetSuggestion()
 // 利用日（未入力なら常に有効な行）時点の SMALL_ASSET_EXPENSE 閾値を解決
 int GetSmallAssetLimit()
 {
+    return GetThresholdAmount("SMALL_ASSET_EXPENSE");
+}
+
+// system_thresholds から指定コードの閾値を期間解決して取得（該当なしは 0）
+int GetThresholdAmount(string code)
+{
     var s = new ModuleSearcher<SystemThreshold>();
     var thresholds = s.Execute();
     var d = ExpenseDate.Value;
@@ -136,7 +208,7 @@ int GetSmallAssetLimit()
     foreach (var t in thresholds)
     {
         var th = (SystemThreshold)t;
-        if (th.Code.Value != "SMALL_ASSET_EXPENSE") continue;
+        if (th.Code.Value != code) continue;
         if (d != null && th.ValidFrom.Value != null && d < th.ValidFrom.Value) continue;
         if (d != null && th.ValidTo.Value != null && d > th.ValidTo.Value) continue;
         limit = th.Amount.Value ?? 0;

@@ -18,14 +18,44 @@ void Initialize(string parentModuleName, string parentId, string templateName)
 
 // 申請ボタン押下時に Orders/Members をテンプレから生成する。
 // UseIndexSort=true なので OrderNo は Submit 時に 0,1,... で自動採番される。
-// ここでは最初の Order を Active に、それ以外を Waiting にするだけ。
-void LoadFromTemplate()
+// テンプレメンバーの approver_role (manager/director) は申請者の所属部門の課長/部長へ動的解決。
+// 失敗時 (テンプレ未設定・役職が解決できない) は行を作らず false を返す（中途半端な Orders を残さない）。
+bool LoadFromTemplate()
 {
-    if (TemplateId.Value == null) return;
+    if (TemplateId.Value == null) { Toaster.Error("承認テンプレートが未設定です"); return false; }
     var tmplSearcher = new ModuleSearcher<ApprovalFlowTemplateOrder>();
     tmplSearcher.AddEquals(o => o.TemplateId.Value, TemplateId.Value);
     tmplSearcher.OrderBy(o => o.OrderNo.Value);
     var tmplOrders = tmplSearcher.Execute();
+    if (tmplOrders.Count == 0) { Toaster.Error("承認テンプレートに承認段階がありません"); return false; }
+
+    var dept = FindCurrentUserDepartment();
+
+    // 事前パス: 全メンバーの承認者を解決できるか検証してから行を作る
+    foreach (var tmplOrder in tmplOrders)
+    {
+        var checkSearcher = new ModuleSearcher<ApprovalFlowTemplateMember>();
+        checkSearcher.AddEquals(m => m.TemplateOrderId.Value, tmplOrder.Id.Value);
+        var checkMembers = checkSearcher.Execute();
+        foreach (var tmplMember in checkMembers)
+        {
+            var role = tmplMember.ApproverRole.Value;
+            if (role == "manager" || role == "director")
+            {
+                if (ResolveDeptRole(dept, role) == null)
+                {
+                    var roleName = (role == "manager") ? "課長" : "部長";
+                    Toaster.Error($"承認者を決定できません: 申請者の所属部門とその{roleName}が未設定です（部門マスタ・ユーザー管理を確認してください）");
+                    return false;
+                }
+            }
+            else if (tmplMember.ApproverUser.Value == null)
+            {
+                Toaster.Error("承認テンプレートに承認者未設定のメンバーがあります");
+                return false;
+            }
+        }
+    }
 
     var first = true;
     foreach (var tmplOrder in tmplOrders)
@@ -39,24 +69,67 @@ void LoadFromTemplate()
         var tmplMembers = memberSearcher.Execute();
         foreach (var tmplMember in tmplMembers)
         {
+            var approver = tmplMember.ApproverUser.Value;
+            var role = tmplMember.ApproverRole.Value;
+            if (role == "manager" || role == "director") approver = ResolveDeptRole(dept, role);
+
             var newMember = newOrder.Members.AddRow();
             newMember.IsRequired.Value = tmplMember.IsRequired.Value;
-            newMember.ApproverUser.Value = tmplMember.ApproverUser.Value;
+            newMember.ApproverUser.Value = approver;
             newMember.Status.Value = "Waiting";
             newMember.ParentModuleName.Value = ParentModuleName.Value;
             newMember.ParentId.Value = ParentId.Value;
         }
     }
     RecalculateCurrentApproverDisplay();
+    return true;
+}
+
+// 申請者 (CurrentUser) の所属部門を取得 (未設定なら null)
+Department FindCurrentUserDepartment()
+{
+    var us = new ModuleSearcher<AppUser>();
+    us.AddEquals(u => u.Id.Value, CurrentUser.Id.Value);
+    var users = us.Execute();
+    if (users.Count == 0) return null;
+    var deptId = users[0].所属部門.Value;
+    if (deptId == null) return null;
+    var ds = new ModuleSearcher<Department>();
+    ds.AddEquals(d => d.Id.Value, deptId);
+    var depts = ds.Execute();
+    if (depts.Count == 0) return null;
+    return (Department)depts[0];
+}
+
+// 部門の役職 (manager=課長 / director=部長) を承認者ユーザー ID に解決
+object ResolveDeptRole(Department dept, string role)
+{
+    if (dept == null) return null;
+    if (role == "manager") return dept.ManagerUser.Value;
+    if (role == "director") return dept.DirectorUser.Value;
+    return null;
 }
 
 // 現在 Active な Order の最初の Waiting Member の承認者を CurrentApprover にセット
 // (複数並列のときは最初の 1 人。検索しやすさ重視で代表者を持つ)
+// Member の Status は遅延ロードで空のことがある (#60) ため DB を優先し、
+// DB 未保存 (新規申請直後) のみメモリから解決する。
 void RecalculateCurrentApproverDisplay()
 {
     foreach (var o in Orders.Rows)
     {
         if (o.Status.Value != "Active") continue;
+
+        var ms = new ModuleSearcher<ApprovalFlowMember>();
+        ms.AddEquals(m => m.ApprovalFlowOrderId.Value, o.Id.Value);
+        ms.AddEquals(m => m.Status.Value, "Waiting");
+        var dbMembers = ms.Execute();
+        if (dbMembers.Count > 0)
+        {
+            CurrentApprover.Value = dbMembers[0].ApproverUser.Value;
+            return;
+        }
+
         foreach (var m in o.Members.Rows)
         {
             if (m.Status.Value != "Waiting") continue;
@@ -246,17 +319,34 @@ void UpdateButtons()
 // ============================================================
 // 申請ボタン
 // ============================================================
+// 親モジュール (申請モジュール) の契約: SelectTemplateName() と ValidateForApply() を実装すること。
+// ValidateForApply は業務チェック (必須項目・費目固有の例外項目) を行い bool を返す。
 void SubmitButton_OnClick()
 {
     var parent = GetParentModule();
     var wasNew = parent.IsNewData;
+
+    if (wasNew)
+    {
+        var valid = parent.ValidateForApply();
+        if (valid != true) return;
+    }
 
     using var suspend = parent.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 
     if (wasNew)
     {
-        LoadFromTemplate();
+        // 申請時点の入力値でテンプレートを再解決する
+        // (Initialize 時は金額・費目が未入力のため、その時点の TemplateId は仮値)
+        var tmplName = parent.SelectTemplateName();
+        var ts = new ModuleSearcher<ApprovalFlowTemplate>();
+        ts.AddEquals(t => t.Name.Value, tmplName);
+        var tmpls = ts.Execute();
+        if (tmpls.Count == 0) { Toaster.Error($"承認テンプレート '{tmplName}' が見つかりません"); return; }
+        TemplateId.Value = tmpls[0].Id.Value;
+
+        if (!LoadFromTemplate()) return;
         AddHistory("Submit", "");
     }
 
@@ -324,9 +414,32 @@ bool IsOrderCompleted(ApprovalFlowOrder order)
 }
 
 // 次の Waiting な Order を Active 化。なければフロー全体を Approved に。
-// UseIndexSort=true で Orders.Rows は OrderNo 昇順保証なので、最初の Waiting が次の承認対象。
+// 注意: ChildModule の Status.Value は遅延ロードで空のことがある (#60 の罠) ため、
+// メモリの Rows を直接判定せず DB から Waiting Order を検索し、対応するメモリ行を更新する。
+// (2段テンプレの1段目承認で「2段目 Waiting なのにフロー全体 Approved」になる実測バグを 2026-07-05 修正)
 void AdvanceToNextOrder()
 {
+    var s = new ModuleSearcher<ApprovalFlowOrder>();
+    s.AddEquals(o => o.ApprovalFlowId.Value, this.Id.Value);
+    s.AddEquals(o => o.Status.Value, "Waiting");
+    s.OrderBy(o => o.OrderNo.Value);
+    var waiting = s.Execute();
+    if (waiting.Count > 0)
+    {
+        var nextId = waiting[0].Id.Value;
+        foreach (var o in Orders.Rows)
+        {
+            if (o.Id.Value == nextId)
+            {
+                o.Status.Value = "Active";
+                return;
+            }
+        }
+        // メモリ行が見つからなくても DB に Waiting がある以上、承認済にはしない
+        return;
+    }
+
+    // DB に Waiting なし → メモリ側の未保存 Waiting を最終確認 (通常は無い)
     foreach (var o in Orders.Rows)
     {
         if (o.Status.Value == "Waiting")
@@ -381,6 +494,9 @@ void Resubmit_OnClick()
 
     if (!IsCurrentUserCreator()) { Toaster.Error("自分の申請のみ再申請できます"); return; }
 
+    var valid = parent.ValidateForApply();
+    if (valid != true) return;
+
     AttemptNo.Value = (AttemptNo.Value ?? 0) + 1;
     Status.Value = "Pending";
 
@@ -395,7 +511,7 @@ void Resubmit_OnClick()
     var tmpls = ts.Execute();
     if (tmpls.Count == 0) { Toaster.Error("テンプレートが見つかりません"); return; }
     TemplateId.Value = tmpls[0].Id.Value;
-    LoadFromTemplate();
+    if (!LoadFromTemplate()) return;
     AddHistory("Resubmit", "");
 
     var ret = parent.Submit();
