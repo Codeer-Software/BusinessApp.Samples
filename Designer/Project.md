@@ -2,26 +2,45 @@
 
 このデザインプロジェクト固有の前提を書く。
 `ClaudeCodeForDesigner/` の汎用ルールはここには書かない（プロジェクト固有のことだけ）。
-
-本プロジェクトは新規作成時点から全て Claude Code に任せる。
-したがって、 **Claude Code はプロジェクトのルールを自ら定め、本ファイルを更新すること** 。
+企画・仕様・進捗は `../docs/`（索引: `../docs/README.md`）、判断の経緯は `../docs/decisions/` にある。
 
 ## 接続先 DB / データソース
 
-- （データソース名・種別・接続先の概要。本番 DB を指すかどうか。`AllowCliSqlAccess` を付けてよいデータソース）
+- **AccountingSQLite**（本アプリの唯一のデータソース。→ `docs/decisions/0001`）
+  - 種別: SQLite / 接続先: `C:\Codeer.LowCode.Blazor.Local\Data\accounting_v1.db`
+  - `AllowCliSqlAccess: true`（ローカル専用 DB。本番を指さない）
+  - 認証テーブル（app_users）・一時ファイル（temporary_files）も同居
+- 旧 `SampleSQLite`（sqlite_sample_auth.db）はフェーズ A-0 で撤去予定。**会計テーブルを置かないこと**
+- サーバ側: `AccountingApp.Server/appsettings(.Development).json` にも同名データソースの定義が必要（変更時はサーバ再起動）
 
 ## 命名規約
 
-- （テーブル / 列 / モジュール / フィールドの命名ルール。`ClaudeCodeForDesigner/Docs/DatabaseGuidelines.md` の標準と違う点があれば明記）
+- テーブル・列: snake_case 英語（例 `journal_entries.entry_date`）。DatabaseGuidelines 標準に従い PK は `id` INTEGER 自動採番
+- モジュール・フィールド: PascalCase 英語（例 `JournalEntry` / `EntryDate`）。画面表示名（DisplayName）は日本語
+- 主要テーブル名は `docs/04_会計ドメイン設計.md` の定義が正
+- CLB システムフィールドは予約名（`Id` / `CreatedAt` / `Creator` / `UpdatedAt` / `Updater`）を使用
 
-## 業務ルール
+## 業務ルール（会計の不変条件）
 
-- （このアプリ固有の業務的な前提・制約）
+- 金額は整数円。貸借一致しない伝票は確定不可。締め済み期間（fiscal_periods.status=closed）の仕訳は作成・変更・削除不可
+- 税抜経理。消費税行はシステム生成（is_tax_line=1）でユーザー直接編集不可
+- 税率・税区分・経過措置控除割合・制度閾値はマスタ参照（ハードコード禁止）
+- 残高＝期首残高＋仕訳集計（残高キャッシュ無し）。帳票 SQL は `status='posted'` のみ集計
+- 詳細は `docs/04_会計ドメイン設計.md` §9 の実装チェックリスト
 
 ## 既存資産
 
-- （既にあるモジュール / マスタ / ページフレーム等、踏襲すべきもの）
+- `Modules/AppUser.mod.json`（Cookie 認証・admin/admin）・`Home.mod.json`・`PageFrames/Main.frm.json` — 認証テンプレート由来。AppUser はフェーズ A-0 で AccountingSQLite へ切替
+- 承認フロー・経費申請の正典: `ClaudeCodeForDesigner/Samples/PatternShowcaseAuth/` と `../references/SampleProject_AuthPatterns/`
+
+## デプロイ手順（zip packing — 2026-07-05 実測確立済み）
+
+- **`pwsh -NoProfile -File Designer/tools/deploy.ps1` を実行するだけ**（designcheck を通してから）
+- zip 仕様（GUI 製 App.zip の実測に基づく）: エントリ名は**バックスラッシュ区切り**・ディレクトリエントリ無し・`app.clprj` はルート直下・`designer.settings*.json` は含めない。書きかけ検知を避けるため一時ファイルに作成してから `Move-Item` で配置
+- 検証結果: サーバ起動時読み込み◯／稼働中の FileWatcher hot-reload ◯（ブラウザ再読み込みで反映を確認済み）
+- 注意: `*.mod.cs`（スクリプト）変更・DB スキーマ変更はサーバ再起動が必要
+- サーバ起動: `dotnet run --project AccountingApp/AccountingApp.Server --launch-profile http`（http://localhost:5085）
 
 ## 作業中に得た知見（追記していく）
 
-- （業務ルール・命名・接続先など、作業中に判明したことをユーザー確認のうえ追記）
+- 2026-07-05: インボイス経過措置は令和8年度改正で4段階（80/70/50/30%）に変更済み。事前知識と異なっていた——**税制は必ずリサーチしてから実装する**こと（→ `docs/research/2026-07_税制・会計制度リサーチ.md`）
