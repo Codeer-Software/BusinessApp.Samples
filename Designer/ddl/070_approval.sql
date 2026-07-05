@@ -38,15 +38,15 @@ CREATE TABLE IF NOT EXISTS approval_flow (
 
 CREATE TABLE IF NOT EXISTS approval_flow_order (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    approval_flow_id INTEGER NOT NULL REFERENCES approval_flow(id),
+    approval_flow_id INTEGER REFERENCES approval_flow(id),
     order_no INTEGER,
     status TEXT
 );
 
 CREATE TABLE IF NOT EXISTS approval_flow_member (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    approval_flow_order_id INTEGER NOT NULL REFERENCES approval_flow_order(id),
-    approval_flow_id INTEGER NOT NULL REFERENCES approval_flow(id),
+    approval_flow_order_id INTEGER REFERENCES approval_flow_order(id),
+    approval_flow_id INTEGER REFERENCES approval_flow(id),
     is_required INTEGER NOT NULL DEFAULT 0,
     approver_user_id INTEGER REFERENCES app_users(id),
     status TEXT,
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS approval_flow_member (
 
 CREATE TABLE IF NOT EXISTS approval_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    approval_flow_id INTEGER NOT NULL REFERENCES approval_flow(id),
+    approval_flow_id INTEGER REFERENCES approval_flow(id),
     attempt_no INTEGER,
     order_no INTEGER,
     actor_user_id INTEGER REFERENCES app_users(id),
