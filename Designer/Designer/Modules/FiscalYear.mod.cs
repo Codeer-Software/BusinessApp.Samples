@@ -47,7 +47,7 @@ void CarryOver_OnClick()
     }
     var s = new ModuleSearcher<FiscalYear>();
     s.AddGreaterThan(e => e.StartDate.Value, EndDate.Value);
-    s.OrderBy(e => e.StartDate);
+    s.OrderBy(e => e.StartDate.Value);
     s.Limit(1);
     var next = s.ExecuteFirstOrDefault();
     if (next == null)
@@ -56,6 +56,25 @@ void CarryOver_OnClick()
         return;
     }
     var typedNext = (FiscalYear)next;
+
+    // 繰越元の実体チェック: 期首残高も確定仕訳も無い年度からの繰越は、
+    // 翌期の期首残高（システム移行時の開始残高など）を空データで洗い替えて破壊するため中止する。
+    // （総合テストで実測した事故パターン。移行初年度での誤操作防止）
+    var obs = new ModuleSearcher<OpeningBalance>();
+    obs.AddEquals(o => o.FiscalYearId.Value, this.Id.Value);
+    obs.Limit(1);
+    var hasOpening = obs.ExecuteFirstOrDefault() != null;
+    var js = new ModuleSearcher<JournalEntry>();
+    js.AddEquals(e => e.FiscalYearRef.Value, this.Id.Value);
+    js.AddEquals(e => e.Status.Value, "posted");
+    js.Limit(1);
+    var hasJournal = js.ExecuteFirstOrDefault() != null;
+    if (!hasOpening && !hasJournal)
+    {
+        Toaster.Error("この年度には期首残高も確定仕訳もありません。繰越を実行すると翌期の期首残高が失われるため中止しました");
+        return;
+    }
+
     var answer = MessageBox.Show($"{typedNext.Name.Value} の期首残高を作成します（既存の期首残高は洗い替えされます）。よろしいですか？", "実行", "キャンセル");
     if (answer != "実行") return;
 

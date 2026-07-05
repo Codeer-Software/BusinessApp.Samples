@@ -226,7 +226,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
-      "DbColumn": "",
+      "DbColumn": "next_year_id",
       "Placeholder": "",
       "Format": "",
       "IsSlider": false,
