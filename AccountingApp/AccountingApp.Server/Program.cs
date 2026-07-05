@@ -37,6 +37,7 @@ SystemConfig.Instance.DesignFileDirectory = builder.Configuration["DesignFileDir
 SystemConfig.Instance.FontFileDirectory = builder.Configuration["FontFileDirectory"] ?? string.Empty;
 SystemConfig.Instance.MailSettings = builder.Configuration.GetSection("MailSettings").Get<MailSettings>() ?? new();
 SystemConfig.Instance.AISettings = builder.Configuration.GetSection("AISettings").Get<AISettings>() ?? new();
+SystemConfig.Instance.NtaInvoiceSettings = builder.Configuration.GetSection("NtaInvoiceSettings").Get<NtaInvoiceSettings>() ?? new();
 SystemConfig.Instance.PasswordCheckUserTableInfo = builder.Configuration.GetSection("PasswordCheckUserTableInfo").Get<PasswordCheckUserTableInfo>() ?? new();
 SystemConfig.Instance.DataSources.ToList().ForEach(e => e.ConnectionString = builder.Configuration.GetConnectionString(e.Name) ?? string.Empty);
 SystemConfig.Instance.FileStorages.ToList().ForEach(e => e.ConnectionString = builder.Configuration.GetConnectionString(e.Name) ?? string.Empty);
