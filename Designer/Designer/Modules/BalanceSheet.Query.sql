@@ -1,4 +1,9 @@
-WITH bal AS (
+WITH yr AS (
+  SELECT id, start_date FROM fiscal_years
+  WHERE date(start_date) <= date(COALESCE(@date_to, date('now')))
+    AND date(end_date) >= date(COALESCE(@date_to, date('now')))
+),
+bal AS (
   SELECT
     a.code,
     a.name,
@@ -7,14 +12,25 @@ WITH bal AS (
     c.name AS cat_name,
     c.section_order,
     c.statement,
-    SUM(CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END) AS dmc
-  FROM journal_lines l
-  JOIN journal_entries e ON e.id = l.journal_entry_id
-  JOIN accounts a ON a.id = l.account_id
+    COALESCE(o.bal, 0) + COALESCE(j.dmc, 0) AS dmc
+  FROM accounts a
   JOIN account_categories c ON c.id = a.category_id
-  WHERE e.status = 'posted'
-    AND (@date_to IS NULL OR date(e.entry_date) <= date(@date_to))
-  GROUP BY a.id
+  LEFT JOIN (
+    SELECT account_id, SUM(balance) AS bal
+    FROM opening_balances
+    WHERE fiscal_year_id IN (SELECT id FROM yr)
+    GROUP BY account_id
+  ) o ON o.account_id = a.id
+  LEFT JOIN (
+    SELECT l.account_id, SUM(CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END) AS dmc
+    FROM journal_lines l
+    JOIN journal_entries e ON e.id = l.journal_entry_id
+    WHERE e.status = 'posted'
+      AND date(e.entry_date) >= (SELECT date(start_date) FROM yr)
+      AND date(e.entry_date) <= date(COALESCE(@date_to, date('now')))
+    GROUP BY l.account_id
+  ) j ON j.account_id = a.id
+  WHERE COALESCE(o.bal, 0) <> 0 OR COALESCE(j.dmc, 0) <> 0
 ),
 bs AS (SELECT * FROM bal WHERE statement = 'BS'),
 pl AS (SELECT * FROM bal WHERE statement = 'PL'),
@@ -49,7 +65,7 @@ SELECT '39-9-ZZZZ', '負債', '負債合計', COALESCE(SUM(-b.dmc), 0)
 FROM bs b WHERE b.account_type = 'liability'
 
 UNION ALL
--- 当期純利益（繰越利益剰余金への加算前の当期分）
+-- 当期純利益
 SELECT '48-1-ZZZZ', '純資産', '当期純利益', (SELECT net_income FROM ni)
 
 UNION ALL
