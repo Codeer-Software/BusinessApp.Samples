@@ -1,0 +1,20 @@
+{
+  "CurrentUserModuleDesignName": "AppUser",
+  "AppAccessConditions": {
+    "ModuleName": ""
+  },
+  "BackgroundColor": "",
+  "Color": "",
+  "FontFamily": "",
+  "Versions": [
+    {
+      "AssemblyName": "Codeer.LowCode.Blazor",
+      "Version": "1.2.51.0"
+    },
+    {
+      "AssemblyName": "WebApp.Client.Shared",
+      "Version": "1.0.0.0"
+    }
+  ],
+  "LocalizeResourcePath": ""
+}

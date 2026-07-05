@@ -1,0 +1,12 @@
+{
+  "DataSources": [
+    {
+      "Name": "SampleSQLite",
+      "DataSourceType": "SQLite",
+      "AllowCliSqlAccess": true
+    }
+  ],
+  "FileStorageNames": [
+    "Local"
+  ]
+}

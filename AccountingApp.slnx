@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/Tools/">
+    <Project Path="AccountingApp/AccountingApp.Designer/AccountingApp.Designer.csproj" />
+    <Project Path="AccountingApp/AccountingApp.LicenseRegisterCli/AccountingApp.LicenseRegisterCli.csproj" />
+  </Folder>
+  <Folder Name="/WebApp/">
+    <Project Path="AccountingApp/AccountingApp.Client.Shared/AccountingApp.Client.Shared.csproj" />
+    <Project Path="AccountingApp/AccountingApp.Client/AccountingApp.Client.csproj" />
+    <Project Path="AccountingApp/AccountingApp.Server.Shared/AccountingApp.Server.Shared.csproj" />
+    <Project Path="AccountingApp/AccountingApp.Server/AccountingApp.Server.csproj" />
+  </Folder>
+</Solution>
