@@ -18,8 +18,31 @@ namespace AccountingApp.Server.Services.AI
 {
     public static class AITextAnalyzeService
     {
+        // プロバイダ判定（AISettings.Provider: Mock / Claude / AzureOpenAI）
+        static bool IsMock => string.Equals(SystemConfig.Instance.AISettings.Provider, "Mock", StringComparison.OrdinalIgnoreCase)
+                              || string.IsNullOrWhiteSpace(SystemConfig.Instance.AISettings.Provider);
+        static bool IsClaude => string.Equals(SystemConfig.Instance.AISettings.Provider, "Claude", StringComparison.OrdinalIgnoreCase);
+
         public static async Task<ModuleData> FileToDataAsync(ModuleDataIO moduleDataIO, string? moduleName, string? fieldName, string? fileName, MemoryStream memoryStream)
         {
+            if (IsMock)
+                return await BuildFromJsonAsync(moduleDataIO, moduleName, MockReceiptJson());
+
+            if (IsClaude)
+            {
+                // Claude はマルチモーダル入力で画像/PDF を直接読める（Document Intelligence 不要）
+                var (system, explanation) = BuildExtractionPrompt(moduleName ?? string.Empty, fieldName,
+                    $"添付は[{fileName}]（領収書・請求書などの画像/PDF）です。記載内容を直接読み取ってください。");
+                var content = new List<object>
+                {
+                    ClaudeChatClient.FileBlock(fileName ?? "file.png", memoryStream.ToArray()),
+                    ClaudeChatClient.TextBlock(explanation)
+                };
+                var raw = await ClaudeChatClient.CompleteAsync(system, content);
+                return await BuildFromJsonAsync(moduleDataIO, moduleName, ClaudeChatClient.ExtractJson(raw));
+            }
+
+            // AzureOpenAI（従来構成: Document Intelligence でレイアウト解析 → チャットで抽出）
             var text = await ExtractTextFromFile(memoryStream);
             var source = $@"テキストは[{fileName}]をドキュメント解析した JSON です。
 構造: ページ配列で、各ページは lines(表の外にあるテキスト行。text と座標 rect{{t,l,b,r}}) と tables(表) を持ちます。
@@ -35,10 +58,101 @@ namespace AccountingApp.Server.Services.AI
 
         public static async Task<ModuleData> TextToDataAsync(ModuleDataIO moduleDataIO, string? moduleName, string? fieldName, string text, string source)
         {
-            var json = await DocumentAnalysisByText(DesignerService.GetDesignData().Modules, moduleName ?? string.Empty, fieldName ?? string.Empty, text, source);
-            return await CreateModule(DesignerService.GetDesignData().Modules, moduleName ?? string.Empty,
-                new FieldCandidatesResolver(moduleDataIO, DesignerService.GetDesignData().Modules, FindCandidatesByAI),
+            if (IsMock)
+                return await BuildFromJsonAsync(moduleDataIO, moduleName, MockReceiptJson());
+
+            string json;
+            if (IsClaude)
+            {
+                var (system, explanation) = BuildExtractionPrompt(moduleName ?? string.Empty, fieldName, source);
+                var raw = await ClaudeChatClient.CompleteAsync(system,
+                    new List<object> { ClaudeChatClient.TextBlock(explanation), ClaudeChatClient.TextBlock(text) });
+                json = ClaudeChatClient.ExtractJson(raw);
+            }
+            else
+            {
+                json = await DocumentAnalysisByText(DesignerService.GetDesignData().Modules, moduleName ?? string.Empty, fieldName ?? string.Empty, text, source);
+            }
+            return await BuildFromJsonAsync(moduleDataIO, moduleName, json);
+        }
+
+        static async Task<ModuleData> BuildFromJsonAsync(ModuleDataIO moduleDataIO, string? moduleName, string json)
+            => await CreateModule(DesignerService.GetDesignData().Modules, moduleName ?? string.Empty,
+                new FieldCandidatesResolver(moduleDataIO, DesignerService.GetDesignData().Modules, ResolveCandidateAsync),
                 JsonSerializer.Deserialize<JsonElement>(json));
+
+        // モック応答: 領収書らしい固定値（存在しないフィールド名は CreateModule 側でスキップされるため
+        // どのモジュールに対しても安全）。実キー投入前のデモ・UI 検証用
+        static string MockReceiptJson()
+        {
+            var today = DateTime.Today.ToString("yyyy-MM-dd");
+            return $@"{{
+  ""Title"": ""会食代（AIモック読み取り）"",
+  ""Amount"": 12800,
+  ""TaxAmount"": 1163,
+  ""ExpenseDate"": ""{today}"",
+  ""UsedAt"": ""炭火焼鳥 とり菊 神田本店"",
+  ""ExpenseCategoryRef"": ""交際費"",
+  ""EntertainmentGuest"": ""株式会社アルタイル商事 佐藤様ほか"",
+  ""EntertainmentCount"": 4,
+  ""EntertainmentPurpose"": ""プロジェクト完了の御礼""
+}}";
+        }
+
+        // 抽出プロンプト（システム＋項目説明）。Claude / AzureOpenAI で共用
+        static (string system, string explanation) BuildExtractionPrompt(string moduleName, string? fieldName, string source)
+        {
+            var moduleDesigns = DesignerService.GetDesignData().Modules;
+            var mod = moduleDesigns.Find(moduleName);
+            var field = mod?.Fields.FirstOrDefault(e => e.Name == fieldName) as AITextAnalyzerFieldDesign;
+            if (field == null) throw LowCodeException.Create($"Invalid Field {moduleName}.{fieldName}");
+
+            var remarks = string.IsNullOrWhiteSpace(field.Remarks) ? "" : $@"
+
+# 補足指示
+{field.Remarks}";
+            var system = @$"あなたはテキストから特定のデータを抽出する役割を担います。
+私が取得すべきデータの指示とテキストを提示します。
+{source}
+抽出結果は JSON 形式で返してください。JSON 以外の文字（前置き・コードフェンス等）を出力しないでください。
+指示には項目名が含まれ、必要に応じて補助名や型を括弧内に（補助名: 型）の形式で示します。
+JSON 出力では、その項目名をキーとして使用してください。
+フィールド名は絶対に省略しないでください。いきなり配列になることはありません。それを格納するフィールドがあるのでそこに格納してください。
+配列が含まれる場合は、子要素の項目指示を再帰的に [{{子要素の項目指示}}] の形で指定します。
+値が見つからない項目は null にしてください。表や本文に存在しない値を推測で補完しないでください。{remarks}";
+            return (system, CreateJsonExplanation(moduleDesigns, moduleName));
+        }
+
+        // Select/Link の候補解決（プロバイダ別）
+        static async Task<string?> ResolveCandidateAsync(Dictionary<string, string> candidates, string text)
+        {
+            if (IsMock) return ResolveCandidateLocal(candidates, text);
+            if (IsClaude)
+            {
+                var raw = await ClaudeChatClient.CompleteAsync(@"
+提供された選択肢から最も可能性の高い一致を1つ選び、その値のみを返してください。
+一致が見つからない場合は ""???"" を返してください。
+応答はプログラムによって解釈されるため、絶対に追加情報を含めないでください。
+答えを囲んだり、""了解しました"" のような確認の文言で返答したりしないでください。",
+                    new List<object>
+                    {
+                        ClaudeChatClient.TextBlock(string.Join(Environment.NewLine, candidates.Keys)),
+                        ClaudeChatClient.TextBlock(text)
+                    }, 256);
+                return raw.Trim();
+            }
+            return await FindCandidatesByAI(candidates, text);
+        }
+
+        // ローカル候補解決（Mock 用）: 完全一致 → 部分一致 → ???
+        static string ResolveCandidateLocal(Dictionary<string, string> candidates, string text)
+        {
+            var t = (text ?? string.Empty).Trim();
+            foreach (var k in candidates.Keys)
+                if (string.Equals(k, t, StringComparison.OrdinalIgnoreCase)) return k;
+            foreach (var k in candidates.Keys)
+                if (!string.IsNullOrEmpty(t) && (k.Contains(t) || t.Contains(k))) return k;
+            return "???";
         }
 
         static async Task<string?> FindCandidatesByAI(Dictionary<string, string> candidates, string text)
@@ -68,31 +182,17 @@ namespace AccountingApp.Server.Services.AI
         {
             var config = SystemConfig.Instance.AISettings;
 
-            var mod = moduleDesigns.Find(moduleName);
-            var field = mod?.Fields.FirstOrDefault(e => e.Name == fieldName) as AITextAnalyzerFieldDesign;
-            if (field == null) throw LowCodeException.Create($"Invalid Field {moduleName}.{fieldName}");
+            var (system, explanation) = BuildExtractionPrompt(moduleName, fieldName, source);
 
             var azureClient = new AzureOpenAIClient(
                 new Uri(config.OpenAIEndPoint),
                 new ApiKeyCredential(config.OpenAIKey));
             var chatClient = azureClient.GetChatClient(config.ChatModel);
 
-            var remarks = string.IsNullOrWhiteSpace(field.Remarks) ? "" : $@"
-
-# 補足指示
-{field.Remarks}";
             var completion = await chatClient.CompleteChatAsync(
                 [
-                    new SystemChatMessage(@$"あなたはテキストから特定のデータを抽出する役割を担います。
-私が取得すべきデータの指示とテキストを提示します。
-{source}
-抽出結果は JSON 形式で返してください。
-指示には項目名が含まれ、必要に応じて補助名や型を括弧内に（補助名: 型）の形式で示します。
-JSON 出力では、その項目名をキーとして使用してください。
-フィールド名は絶対に省略しないでください。いきなり配列になることはありません。それを格納するフィールドがあるのでそこに格納してください。
-配列が含まれる場合は、子要素の項目指示を再帰的に [{{子要素の項目指示}}] の形で指定します。
-値が見つからない項目は null にしてください。表や本文に存在しない値を推測で補完しないでください。{remarks}"),
-                    new UserChatMessage(CreateJsonExplanation(moduleDesigns, moduleName)),
+                    new SystemChatMessage(system),
+                    new UserChatMessage(explanation),
                     new UserChatMessage(text),
                 ], new()
                 {
