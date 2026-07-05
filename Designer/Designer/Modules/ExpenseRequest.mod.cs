@@ -262,6 +262,26 @@ void GenerateJournal_OnClick()
         if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
     }
 
+    // 申請者の所属部門を解決して全行に引き継ぐ (部門別予実に乗せる。B-7。未解決なら省略)
+    // 注: レイアウトに出ていない Creator は遅延ロードで null のことがある (#60) →
+    //     DB から自レコードを取り直して creator を確実に読む
+    var creatorId = Creator.Value;
+    if (creatorId == null)
+    {
+        var es = new ModuleSearcher<ExpenseRequest>();
+        es.AddEquals(e => e.Id.Value, this.Id.Value);
+        var self = es.ExecuteFirstOrDefault();
+        if (self != null) { creatorId = ((ExpenseRequest)self).Creator.Value; }
+    }
+    object creatorDeptId = null;
+    if (creatorId != null)
+    {
+        var us = new ModuleSearcher<AppUser>();
+        us.AddEquals(u => u.Id.Value, creatorId);
+        var creatorUser = us.ExecuteFirstOrDefault();
+        if (creatorUser != null) { creatorDeptId = ((AppUser)creatorUser).所属部門.Value; }
+    }
+
     // 仕訳生成 (docs/04 の税行方式: 本体行 + is_tax_line 行 + 貸方行)
     var lineCount = (tax > 0) ? 3 : 2;
     var je = new JournalEntry();
@@ -281,6 +301,7 @@ void GenerateJournal_OnClick()
         idx = idx + 1;
         l.LineNo.Value = idx;
         l.Description.Value = Title.Value;
+        if (creatorDeptId != null) { l.Department.Value = creatorDeptId; }
         if (idx == 1)
         {
             l.Dc.Value = "D";
