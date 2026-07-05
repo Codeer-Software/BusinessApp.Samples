@@ -1,11 +1,6 @@
 {
   "DataSources": [
     {
-      "Name": "SampleSQLite",
-      "DataSourceType": "SQLite",
-      "AllowCliSqlAccess": true
-    },
-    {
       "Name": "AccountingSQLite",
       "DataSourceType": "SQLite",
       "AllowCliSqlAccess": true

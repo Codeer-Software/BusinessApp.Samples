@@ -1,6 +1,6 @@
 {
   "Name": "AppUser",
-  "DataSourceName": "SampleSQLite",
+  "DataSourceName": "AccountingSQLite",
   "DbTable": "app_users",
   "CanCreate": true,
   "CanUpdate": true,
