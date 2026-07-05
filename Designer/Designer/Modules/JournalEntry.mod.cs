@@ -424,7 +424,7 @@ int NextJournalNo()
 {
     var s = new ModuleSearcher<JournalEntry>();
     s.AddEquals(e => e.FiscalYearRef.Value, FiscalYearRef.Value);
-    s.OrderByDescending(e => e.JournalNo);
+    s.OrderByDescending(e => e.JournalNo.Value);
     s.Limit(1);
     var last = s.ExecuteFirstOrDefault();
     if (last == null) { return 1; }

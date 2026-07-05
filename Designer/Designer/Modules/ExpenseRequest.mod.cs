@@ -252,7 +252,7 @@ void GenerateJournal_OnClick()
     // 伝票採番
     var ns = new ModuleSearcher<JournalEntry>();
     ns.AddEquals(e => e.FiscalYearRef.Value, typedFy.Id.Value);
-    ns.OrderByDescending(e => e.JournalNo);
+    ns.OrderByDescending(e => e.JournalNo.Value);
     ns.Limit(1);
     var last = ns.ExecuteFirstOrDefault();
     var nextNo = 1;

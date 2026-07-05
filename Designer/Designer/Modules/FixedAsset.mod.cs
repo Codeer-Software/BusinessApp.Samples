@@ -226,7 +226,7 @@ void GenerateDep_OnClick()
     // 伝票番号の採番
     var ns = new ModuleSearcher<JournalEntry>();
     ns.AddEquals(e => e.FiscalYearRef.Value, TargetYear.Value);
-    ns.OrderByDescending(e => e.JournalNo);
+    ns.OrderByDescending(e => e.JournalNo.Value);
     ns.Limit(1);
     var last = ns.ExecuteFirstOrDefault();
     var nextNo = 1;
