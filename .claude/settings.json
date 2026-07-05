@@ -15,8 +15,11 @@
       "Bash(unzip:*)",
       "Bash(powershell:*)",
       "Bash(pwsh:*)",
+      "PowerShell(pwsh:*)",
       "Bash(cp:*)",
       "Bash(mkdir:*)",
+      "Bash(echo:*)",
+      "Bash(ls:*)",
       "Bash(\"C:\\Users\\REDACTED\\DEV\\accounting-app\\AccountingApp\\AccountingApp\\AccountingApp.Designer\\bin\\Debug\\net8.0-windows\\AccountingApp.Designer.exe\" designcheck:*)",
       "Bash(\"C:\\Users\\REDACTED\\DEV\\accounting-app\\AccountingApp\\AccountingApp\\AccountingApp.Designer\\bin\\Debug\\net8.0-windows\\AccountingApp.Designer.exe\" sql:*)"
     ]

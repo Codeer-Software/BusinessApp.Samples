@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Designer workspace scratch outputs (designcheck/sql CLI results, screenshots)
+Designer/temporary/
