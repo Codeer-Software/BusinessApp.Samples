@@ -364,6 +364,102 @@ void SubmitButton_OnClick()
     var ret = parent.Submit();
     if (ret != true) { Toaster.Error("申請に失敗しました"); return; }
     Toaster.Success("申請しました");
+
+    // 申請成功後: 最初の承認者へ通知 (メモリの Id は temporary のため DB から取り直す)
+    if (wasNew)
+    {
+        NotifyActiveApprovers(FetchLatestOwnFlowFromDb(), "承認依頼");
+    }
+}
+
+// ============================================================
+// アプリ内通知 (B-9)
+// Slack/メール連携は将来 NotifyUser から呼ぶ（現状は Logger のみ=口だけ実装・作業合意）。
+// 支払期限リマインドは見送り（売掛残高一覧の期限超過表示で代替）。
+// ============================================================
+void NotifyUser(object recipientUserId, string title, string body, string linkModule, string linkId)
+{
+    if (recipientUserId == null) return;
+    var n = new Notification();
+    n.RecipientUser.Value = recipientUserId;
+    n.Title.Value = title;
+    n.Body.Value = body;
+    n.LinkModule.Value = linkModule;
+    n.LinkId.Value = linkId;
+    n.IsRead.Value = false;
+    n.CreatedAt.Value = DateTime.Now;
+    var ret = n.Submit();
+    if (ret != true) { Logger.Warn($"通知の作成に失敗: {title}"); }
+    Logger.Log($"SLACK(mock): to user#{recipientUserId} {title} - {body}");
+}
+
+// 申請モジュール名の表示名 (通知文言用)
+string ModuleDisplayName(string moduleName)
+{
+    if (moduleName == "ExpenseRequest") return "経費申請";
+    return moduleName;
+}
+
+// 実 Id・実 ParentId を DB から解決した自フロー (メモリの遅延ロードを信用しない)
+ApprovalFlow FetchSelfFromDb()
+{
+    var s = new ModuleSearcher<ApprovalFlow>();
+    s.AddEquals(f => f.Id.Value, this.Id.Value);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return (ApprovalFlow)found;
+}
+
+// 新規申請直後: メモリの Id が temporary のため、自分が直近に作成したフローを DB から特定する
+// (同一ユーザーの同時多重申請はブラウザ操作上起こらない前提)
+ApprovalFlow FetchLatestOwnFlowFromDb()
+{
+    var s = new ModuleSearcher<ApprovalFlow>();
+    s.AddEquals(f => f.Creator.Value, CurrentUser.Id.Value);
+    s.OrderByDescending(f => f.Id.Value);
+    s.Limit(1);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return (ApprovalFlow)found;
+}
+
+// 現在 Active な Order の Waiting Member 全員へ通知 (メンバー列挙は既存の DB 検索と同じ規模)
+void NotifyActiveApprovers(ApprovalFlow flow, string title)
+{
+    if (flow == null) return;
+    var linkModule = flow.ParentModuleName.Value;
+    var linkId = $"{flow.ParentId.Value}";
+    var body = $"{ModuleDisplayName(linkModule)}の承認をお願いします";
+    var os = new ModuleSearcher<ApprovalFlowOrder>();
+    os.AddEquals(o => o.ApprovalFlowId.Value, flow.Id.Value);
+    os.AddEquals(o => o.Status.Value, "Active");
+    var orders = os.Execute();
+    foreach (var oRow in orders)
+    {
+        var o = (ApprovalFlowOrder)oRow;
+        var ms = new ModuleSearcher<ApprovalFlowMember>();
+        ms.AddEquals(m => m.ApprovalFlowOrderId.Value, o.Id.Value);
+        ms.AddEquals(m => m.Status.Value, "Waiting");
+        var members = ms.Execute();
+        foreach (var mRow in members)
+        {
+            var m = (ApprovalFlowMember)mRow;
+            NotifyUser(m.ApproverUser.Value, title, body, linkModule, linkId);
+        }
+    }
+}
+
+// 申請者へ通知 (申請者 = 履歴の最初の Submit の ActorUser。IsCurrentUserCreator と同じ解決法)
+void NotifyCreator(ApprovalFlow flow, string title, string body)
+{
+    if (flow == null) return;
+    var hs = new ModuleSearcher<ApprovalHistory>();
+    hs.AddEquals(h => h.ApprovalFlowId.Value, flow.Id.Value);
+    hs.AddEquals(h => h.Action.Value, "Submit");
+    var subHistory = hs.Execute();
+    if (subHistory.Count == 0) return;
+    var actor = ((ApprovalHistory)subHistory[0]).ActorUser.Value;
+    NotifyUser(actor, title, body, flow.ParentModuleName.Value, $"{flow.ParentId.Value}");
 }
 
 // ============================================================
@@ -396,6 +492,20 @@ void Approve_OnClick()
 
     var ret = GetParentModule().Submit();
     if (ret == true) Toaster.Success("承認しました");
+
+    // 承認成功後の通知: 最終承認なら申請者へ、次段へ進んだなら次の承認者へ
+    if (ret == true)
+    {
+        var flow = FetchSelfFromDb();
+        if (Status.Value == "Approved")
+        {
+            NotifyCreator(flow, "承認されました", "申請が最終承認されました");
+        }
+        else
+        {
+            NotifyActiveApprovers(flow, "承認依頼");
+        }
+    }
 }
 
 ApprovalFlowOrder GetOrderById(string orderId)
@@ -484,7 +594,8 @@ void Reject_OnClick()
 
     Status.Value = "Rejected";
     SkipRemainingOrdersAndMembers();
-    AddHistory("Reject", Comment.Value);
+    var rejectComment = Comment.Value;
+    AddHistory("Reject", rejectComment);
     Comment.Value = "";
     RecalculateCurrentApproverDisplay();
     UpdateFlowSummary();
@@ -492,6 +603,12 @@ void Reject_OnClick()
 
     var ret = GetParentModule().Submit();
     if (ret == true) Toaster.Info("却下しました");
+
+    // 却下成功後: 申請者へ通知
+    if (ret == true)
+    {
+        NotifyCreator(FetchSelfFromDb(), "却下されました", $"申請が却下されました（コメント: {rejectComment}）");
+    }
 }
 
 // ============================================================
@@ -520,6 +637,12 @@ void Resubmit_OnClick()
     var ret = parent.Submit();
     if (ret == true) Toaster.Success("再申請しました");
     else if (ret == false) Toaster.Error("再申請に失敗しました");
+
+    // 再申請成功後: 新ルートの最初の承認者へ通知 (既存データのため自 Id は実 Id)
+    if (ret == true)
+    {
+        NotifyActiveApprovers(FetchSelfFromDb(), "（再）承認依頼");
+    }
 }
 
 // 古い Orders を削除し、親のテンプレ再解決 → Orders/Members を再構築する
@@ -559,6 +682,12 @@ void ReapproveForOverrun(string reason)
     var ret = parent.Submit();
     if (ret == true) Toaster.Success("実費が見込みを超過したため再承認を依頼しました");
     else Toaster.Error("再承認の依頼に失敗しました");
+
+    // 超過再承認の成功後: 新ルートの最初の承認者へ通知
+    if (ret == true)
+    {
+        NotifyActiveApprovers(FetchSelfFromDb(), "（再）承認依頼");
+    }
 }
 
 // ============================================================
