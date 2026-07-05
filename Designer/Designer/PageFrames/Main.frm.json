@@ -6,13 +6,13 @@
     "IsVisible": true,
     "Home": {
       "Type": "Text",
-      "Text": "Home",
+      "Text": "ホーム",
       "Icon": "",
       "ResourcePath": ""
     },
     "Links": [
       {
-        "Title": "AppUser",
+        "Title": "ユーザー管理",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
