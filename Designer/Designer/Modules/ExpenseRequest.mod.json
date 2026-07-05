@@ -542,6 +542,24 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FileFieldDesign"
     },
     {
+      "Remarks": "これは経費精算の領収書・レシートです。Title は店名や内容から適切な件名（例: 会食代、書籍購入）を簡潔に生成してください。Amount は税込合計金額、TaxAmount は記載があれば消費税額、ExpenseDate は利用日（発行日）、UsedAt は店名・発行元です。ExpenseCategoryRef は内容に最も合う費目名（旅費交通費/会議費/交際費/消耗品費/備品/外注費/通信費/図書研修費/諸会費/その他）を返してください。飲食で取引先接待と読み取れる場合は EntertainmentGuest/EntertainmentCount/EntertainmentPurpose も推定してください。",
+      "DataImportCompleted": "AiImport_Completed",
+      "FileField": "Receipt",
+      "Name": "AiReceiptReader",
+      "IgnoreModification": false,
+      "TypeFullName": "Design.Samples.AIDocumentAnalyzer.AITextAnalyzerFieldDesign"
+    },
+    {
+      "Text": "AI読み取り",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "AiReaderLabel",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
       "Text": "精算ステータス",
       "Icon": "",
       "Style": "Default",
@@ -1999,6 +2017,54 @@
                         {
                           "Layout": {
                             "FieldName": "Receipt",
+                            "ContextMenu": "",
+                            "ClassName": "",
+                            "FontFamily": "",
+                            "Color": "",
+                            "BackgroundColor": "",
+                            "Name": "",
+                            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                          },
+                          "Padding": {},
+                          "BackgroundColor": "",
+                          "BorderStyle": {
+                            "LeftColor": "",
+                            "TopColor": "",
+                            "RightColor": "",
+                            "BottomColor": ""
+                          },
+                          "CanResize": false,
+                          "Border": "None",
+                          "VerticalAlignment": "Middle"
+                        },
+                        {
+                          "Layout": {
+                            "FieldName": "AiReaderLabel",
+                            "ContextMenu": "",
+                            "ClassName": "",
+                            "FontFamily": "",
+                            "Color": "",
+                            "BackgroundColor": "",
+                            "Name": "",
+                            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                          },
+                          "Padding": {},
+                          "BackgroundColor": "",
+                          "BorderStyle": {
+                            "LeftColor": "",
+                            "TopColor": "",
+                            "RightColor": "",
+                            "BottomColor": ""
+                          },
+                          "CanResize": false,
+                          "Border": "None",
+                          "VerticalAlignment": "Middle",
+                          "HorizontalAlignment": "Right",
+                          "Width": 140
+                        },
+                        {
+                          "Layout": {
+                            "FieldName": "AiReceiptReader",
                             "ContextMenu": "",
                             "ClassName": "",
                             "FontFamily": "",

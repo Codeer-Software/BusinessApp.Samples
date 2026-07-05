@@ -539,6 +539,16 @@ void IsFixedAsset_OnDataChanged()
     UpdateVisibility();
 }
 
+// AI 読み取り（AiReceiptReader）完了時: プログラム的なフィールド更新では OnDataChanged が
+// 発火しないため、出し分け・固定資産判定を明示的に再評価する。
+// AI はオプトイン（このコントロールを使ったときだけ実行。通常の領収書アップロードは手入力のまま）
+void AiImport_Completed()
+{
+    UpdateFixedAssetSuggestion();
+    UpdateVisibility();
+    Toaster.Info("AI読み取り結果を反映しました。内容を確認・修正のうえ申請してください");
+}
+
 // 選択中の費目マスタを取得（未選択なら null）
 ExpenseCategory FindSelectedCategory()
 {
