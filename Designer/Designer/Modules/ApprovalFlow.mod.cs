@@ -40,18 +40,15 @@ bool LoadFromTemplate()
         foreach (var tmplMember in checkMembers)
         {
             var role = tmplMember.ApproverRole.Value;
-            if (role == "manager" || role == "director")
-            {
-                if (ResolveDeptRole(dept, role) == null)
-                {
-                    var roleName = (role == "manager") ? "課長" : "部長";
-                    Toaster.Error($"承認者を決定できません: 申請者の所属部門とその{roleName}が未設定です（部門マスタ・ユーザー管理を確認してください）");
-                    return false;
-                }
-            }
-            else if (tmplMember.ApproverUser.Value == null)
+            if (tmplMember.ApproverUser.Value == null && role != "manager" && role != "director")
             {
                 Toaster.Error("承認テンプレートに承認者未設定のメンバーがあります");
+                return false;
+            }
+            var resolved = ResolveApproverAvoidingSelf(dept, role, tmplMember.ApproverUser.Value);
+            if (resolved == null)
+            {
+                Toaster.Error("承認者を決定できません: 部門の課長/部長の設定、または自己承認の代替となる経理ユーザーを確認してください（自己承認は禁止です）");
                 return false;
             }
         }
@@ -69,9 +66,7 @@ bool LoadFromTemplate()
         var tmplMembers = memberSearcher.Execute();
         foreach (var tmplMember in tmplMembers)
         {
-            var approver = tmplMember.ApproverUser.Value;
-            var role = tmplMember.ApproverRole.Value;
-            if (role == "manager" || role == "director") approver = ResolveDeptRole(dept, role);
+            var approver = ResolveApproverAvoidingSelf(dept, tmplMember.ApproverRole.Value, tmplMember.ApproverUser.Value);
 
             var newMember = newOrder.Members.AddRow();
             newMember.IsRequired.Value = tmplMember.IsRequired.Value;
@@ -83,6 +78,41 @@ bool LoadFromTemplate()
     }
     RecalculateCurrentApproverDisplay();
     return true;
+}
+
+// 承認者の解決＋自己承認の禁止 (decisions/0010)
+// 役職解決/固定指定が申請者本人の場合: manager→director へ格上げ、
+// それも本人（or director/固定が本人）→ 経理ロールの他ユーザー(最小Id)を代替承認者にする。
+// 解決不能なら null（呼び出し側で申請ブロック）
+object ResolveApproverAvoidingSelf(Department dept, string role, object fixedApprover)
+{
+    var resolved = fixedApprover;
+    if (role == "manager" || role == "director") resolved = ResolveDeptRole(dept, role);
+    if (resolved == null) return null;
+    if (resolved != CurrentUser.Id.Value) return resolved;
+
+    // 申請者本人だった: まず部門の部長へ格上げ (manager 解決時のみ意味を持つ)
+    if (role == "manager" && dept != null)
+    {
+        var director = dept.DirectorUser.Value;
+        if (director != null && director != CurrentUser.Id.Value) return director;
+    }
+    return FindFallbackApprover();
+}
+
+// 自己承認の代替承認者: 経理ロール (accounting) のうち申請者以外で Id 最小のユーザー
+object FindFallbackApprover()
+{
+    var s = new ModuleSearcher<AppUser>();
+    s.AddEquals(u => u.Role.Value, "accounting");
+    s.OrderBy(u => u.Id.Value);
+    var users = s.Execute();
+    foreach (var u in users)
+    {
+        var au = (AppUser)u;
+        if (au.Id.Value != CurrentUser.Id.Value) return au.Id.Value;
+    }
+    return null;
 }
 
 // 申請者 (CurrentUser) の所属部門を取得 (未設定なら null)
