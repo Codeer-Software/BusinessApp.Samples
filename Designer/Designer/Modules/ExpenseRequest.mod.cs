@@ -86,6 +86,7 @@ void OnAfterInitialization()
         PayeeUser.Value = CurrentUser.Id.Value;
         SettlementStatus.Value = "draft";
         UpdateVisibility();
+        UpdateAccountingButtons();
         return;
     }
 
@@ -94,6 +95,257 @@ void OnAfterInitialization()
     var reopenable = (flowStatus == "Rejected" || flowStatus == "Cancelled");
     EditableGrid.IsEnabled = reopenable;
     UpdateVisibility();
+    UpdateAccountingButtons();
+}
+
+// ============================================================
+// 精算ステータスと経理処理 (B2-4)
+// draft → applying(申請) → approved(承認完了) → accounting(仕訳生成)
+//       → settled(精算=支払済) → completed(完了)。前半はフロー連動、後半は経理操作。
+// ============================================================
+
+// ApprovalFlow からの状態変化通知 (契約メソッド。親 Submit の直前に呼ばれる)
+void OnApprovalFlowStatusChanged(string flowStatus)
+{
+    if (flowStatus == "Pending")
+    {
+        SettlementStatus.Value = "applying";
+    }
+    else if (flowStatus == "Approved")
+    {
+        // 経理処理以降へ進んでいる場合は巻き戻さない
+        var st = SettlementStatus.Value;
+        if (st == null || st == "" || st == "draft" || st == "applying") SettlementStatus.Value = "approved";
+    }
+    else if (flowStatus == "Rejected" || flowStatus == "Cancelled")
+    {
+        SettlementStatus.Value = "draft";
+    }
+    UpdateAccountingButtons();
+}
+
+// 経理ボタンと精算ステータス表示の出し分け
+// 注: 経理ロールによるゲートは B-8 で実装（現状は全ユーザーに見える）
+void UpdateAccountingButtons()
+{
+    var st = SettlementStatus.Value;
+    SettlementStatusLabel.IsVisible = !IsNewData;
+    SettlementStatus.IsVisible = !IsNewData;
+    GenerateJournalButton.IsVisible = !IsNewData && (st == "approved");
+    SettleButton.IsVisible = !IsNewData && (st == "accounting");
+    CompleteButton.IsVisible = !IsNewData && (st == "settled");
+}
+
+// 経理: 仕訳を生成 (approved → accounting)
+// D: 費目の既定勘定科目（固定資産計上時は工具器具備品1520）+ 仮払消費税行 / C: 未払金2020
+void GenerateJournal_OnClick()
+{
+    if (SettlementStatus.Value != "approved") { Toaster.Error("承認済の申請のみ仕訳を生成できます"); return; }
+    if (Amount.Value == null || Amount.Value <= 0) { Toaster.Error("金額が入力されていません"); return; }
+    if (ExpenseDate.Value == null) { Toaster.Error("利用日が入力されていません"); return; }
+    var cat = FindSelectedCategory();
+    if (cat == null) { Toaster.Error("費目が選択されていません"); return; }
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    // 二重生成ガード
+    var js = new ModuleSearcher<JournalEntry>();
+    js.AddEquals(e => e.SourceType.Value, "expense");
+    js.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    if (js.Execute().Count > 0) { Toaster.Error("この申請の仕訳は既に生成済みです"); return; }
+
+    // 会計年度の解決と締め済み期間ガード (JournalEntry.SaveEntry と同じ規律)
+    var ys = new ModuleSearcher<FiscalYear>();
+    ys.AddLessThanOrEqual(e => e.StartDate.Value, ExpenseDate.Value);
+    ys.AddGreaterThanOrEqual(e => e.EndDate.Value, ExpenseDate.Value);
+    var fy = ys.ExecuteFirstOrDefault();
+    if (fy == null) { Toaster.Error("利用日に対応する会計年度がありません"); return; }
+    var typedFy = (FiscalYear)fy;
+    var ps = new ModuleSearcher<FiscalPeriod>();
+    ps.AddLessThanOrEqual(e => e.StartDate.Value, ExpenseDate.Value);
+    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, ExpenseDate.Value);
+    var period = ps.ExecuteFirstOrDefault();
+    if (period == null) { Toaster.Error("利用日に対応する月次期間がありません"); return; }
+    var typedPeriod = (FiscalPeriod)period;
+    if (typedPeriod.Status.Value == "closed") { Toaster.Error("利用日の期間は締め済みです。仕訳は手動で起票してください"); return; }
+
+    // 借方科目: 通常=費目の既定科目 / 固定資産計上=工具器具備品(1520)
+    var debitAccountId = cat.DefaultAccount.Value;
+    var debitName = cat.Name.Value;
+    if (IsFixedAsset.Value == true)
+    {
+        var accS = new ModuleSearcher<Account>();
+        accS.AddEquals(e => e.Code.Value, "1520");
+        var assetAcc = accS.ExecuteFirstOrDefault();
+        if (assetAcc == null) { Toaster.Error("工具器具備品(1520)の科目がありません"); return; }
+        debitAccountId = ((Account)assetAcc).Id.Value;
+        debitName = "工具器具備品";
+    }
+    if (debitAccountId == null) { Toaster.Error("費目に既定勘定科目が設定されていません"); return; }
+
+    // 貸方科目: 未払金(2020) / 税行科目: 仮払消費税(1900)
+    var apS = new ModuleSearcher<Account>();
+    apS.AddIn(e => e.Code.Value, "2020", "1900");
+    var settleAccounts = apS.Execute();
+    object apAccountId = null;
+    object purchaseTaxAccountId = null;
+    foreach (var a in settleAccounts)
+    {
+        var acc = (Account)a;
+        if (acc.Code.Value == "2020") { apAccountId = acc.Id.Value; }
+        if (acc.Code.Value == "1900") { purchaseTaxAccountId = acc.Id.Value; }
+    }
+    if (apAccountId == null) { Toaster.Error("未払金(2020)の科目がありません"); return; }
+
+    // 税額: レシート記載 (TaxAmount) を優先、なければ税区分の税率で内税計算 (切り捨て)
+    int gross = Amount.Value;
+    int tax = CalcExpenseTax(cat, gross);
+    int baseAmount = gross - tax;
+
+    // 伝票採番
+    var ns = new ModuleSearcher<JournalEntry>();
+    ns.AddEquals(e => e.FiscalYearRef.Value, typedFy.Id.Value);
+    ns.OrderByDescending(e => e.JournalNo);
+    ns.Limit(1);
+    var last = ns.ExecuteFirstOrDefault();
+    var nextNo = 1;
+    if (last != null)
+    {
+        var typedLast = (JournalEntry)last;
+        if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
+    }
+
+    // 仕訳生成 (docs/04 の税行方式: 本体行 + is_tax_line 行 + 貸方行)
+    var lineCount = (tax > 0) ? 3 : 2;
+    var je = new JournalEntry();
+    je.EntryDate.Value = ExpenseDate.Value;
+    je.EntryType.Value = "auto";
+    je.Description.Value = $"経費精算 {Title.Value}";
+    je.Status.Value = "posted";
+    je.JournalNo.Value = nextNo;
+    je.FiscalYearRef.Value = typedFy.Id.Value;
+    je.SourceType.Value = "expense";
+    je.SourceId.Value = this.Id.Value;
+    je.Lines.AddRows(lineCount);
+    var idx = 0;
+    foreach (var row in je.Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        idx = idx + 1;
+        l.LineNo.Value = idx;
+        l.Description.Value = Title.Value;
+        if (idx == 1)
+        {
+            l.Dc.Value = "D";
+            l.Account.Value = debitAccountId;
+            l.TaxCategory.Value = cat.DefaultTaxCategory.Value;
+            l.TaxInputMode.Value = "inclusive";
+            l.Amount.Value = baseAmount;
+            l.InputAmount.Value = gross;
+        }
+        else if (idx == 2 && tax > 0)
+        {
+            l.Dc.Value = "D";
+            l.Account.Value = purchaseTaxAccountId;
+            l.TaxCategory.Value = cat.DefaultTaxCategory.Value;
+            l.TaxInputMode.Value = "none";
+            l.IsTaxLine.Value = true;
+            l.ParentLineNo.Value = 1;
+            l.Amount.Value = tax;
+            l.InputAmount.Value = tax;
+            l.Description.Value = "消費税（行1）";
+        }
+        else
+        {
+            l.Dc.Value = "C";
+            l.Account.Value = apAccountId;
+            l.TaxInputMode.Value = "none";
+            l.Amount.Value = gross;
+            l.InputAmount.Value = gross;
+        }
+    }
+    var ret = je.Submit();
+    if (ret != true) { Toaster.Error("仕訳の生成に失敗しました"); return; }
+
+    // 固定資産計上対象なら台帳へ自動登録 (取得価額は税抜本体額)
+    if (IsFixedAsset.Value == true)
+    {
+        RegisterFixedAsset(debitAccountId, baseAmount);
+    }
+
+    SettlementStatus.Value = "accounting";
+    var ret2 = this.Submit();
+    if (ret2 == false) { Toaster.Error("精算ステータスの更新に失敗しました"); return; }
+    UpdateAccountingButtons();
+    Toaster.Success($"仕訳 No.{nextNo} を生成しました（借方 {debitName} {baseAmount:#,0} 円 / 貸方 未払金 {gross:#,0} 円）");
+}
+
+// 税額の決定: 費目の既定税区分が課税仕入のときのみ。レシート記載の消費税額を優先
+int CalcExpenseTax(ExpenseCategory cat, int gross)
+{
+    if (cat.DefaultTaxCategory.Value == null) return 0;
+    var cs = new ModuleSearcher<TaxCategory>();
+    cs.AddEquals(c => c.Id.Value, cat.DefaultTaxCategory.Value);
+    var found = cs.ExecuteFirstOrDefault();
+    if (found == null) return 0;
+    var tcat = (TaxCategory)found;
+    if (tcat.TaxationType.Value != "taxable_purchase") return 0;
+    if (TaxAmount.Value != null && TaxAmount.Value > 0) return TaxAmount.Value;
+    if (tcat.Rate.Value == null) return 0;
+    var rs = new ModuleSearcher<TaxRate>();
+    rs.AddEquals(r => r.Id.Value, tcat.Rate.Value);
+    var foundRate = rs.ExecuteFirstOrDefault();
+    if (foundRate == null) return 0;
+    decimal pct = ((TaxRate)foundRate).RatePercent.Value ?? 0;
+    if (pct == 0) return 0;
+    int tax = gross * pct / (100 + pct);
+    return tax;
+}
+
+// 固定資産台帳への自動登録 (償却方法は仮=定額法。耐用年数と方法は経理が台帳で確定する)
+void RegisterFixedAsset(object assetAccountId, int baseAmount)
+{
+    var code = AssetNo.Value;
+    if (code == null || code == "") { code = $"EXP-{this.Id.Value}"; }
+    var fs = new ModuleSearcher<FixedAsset>();
+    fs.AddEquals(f => f.Code.Value, code);
+    if (fs.Execute().Count > 0) return;
+
+    var fa = new FixedAsset();
+    fa.Code.Value = code;
+    fa.Name.Value = Title.Value;
+    fa.AssetAccount.Value = assetAccountId;
+    fa.AcquisitionDate.Value = ExpenseDate.Value;
+    fa.AcquisitionCost.Value = baseAmount;
+    fa.DepreciationMethod.Value = "straight_line";
+    fa.Status.Value = "in_use";
+    fa.Memo.Value = $"経費申請「{Title.Value}」から自動登録。耐用年数・償却方法を確認してください";
+    var ret = fa.Submit();
+    if (ret == true) Toaster.Info($"固定資産台帳に {code} を登録しました（耐用年数・償却方法は台帳で確定してください）");
+    else Toaster.Error("固定資産台帳への自動登録に失敗しました。手動で登録してください");
+}
+
+// 経理: 精算済にする (accounting → settled)。実支払の記録は B-6 出納帳と連動予定
+void Settle_OnClick()
+{
+    if (SettlementStatus.Value != "accounting") return;
+    SettlementStatus.Value = "settled";
+    var ret = this.Submit();
+    if (ret != true) { Toaster.Error("更新に失敗しました"); SettlementStatus.Value = "accounting"; return; }
+    UpdateAccountingButtons();
+    Toaster.Success("精算済にしました");
+}
+
+// 経理: 完了にする (settled → completed)
+void Complete_OnClick()
+{
+    if (SettlementStatus.Value != "settled") return;
+    SettlementStatus.Value = "completed";
+    var ret = this.Submit();
+    if (ret != true) { Toaster.Error("更新に失敗しました"); SettlementStatus.Value = "settled"; return; }
+    UpdateAccountingButtons();
+    Toaster.Success("完了にしました");
 }
 
 void RequestType_OnDataChanged()

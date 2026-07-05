@@ -319,8 +319,18 @@ void UpdateButtons()
 // ============================================================
 // 申請ボタン
 // ============================================================
-// 親モジュール (申請モジュール) の契約: SelectTemplateName() と ValidateForApply() を実装すること。
+// 親モジュール (申請モジュール) の契約: SelectTemplateName() / ValidateForApply() /
+// OnApprovalFlowStatusChanged(string) を実装すること。
 // ValidateForApply は業務チェック (必須項目・費目固有の例外項目) を行い bool を返す。
+// OnApprovalFlowStatusChanged はフロー状態の変化 (Pending/Approved/Rejected/Cancelled) を
+// 親側のステータス (経費なら精算ステータス) に反映するために、親 Submit の直前に呼ばれる。
+
+// 親モジュールへ承認フローの状態変化を通知する
+void NotifyParentStatusChanged()
+{
+    GetParentModule().OnApprovalFlowStatusChanged(Status.Value);
+}
+
 void SubmitButton_OnClick()
 {
     var parent = GetParentModule();
@@ -348,6 +358,7 @@ void SubmitButton_OnClick()
 
         if (!LoadFromTemplate()) return;
         AddHistory("Submit", "");
+        NotifyParentStatusChanged();
     }
 
     var ret = parent.Submit();
@@ -381,6 +392,7 @@ void Approve_OnClick()
     Comment.Value = "";
     RecalculateCurrentApproverDisplay();
     UpdateFlowSummary();
+    NotifyParentStatusChanged();
 
     var ret = GetParentModule().Submit();
     if (ret == true) Toaster.Success("承認しました");
@@ -476,6 +488,7 @@ void Reject_OnClick()
     Comment.Value = "";
     RecalculateCurrentApproverDisplay();
     UpdateFlowSummary();
+    NotifyParentStatusChanged();
 
     var ret = GetParentModule().Submit();
     if (ret == true) Toaster.Info("却下しました");
@@ -513,6 +526,7 @@ void Resubmit_OnClick()
     TemplateId.Value = tmpls[0].Id.Value;
     if (!LoadFromTemplate()) return;
     AddHistory("Resubmit", "");
+    NotifyParentStatusChanged();
 
     var ret = parent.Submit();
     if (ret == true) Toaster.Success("再申請しました");
@@ -536,6 +550,7 @@ void Cancel_OnClick()
     AddHistory("Cancel", "申請をキャンセルしました");
     RecalculateCurrentApproverDisplay();
     UpdateFlowSummary();
+    NotifyParentStatusChanged();
 
     var ret = parent.Submit();
     if (ret == true) Toaster.Success("キャンセルしました");
