@@ -129,10 +129,12 @@ void OnApprovalFlowStatusChanged(string flowStatus)
 }
 
 // 経理ボタンと精算ステータス表示の出し分け
-// 注: 経理ロールによるゲートは B-8 で実装（現状は全ユーザーに見える）
+// 会計処理（仕訳生成・精算・完了）は経理ロール専用（B-8）。
+// 実費確定は申請者本人が行う業務のため全ユーザーに出す（ゲートしない）。
 void UpdateAccountingButtons()
 {
     var st = SettlementStatus.Value;
+    var isAccounting = (CurrentUser.Role.Value == "accounting");
     SettlementStatusLabel.IsVisible = !IsNewData;
     SettlementStatus.IsVisible = !IsNewData;
 
@@ -144,9 +146,9 @@ void UpdateAccountingButtons()
     ActualAmountInput.IsVisible = needsActual;
     ConfirmActualButton.IsVisible = needsActual;
 
-    GenerateJournalButton.IsVisible = !IsNewData && (st == "approved") && !needsActual;
-    SettleButton.IsVisible = !IsNewData && (st == "accounting");
-    CompleteButton.IsVisible = !IsNewData && (st == "settled");
+    GenerateJournalButton.IsVisible = isAccounting && !IsNewData && (st == "approved") && !needsActual;
+    SettleButton.IsVisible = isAccounting && !IsNewData && (st == "accounting");
+    CompleteButton.IsVisible = isAccounting && !IsNewData && (st == "settled");
 }
 
 // 事前申請の実費確定: 見込みとの乖離が大きければ再承認、問題なければそのまま経理処理へ
