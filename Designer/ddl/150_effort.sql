@@ -1,0 +1,54 @@
+-- 150_effort.sql — 工数・人件費配賦・案件損益（B'、AccountingSQLite）
+-- 設計: docs/decisions/0009（配賦は管理会計レイヤ=仕訳なし・工数は分単位 INTEGER）
+-- 規律: FK 列に NOT NULL 禁止 / 日付=DATE
+
+CREATE TABLE IF NOT EXISTS time_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES app_users(id),
+    project_id INTEGER REFERENCES projects(id),
+    work_date DATE,
+    minutes INTEGER,               -- 分単位（decisions/0009）
+    note TEXT,
+    creator INTEGER REFERENCES app_users(id),
+    updater INTEGER REFERENCES app_users(id),
+    created_at DATETIME,
+    updated_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_time_entries_up ON time_entries(user_id, project_id, work_date);
+
+CREATE TABLE IF NOT EXISTS monthly_salaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES app_users(id),
+    fiscal_year_id INTEGER REFERENCES fiscal_years(id),
+    period_no INTEGER,             -- 1〜12
+    cost INTEGER,                  -- 配賦用の月次人件費コスト（法定福利込み概算）
+    creator INTEGER REFERENCES app_users(id),
+    updater INTEGER REFERENCES app_users(id),
+    created_at DATETIME,
+    updated_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_monthly_salaries_key ON monthly_salaries(fiscal_year_id, period_no, user_id);
+
+-- ---- seed: 案件（active 案件が無い場合のみ） ----
+INSERT INTO projects (code, name, partner_id, project_type, status, is_active)
+SELECT 'PRJ-001', '基幹システム改修', (SELECT id FROM partners WHERE code = 'C001'), 'contract', 'active', 1
+WHERE NOT EXISTS (SELECT 1 FROM projects WHERE code = 'PRJ-001');
+INSERT INTO projects (code, name, partner_id, project_type, status, is_active)
+SELECT 'PRJ-002', 'クラウド勤怠SaaS', (SELECT id FROM partners WHERE code = 'C001'), 'saas', 'active', 1
+WHERE NOT EXISTS (SELECT 1 FROM projects WHERE code = 'PRJ-002');
+
+-- ---- seed: 月次人件費コスト（第18期=fiscal_year_id 2、period 1〜12 × 4ユーザー） ----
+INSERT INTO monthly_salaries (user_id, fiscal_year_id, period_no, cost)
+SELECT u.id, 2, p.period_no, v.cost
+FROM (
+    SELECT 'admin' AS user_name, 800000 AS cost UNION ALL
+    SELECT 'hanako', 700000 UNION ALL
+    SELECT 'jiro', 900000 UNION ALL
+    SELECT 'soumu', 600000
+) v
+JOIN app_users u ON u.user_name = v.user_name
+JOIN (SELECT DISTINCT period_no FROM fiscal_periods WHERE fiscal_year_id = 2) p
+WHERE NOT EXISTS (
+    SELECT 1 FROM monthly_salaries ms
+    WHERE ms.user_id = u.id AND ms.fiscal_year_id = 2 AND ms.period_no = p.period_no
+);
