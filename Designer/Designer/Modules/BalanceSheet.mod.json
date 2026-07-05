@@ -11,7 +11,7 @@
         "QuerySortType": "None",
         "QueryPagingType": "None",
         "Parameters": [
-          { "IsParameter": true, "Name": "date_to", "DbType": "DATE", "DbParameterDirection": "Input" },
+          { "IsParameter": true, "Name": "fiscal_year_id", "DbType": "bigint", "DbParameterDirection": "Input" },
           { "IsParameter": false, "Name": "sort_key", "DbType": "text", "DbParameterDirection": "Input" },
           { "IsParameter": false, "Name": "section", "DbType": "text", "DbParameterDirection": "Input" },
           { "IsParameter": false, "Name": "item", "DbType": "text", "DbParameterDirection": "Input" },
@@ -23,20 +23,30 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.QueryFieldDesign"
     },
     {
-      "DbColumn": "date_to",
-      "Format": "",
-      "IsYearMonthOnly": false,
+      "Candidates": [],
+      "SearchCondition": {
+        "SelectFields": [],
+        "SortConditions": [],
+        "SortFieldVariable": "StartDate.Value",
+        "SortDescending": true,
+        "ModuleName": "FiscalYear"
+      },
+      "ValueVariable": "Id.Value",
+      "DisplayTextVariable": "Name.Value",
+      "DbColumn": "fiscal_year_id",
+      "EmptyCandidateType": "Null",
+      "AllowOrSearch": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": true,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "基準日",
+      "DisplayName": "対象年度",
       "IsRequired": false,
       "OnDataChanged": "",
-      "Name": "DateTo",
+      "Name": "FiscalYearRef",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
       "DbColumn": "sort_key",
@@ -188,7 +198,7 @@
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
-            "ClassName": "",
+            "ClassName": "amount-cell",
             "FontFamily": "",
             "Color": "",
             "BackgroundColor": "",
@@ -227,7 +237,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "DateTo",
+                  "FieldName": "FiscalYearRef",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",

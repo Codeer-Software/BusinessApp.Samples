@@ -1,0 +1,18 @@
+/* 帳合(Chōai) カスタムCSS
+   参照: ClaudeCodeForDesigner/Docs/AppCss.md（ListElement.ClassName は一覧の td/th に付与される） */
+
+/* 一覧の金額・数値列: 右詰め＋等幅数字（ListElement.ClassName = "amount-cell"） */
+.amount-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 一覧セル内のラッパー DIV は display:flex（実測）のため、text-align では子が動かない。
+   justify-content で右寄せし、スパン側の右詰めも併用する */
+.amount-cell > div {
+  justify-content: flex-end;
+}
+.amount-cell > div > span {
+  display: block;
+  text-align: right;
+}

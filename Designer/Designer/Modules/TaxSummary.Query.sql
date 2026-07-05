@@ -17,7 +17,6 @@ JOIN journal_entries e ON e.id = l.journal_entry_id
 JOIN tax_categories tc ON tc.id = l.tax_category_id
 WHERE e.status = 'posted'
   AND l.tax_category_id IS NOT NULL
-  AND (@date_from IS NULL OR date(e.entry_date) >= date(@date_from))
-  AND (@date_to IS NULL OR date(e.entry_date) <= date(@date_to))
+  AND (@fiscal_year_id IS NULL OR e.fiscal_year_id = @fiscal_year_id)
 GROUP BY tc.id
 ORDER BY tc.display_order

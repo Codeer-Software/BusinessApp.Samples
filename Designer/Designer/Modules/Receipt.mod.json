@@ -897,7 +897,7 @@
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
-            "ClassName": "",
+            "ClassName": "amount-cell",
             "FontFamily": "",
             "Color": "",
             "BackgroundColor": "",

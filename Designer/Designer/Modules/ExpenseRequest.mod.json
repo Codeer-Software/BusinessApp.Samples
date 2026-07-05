@@ -46,7 +46,7 @@
     {
       "DbColumn": "amount",
       "Placeholder": "",
-      "Format": "",
+      "Format": "#,0",
       "IsSlider": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
@@ -2339,7 +2339,7 @@
             "TextWrap": "Unset",
             "CanResize": true,
             "CanUserSort": true,
-            "ClassName": "",
+            "ClassName": "amount-cell",
             "FontFamily": "",
             "Color": "",
             "BackgroundColor": "",

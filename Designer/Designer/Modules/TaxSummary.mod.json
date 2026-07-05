@@ -11,8 +11,7 @@
         "QuerySortType": "None",
         "QueryPagingType": "None",
         "Parameters": [
-          { "IsParameter": true, "Name": "date_from", "DbType": "DATE", "DbParameterDirection": "Input" },
-          { "IsParameter": true, "Name": "date_to", "DbType": "DATE", "DbParameterDirection": "Input" },
+          { "IsParameter": true, "Name": "fiscal_year_id", "DbType": "bigint", "DbParameterDirection": "Input" },
           { "IsParameter": false, "Name": "sort_key", "DbType": "integer", "DbParameterDirection": "Input" },
           { "IsParameter": false, "Name": "tax_category_name", "DbType": "text", "DbParameterDirection": "Input" },
           { "IsParameter": false, "Name": "taxation_type_name", "DbType": "text", "DbParameterDirection": "Input" },
@@ -25,36 +24,30 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.QueryFieldDesign"
     },
     {
-      "DbColumn": "date_from",
-      "Format": "",
-      "IsYearMonthOnly": false,
+      "Candidates": [],
+      "SearchCondition": {
+        "SelectFields": [],
+        "SortConditions": [],
+        "SortFieldVariable": "StartDate.Value",
+        "SortDescending": true,
+        "ModuleName": "FiscalYear"
+      },
+      "ValueVariable": "Id.Value",
+      "DisplayTextVariable": "Name.Value",
+      "DbColumn": "fiscal_year_id",
+      "EmptyCandidateType": "Null",
+      "AllowOrSearch": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": true,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "期間（自）",
+      "DisplayName": "対象年度",
       "IsRequired": false,
       "OnDataChanged": "",
-      "Name": "DateFrom",
+      "Name": "FiscalYearRef",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateFieldDesign"
-    },
-    {
-      "DbColumn": "date_to",
-      "Format": "",
-      "IsYearMonthOnly": false,
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": true,
-      "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "期間（至）",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "DateTo",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
       "DbColumn": "sort_key",
@@ -225,7 +218,7 @@
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
-            "ClassName": "",
+            "ClassName": "amount-cell",
             "FontFamily": "",
             "Color": "",
             "BackgroundColor": "",
@@ -241,7 +234,7 @@
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
-            "ClassName": "",
+            "ClassName": "amount-cell",
             "FontFamily": "",
             "Color": "",
             "BackgroundColor": "",
@@ -280,29 +273,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "DateFrom",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "DateTo",
+                  "FieldName": "FiscalYearRef",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",

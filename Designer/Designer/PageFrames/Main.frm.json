@@ -88,7 +88,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": false,
           "ListFieldDesign": {
@@ -147,7 +147,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": false,
           "ListFieldDesign": {
@@ -265,7 +265,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": true,
           "ListFieldDesign": {
@@ -324,7 +324,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": true,
           "ListFieldDesign": {
@@ -505,7 +505,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": true,
           "ListFieldDesign": {
@@ -564,7 +564,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": true,
           "ListFieldDesign": {
@@ -623,7 +623,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": true,
           "ListFieldDesign": {
@@ -682,7 +682,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": true,
           "ListFieldDesign": {
@@ -741,7 +741,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": true,
           "ListFieldDesign": {
@@ -800,7 +800,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": false,
           "ListFieldDesign": {
@@ -977,7 +977,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": true,
           "ListFieldDesign": {
@@ -1036,7 +1036,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": true,
           "ListFieldDesign": {
@@ -1095,7 +1095,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": false,
           "ListFieldDesign": {
@@ -1154,7 +1154,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": false,
           "ListFieldDesign": {
@@ -1271,8 +1271,8 @@
           "UserUrlParameter": true,
           "PageTitle": "",
           "HeaderTitle": "",
-          "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataUpdate": true,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": true,
           "ListFieldDesign": {
@@ -1331,7 +1331,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": false,
           "ListFieldDesign": {
@@ -1390,7 +1390,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": false,
           "ListFieldDesign": {
@@ -1449,7 +1449,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": false,
           "ListFieldDesign": {
@@ -1508,7 +1508,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": false,
           "ListFieldDesign": {
@@ -1567,7 +1567,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": false,
           "ListFieldDesign": {
@@ -1626,7 +1626,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": false,
           "ListFieldDesign": {
@@ -1685,7 +1685,7 @@
           "PageTitle": "",
           "HeaderTitle": "",
           "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
+          "CanBulkDataDownload": true,
           "UseSubmitButton": false,
           "UseNavigateToCreate": false,
           "ListFieldDesign": {

@@ -1520,7 +1520,7 @@
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": true,
-            "ClassName": "",
+            "ClassName": "amount-cell",
             "FontFamily": "",
             "Color": "",
             "BackgroundColor": "",

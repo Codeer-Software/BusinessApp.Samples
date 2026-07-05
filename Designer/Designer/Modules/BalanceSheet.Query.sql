@@ -1,7 +1,8 @@
 WITH yr AS (
   SELECT id, start_date FROM fiscal_years
-  WHERE date(start_date) <= date(COALESCE(@date_to, date('now')))
-    AND date(end_date) >= date(COALESCE(@date_to, date('now')))
+  WHERE id = COALESCE(@fiscal_year_id,
+    (SELECT id FROM fiscal_years
+     WHERE date(start_date) <= date('now') AND date(end_date) >= date('now')))
 ),
 bal AS (
   SELECT
@@ -26,8 +27,7 @@ bal AS (
     FROM journal_lines l
     JOIN journal_entries e ON e.id = l.journal_entry_id
     WHERE e.status = 'posted'
-      AND date(e.entry_date) >= (SELECT date(start_date) FROM yr)
-      AND date(e.entry_date) <= date(COALESCE(@date_to, date('now')))
+      AND e.fiscal_year_id IN (SELECT id FROM yr)
     GROUP BY l.account_id
   ) j ON j.account_id = a.id
   WHERE COALESCE(o.bal, 0) <> 0 OR COALESCE(j.dmc, 0) <> 0

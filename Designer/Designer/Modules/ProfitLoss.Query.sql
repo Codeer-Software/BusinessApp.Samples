@@ -13,8 +13,7 @@ WITH bal AS (
   JOIN account_categories c ON c.id = a.category_id
   WHERE e.status = 'posted'
     AND c.statement = 'PL'
-    AND (@date_from IS NULL OR date(e.entry_date) >= date(@date_from))
-    AND (@date_to IS NULL OR date(e.entry_date) <= date(@date_to))
+    AND (@fiscal_year_id IS NULL OR e.fiscal_year_id = @fiscal_year_id)
   GROUP BY a.id
 ),
 amt AS (
