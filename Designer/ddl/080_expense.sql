@@ -57,6 +57,20 @@ FROM (
     SELECT 'OUT', '外注費',     '5000', 'PUR_10', 0, 0, 60 UNION ALL
     SELECT 'COM', '通信費',     '6130', 'PUR_10', 0, 0, 70 UNION ALL
     SELECT 'BOK', '図書研修費', '6150', 'PUR_10', 0, 0, 80 UNION ALL
-    SELECT 'DUE', '諸会費',     '6210', 'PUR_10', 0, 0, 90 UNION ALL
+    SELECT 'DUE', '諸会費',     '6260', 'NON_TAXABLE', 0, 0, 90 UNION ALL
     SELECT 'ETC', 'その他',     '6900', 'PUR_10', 0, 0, 100
 ) v;
+
+-- ---- 修正 (2026-07-05 適用後に発覚): 諸会費の勘定科目が無かった ----
+-- 勘定科目 6260 諸会費 を追加（同業団体の通常会費は消費税不課税が原則 → 既定税区分 NON_TAXABLE）
+INSERT OR IGNORE INTO accounts (code, name, account_type, category_id, dc_normal, default_tax_category_id, display_order)
+SELECT '6260', '諸会費', 'expense',
+       (SELECT category_id FROM accounts WHERE code = '6210'),
+       'D',
+       (SELECT id FROM tax_categories WHERE code = 'NON_TAXABLE'),
+       6260;
+-- 費目 DUE の橋渡しを 6210(支払手数料)/PUR_10 → 6260(諸会費)/NON_TAXABLE に是正
+UPDATE expense_categories SET
+    default_account_id = (SELECT id FROM accounts WHERE code = '6260'),
+    default_tax_category_id = (SELECT id FROM tax_categories WHERE code = 'NON_TAXABLE')
+WHERE code = 'DUE';
