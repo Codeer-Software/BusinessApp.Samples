@@ -8,8 +8,8 @@ CREATE TABLE IF NOT EXISTS tax_rates (
     code TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     rate_percent REAL NOT NULL,          -- 10 / 8 （将来 1 等の追加もレコードで対応）
-    valid_from TEXT NOT NULL,            -- ISO 日付
-    valid_to TEXT,                       -- NULL = 無期限
+    valid_from DATE NOT NULL,            -- ISO 日付
+    valid_to DATE,                       -- NULL = 無期限
     display_order INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1
 );
@@ -30,8 +30,8 @@ CREATE TABLE IF NOT EXISTS tax_categories (
 -- インボイス経過措置の控除割合（令和8年度改正: 8・7・5・3割の4段階）
 CREATE TABLE IF NOT EXISTS invoice_transition_rates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    valid_from TEXT NOT NULL,
-    valid_to TEXT NOT NULL,
+    valid_from DATE NOT NULL,
+    valid_to DATE NOT NULL,
     rate_percent INTEGER NOT NULL        -- 控除できる割合(%)
 );
 
@@ -41,8 +41,8 @@ CREATE TABLE IF NOT EXISTS system_thresholds (
     code TEXT NOT NULL,                  -- SMALL_ASSET_EXPENSE / LUMP_SUM_ASSET / SME_IMMEDIATE / SME_ANNUAL_CAP
     name TEXT NOT NULL,
     amount INTEGER NOT NULL,             -- 円
-    valid_from TEXT,                     -- NULL = 期間の定めなし
-    valid_to TEXT
+    valid_from DATE,                     -- NULL = 期間の定めなし
+    valid_to DATE
 );
 
 -- ---- seed ----
