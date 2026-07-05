@@ -1,0 +1,24 @@
+{
+  "_README": "Fable 自律実行用の恒久 許可リスト（手動管理）。承認済み権限が自動追記される settings.local.json とは別に、こちらは自動上書きされないのでシード運用に使う。方針: 任意のシェル実行は許さず（bare Bash なし・rm/del なし）、必要なコマンドだけ列挙。ファイル編集はリポジトリ配下に限定。不足が出たら追記して育てる。exe パスは JSON 文字列なのでバックスラッシュは 2 個ずつ書く（単一だと不正 JSON で設定全体が読み込まれない）。",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "WebSearch",
+      "WebFetch",
+      "Write(//c/Users/REDACTED/DEV/accounting-app/**)",
+      "Edit(//c/Users/REDACTED/DEV/accounting-app/**)",
+      "Bash(dotnet:*)",
+      "Bash(git:*)",
+      "Bash(zip:*)",
+      "Bash(unzip:*)",
+      "Bash(powershell:*)",
+      "Bash(pwsh:*)",
+      "Bash(cp:*)",
+      "Bash(mkdir:*)",
+      "Bash(\"C:\\Users\\REDACTED\\DEV\\accounting-app\\AccountingApp\\AccountingApp\\AccountingApp.Designer\\bin\\Debug\\net8.0-windows\\AccountingApp.Designer.exe\" designcheck:*)",
+      "Bash(\"C:\\Users\\REDACTED\\DEV\\accounting-app\\AccountingApp\\AccountingApp\\AccountingApp.Designer\\bin\\Debug\\net8.0-windows\\AccountingApp.Designer.exe\" sql:*)"
+    ]
+  }
+}
