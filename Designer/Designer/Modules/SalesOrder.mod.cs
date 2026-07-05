@@ -51,7 +51,7 @@ string NextOrderNo()
 {
     var prefix = $"SO-{DateTime.Today:yy}-";
     var s = new ModuleSearcher<SalesOrder>();
-    s.OrderByDescending(e => e.OrderNo);
+    s.OrderByDescending(e => e.OrderNo.Value);
     s.Limit(1);
     var last = s.ExecuteFirstOrDefault();
     var seq = 1;

@@ -66,7 +66,7 @@ string NextAcceptanceNo()
 {
     var prefix = $"A-{DateTime.Today:yy}-";
     var s = new ModuleSearcher<Acceptance>();
-    s.OrderByDescending(e => e.AcceptanceNo);
+    s.OrderByDescending(e => e.AcceptanceNo.Value);
     s.Limit(1);
     var last = s.ExecuteFirstOrDefault();
     var seq = 1;
@@ -248,7 +248,7 @@ string NextInvoiceNoForCreate()
 {
     var prefix = $"INV-{DateTime.Today:yy}-";
     var s = new ModuleSearcher<Invoice>();
-    s.OrderByDescending(e => e.InvoiceNo);
+    s.OrderByDescending(e => e.InvoiceNo.Value);
     s.Limit(1);
     var last = s.ExecuteFirstOrDefault();
     var seq = 1;

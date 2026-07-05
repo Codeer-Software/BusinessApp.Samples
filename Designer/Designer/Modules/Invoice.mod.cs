@@ -75,7 +75,7 @@ string NextInvoiceNo()
 {
     var prefix = $"INV-{DateTime.Today:yy}-";
     var s = new ModuleSearcher<Invoice>();
-    s.OrderByDescending(e => e.InvoiceNo);
+    s.OrderByDescending(e => e.InvoiceNo.Value);
     s.Limit(1);
     var last = s.ExecuteFirstOrDefault();
     var seq = 1;

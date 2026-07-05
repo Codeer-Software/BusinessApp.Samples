@@ -51,7 +51,7 @@ string NextQuoteNo()
 {
     var prefix = $"Q-{DateTime.Today:yy}-";
     var s = new ModuleSearcher<Quote>();
-    s.OrderByDescending(e => e.QuoteNo);
+    s.OrderByDescending(e => e.QuoteNo.Value);
     s.Limit(1);
     var last = s.ExecuteFirstOrDefault();
     var seq = 1;
@@ -71,7 +71,7 @@ string NextOrderNoForConvert()
 {
     var prefix = $"SO-{DateTime.Today:yy}-";
     var s = new ModuleSearcher<SalesOrder>();
-    s.OrderByDescending(e => e.OrderNo);
+    s.OrderByDescending(e => e.OrderNo.Value);
     s.Limit(1);
     var last = s.ExecuteFirstOrDefault();
     var seq = 1;
