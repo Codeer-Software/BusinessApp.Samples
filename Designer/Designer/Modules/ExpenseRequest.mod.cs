@@ -372,15 +372,114 @@ void RegisterFixedAsset(object assetAccountId, int baseAmount)
     else Toaster.Error("固定資産台帳への自動登録に失敗しました。手動で登録してください");
 }
 
-// 経理: 精算済にする (accounting → settled)。実支払の記録は B-6 出納帳と連動予定
+// 経理: 精算済にする (accounting → settled)
+// B-6: 支払仕訳 (D 未払金2020 / C 普通預金1020) を生成してからステータスを進める
 void Settle_OnClick()
 {
+    if (CurrentUser.Role.Value != "accounting")
+    {
+        Toaster.Error("精算（支払仕訳の生成）は経理ロールのみ実行できます");
+        return;
+    }
     if (SettlementStatus.Value != "accounting") return;
+    if (Amount.Value == null || Amount.Value <= 0) { Toaster.Error("金額が入力されていません"); return; }
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    // 二重生成ガード
+    var js = new ModuleSearcher<JournalEntry>();
+    js.AddEquals(e => e.SourceType.Value, "expense_payment");
+    js.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    if (js.Execute().Count > 0) { Toaster.Error("この申請の支払仕訳は既に生成済みです"); return; }
+
+    // 支払日=今日。会計年度・期間の解決 (境界日知見: 期間解決はその月の月初日で行う)
+    var payDate = DateOnly.FromDateTime(DateTime.Today);
+    var monthFirst = new DateOnly(payDate.Year, payDate.Month, 1);
+    var ys = new ModuleSearcher<FiscalYear>();
+    ys.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
+    ys.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);
+    var fy = ys.ExecuteFirstOrDefault();
+    if (fy == null) { Toaster.Error("支払日に対応する会計年度がありません"); return; }
+    var typedFy = (FiscalYear)fy;
+    var ps = new ModuleSearcher<FiscalPeriod>();
+    ps.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
+    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);
+    var period = ps.ExecuteFirstOrDefault();
+    if (period == null) { Toaster.Error("支払日に対応する月次期間がありません"); return; }
+    var typedPeriod = (FiscalPeriod)period;
+    if (typedPeriod.Status.Value == "closed") { Toaster.Error("支払日の期間は締め済みです"); return; }
+
+    // 科目解決: 未払金2020 / 普通預金1020
+    var accS = new ModuleSearcher<Account>();
+    accS.AddIn(e => e.Code.Value, "2020", "1020");
+    var accounts = accS.Execute();
+    object apAccountId = null;
+    object bankAccountId = null;
+    foreach (var a in accounts)
+    {
+        var acc = (Account)a;
+        if (acc.Code.Value == "2020") { apAccountId = acc.Id.Value; }
+        if (acc.Code.Value == "1020") { bankAccountId = acc.Id.Value; }
+    }
+    if (apAccountId == null) { Toaster.Error("未払金(2020)の科目がありません"); return; }
+    if (bankAccountId == null) { Toaster.Error("普通預金(1020)の科目がありません"); return; }
+
+    // 伝票採番
+    var ns = new ModuleSearcher<JournalEntry>();
+    ns.AddEquals(e => e.FiscalYearRef.Value, typedFy.Id.Value);
+    ns.OrderByDescending(e => e.JournalNo.Value);
+    ns.Limit(1);
+    var last = ns.ExecuteFirstOrDefault();
+    var nextNo = 1;
+    if (last != null)
+    {
+        var typedLast = (JournalEntry)last;
+        if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
+    }
+
+    int amount = Amount.Value;
+
+    // 支払仕訳: D 未払金 / C 普通預金
+    var je = new JournalEntry();
+    je.EntryDate.Value = payDate;
+    je.EntryType.Value = "auto";
+    je.Description.Value = $"経費支払 {Title.Value}";
+    je.Status.Value = "posted";
+    je.JournalNo.Value = nextNo;
+    je.FiscalYearRef.Value = typedFy.Id.Value;
+    je.SourceType.Value = "expense_payment";
+    je.SourceId.Value = this.Id.Value;
+    je.Lines.AddRows(2);
+    var idx = 0;
+    foreach (var row in je.Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        idx = idx + 1;
+        l.LineNo.Value = idx;
+        l.Description.Value = $"経費支払 {Title.Value}";
+        l.TaxInputMode.Value = "none";
+        l.Amount.Value = amount;
+        l.InputAmount.Value = amount;
+        if (idx == 1)
+        {
+            l.Dc.Value = "D";
+            l.Account.Value = apAccountId;
+        }
+        else
+        {
+            l.Dc.Value = "C";
+            l.Account.Value = bankAccountId;
+        }
+    }
+    var ret = je.Submit();
+    if (ret != true) { Toaster.Error("支払仕訳の生成に失敗しました"); return; }
+
     SettlementStatus.Value = "settled";
-    var ret = this.Submit();
-    if (ret != true) { Toaster.Error("更新に失敗しました"); SettlementStatus.Value = "accounting"; return; }
+    var ret2 = this.Submit();
+    if (ret2 != true) { Toaster.Error("精算ステータスの更新に失敗しました（支払仕訳は生成済みです）"); return; }
     UpdateAccountingButtons();
-    Toaster.Success("精算済にしました");
+    Toaster.Success($"支払仕訳 No.{nextNo}（{amount:#,0} 円）を生成し精算済にしました");
 }
 
 // 経理: 完了にする (settled → completed)
