@@ -364,3 +364,5 @@ FodyWeavers.xsd
 
 # Designer workspace scratch outputs (designcheck/sql CLI results, screenshots)
 Designer/temporary/
+# API キー（絶対にコミットしない）
+references/api-keys.json
