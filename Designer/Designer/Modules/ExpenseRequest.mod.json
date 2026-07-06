@@ -602,7 +602,7 @@
       "TypeFullName": "Design.Samples.AIDocumentAnalyzer.AITextAnalyzerFieldDesign"
     },
     {
-      "Text": "AI読み取り",
+      "Text": "AI読み取り（添付＋自動入力）",
       "Icon": "",
       "Style": "Default",
       "RelativeField": "",
@@ -854,7 +854,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "領収書",
+      "Text": "領収書（添付のみ）",
       "Icon": "",
       "Style": "Default",
       "RelativeField": "Receipt",
