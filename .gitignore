@@ -364,3 +364,6 @@ FodyWeavers.xsd
 
 # Designer workspace scratch outputs (designcheck/sql CLI results, screenshots)
 Designer/temporary/
+
+# Designer IDE per-machine state (70ef403 で誤コミットされたため明示的に除外)
+.ide/

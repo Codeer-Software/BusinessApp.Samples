@@ -108,7 +108,7 @@
       "OnSearchDataChanged": "",
       "DisplayName": "状態",
       "IsRequired": true,
-      "OnDataChanged": "",
+      "OnDataChanged": "Status_OnDataChanged",
       "Name": "Status",
       "IgnoreModification": false,
       "OnValidateInput": "",

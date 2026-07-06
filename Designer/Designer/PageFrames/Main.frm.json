@@ -2462,7 +2462,7 @@
             "CanCustomizeColumns": false,
             "DisplayName": "",
             "SearchCondition": {
-              "LimitCount": 50,
+              "LimitCount": 100,
               "SelectFields": [],
               "SortConditions": [],
               "SortFieldVariable": "Code.Value",

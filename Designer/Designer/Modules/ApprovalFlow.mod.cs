@@ -259,7 +259,9 @@ bool IsCurrentUserCreator()
 void AddHistory(string action, string comment)
 {
     var h = History.AddRow();
-    h.AttemptNo.Value = AttemptNo.Value;
+    // AttemptNo はメモリの ChildModule 値が遅延ロードで空のことがある（#60）。
+    // 再申請直後はメモリ側が最新（DB+1）なのでメモリ優先、null のときだけ DB から解決する
+    h.AttemptNo.Value = AttemptNo.Value ?? ResolveDbAttemptNo();
     h.ActorUser.Value = CurrentUser.Id.Value;
     h.Action.Value = action;
     h.ActedAt.Value = DateTime.Now;
@@ -438,6 +440,18 @@ ApprovalFlow FetchSelfFromDb()
     var found = s.ExecuteFirstOrDefault();
     if (found == null) return null;
     return (ApprovalFlow)found;
+}
+
+// AttemptNo の DB 解決（メモリの ChildModule 値が遅延ロードで空/古いことへの対処。#60）。
+// DB にも無ければ 1（初回申請）
+int ResolveDbAttemptNo()
+{
+    if (!this.IsNewData)
+    {
+        var self = FetchSelfFromDb();
+        if (self != null && self.AttemptNo.Value != null) return (int)self.AttemptNo.Value;
+    }
+    return (int)(AttemptNo.Value ?? 1);
 }
 
 // 新規申請直後: メモリの Id が temporary のため、自分が直近に作成したフローを DB から特定する
@@ -657,7 +671,8 @@ void Resubmit_OnClick()
     var valid = parent.ValidateForApply();
     if (valid != true) return;
 
-    AttemptNo.Value = (AttemptNo.Value ?? 0) + 1;
+    // メモリ値は遅延ロードで空/古いことがあるため DB の AttemptNo を基準に増分（#60）
+    AttemptNo.Value = ResolveDbAttemptNo() + 1;
     Status.Value = "Pending";
 
     if (!RebuildOrdersFromTemplate()) return;
@@ -702,7 +717,8 @@ void ReapproveForOverrun(string reason)
     using var suspend = parent.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 
-    AttemptNo.Value = (AttemptNo.Value ?? 0) + 1;
+    // メモリ値は遅延ロードで空/古いことがあるため DB の AttemptNo を基準に増分（#60）
+    AttemptNo.Value = ResolveDbAttemptNo() + 1;
     Status.Value = "Pending";
 
     if (!RebuildOrdersFromTemplate()) return;
