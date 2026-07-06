@@ -542,7 +542,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FileFieldDesign"
     },
     {
-      "Remarks": "これは経費精算の領収書・レシートです。Title は店名や内容から適切な件名（例: 会食代、書籍購入）を簡潔に生成してください。Amount は税込合計金額、TaxAmount は記載があれば消費税額、ExpenseDate は利用日（発行日）、UsedAt は店名・発行元です。ExpenseCategoryRef は内容に最も合う費目名（旅費交通費/会議費/交際費/消耗品費/備品/外注費/通信費/図書研修費/諸会費/その他）を返してください。飲食で取引先接待と読み取れる場合は EntertainmentGuest/EntertainmentCount/EntertainmentPurpose も推定してください。",
+      "Remarks": "これは経費精算の領収書・レシートです。次のルールで抽出してください。\n- Title: 必ず値を入れる。店名と内容から簡潔な件名を生成する（例: 「会食代（炭火焼鳥 心）」「書籍購入」）。原文の丸写しはしない\n- Amount: 合計金額（税込）の数値。「合計」「お買上げ」の金額。お預り・お釣りではない\n- TaxAmount: 「消費税」「内消費税額」の記載があればその数値\n- ExpenseDate: レシートの発行日（YYYY-MM-DD）。和暦・時刻付きでも日付に変換する\n- UsedAt: 店名・発行元の名称のみ（住所は含めない）\n- ExpenseCategoryRef: 内容に最も合う費目名を必ず1つ選ぶ（旅費交通費/会議費/交際費/消耗品費/備品/外注費/通信費/図書研修費/諸会費/その他）。飲食・会食は交際費または会議費\n- 宛名（〜御中）や人数から取引先接待と読み取れる場合: EntertainmentGuest=相手先名、EntertainmentCount=人数、EntertainmentPurpose=目的を推定して入れる\n- Purpose: 使用しない。必ず null にする（レシート原文を入れない）\n- EstimatedAmount・Note などその他の項目も null にする",
       "DataImportCompleted": "AiImport_Completed",
       "FileField": "Receipt",
       "Name": "AiReceiptReader",
