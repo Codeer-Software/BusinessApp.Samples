@@ -37,9 +37,11 @@ void ResolveFiscalYear()
         FiscalYearRef.Value = null;
         return;
     }
+    // 月初日で解決（月末日など境界日は日付書式の辞書順比較で一致に失敗する罠がある。Project.md 知見）
+    var firstDay = new DateTime(EntryDate.Value.Year, EntryDate.Value.Month, 1);
     var s = new ModuleSearcher<FiscalYear>();
-    s.AddLessThanOrEqual(e => e.StartDate.Value, EntryDate.Value);
-    s.AddGreaterThanOrEqual(e => e.EndDate.Value, EntryDate.Value);
+    s.AddLessThanOrEqual(e => e.StartDate.Value, firstDay);
+    s.AddGreaterThanOrEqual(e => e.EndDate.Value, firstDay);
     var fy = s.ExecuteFirstOrDefault();
     if (fy == null)
     {
@@ -152,9 +154,10 @@ void SaveEntry(bool post)
         EntryDate.SetError("取引日に対応する会計年度がありません");
         return;
     }
+    var entryFirstDay = new DateTime(EntryDate.Value.Year, EntryDate.Value.Month, 1);
     var ps = new ModuleSearcher<FiscalPeriod>();
-    ps.AddLessThanOrEqual(e => e.StartDate.Value, EntryDate.Value);
-    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, EntryDate.Value);
+    ps.AddLessThanOrEqual(e => e.StartDate.Value, entryFirstDay);
+    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, entryFirstDay);
     var period = ps.ExecuteFirstOrDefault();
     if (period == null)
     {
@@ -285,9 +288,10 @@ void RegenerateTaxLines()
 
     // 4. 経過措置の控除割合（取引日で期間解決。期間外は 0%）
     decimal transitionRate = 0;
+    var trFirstDay = new DateTime(EntryDate.Value.Year, EntryDate.Value.Month, 1);
     var trSearch = new ModuleSearcher<InvoiceTransitionRate>();
-    trSearch.AddLessThanOrEqual(e => e.ValidFrom.Value, EntryDate.Value);
-    trSearch.AddGreaterThanOrEqual(e => e.ValidTo.Value, EntryDate.Value);
+    trSearch.AddLessThanOrEqual(e => e.ValidFrom.Value, trFirstDay);
+    trSearch.AddGreaterThanOrEqual(e => e.ValidTo.Value, trFirstDay);
     var tr = trSearch.ExecuteFirstOrDefault();
     if (tr != null)
     {

@@ -105,16 +105,17 @@ void Confirm_OnClick()
     js.AddEquals(e => e.SourceId.Value, this.Id.Value);
     if (js.Execute().Count > 0) { Toaster.Error("この検収の売上仕訳は既に生成済みです"); return; }
 
-    // 会計年度の解決と締め済み期間ガード
+    // 会計年度の解決と締め済み期間ガード (境界日知見: 月末日は辞書順比較で失敗するため月初日で解決)
+    var accMonthFirst = new DateOnly(AcceptanceDate.Value.Year, AcceptanceDate.Value.Month, 1);
     var ys = new ModuleSearcher<FiscalYear>();
-    ys.AddLessThanOrEqual(e => e.StartDate.Value, AcceptanceDate.Value);
-    ys.AddGreaterThanOrEqual(e => e.EndDate.Value, AcceptanceDate.Value);
+    ys.AddLessThanOrEqual(e => e.StartDate.Value, accMonthFirst);
+    ys.AddGreaterThanOrEqual(e => e.EndDate.Value, accMonthFirst);
     var fy = ys.ExecuteFirstOrDefault();
     if (fy == null) { Toaster.Error("検収日に対応する会計年度がありません"); return; }
     var typedFy = (FiscalYear)fy;
     var ps = new ModuleSearcher<FiscalPeriod>();
-    ps.AddLessThanOrEqual(e => e.StartDate.Value, AcceptanceDate.Value);
-    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, AcceptanceDate.Value);
+    ps.AddLessThanOrEqual(e => e.StartDate.Value, accMonthFirst);
+    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, accMonthFirst);
     var period = ps.ExecuteFirstOrDefault();
     if (period == null) { Toaster.Error("検収日に対応する月次期間がありません"); return; }
     var typedPeriod = (FiscalPeriod)period;

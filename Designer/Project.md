@@ -58,4 +58,10 @@
 - 2026-07-06: **期間解決の日付比較で「境界日（end_date と同日）の >=」は失敗しうる**（検索パラメータが時刻付き書式・seed が素の DATE 文字列だと辞書順で偽。RecurringRun の月末日解決で実測）。**期間・年度の解決は境界にならない日付（月初日等）で行う**。月末日付の手動起票が同じ罠を踏む可能性は要実測（バックログ）
 - 2026-07-06: **レイアウトに出ていないフィールド（DataOnlyFields 含む）の `.Value` は信用しない**。ExpenseRequest.Creator（DataOnly の LinkField）が実行タイミングにより null で、部門引継ぎが欠落した実測バグ。スクリプトで確実に値が要る場合は **ModuleSearcher で自レコードを DB から取り直す**（#60 の罠の一般化。ApprovalFlow の通知でも同方式を採用）
 - 2026-07-06: **システム移行時の開始残高は「導入初年度の期首」に置く**（過去年度に期首も仕訳も無い状態でその年度から繰越を実行すると、翌期の期首残高が空データで洗い替えられ帳簿が破壊される。総合テストで実測 → CarryOver_OnClick に空年度ガードを実装済み）
+- 2026-07-07: **月末日付の境界罠は実発現を確認**（新規振替伝票 2026-07-31 で「取引日に対応する月次期間がありません」を実測。EndDate と同日の >= 比較が日付書式の辞書順比較で偽になる）。**対策: 年度・期間・経過措置の期間解決はすべて「対象日の月初日」で行う**（JournalEntry/ExpenseRequest/Acceptance/Receipt を修正済み。CashEntry/RecurringRun/BankImport/JournalImport/JournalTemplate/VendorInvoice は当初から月初日方式）。新規スクリプトでも必ずこの方式を使うこと
+- 2026-07-07: **表示専用モジュール（DataSourceName ""）の this.Submit() は機能しない**（BankImport で実測: 例外も出ず何も起きない）。ListField の行を保存するには行インスタンス単位で row.Submit() する
+- 2026-07-07: **DateField への代入は DateOnly.FromDateTime(…) 必須**（DateTime を代入すると UI には表示されるが保存データに乗らず NOT NULL 違反になる。BankImport で実測）
+- 2026-07-07: **スクリプトから new して Submit するモジュールは CanCreate:true 必須**（false だとサーバ側で "This module data cannot be created" と拒否される。UI の新規作成だけ塞ぎたい場合は PageFrame Link の UseNavigateToCreate:false と ListField の CanCreate:false で行う）
+- 2026-07-07: ブラウザ自動操作で Blazor のボタンが座標クリックで空振りすることがある → **JS の btn.click() が確実**（承認待ち「開く」が無反応に見えた原因もこれ。アプリ側の不具合ではなかった）
+- 2026-07-07: **検索フォームの SelectField は JS の `el.value=…; dispatchEvent('change')` では Blazor に値が伝わらないことがある**（見た目は変わるが SearchValue が更新されず、検索パラメータが NULL のまま＝0件に見える）。総勘定元帳で実測・診断 SQL で確定。**実クリック＋キーボード（Down/Up）操作なら確実に伝わる**。自動テストで検索セレクトを操作するときはキーボード方式を使うこと（アプリ側の不具合ではない）
 - 2026-07-06: **翌期繰越ボタン（Update タイミングの ExecuteSqlField）が Submit 経由で発火しない（確定・未解決）**。Timing:Update / WithStandardIO:Before / パラメータ宣言 / NextYearId の実列バインド / DataOnlyFields 登録——設定はすべて正しい状態でも opening_balances が書き換わらないことを行 id 比較で実測（3回試行）。CLB コア（ModuleDataIO）の発火条件・パラメータ解決の調査が必要。**回避策: 繰越 SQL の手動実行（sql CLI）は完全動作**。A-10 時点の「動作確認」は繰越元が空でゼロ件動作だった可能性が高い
