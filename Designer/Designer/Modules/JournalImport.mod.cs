@@ -1,0 +1,445 @@
+// JournalImport.mod.cs — 仕訳CSVインポート（D-5・汎用）
+// 他ソフトからの移行・給与計算ソフトの仕訳データ取込の受け皿。
+// 形式: 伝票グループ,日付,借貸,科目コード,金額,税区分コード,摘要（1行=1明細行）
+// 方針: 行は無加工で取り込む（税の再計算・税行の自動生成はしない。移行の正確性優先）。
+// 検証はグループ（伝票）単位: 1行でも NG のグループは伝票ごとスキップして理由を集計する。
+// 生成は JournalEntry 単位の je.Submit()（表示専用モジュールの this.Submit() は機能しない）。
+// 注: グループエラーの記録は List への追記＋線形探索で行う（インデクサ書き込み・
+//     Dictionary・ジェネリック引数のヘルパはスクリプトで未実証のため使わない）。
+
+void Detail_OnAfterInit()
+{
+    ResultLabel.Text = "";
+}
+
+void Import_OnClick()
+{
+    var raw = CsvText.Value;
+    if (raw == null || raw.Trim() == "") { Toaster.Error("仕訳CSVを貼り付けてください"); return; }
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    // マスタ一括ロード（ループ内 I/O の削減）
+    var accS = new ModuleSearcher<Account>();
+    var accounts = accS.Execute();
+    var tcS = new ModuleSearcher<TaxCategory>();
+    var taxCats = tcS.Execute();
+    var fyS = new ModuleSearcher<FiscalYear>();
+    var years = fyS.Execute();
+    var fpS = new ModuleSearcher<FiscalPeriod>();
+    var periods = fpS.Execute();
+
+    // ---- 解析（グループと行を並行リストに集める） ----
+    var gKeys = new List<string>();     // グループキー（出現順）
+    var gDate = new List<string>();     // グループの日付（先頭行の正規化日付）
+    var errGi = new List<int>();        // グループエラー（追記のみ・最初の理由が有効）
+    var errMsg = new List<string>();
+
+    var rGroup = new List<int>();       // 行→グループ index
+    var rDc = new List<string>();
+    var rAccountId = new List<object>();
+    var rAmount = new List<int>();
+    var rTaxCatId = new List<object>();
+    var rDesc = new List<string>();
+
+    var badLines = 0;
+
+    var text = raw.Replace("\r\n", "\n").Replace("\r", "\n");
+    var lines = text.Split('\n');
+    foreach (var line in lines)
+    {
+        var t = line.Trim();
+        if (t == "") continue;
+        var cols = SplitCsvLine(t);
+        if (cols.Count < 5) { badLines = badLines + 1; continue; }
+
+        var groupKey = cols[0].Trim();
+        var dateStr = NormalizeDate(cols[1]);
+        var amount = ParseAmount(cols[4]);
+
+        // ヘッダ行・ゴミ行: 日付も金額も解析できない行は黙ってスキップ
+        if (dateStr == "" && amount == 0) { badLines = badLines + 1; continue; }
+        if (groupKey == "") { badLines = badLines + 1; continue; }
+
+        // グループの解決（出現順に採る）
+        var gi = -1;
+        for (int i = 0; i < gKeys.Count; i++)
+        {
+            if (gKeys[i] == groupKey) { gi = i; break; }
+        }
+        if (gi < 0)
+        {
+            gKeys.Add(groupKey);
+            gDate.Add(dateStr);
+            gi = gKeys.Count - 1;
+        }
+
+        // 行レベル検証（NG はグループごとスキップ。最初の理由のみ記録）
+        var rowErr = "";
+        if (dateStr == "")
+        {
+            rowErr = "日付が解析できない行があります";
+        }
+        else if (gDate[gi] != dateStr)
+        {
+            rowErr = "同一伝票内で日付が一致しません";
+        }
+
+        var dc = NormalizeDc(cols[2]);
+        if (rowErr == "" && dc == "")
+        {
+            rowErr = $"借貸が不正です（{cols[2]}）";
+        }
+
+        var code = cols[3].Trim();
+        object accountId = null;
+        foreach (var am in accounts)
+        {
+            var a = (Account)am;
+            if (a.Code.Value == code) { accountId = a.Id.Value; break; }
+        }
+        if (rowErr == "" && accountId == null)
+        {
+            rowErr = $"科目コード {code} が存在しません";
+        }
+
+        object taxCatId = null;
+        var taxCode = (cols.Count > 5) ? cols[5].Trim() : "";
+        if (taxCode != "")
+        {
+            foreach (var cm in taxCats)
+            {
+                var c = (TaxCategory)cm;
+                if (c.Code.Value == taxCode) { taxCatId = c.Id.Value; break; }
+            }
+            if (rowErr == "" && taxCatId == null)
+            {
+                rowErr = $"税区分コード {taxCode} が存在しません";
+            }
+        }
+
+        if (rowErr == "" && amount <= 0)
+        {
+            rowErr = "金額は 1 円以上で入力してください";
+        }
+
+        if (rowErr != "")
+        {
+            var hasErr = false;
+            for (int i = 0; i < errGi.Count; i++)
+            {
+                if (errGi[i] == gi) { hasErr = true; break; }
+            }
+            if (!hasErr) { errGi.Add(gi); errMsg.Add(rowErr); }
+        }
+
+        rGroup.Add(gi);
+        rDc.Add(dc);
+        rAccountId.Add(accountId);
+        rAmount.Add(amount);
+        rTaxCatId.Add(taxCatId);
+        rDesc.Add((cols.Count > 6) ? cols[6].Trim() : "");
+    }
+
+    if (gKeys.Count == 0)
+    {
+        ResultLabel.Text = $"取込 0 伝票（解析不能行 {badLines} 行）";
+        Toaster.Warn("取り込める仕訳がありませんでした");
+        return;
+    }
+
+    // ---- グループ単位の検証（貸借一致・期間 open） ----
+    for (int gi = 0; gi < gKeys.Count; gi++)
+    {
+        var hasErr = false;
+        for (int i = 0; i < errGi.Count; i++)
+        {
+            if (errGi[i] == gi) { hasErr = true; break; }
+        }
+        if (hasErr) continue;
+
+        var groupErr = "";
+        var dSum = 0;
+        var cSum = 0;
+        var rowCount = 0;
+        for (int ri = 0; ri < rGroup.Count; ri++)
+        {
+            if (rGroup[ri] != gi) continue;
+            rowCount = rowCount + 1;
+            if (rDc[ri] == "D") { dSum = dSum + rAmount[ri]; }
+            else { cSum = cSum + rAmount[ri]; }
+        }
+        if (rowCount == 0)
+        {
+            groupErr = "明細行がありません";
+        }
+        else if (dSum != cSum)
+        {
+            groupErr = $"貸借不一致（借方 {dSum:#,0} / 貸方 {cSum:#,0}）";
+        }
+
+        if (groupErr == "")
+        {
+            // 年度・期間の解決は境界日の罠を避けるため月初日で行う
+            var gd = ToDate(gDate[gi]);
+            var firstDay = DateOnly.FromDateTime(new DateTime(gd.Year, gd.Month, 1));
+            var yearFound = false;
+            foreach (var ym in years)
+            {
+                var y = (FiscalYear)ym;
+                if (y.StartDate.Value <= firstDay && y.EndDate.Value >= firstDay) { yearFound = true; break; }
+            }
+            if (!yearFound)
+            {
+                groupErr = $"{gDate[gi]} に対応する会計年度がありません";
+            }
+            else
+            {
+                var periodFound = false;
+                var periodOpen = false;
+                foreach (var pm in periods)
+                {
+                    var p = (FiscalPeriod)pm;
+                    if (p.StartDate.Value <= firstDay && p.EndDate.Value >= firstDay)
+                    {
+                        periodFound = true;
+                        if (p.Status.Value != "closed") { periodOpen = true; }
+                        break;
+                    }
+                }
+                if (!periodFound)
+                {
+                    groupErr = $"{gDate[gi]} に対応する月次期間がありません";
+                }
+                else if (!periodOpen)
+                {
+                    groupErr = $"{gDate[gi]} の期間は締め済みです";
+                }
+            }
+        }
+
+        if (groupErr != "")
+        {
+            errGi.Add(gi);
+            errMsg.Add(groupErr);
+        }
+    }
+
+    // ---- 伝票の生成（出現順。伝票番号は年度内連番で再採番） ----
+    var asDraft = (AsDraftCheck.Value == true);
+    var importedEntries = 0;
+    var importedLines = 0;
+    var skippedGroups = 0;
+    var failedGroups = 0;
+
+    for (int gi = 0; gi < gKeys.Count; gi++)
+    {
+        var hasErr = false;
+        for (int i = 0; i < errGi.Count; i++)
+        {
+            if (errGi[i] == gi) { hasErr = true; break; }
+        }
+        if (hasErr) { skippedGroups = skippedGroups + 1; continue; }
+
+        var idxs = new List<int>();
+        for (int ri = 0; ri < rGroup.Count; ri++)
+        {
+            if (rGroup[ri] == gi) idxs.Add(ri);
+        }
+
+        var gd = ToDate(gDate[gi]);
+        var firstDay = DateOnly.FromDateTime(new DateTime(gd.Year, gd.Month, 1));
+        object fyId = null;
+        foreach (var ym in years)
+        {
+            var y = (FiscalYear)ym;
+            if (y.StartDate.Value <= firstDay && y.EndDate.Value >= firstDay) { fyId = y.Id.Value; break; }
+        }
+        if (fyId == null) { skippedGroups = skippedGroups + 1; continue; }
+
+        var je = new JournalEntry();
+        je.EntryDate.Value = DateOnly.FromDateTime(gd);
+        je.EntryType.Value = "transfer";
+        je.FiscalYearRef.Value = fyId;
+        je.SourceType.Value = "import";
+        var headDesc = rDesc[idxs[0]];
+        if (headDesc == "") { headDesc = $"インポート {gKeys[gi]}"; }
+        je.Description.Value = headDesc;
+        if (asDraft)
+        {
+            je.Status.Value = "draft";
+        }
+        else
+        {
+            je.Status.Value = "posted";
+            // 年度内連番の採番（伝票ごとに直前の最大値を取得。BankImport と同方式）
+            var ns = new ModuleSearcher<JournalEntry>();
+            ns.AddEquals(e => e.FiscalYearRef.Value, fyId);
+            ns.OrderByDescending(e => e.JournalNo.Value);
+            ns.Limit(1);
+            var last = ns.ExecuteFirstOrDefault();
+            var nextNo = 1;
+            if (last != null)
+            {
+                var typedLast = (JournalEntry)last;
+                if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
+            }
+            je.JournalNo.Value = nextNo;
+        }
+
+        je.Lines.AddRows(idxs.Count);
+        var li = 0;
+        foreach (var lr in je.Lines.Rows)
+        {
+            var l = (JournalLine)lr;
+            var ri = idxs[li];
+            li = li + 1;
+            l.LineNo.Value = li;
+            l.Dc.Value = rDc[ri];
+            l.Account.Value = rAccountId[ri];
+            l.Amount.Value = rAmount[ri];
+            l.InputAmount.Value = rAmount[ri];
+            if (rTaxCatId[ri] != null) { l.TaxCategory.Value = rTaxCatId[ri]; }
+            l.TaxInputMode.Value = "none";
+            l.Description.Value = rDesc[ri];
+        }
+
+        var ok = je.Submit();
+        if (ok != true)
+        {
+            failedGroups = failedGroups + 1;
+            continue;
+        }
+        importedEntries = importedEntries + 1;
+        importedLines = importedLines + idxs.Count;
+    }
+
+    // ---- 結果表示（スキップ理由は先頭3件まで） ----
+    var reasons = "";
+    var shown = 0;
+    for (int i = 0; i < errGi.Count; i++)
+    {
+        if (shown >= 3) { reasons = reasons + " ほか"; break; }
+        reasons = reasons + $" [{gKeys[errGi[i]]}: {errMsg[i]}]";
+        shown = shown + 1;
+    }
+
+    var statusNote = "";
+    if (asDraft) { statusNote = "（下書き）"; }
+    ResultLabel.Text = $"取込 {importedEntries} 伝票（{importedLines} 行）{statusNote} / スキップ {skippedGroups} 伝票{reasons} / 保存失敗 {failedGroups} / 解析不能行 {badLines} 行";
+    if (importedEntries > 0)
+    {
+        Toaster.Success($"{importedEntries} 伝票（{importedLines} 行）を取り込みました{statusNote}");
+    }
+    else
+    {
+        Toaster.Warn("取り込めた伝票がありません。スキップ理由を確認してください");
+    }
+}
+
+// ============ ヘルパ ============
+
+// 借貸の正規化: D/C・借/貸・借方/貸方 を受理。不明は ""
+string NormalizeDc(string s)
+{
+    var t = s.Trim().Replace("\"", "").ToUpper();
+    if (t == "D" || t == "借" || t == "借方") return "D";
+    if (t == "C" || t == "貸" || t == "貸方") return "C";
+    return "";
+}
+
+// CSV 1行の分割（引用符内カンマ対応。BankImport と同実装）
+List<string> SplitCsvLine(string line)
+{
+    var parts = line.Split(',');
+    var result = new List<string>();
+    var buf = "";
+    var inQuote = false;
+    foreach (var part in parts)
+    {
+        var quotes = part.Split('"').Length - 1;
+        if (inQuote)
+        {
+            buf = buf + "," + part;
+            if (quotes % 2 == 1)
+            {
+                result.Add(CleanCsvCell(buf));
+                inQuote = false;
+            }
+        }
+        else
+        {
+            if (quotes % 2 == 1)
+            {
+                buf = part;
+                inQuote = true;
+            }
+            else
+            {
+                result.Add(CleanCsvCell(part));
+            }
+        }
+    }
+    if (inQuote) result.Add(CleanCsvCell(buf));
+    return result;
+}
+
+string CleanCsvCell(string s)
+{
+    var t = s.Trim();
+    if (t.StartsWith("\"") && t.EndsWith("\"") && t.Length >= 2)
+    {
+        t = t.Substring(1, t.Length - 2);
+    }
+    return t.Replace("\"\"", "\"").Trim();
+}
+
+// 日付文字列の正規化（BankImport と同実装）。日付でなければ "" を返す
+string NormalizeDate(string s)
+{
+    var t = s.Trim().Replace("\"", "").Replace("-", "/").Replace(".", "/").Replace("年", "/").Replace("月", "/").Replace("日", "");
+    var p = t.Split('/');
+    if (p.Length != 3) return "";
+    if (!IsNumeric(p[0].Trim()) || !IsNumeric(p[1].Trim()) || !IsNumeric(p[2].Trim())) return "";
+    var y = int.Parse(p[0].Trim());
+    var m = int.Parse(p[1].Trim());
+    var dd = int.Parse(p[2].Trim());
+    if (y < 1990 || y > 2100 || m < 1 || m > 12 || dd < 1 || dd > 31) return "";
+    var dt = new DateTime(y, m, 1).AddDays(dd - 1);
+    if (dt.Month != m) return "";
+    return $"{y}/{m}/{dd}";
+}
+
+DateTime ToDate(string ymd)
+{
+    var p = ymd.Split('/');
+    var y = int.Parse(p[0]);
+    var m = int.Parse(p[1]);
+    var dd = int.Parse(p[2]);
+    return new DateTime(y, m, 1).AddDays(dd - 1);
+}
+
+// 金額文字列 → 円整数（BankImport と同実装）
+int ParseAmount(string s)
+{
+    var t = s.Trim().Replace("\"", "").Replace(",", "").Replace("¥", "").Replace("\\", "").Replace("円", "").Replace(" ", "");
+    if (t == "") return 0;
+    var neg = false;
+    if (t.StartsWith("-")) { neg = true; t = t.Substring(1); }
+    if (!IsNumeric(t)) return 0;
+    var v = int.Parse(t);
+    if (neg) v = -v;
+    return v;
+}
+
+bool IsNumeric(string s)
+{
+    if (s == null || s == "") return false;
+    var digits = "0123456789";
+    for (int i = 0; i < s.Length; i++)
+    {
+        if (!digits.Contains(s.Substring(i, 1))) return false;
+    }
+    return true;
+}
