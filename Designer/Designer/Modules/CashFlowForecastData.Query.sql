@@ -2,6 +2,8 @@
 -- 「今日」は既存帳票（売掛残高・元帳の既定値）に合わせ date('now') を使用。
 -- 入金: 未回収請求書（期日月、期日超過は当月）＋ 定期請求の未生成将来分（対象月の翌月末入金）
 -- 出金: 未払金残高（当月）＋ 承認済み未仕訳の経費（当月）＋ 月次人件費（各月）
+--       ＋ 仕入先請求書の未払い分（D-6 連動。支払期限月・期限超過/期限なしは当月。
+--         received/accrued を請求書ベースで拾うため買掛金 GL 残高は加算しない=二重計上回避）
 WITH RECURSIVE months(idx, month_first) AS (
   SELECT 0, date('now', 'start of month')
   UNION ALL
@@ -67,6 +69,14 @@ exp_now AS (
   FROM expense_request
   WHERE settlement_status = 'approved'
 ),
+vend_out AS (
+  SELECT max(COALESCE(date(v.due_date, 'start of month'),
+                      (SELECT month_first FROM months WHERE idx = 0)),
+             (SELECT month_first FROM months WHERE idx = 0)) AS m,
+         v.amount AS amt
+  FROM vendor_invoices v
+  WHERE v.status IN ('received', 'accrued')
+),
 sal_out AS (
   SELECT mm.month_first AS m, SUM(ms.cost) AS amt
   FROM months mm
@@ -79,6 +89,7 @@ flows AS (
     COALESCE((SELECT SUM(amt) FROM inv_in WHERE inv_in.m = mm.month_first AND amt > 0), 0)
     + COALESCE((SELECT SUM(amt) FROM rec_in WHERE rec_in.m = mm.month_first), 0) AS cash_in,
     (CASE WHEN mm.idx = 0 THEN (SELECT ap FROM ap_now) + (SELECT exp FROM exp_now) ELSE 0 END)
+    + COALESCE((SELECT SUM(amt) FROM vend_out WHERE vend_out.m = mm.month_first), 0)
     + COALESCE((SELECT amt FROM sal_out WHERE sal_out.m = mm.month_first), 0) AS cash_out
   FROM months mm
 ),
