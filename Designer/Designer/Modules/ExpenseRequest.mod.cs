@@ -201,16 +201,17 @@ void GenerateJournal_OnClick()
     js.AddEquals(e => e.SourceId.Value, this.Id.Value);
     if (js.Execute().Count > 0) { Toaster.Error("この申請の仕訳は既に生成済みです"); return; }
 
-    // 会計年度の解決と締め済み期間ガード (JournalEntry.SaveEntry と同じ規律)
+    // 会計年度の解決と締め済み期間ガード (境界日知見: 月末日は辞書順比較で失敗するため月初日で解決)
+    var expMonthFirst = new DateOnly(ExpenseDate.Value.Year, ExpenseDate.Value.Month, 1);
     var ys = new ModuleSearcher<FiscalYear>();
-    ys.AddLessThanOrEqual(e => e.StartDate.Value, ExpenseDate.Value);
-    ys.AddGreaterThanOrEqual(e => e.EndDate.Value, ExpenseDate.Value);
+    ys.AddLessThanOrEqual(e => e.StartDate.Value, expMonthFirst);
+    ys.AddGreaterThanOrEqual(e => e.EndDate.Value, expMonthFirst);
     var fy = ys.ExecuteFirstOrDefault();
     if (fy == null) { Toaster.Error("利用日に対応する会計年度がありません"); return; }
     var typedFy = (FiscalYear)fy;
     var ps = new ModuleSearcher<FiscalPeriod>();
-    ps.AddLessThanOrEqual(e => e.StartDate.Value, ExpenseDate.Value);
-    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, ExpenseDate.Value);
+    ps.AddLessThanOrEqual(e => e.StartDate.Value, expMonthFirst);
+    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, expMonthFirst);
     var period = ps.ExecuteFirstOrDefault();
     if (period == null) { Toaster.Error("利用日に対応する月次期間がありません"); return; }
     var typedPeriod = (FiscalPeriod)period;
@@ -282,6 +283,17 @@ void GenerateJournal_OnClick()
         if (creatorUser != null) { creatorDeptId = ((AppUser)creatorUser).所属部門.Value; }
     }
 
+    // 案件（任意）: 申請に案件が選ばれていれば仕訳の全行に引き継ぐ（案件別損益への直課）
+    // レイアウト状態によっては .Value が未ロードのことがあるため（#60）、null なら DB から取り直す
+    var projectId = ProjectRef.Value;
+    if (projectId == null)
+    {
+        var prjS = new ModuleSearcher<ExpenseRequest>();
+        prjS.AddEquals(e => e.Id.Value, this.Id.Value);
+        var selfPrj = prjS.ExecuteFirstOrDefault();
+        if (selfPrj != null) { projectId = ((ExpenseRequest)selfPrj).ProjectRef.Value; }
+    }
+
     // 仕訳生成 (docs/04 の税行方式: 本体行 + is_tax_line 行 + 貸方行)
     var lineCount = (tax > 0) ? 3 : 2;
     var je = new JournalEntry();
@@ -302,6 +314,7 @@ void GenerateJournal_OnClick()
         l.LineNo.Value = idx;
         l.Description.Value = Title.Value;
         if (creatorDeptId != null) { l.Department.Value = creatorDeptId; }
+        if (projectId != null) { l.ProjectRef.Value = projectId; }
         if (idx == 1)
         {
             l.Dc.Value = "D";
