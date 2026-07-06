@@ -52,7 +52,7 @@
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "金額",
+      "DisplayName": "金額（税込）",
       "IsRequired": false,
       "OnDataChanged": "Amount_OnDataChanged",
       "Name": "Amount",
@@ -311,7 +311,7 @@
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "消費税額",
+      "DisplayName": "うち消費税",
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "TaxAmount",
@@ -714,7 +714,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "消費税額",
+      "Text": "うち消費税",
       "Icon": "",
       "Style": "Default",
       "RelativeField": "TaxAmount",
@@ -2399,7 +2399,7 @@
           {
             "FieldName": "Amount",
             "ContextMenu": "",
-            "Label": "金額",
+            "Label": "金額（税込）",
             "ColumnSpan": 1,
             "RowSpan": 1,
             "TextWrap": "Unset",
