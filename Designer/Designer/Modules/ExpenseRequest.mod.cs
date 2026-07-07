@@ -348,10 +348,10 @@ void GenerateJournal_OnClick()
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("仕訳の生成に失敗しました"); return; }
 
-    // 固定資産計上対象なら台帳へ自動登録 (取得価額は税抜本体額)
+    // 固定資産計上対象なら台帳へ自動登録 (取得価額は税抜本体額。部門は仕訳と同じく申請者の所属部門)
     if (IsFixedAsset.Value == true)
     {
-        RegisterFixedAsset(debitAccountId, baseAmount);
+        RegisterFixedAsset(debitAccountId, baseAmount, creatorDeptId);
     }
 
     SettlementStatus.Value = "accounting";
@@ -384,7 +384,7 @@ int CalcExpenseTax(ExpenseCategory cat, int gross)
 }
 
 // 固定資産台帳への自動登録 (償却方法は仮=定額法。耐用年数と方法は経理が台帳で確定する)
-void RegisterFixedAsset(object assetAccountId, int baseAmount)
+void RegisterFixedAsset(object assetAccountId, int baseAmount, object departmentId)
 {
     var code = AssetNo.Value;
     if (code == null || code == "") { code = $"EXP-{this.Id.Value}"; }
@@ -395,6 +395,7 @@ void RegisterFixedAsset(object assetAccountId, int baseAmount)
     var fa = new FixedAsset();
     fa.Code.Value = code;
     fa.Name.Value = Title.Value;
+    if (departmentId != null) { fa.Department.Value = departmentId; }
     fa.AssetAccount.Value = assetAccountId;
     fa.AcquisitionDate.Value = ExpenseDate.Value;
     fa.AcquisitionCost.Value = baseAmount;
