@@ -94,10 +94,12 @@ void OnAfterInitialization()
         return;
     }
 
-    // 申請後 (新規でない) は申請内容を変更不可。却下/キャンセル時のみ再申請のため編集可。
-    var flowStatus = ApprovalFlow.ChildModule.Status.Value;
-    var reopenable = (flowStatus == "Rejected" || flowStatus == "Cancelled");
-    EditableGrid.IsEnabled = reopenable;
+    // 申請後（フロー進行中/完了）は申請内容を変更不可。
+    // 下書き（未申請の複製ドラフト／却下・キャンセルで差し戻し済み）は編集可。
+    // 注: 未保存の子モジュールのフィールドを親から読むと「操作が存在しません」エラーになるため、
+    //     フロー状態ではなく親自身の精算ステータスで判定する（却下/キャンセル時は
+    //     OnApprovalFlowStatusChanged が draft に戻すので同値。2026-07-08）
+    EditableGrid.IsEnabled = (SettlementStatus.Value == "draft");
     UpdateVisibility();
     UpdateAccountingButtons();
 }
@@ -202,20 +204,33 @@ void GenerateJournal_OnClick()
     if (js.Execute().Count > 0) { Toaster.Error("この申請の仕訳は既に生成済みです"); return; }
 
     // 会計年度の解決と締め済み期間ガード (境界日知見: 月末日は辞書順比較で失敗するため月初日で解決)
-    var expMonthFirst = new DateOnly(ExpenseDate.Value.Year, ExpenseDate.Value.Month, 1);
-    var ys = new ModuleSearcher<FiscalYear>();
-    ys.AddLessThanOrEqual(e => e.StartDate.Value, expMonthFirst);
-    ys.AddGreaterThanOrEqual(e => e.EndDate.Value, expMonthFirst);
-    var fy = ys.ExecuteFirstOrDefault();
-    if (fy == null) { Toaster.Error("利用日に対応する会計年度がありません"); return; }
-    var typedFy = (FiscalYear)fy;
-    var ps = new ModuleSearcher<FiscalPeriod>();
-    ps.AddLessThanOrEqual(e => e.StartDate.Value, expMonthFirst);
-    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, expMonthFirst);
-    var period = ps.ExecuteFirstOrDefault();
-    if (period == null) { Toaster.Error("利用日に対応する月次期間がありません"); return; }
-    var typedPeriod = (FiscalPeriod)period;
-    if (typedPeriod.Status.Value == "closed") { Toaster.Error("利用日の期間は締め済みです。仕訳は手動で起票してください"); return; }
+    // 利用日の期間が締め済み（または期間未設定）の場合は処理日（今日）に自動フォールバックして起票する
+    // （実務の定石＝重要性の原則。締めた月の数字は動かさず、当月の費用として計上。摘要に元の利用日を明記）
+    var entryDate = ExpenseDate.Value;
+    var usedFallback = false;
+    var typedFy = ResolveYearForDate(entryDate);
+    var typedPeriod = ResolvePeriodForDate(entryDate);
+    var origClosed = (typedPeriod != null && typedPeriod.Status.Value == "closed");
+    if (typedFy == null || typedPeriod == null || origClosed)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var fyToday = ResolveYearForDate(today);
+        var periodToday = ResolvePeriodForDate(today);
+        if (fyToday == null || periodToday == null || periodToday.Status.Value == "closed")
+        {
+            Toaster.Error("利用日の期間に起票できず、本日の期間も締め済みまたは未設定です。会計年度・月次期間の設定を確認してください");
+            return;
+        }
+        // 年度跨ぎの警告（前期の費用を当期計上する場合。重要な金額は決算修正を検討）
+        if (typedFy != null && fyToday.Id.Value != typedFy.Id.Value)
+        {
+            Toaster.Warn($"利用日（{ExpenseDate.Value:yyyy/MM/dd}）は前年度です。当期の費用として計上します。金額が重要な場合は決算修正をご検討ください");
+        }
+        entryDate = today;
+        typedFy = fyToday;
+        typedPeriod = periodToday;
+        usedFallback = true;
+    }
 
     // 借方科目: 通常=費目の既定科目 / 固定資産計上=工具器具備品(1520)
     var debitAccountId = cat.DefaultAccount.Value;
@@ -297,9 +312,10 @@ void GenerateJournal_OnClick()
     // 仕訳生成 (docs/04 の税行方式: 本体行 + is_tax_line 行 + 貸方行)
     var lineCount = (tax > 0) ? 3 : 2;
     var je = new JournalEntry();
-    je.EntryDate.Value = ExpenseDate.Value;
+    je.EntryDate.Value = entryDate;
     je.EntryType.Value = "auto";
-    je.Description.Value = $"経費精算 {Title.Value}";
+    if (usedFallback) { je.Description.Value = $"経費精算 {Title.Value}（利用日 {ExpenseDate.Value:yyyy/MM/dd}）"; }
+    else { je.Description.Value = $"経費精算 {Title.Value}"; }
     je.Status.Value = "posted";
     je.JournalNo.Value = nextNo;
     je.FiscalYearRef.Value = typedFy.Id.Value;
@@ -359,6 +375,99 @@ void GenerateJournal_OnClick()
     if (ret2 == false) { Toaster.Error("精算ステータスの更新に失敗しました"); return; }
     UpdateAccountingButtons();
     Toaster.Success($"仕訳 No.{nextNo} を生成しました（借方 {debitName} {baseAmount:#,0} 円 / 貸方 未払金 {gross:#,0} 円）");
+    if (usedFallback)
+    {
+        Toaster.Info($"利用日（{ExpenseDate.Value:yyyy/MM/dd}）の期間が締め済みのため、本日（{entryDate:yyyy/MM/dd}）日付で起票しました（摘要に利用日を記載）");
+    }
+}
+
+// この申請を複製: 反復的な経費（定期券・毎月の会費・恒例の会議費など）を過去申請から新規作成する。
+// コピーする: 件名・金額・目的・申請区分・支払先区分・費目・案件・見込み額・取引先・接待情報・固定資産フラグ
+// コピーしない: 利用日(=今日)・領収書添付・実費・承認履歴・精算ステータス(=下書き)。精算対象者は複製した本人
+void Duplicate_OnClick()
+{
+    if (this.IsNewData) { Toaster.Error("保存済みの申請のみ複製できます"); return; }
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    var copy = new ExpenseRequest();
+    copy.Title.Value = Title.Value;
+    copy.Amount.Value = Amount.Value;
+    copy.Purpose.Value = Purpose.Value;
+    copy.RequestType.Value = RequestType.Value;
+    copy.PayeeType.Value = PayeeType.Value;
+    copy.ExpenseCategoryRef.Value = ExpenseCategoryRef.Value;
+    copy.ProjectRef.Value = ProjectRef.Value;
+    copy.EstimatedAmount.Value = EstimatedAmount.Value;
+    copy.PayeePartner.Value = PayeePartner.Value;
+    copy.EntertainmentGuest.Value = EntertainmentGuest.Value;
+    copy.EntertainmentCount.Value = EntertainmentCount.Value;
+    copy.EntertainmentPurpose.Value = EntertainmentPurpose.Value;
+    copy.IsFixedAsset.Value = IsFixedAsset.Value;
+    copy.ExpenseDate.Value = DateOnly.FromDateTime(DateTime.Today);
+    copy.PayeeUser.Value = CurrentUser.Id.Value;
+    copy.SettlementStatus.Value = "draft";
+    var ret = copy.Submit();
+    if (ret != true) { Toaster.Error("複製に失敗しました"); return; }
+
+    // 作成した複製を DB から取り直す（Submit 後の Id はテンポラリの可能性があるため）
+    var s = new ModuleSearcher<ExpenseRequest>();
+    s.AddEquals(e => e.Creator.Value, CurrentUser.Id.Value);
+    s.OrderByDescending(e => e.Id.Value);
+    s.Limit(1);
+    var created = s.ExecuteFirstOrDefault();
+    if (created == null) { Toaster.Error("複製の取得に失敗しました"); return; }
+    var typedCreated = (ExpenseRequest)created;
+
+    // 承認フローの行を Draft で作成し、FK（approval_flow_id）を複製に張る。
+    // 子行が無い親は CLB が子モジュールを実体化せず申請ボタンが出ない（2026-07-08 実測）。
+    // 未保存インスタンスの ChildModule 参照は「操作が存在しません」になるため、
+    // 実列バインドの ApprovalFlowIdRaw 経由でリンクする
+    var flow = new ApprovalFlow();
+    flow.Status.Value = "Draft";
+    flow.AttemptNo.Value = 1;
+    flow.ParentModuleName.Value = "ExpenseRequest";
+    flow.ParentId.Value = $"{typedCreated.Id.Value}";
+    var retFlow = flow.Submit();
+    if (retFlow != true) { Toaster.Error("承認フローの初期化に失敗しました"); return; }
+
+    var fs = new ModuleSearcher<ApprovalFlow>();
+    fs.OrderByDescending(f => f.Id.Value);
+    fs.Limit(1);
+    var newFlow = fs.ExecuteFirstOrDefault();
+    if (newFlow != null)
+    {
+        typedCreated.ApprovalFlowIdRaw.Value = ((ApprovalFlow)newFlow).Id.Value;
+        typedCreated.Submit();
+    }
+
+    Toaster.Success("申請を複製しました。利用日・金額を確認して申請してください");
+    NavigationService.NavigateTo(NavigationService.GetModuleDataUrl("ExpenseRequest", $"{typedCreated.Id.Value}"));
+}
+
+// 月初日で年度を解決（境界日の罠回避）。該当なしは null
+FiscalYear ResolveYearForDate(var d)
+{
+    var first = new DateOnly(d.Year, d.Month, 1);
+    var s = new ModuleSearcher<FiscalYear>();
+    s.AddLessThanOrEqual(e => e.StartDate.Value, first);
+    s.AddGreaterThanOrEqual(e => e.EndDate.Value, first);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return (FiscalYear)found;
+}
+
+// 月初日で月次期間を解決（境界日の罠回避）。該当なしは null
+FiscalPeriod ResolvePeriodForDate(var d)
+{
+    var first = new DateOnly(d.Year, d.Month, 1);
+    var s = new ModuleSearcher<FiscalPeriod>();
+    s.AddLessThanOrEqual(e => e.StartDate.Value, first);
+    s.AddGreaterThanOrEqual(e => e.EndDate.Value, first);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return (FiscalPeriod)found;
 }
 
 // 税額の決定: 費目の既定税区分が課税仕入のときのみ。レシート記載の消費税額を優先

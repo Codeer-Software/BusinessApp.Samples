@@ -14,6 +14,43 @@ void Detail_OnAfterInit()
     UpdateButtons();
 }
 
+// この請求書を複製: 反復的な仕入（家賃・外注の月次請求・保守料など）を過去請求書から新規作成する。
+// コピーする: 取引先・費用科目・税区分・税込金額・摘要・支払口座
+// コピーしない: 請求書番号・請求日・支払期限（今回の請求書の実物から入力）・仕訳リンク・支払日。状態=受領
+void Duplicate_OnClick()
+{
+    if (this.IsNewData) { Toaster.Error("保存済みの請求書のみ複製できます"); return; }
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    var copy = new VendorInvoice();
+    copy.Partner.Value = Partner.Value;
+    copy.ExpenseAccount.Value = ExpenseAccount.Value;
+    copy.TaxCategoryRef.Value = TaxCategoryRef.Value;
+    copy.Amount.Value = Amount.Value;
+    copy.Description.Value = Description.Value;
+    copy.BankAccountRef.Value = BankAccountRef.Value;
+    copy.ReceivedDate.Value = DateOnly.FromDateTime(DateTime.Today);
+    copy.Status.Value = "received";
+    var ret = copy.Submit();
+    if (ret != true) { Toaster.Error("複製に失敗しました"); return; }
+
+    Toaster.Success("請求書を複製しました。請求書番号・請求日・支払期限・金額を実物に合わせて入力してください");
+
+    // 作成した複製へ遷移（Submit 後の Id はテンポラリの可能性があるため DB から取り直す。
+    // 直後の自動採番 PK＝最新行。VendorInvoice に Creator 列は無い）
+    var s = new ModuleSearcher<VendorInvoice>();
+    s.OrderByDescending(e => e.Id.Value);
+    s.Limit(1);
+    var created = s.ExecuteFirstOrDefault();
+    if (created != null)
+    {
+        var typedCreated = (VendorInvoice)created;
+        NavigationService.NavigateTo(NavigationService.GetModuleDataUrl("VendorInvoice", $"{typedCreated.Id.Value}"));
+    }
+}
+
 void UpdateButtons()
 {
     var isAccounting = CurrentUser.Role.Value == "accounting";

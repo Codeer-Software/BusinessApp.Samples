@@ -176,7 +176,8 @@ void RecalculateCurrentApproverDisplay()
 void UpdateFlowSummary()
 {
     // 新規申請時は Id が @temporary:guid なので ModuleSearcher で数値列にぶつけるとエラー
-    if (GetParentModule().IsNewData)
+    // （フロー自身が新規のケースも同様: 複製ドラフトは親=保存済み・フロー=新規）
+    if (GetParentModule().IsNewData || this.IsNewData)
     {
         FlowSummary.Value = "";
         return;
@@ -245,6 +246,8 @@ void OpenRequest_OnClick()
 // 現在ユーザーが申請者か (parent.Creator.Value は LinkField 遅延ロードで取れないため履歴ベース)
 bool IsCurrentUserCreator()
 {
+    // フロー未保存時は履歴も無い（temporary Id を数値列に検索するとエラーになるためガード）
+    if (this.IsNewData) return false;
     var hs = new ModuleSearcher<ApprovalHistory>();
     hs.AddEquals(h => h.ApprovalFlowId.Value, this.Id.Value);
     hs.AddEquals(h => h.Action.Value, "Submit");
@@ -339,7 +342,8 @@ void UpdateButtons()
     var canApprove = isPending && HasWaitingMemberForCurrentUser();
     var isCreator = !isNewParent && IsCurrentUserCreator();
 
-    SubmitButton.IsVisible   = isNewParent;
+    // 申請ボタン: フローが未開始なら表示（通常の新規申請＝親新規／複製ドラフト＝Status "Draft" の既存行）
+    SubmitButton.IsVisible   = isNewParent || this.IsNewData || s == "Draft";
     ApproveButton.IsVisible  = !isNewParent && canApprove;
     RejectButton.IsVisible   = !isNewParent && canApprove;
     ResubmitButton.IsVisible = !isNewParent && (isRejected || isCancelled) && isCreator;
@@ -366,7 +370,9 @@ void NotifyParentStatusChanged()
 void SubmitButton_OnClick()
 {
     var parent = GetParentModule();
-    var wasNew = parent.IsNewData;
+    // 「初回申請」の判定はフロー自身の状態で行う（親の新規性ではなく）。
+    // 通常の新規申請＝フロー新規／「この申請を複製」の下書き＝Status "Draft" の既存行（2026-07-08）
+    var wasNew = this.IsNewData || Status.Value == "Draft";
 
     if (wasNew)
     {
@@ -379,6 +385,16 @@ void SubmitButton_OnClick()
 
     if (wasNew)
     {
+        // 複製ドラフト（Status "Draft" の既存行）: 申請に向けて Pending 化する
+        // （通常の新規は親の OnAfterInitialization の Initialize が Pending 設定済み）
+        if (Status.Value == null || Status.Value == "" || Status.Value == "Draft")
+        {
+            Status.Value = "Pending";
+            if (AttemptNo.Value == null) { AttemptNo.Value = 1; }
+            if (ParentModuleName.Value == null || ParentModuleName.Value == "") { ParentModuleName.Value = "ExpenseRequest"; }
+            if (ParentId.Value == null || ParentId.Value == "") { ParentId.Value = $"{parent.Id.Value}"; }
+        }
+
         // 申請時点の入力値でテンプレートを再解決する
         // (Initialize 時は金額・費目が未入力のため、その時点の TemplateId は仮値)
         var tmplName = parent.SelectTemplateName();
@@ -432,6 +448,29 @@ string ModuleDisplayName(string moduleName)
     return moduleName;
 }
 
+// 通知文言用: 対象申請の件名・金額まで解決する（「どの申請か」が通知一覧だけで分かるように）
+// 現状の対象は ExpenseRequest のみ。他モジュールをフローに載せたらここに分岐を足す
+string TargetSummary(ApprovalFlow flow)
+{
+    if (flow == null) return "申請";
+    var moduleName = flow.ParentModuleName.Value;
+    var disp = ModuleDisplayName(moduleName);
+    if (moduleName == "ExpenseRequest" && flow.ParentId.Value != null)
+    {
+        var s = new ModuleSearcher<ExpenseRequest>();
+        s.AddEquals(e => e.Id.Value, flow.ParentId.Value);
+        var found = s.ExecuteFirstOrDefault();
+        if (found != null)
+        {
+            var er = (ExpenseRequest)found;
+            var title = er.Title.Value ?? "";
+            if (er.Amount.Value != null) { return $"{disp}「{title}」（{er.Amount.Value:#,0}円）"; }
+            return $"{disp}「{title}」";
+        }
+    }
+    return disp;
+}
+
 // 実 Id・実 ParentId を DB から解決した自フロー (メモリの遅延ロードを信用しない)
 ApprovalFlow FetchSelfFromDb()
 {
@@ -473,7 +512,7 @@ void NotifyActiveApprovers(ApprovalFlow flow, string title)
     if (flow == null) return;
     var linkModule = flow.ParentModuleName.Value;
     var linkId = $"{flow.ParentId.Value}";
-    var body = $"{ModuleDisplayName(linkModule)}の承認をお願いします";
+    var body = $"{TargetSummary(flow)}の承認をお願いします";
     var os = new ModuleSearcher<ApprovalFlowOrder>();
     os.AddEquals(o => o.ApprovalFlowId.Value, flow.Id.Value);
     os.AddEquals(o => o.Status.Value, "Active");
@@ -543,7 +582,7 @@ void Approve_OnClick()
         var flow = FetchSelfFromDb();
         if (Status.Value == "Approved")
         {
-            NotifyCreator(flow, "承認されました", "申請が最終承認されました");
+            NotifyCreator(flow, "承認されました", $"{TargetSummary(flow)}が最終承認されました");
         }
         else
         {
@@ -651,7 +690,8 @@ void Reject_OnClick()
     // 却下成功後: 申請者へ通知
     if (ret == true)
     {
-        NotifyCreator(FetchSelfFromDb(), "却下されました", $"申請が却下されました（コメント: {rejectComment}）");
+        var selfFlow = FetchSelfFromDb();
+        NotifyCreator(selfFlow, "却下されました", $"{TargetSummary(selfFlow)}が却下されました（コメント: {rejectComment}）");
     }
 }
 

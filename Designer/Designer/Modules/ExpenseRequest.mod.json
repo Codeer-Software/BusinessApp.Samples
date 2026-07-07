@@ -81,6 +81,24 @@
     },
     {
       "DbColumn": "approval_flow_id",
+      "Placeholder": "",
+      "Format": "",
+      "IsSlider": false,
+      "OnInput": "",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "ApprovalFlowIdRaw",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "DbColumn": "approval_flow_id",
       "ModuleName": "ApprovalFlow",
       "LayoutName": "",
       "IsUpdateProtected": false,
@@ -722,6 +740,24 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
+      "Text": "この申請を複製",
+      "Icon": "",
+      "Variant": "Secondary",
+      "OnClick": "Duplicate_OnClick",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "ShowTextInToolTip": false,
+      "Name": "DuplicateButton",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+    },
+    {
       "Text": "申請区分",
       "Icon": "",
       "Style": "Default",
@@ -1107,6 +1143,51 @@
                 "CanResize": false,
                 "Border": "None",
                 "Width": 60
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "DuplicateButton",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 180,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              },
+              {
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
               }
             ]
           },
