@@ -86,6 +86,138 @@ string NextOrderNoForConvert()
     return $"{prefix}{seq:000}";
 }
 
+// ============ 見積書の帳票出力（Excel / PDF） ============
+// Resources/quote_template.xlsx（プレースホルダ差し込み方式）に1件分を転記してダウンロードする。
+// 自社名・住所はテンプレート直書き（自社で編集する運用）。明細はテンプレの10行まで。
+// 消費税は課税売上 10%（SALES_10）でまとめて計算（請求書と同方式）。
+
+void PrintExcel_OnClick()
+{
+    PrintQuote(false);
+}
+
+void PrintPdf_OnClick()
+{
+    PrintQuote(true);
+}
+
+void PrintQuote(bool asPdf)
+{
+    if (this.IsNewData)
+    {
+        Toaster.Error("見積を保存してから出力してください");
+        return;
+    }
+    using var loading = LoadingService.StartLoading(0);
+
+    var stream = Resources.GetMemoryStream("quote_template.xlsx");
+    if (stream == null)
+    {
+        Toaster.Error("見積書テンプレート（Resources/quote_template.xlsx）が見つかりません");
+        return;
+    }
+
+    // 明細は DB から取り直す（メモリ行の遅延ロード対策）
+    var ls = new ModuleSearcher<QuoteLine>();
+    ls.AddEquals(e => e.QuoteId.Value, this.Id.Value);
+    ls.OrderBy(e => e.LineNo.Value);
+    var lines = ls.Execute();
+
+    // 取引先名
+    var partnerName = "";
+    if (PartnerRef.Value != null)
+    {
+        var pc = new ModuleSearcher<Partner>();
+        pc.AddEquals(p => p.Id.Value, PartnerRef.Value);
+        var pt = pc.ExecuteFirstOrDefault();
+        if (pt != null) { partnerName = ((Partner)pt).Name.Value ?? ""; }
+    }
+
+    var subtotal = 0;
+    foreach (var m in lines)
+    {
+        var l = (QuoteLine)m;
+        if (l.Amount.Value != null) subtotal = subtotal + l.Amount.Value;
+    }
+    decimal pct = GetSalesTaxRatePercent();
+    int tax = subtotal * pct / 100;
+    var total = subtotal + tax;
+    var issueStr = "";
+    if (IssueDate.Value != null) { issueStr = $"{IssueDate.Value:yyyy年M月d日}"; }
+    var validStr = "";
+    if (ValidUntil.Value != null) { validStr = $"{ValidUntil.Value:yyyy年M月d日}"; }
+
+    using (var excel = new Excel(stream, $"見積書_{QuoteNo.Value}.xlsx"))
+    {
+        SetByMarker(excel, "{{PARTNER}}", $"{partnerName}　御中");
+        SetByMarker(excel, "{{QUOTE_NO}}", QuoteNo.Value ?? "");
+        SetByMarker(excel, "{{ISSUE_DATE}}", issueStr);
+        SetByMarker(excel, "{{VALID_UNTIL}}", validStr);
+        SetByMarker(excel, "{{TITLE}}", Title.Value ?? "");
+        SetByMarker(excel, "{{TOTAL}}", $"￥{total:#,0} -");
+        SetByMarker(excel, "{{SUBTOTAL}}", $"{subtotal:#,0}");
+        SetByMarker(excel, "{{TAX}}", $"{tax:#,0}");
+        SetByMarker(excel, "{{TOTAL2}}", $"{total:#,0}");
+        SetByMarker(excel, "{{NOTE}}", Note.Value ?? "");
+
+        var baseCell = excel.FindCellByText("{{LINES}}");
+        if (baseCell != null)
+        {
+            excel.SetCellValue(baseCell, "");
+            var i = 0;
+            foreach (var m in lines)
+            {
+                if (i >= 10) break;  // テンプレートの明細枠は10行
+                var l = (QuoteLine)m;
+                var rowCell = baseCell.GetNext(i, 0);
+                excel.SetCellValue(rowCell, l.LineNo.Value ?? 0);
+                excel.SetCellValue(rowCell.GetNext(0, 1), l.Description.Value ?? "");
+                excel.SetCellValue(rowCell.GetNext(0, 2), l.Qty.Value ?? 0);
+                excel.SetCellValue(rowCell.GetNext(0, 3), $"{l.UnitPrice.Value ?? 0:#,0}");
+                excel.SetCellValue(rowCell.GetNext(0, 4), $"{l.Amount.Value ?? 0:#,0}");
+                i = i + 1;
+            }
+            if (lines.Count > 10)
+            {
+                Toaster.Warn($"明細が10行を超えています（{lines.Count}行）。11行目以降は出力されません");
+            }
+        }
+
+        var ok = false;
+        if (asPdf) { ok = excel.DownloadPdf(); }
+        else { ok = excel.Download(); }
+        if (!ok)
+        {
+            Toaster.Error("見積書の出力に失敗しました");
+            return;
+        }
+    }
+    if (asPdf) { Toaster.Success($"見積書 {QuoteNo.Value} を PDF でダウンロードしました"); }
+    else { Toaster.Success($"見積書 {QuoteNo.Value} を Excel でダウンロードしました"); }
+}
+
+void SetByMarker(Excel excel, string marker, object value)
+{
+    var cell = excel.FindCellByText(marker);
+    if (cell != null) { excel.SetCellValue(cell, value); }
+}
+
+// 課税売上 10% (tax_categories.code='SALES_10') の税率をマスタから解決（Invoice と同方式）
+decimal GetSalesTaxRatePercent()
+{
+    var cs = new ModuleSearcher<TaxCategory>();
+    cs.AddEquals(c => c.Code.Value, "SALES_10");
+    var found = cs.ExecuteFirstOrDefault();
+    if (found == null) return 0;
+    var tcat = (TaxCategory)found;
+    if (tcat.Rate.Value == null) return 0;
+    var rs = new ModuleSearcher<TaxRate>();
+    rs.AddEquals(r => r.Id.Value, tcat.Rate.Value);
+    var foundRate = rs.ExecuteFirstOrDefault();
+    if (foundRate == null) return 0;
+    return ((TaxRate)foundRate).RatePercent.Value ?? 0;
+}
+
 // 受注にする: SalesOrder を新規作成して明細をコピーし、見積を accepted に更新する
 void ConvertToOrder_OnClick()
 {
