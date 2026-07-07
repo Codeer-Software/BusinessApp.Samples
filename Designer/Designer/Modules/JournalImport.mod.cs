@@ -41,6 +41,7 @@ void Import_OnClick()
     var rAccountId = new List<object>();
     var rAmount = new List<int>();
     var rTaxCatId = new List<object>();
+    var rIsTaxLine = new List<bool>();
     var rDesc = new List<string>();
 
     var badLines = 0;
@@ -99,6 +100,8 @@ void Import_OnClick()
             var a = (Account)am;
             if (a.Code.Value == code) { accountId = a.Id.Value; break; }
         }
+        // 消費税勘定（仮払1900/仮受2200）は税行として取り込む（未設定だと消費税集計表の課税標準に混入する）
+        var isTaxLine = (code == "1900" || code == "2200");
         if (rowErr == "" && accountId == null)
         {
             rowErr = $"科目コード {code} が存在しません";
@@ -139,6 +142,7 @@ void Import_OnClick()
         rAccountId.Add(accountId);
         rAmount.Add(amount);
         rTaxCatId.Add(taxCatId);
+        rIsTaxLine.Add(isTaxLine);
         rDesc.Add((cols.Count > 6) ? cols[6].Trim() : "");
     }
 
@@ -301,6 +305,7 @@ void Import_OnClick()
             l.Amount.Value = rAmount[ri];
             l.InputAmount.Value = rAmount[ri];
             if (rTaxCatId[ri] != null) { l.TaxCategory.Value = rTaxCatId[ri]; }
+            if (rIsTaxLine[ri]) { l.IsTaxLine.Value = true; }
             l.TaxInputMode.Value = "none";
             l.Description.Value = rDesc[ri];
         }
