@@ -2548,6 +2548,23 @@
             "ListElementComponent": ""
           },
           {
+            "FieldName": "ProjectRef",
+            "ContextMenu": "",
+            "Label": "案件",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": true,
+            "CanUserSort": false,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": "",
+            "IsViewOnly": true
+          },
+          {
             "FieldName": "Creator",
             "ContextMenu": "",
             "Label": "申請者",

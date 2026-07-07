@@ -48,22 +48,24 @@ merged AS (
   WHERE COALESCE(o.bal, 0) <> 0 OR COALESCE(p.dmc, 0) <> 0
      OR COALESCE(s.dsum, 0) <> 0 OR COALESCE(s.csum, 0) <> 0
 )
-SELECT
-  m.code AS account_code,
-  m.name AS account_name,
-  CASE WHEN m.dc_normal = 'D' THEN m.open_dmc ELSE -m.open_dmc END AS opening_balance,
-  m.dsum AS debit_total,
-  m.csum AS credit_total,
-  CASE WHEN m.dc_normal = 'D' THEN m.open_dmc + m.dsum - m.csum
-       ELSE -m.open_dmc + m.csum - m.dsum END AS balance
-FROM merged m
-UNION ALL
-SELECT
-  'ZZZZ' AS account_code,
-  '合計（貸借検算）' AS account_name,
-  NULL AS opening_balance,
-  SUM(m2.dsum) AS debit_total,
-  SUM(m2.csum) AS credit_total,
-  NULL AS balance
-FROM merged m2
-ORDER BY account_code
+SELECT * FROM (
+  SELECT
+    m.code AS account_code,
+    m.name AS account_name,
+    CASE WHEN m.dc_normal = 'D' THEN m.open_dmc ELSE -m.open_dmc END AS opening_balance,
+    m.dsum AS debit_total,
+    m.csum AS credit_total,
+    CASE WHEN m.dc_normal = 'D' THEN m.open_dmc + m.dsum - m.csum
+         ELSE -m.open_dmc + m.csum - m.dsum END AS balance
+  FROM merged m
+  UNION ALL
+  SELECT
+    '' AS account_code,
+    '合計（貸借検算）' AS account_name,
+    NULL AS opening_balance,
+    SUM(m2.dsum) AS debit_total,
+    SUM(m2.csum) AS credit_total,
+    NULL AS balance
+  FROM merged m2
+)
+ORDER BY CASE WHEN account_code = '' THEN 1 ELSE 0 END, account_code

@@ -2,7 +2,11 @@
 -- 当期純利益は繰越利益剰余金（コード 3100 固定・Project.md 知見）の行にのみ差込む（BalanceSheet と同じ計算）。
 -- 純資産は貸方正で表示（opening_balances.balance は D 正の符号付きのため反転）。
 WITH yr AS (
-  SELECT id, start_date, end_date FROM fiscal_years WHERE id = @fiscal_year_id
+  -- 年度未選択（初期表示）は現在日付を含む年度に自動解決（BS/PL と同方式。総合テスト第2Rのバグ修正）
+  SELECT id, start_date, end_date FROM fiscal_years
+  WHERE id = COALESCE(@fiscal_year_id,
+    (SELECT id FROM fiscal_years
+     WHERE date(start_date) <= date('now') AND date(end_date) >= date('now')))
 ),
 eq AS (
   SELECT a.id, a.code, a.name FROM accounts a WHERE a.account_type = 'equity'
@@ -10,7 +14,7 @@ eq AS (
 ob AS (
   SELECT account_id, SUM(balance) AS bal
   FROM opening_balances
-  WHERE fiscal_year_id = @fiscal_year_id
+  WHERE fiscal_year_id IN (SELECT id FROM yr)
   GROUP BY account_id
 ),
 mv AS (
@@ -47,10 +51,12 @@ final AS (
   WHERE COALESCE(ob.bal, 0) <> 0 OR COALESCE(mv.chg, 0) <> 0
      OR eq.code IN ('3000', '3100')
 )
-SELECT account_code, account_name, opening_balance, change_amount, net_income, ending_balance
-FROM final
-UNION ALL
-SELECT 'ZZZZ', '純資産合計',
-  SUM(opening_balance), SUM(change_amount), SUM(net_income), SUM(ending_balance)
-FROM final
-ORDER BY account_code
+SELECT * FROM (
+  SELECT account_code, account_name, opening_balance, change_amount, net_income, ending_balance
+  FROM final
+  UNION ALL
+  SELECT '', '純資産合計',
+    SUM(opening_balance), SUM(change_amount), SUM(net_income), SUM(ending_balance)
+  FROM final
+)
+ORDER BY CASE WHEN account_code = '' THEN 1 ELSE 0 END, account_code
