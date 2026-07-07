@@ -13,6 +13,7 @@ days AS (
   SELECT l.bank_account_id AS ba_id, date(l.line_date) AS d
   FROM bank_statement_lines l
   JOIN tgt t ON t.id = l.bank_account_id
+  WHERE l.status <> 'preview'  -- プレビュー（未登録）の明細は照合対象にしない
   GROUP BY l.bank_account_id, date(l.line_date)
 ),
 raw AS (
@@ -21,6 +22,7 @@ raw AS (
     dy.d AS line_date,
     (SELECT b.balance FROM bank_statement_lines b
       WHERE b.bank_account_id = dy.ba_id AND date(b.line_date) = dy.d
+        AND b.status <> 'preview'
       ORDER BY b.id DESC LIMIT 1) AS stmt_balance,
     COALESCE((SELECT SUM(o.balance) FROM opening_balances o
       WHERE o.account_id = t.ledger_account_id

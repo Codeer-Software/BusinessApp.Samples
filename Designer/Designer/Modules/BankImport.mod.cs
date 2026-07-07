@@ -97,7 +97,7 @@ void Import_OnClick()
         row.AmountIn.Value = inAmt;
         if (hasBal) row.Balance.Value = bal;
         row.DedupKey.Value = key;
-        row.Status.Value = "pending";
+        row.Status.Value = "preview";
         if (suggested != null)
         {
             row.SuggestedAccount.Value = suggested;
@@ -113,13 +113,61 @@ void Import_OnClick()
 
     if (added == 0)
     {
-        ResultLabel.Text = $"取込 0 件（重複スキップ {skipped} 件 / 解析不能行 {badLines} 行）";
+        ResultLabel.Text = $"プレビュー 0 件（重複スキップ {skipped} 件 / 解析不能行 {badLines} 行）";
         Toaster.Warn("取り込める明細がありませんでした");
         return;
     }
+    PreviewLines.Reload();
+    ResultLabel.Text = $"プレビュー {added} 件 / ルール適用 {ruled} 件 / 重複スキップ {skipped} 件 / 解析不能行 {badLines} 行 — 内容を確認して「この内容で登録」を押してください";
+    Toaster.Success($"{added} 件をプレビューに読み込みました。内容を確認して「この内容で登録」を押してください");
+}
+
+// プレビューの確定: preview → pending（未起票の明細として正式登録）
+void ConfirmImport_OnClick()
+{
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    var s = new ModuleSearcher<BankStatementLine>();
+    s.AddEquals(e => e.Status.Value, "preview");
+    var rows = s.Execute();
+    if (rows.Count == 0) { Toaster.Info("プレビュー中の明細がありません"); return; }
+
+    var done = 0;
+    foreach (var m in rows)
+    {
+        var r = (BankStatementLine)m;
+        r.Status.Value = "pending";
+        var ok = r.Submit();
+        if (ok == true) { done = done + 1; }
+    }
+    PreviewLines.Reload();
     PendingLines.Reload();
-    ResultLabel.Text = $"取込 {added} 件 / ルール適用 {ruled} 件 / 重複スキップ {skipped} 件 / 解析不能行 {badLines} 行";
-    Toaster.Success($"{added} 件の明細を取り込みました（ルール適用 {ruled} 件）");
+    ResultLabel.Text = $"{done} 件を登録しました（未起票の明細へ移動）";
+    Toaster.Success($"{done} 件の明細を登録しました");
+}
+
+// プレビューの取り消し: preview 行を削除（重複キーも解放され、同じ CSV を再取込できる）
+void CancelImport_OnClick()
+{
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    var s = new ModuleSearcher<BankStatementLine>();
+    s.AddEquals(e => e.Status.Value, "preview");
+    var rows = s.Execute();
+    if (rows.Count == 0) { Toaster.Info("プレビュー中の明細がありません"); return; }
+
+    var done = 0;
+    foreach (var m in rows)
+    {
+        var r = (BankStatementLine)m;
+        var ok = r.Delete();
+        if (ok == true) { done = done + 1; }
+    }
+    PreviewLines.Reload();
+    ResultLabel.Text = $"プレビュー {done} 件を取り消しました";
+    Toaster.Info($"プレビュー {done} 件を取り消しました（同じ CSV を貼り直せます）");
 }
 
 // ============ AI 科目推定（ルール未該当分） ============
