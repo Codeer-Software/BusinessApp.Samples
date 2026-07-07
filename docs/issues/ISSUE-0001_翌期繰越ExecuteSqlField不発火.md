@@ -1,8 +1,18 @@
 # ISSUE-0001: Update タイミングの ExecuteSqlField が Submit 経由で発火しない（翌期繰越ボタン）
 
+> ## ✅ 解決済み（2026-07-08）
+>
+> **真因: ExecuteSqlField の `Parameters` は、SQL 内の `@プレースホルダ` を「フィールド名」ではなく「**DB 列名（DbColumn）**」で解決する。**
+> `@id` が通っていたのはフィールド名 `Id` と列名 `id` が同名だったため。`@NextYearId`（フィールド名）は列名 `next_year_id` と不一致でバインドされず、SQLite が `Must add values for the following parameters: @NextYearId` を返して Submit ごとロールバックしていた。
+>
+> **修正**: `FiscalYear.CarryOverSql.sql` のプレースホルダを `@next_year_id` に変更＋ `FiscalYear.mod.json` の Parameters Name を `next_year_id` に変更（コミット参照）。
+> **実機検証**: 「翌期繰越を実行」→ opening_balances の row_id が 8/9/10→11/12/13 に変わり（DELETE→INSERT 実行）、残高は 478,000／−500,000／+22,000（Σ=0）で正しく再計算。NextYearId を null に戻すリセット Submit も成功。
+>
+> **経緯メモ**: 本票起票時（7/6）は「エラーなしの偽成功」と記録したが、7/8 の再現ではユーザー・Fable とも一貫して上記パラメータエラーが出た。7/6 時点は NextYearId 非バインド（DataOnly）→実列化の試行が混在しており、検証時に旧デザインが配信されていた可能性が高い（デプロイ/再起動漏れ）。現行の実列バインド構成では「実行される・列名で解決される・修正で完全動作」が確定。
+
 | 項目 | 内容 |
 |---|---|
-| 状態 | **未解決**（回避策で運用可能） |
+| 状態 | **解決済み**（2026-07-08・上記参照） |
 | 発見日 | 2026-07-06（自律総合テスト 第1ラウンド） |
 | 影響機能 | 会計年度画面の「翌期繰越を実行」ボタン（decisions/0006 年次繰越） |
 | 影響度 | 中（年1回の操作。回避策あり＝sql CLI で繰越 SQL を手動実行すれば完全動作） |

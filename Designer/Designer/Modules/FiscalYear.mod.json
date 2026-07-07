@@ -257,7 +257,7 @@
         },
         "Parameters": [
           { "IsParameter": true, "Name": "id", "DbType": "bigint", "DbParameterDirection": "Input" },
-          { "IsParameter": true, "Name": "NextYearId", "DbType": "bigint", "DbParameterDirection": "Input" }
+          { "IsParameter": true, "Name": "next_year_id", "DbType": "bigint", "DbParameterDirection": "Input" }
         ]
       },
       "Name": "CarryOverSql",

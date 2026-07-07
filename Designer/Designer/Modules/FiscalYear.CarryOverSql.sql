@@ -1,11 +1,12 @@
 -- 翌期繰越（decisions/0006）。年度の Update Submit のたびに実行されるが、
--- NextYearId（非バインドフィールド）が NULL のときは何もしない no-op ガード付き。
+-- next_year_id が NULL のときは何もしない no-op ガード付き。
 -- 「翌期繰越を実行」ボタンが NextYearId をセットして Submit することで発火する。
+-- ★パラメータ名はフィールド名ではなく DB 列名（@next_year_id）で解決される（ISSUE-0001 の真因・2026-07-08 実測）
 DELETE FROM opening_balances
-WHERE @NextYearId IS NOT NULL AND fiscal_year_id = @NextYearId;
+WHERE @next_year_id IS NOT NULL AND fiscal_year_id = @next_year_id;
 
 INSERT INTO opening_balances (fiscal_year_id, account_id, sub_account_id, department_id, balance)
-SELECT @NextYearId, t.account_id, NULL, NULL, t.bal
+SELECT @next_year_id, t.account_id, NULL, NULL, t.bal
 FROM (
   SELECT
     a.id AS account_id,
@@ -32,4 +33,4 @@ FROM (
   FROM accounts a
   WHERE a.account_type IN ('asset', 'liability', 'equity')
 ) t
-WHERE @NextYearId IS NOT NULL AND t.bal <> 0;
+WHERE @next_year_id IS NOT NULL AND t.bal <> 0;
