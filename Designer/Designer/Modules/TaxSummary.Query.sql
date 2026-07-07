@@ -17,6 +17,9 @@ JOIN journal_entries e ON e.id = l.journal_entry_id
 JOIN tax_categories tc ON tc.id = l.tax_category_id
 WHERE e.status = 'posted'
   AND l.tax_category_id IS NOT NULL
-  AND (@fiscal_year_id IS NULL OR e.fiscal_year_id = @fiscal_year_id)
+  -- 年度未選択（初期表示）は現在日付を含む年度に自動解決（BS/PL と同方式。申告基礎資料に前期分が混入しないように）
+  AND e.fiscal_year_id = COALESCE(@fiscal_year_id,
+    (SELECT id FROM fiscal_years
+     WHERE date(start_date) <= date('now') AND date(end_date) >= date('now')))
 GROUP BY tc.id
 ORDER BY tc.display_order

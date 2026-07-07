@@ -135,6 +135,14 @@ void Confirm_OnClick()
     int receivedOthers = SumReceipts(InvoiceRef.Value, true);
     int remainBefore = grossAll - receivedOthers;
     int inputAmount = Amount.Value;
+
+    // 過入金ガード: 売掛金がマイナス残高になる消込は起票しない（誤入金・重複振込対策）
+    if (inputAmount > remainBefore)
+    {
+        Toaster.Error($"入金額 {inputAmount:#,0} 円が請求残額 {remainBefore:#,0} 円を超えています。過入金分は前受金(2100)として振替伝票で起票してください");
+        return;
+    }
+
     var diff = remainBefore - inputAmount;
     var diffMax = GetThresholdAmount("RECEIPT_DIFF_MAX");
     var useDiff = (diff >= 1 && diff <= diffMax && feeAccount != null);

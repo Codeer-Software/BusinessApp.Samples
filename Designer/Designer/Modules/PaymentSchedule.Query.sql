@@ -14,7 +14,8 @@ WITH pend AS (
 )
 
 SELECT
-  '1-' || due_date || '-' || COALESCE(invoice_no, '') AS sort_key,
+  -- due_date NULL でも sort_key が NULL にならないよう COALESCE（NULL 連結は全体が NULL になり並びが壊れる）
+  '1-' || COALESCE(due_date, '9999-99-99') || '-' || COALESCE(invoice_no, '') AS sort_key,
   due_date,
   partner_name,
   invoice_no,

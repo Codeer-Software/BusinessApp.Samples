@@ -194,6 +194,19 @@ void GenerateDep_OnClick()
         return;
     }
 
+    // 締め済み月次期間ガード（仕訳日＝期末日が属する期間。月初日で解決＝境界日の罠回避）
+    var eod = typedFy.EndDate.Value;
+    var periodFirstDay = new DateTime(eod.Year, eod.Month, 1);
+    var ps = new ModuleSearcher<FiscalPeriod>();
+    ps.AddLessThanOrEqual(e => e.StartDate.Value, periodFirstDay);
+    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, periodFirstDay);
+    var period = ps.ExecuteFirstOrDefault();
+    if (period != null && ((FiscalPeriod)period).Status.Value == "closed")
+    {
+        Toaster.Error("期末月の期間が締め済みです。期間を再オープンしてから生成してください");
+        return;
+    }
+
     // 二重生成ガード
     var js = new ModuleSearcher<JournalEntry>();
     js.AddEquals(e => e.SourceType.Value, "depreciation");
