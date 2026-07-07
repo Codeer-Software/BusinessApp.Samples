@@ -51,8 +51,8 @@ void Generate_OnClick()
         return;
     }
 
-    // 仕入先の口座情報
-    var ps = new ModuleSearcher<Partner>();
+    // 仕入先の口座情報（経理専用の PartnerBank モジュール経由。機微情報の項目分離）
+    var ps = new ModuleSearcher<PartnerBank>();
     var partners = ps.Execute();
 
     var lines = new List<string>();
@@ -77,10 +77,10 @@ void Generate_OnClick()
     foreach (var im in invoices)
     {
         var inv = (VendorInvoice)im;
-        Partner partner = null;
+        PartnerBank partner = null;
         foreach (var pm in partners)
         {
-            var p = (Partner)pm;
+            var p = (PartnerBank)pm;
             if ($"{p.Id.Value}" == $"{inv.Partner.Value}") { partner = p; break; }
         }
         var invNo = inv.InvoiceNo.Value ?? "?";
@@ -92,7 +92,7 @@ void Generate_OnClick()
         if (!IsDigitsLen(partner.BankCode.Value, 4) || !IsDigitsLen(partner.BranchCode.Value, 3)
             || !IsDigitsLen(partner.AccountNo.Value, 7) || partner.AccountTypeSel.Value == null)
         {
-            errors.Add($"{invNo}: {partner.Name.Value} の振込先口座情報が未登録または桁数不正（取引先マスタで銀行4桁/支店3桁/口座7桁/種別を登録）");
+            errors.Add($"{invNo}: {partner.Name.Value} の振込先口座情報が未登録または桁数不正（購買 > 取引先口座 で銀行4桁/支店3桁/口座7桁/種別を登録）");
             continue;
         }
         var kanaErr = KanaError(partner.PayeeKana.Value);

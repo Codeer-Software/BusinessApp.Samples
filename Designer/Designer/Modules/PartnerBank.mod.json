@@ -1,10 +1,10 @@
 {
-  "Name": "Partner",
+  "Name": "PartnerBank",
   "DataSourceName": "AccountingSQLite",
   "DbTable": "partners",
-  "CanCreate": true,
+  "CanCreate": false,
   "CanUpdate": true,
-  "CanDelete": true,
+  "CanDelete": false,
   "Fields": [
     {
       "DbColumn": "id",
@@ -23,162 +23,123 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.IdFieldDesign"
     },
     {
-      "DbColumn": "code",
-      "IsMultiline": false,
-      "IsAutoFitRows": false,
-      "Placeholder": "例: C001",
-      "TextEditEmptyType": "StringEmpty",
-      "ShouldTrimAfterEdit": true,
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "取引先コード",
-      "IsRequired": true,
-      "OnDataChanged": "",
-      "Name": "Code",
-      "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
-    },
-    {
       "DbColumn": "name",
       "IsMultiline": false,
       "IsAutoFitRows": false,
-      "Placeholder": "例: 株式会社サンプル",
+      "Placeholder": "",
       "TextEditEmptyType": "StringEmpty",
-      "ShouldTrimAfterEdit": true,
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
+      "ShouldTrimAfterEdit": false,
+      "IsUpdateProtected": true,
+      "IsSimpleSearchParameter": true,
       "OnSearchDataChanged": "",
       "DisplayName": "取引先名",
-      "IsRequired": true,
+      "IsRequired": false,
       "OnDataChanged": "",
       "Name": "Name",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
-      "DbColumn": "kana",
+      "DbColumn": "bank_code",
       "IsMultiline": false,
       "IsAutoFitRows": false,
-      "Placeholder": "検索用ふりがな",
-      "TextEditEmptyType": "StringEmpty",
-      "ShouldTrimAfterEdit": true,
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "ふりがな",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "Kana",
-      "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
-    },
-    {
-      "Text": "得意先",
-      "DbColumn": "is_customer",
-      "UIType": "CheckBox",
-      "TrueText": "○",
-      "FalseText": "—",
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "得意先",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "IsCustomer",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.BooleanFieldDesign"
-    },
-    {
-      "Text": "仕入先",
-      "DbColumn": "is_supplier",
-      "UIType": "CheckBox",
-      "TrueText": "○",
-      "FalseText": "—",
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "仕入先",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "IsSupplier",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.BooleanFieldDesign"
-    },
-    {
-      "DbColumn": "invoice_reg_no",
-      "IsMultiline": false,
-      "IsAutoFitRows": false,
-      "Placeholder": "T+13桁",
+      "Placeholder": "銀行コード4桁",
       "TextEditEmptyType": "Null",
       "ShouldTrimAfterEdit": true,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "適格請求書登録番号",
+      "DisplayName": "銀行コード",
       "IsRequired": false,
       "OnDataChanged": "",
-      "Name": "InvoiceRegNo",
+      "Name": "BankCode",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
-      "Text": "免税事業者（経過措置対象）",
-      "DbColumn": "is_tax_exempt",
-      "UIType": "CheckBox",
-      "TrueText": "○",
-      "FalseText": "—",
+      "DbColumn": "branch_code",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "支店コード3桁",
+      "TextEditEmptyType": "Null",
+      "ShouldTrimAfterEdit": true,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "支店コード",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "BranchCode",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "Candidates": ["普通,1", "当座,2"],
+      "SearchCondition": {
+        "SelectFields": [],
+        "SortConditions": [],
+        "SortFieldVariable": "",
+        "SortDescending": false,
+        "ModuleName": ""
+      },
+      "ValueVariable": "",
+      "DisplayTextVariable": "",
+      "DbColumn": "account_type",
+      "EmptyCandidateType": "Null",
+      "AllowOrSearch": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "免税事業者",
+      "DisplayName": "口座種別",
       "IsRequired": false,
       "OnDataChanged": "",
-      "Name": "IsTaxExempt",
+      "Name": "AccountTypeSel",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.BooleanFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
-      "Text": "有効",
-      "DbColumn": "is_active",
-      "UIType": "CheckBox",
-      "TrueText": "○",
-      "FalseText": "—",
+      "DbColumn": "account_no",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "口座番号7桁",
+      "TextEditEmptyType": "Null",
+      "ShouldTrimAfterEdit": true,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
-      "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "有効",
+      "DisplayName": "口座番号",
       "IsRequired": false,
       "OnDataChanged": "",
-      "Name": "IsActive",
+      "Name": "AccountNo",
       "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.BooleanFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
-      "Text": "取引先",
+      "DbColumn": "payee_kana",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "ｶ)ｽﾀｰﾗｲﾄ の形式（半角ｶﾅ・英大文字・数字。小文字ｶﾅ ｬｭｮｯ 不可）",
+      "TextEditEmptyType": "Null",
+      "ShouldTrimAfterEdit": true,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "受取人名（半角カナ）",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "PayeeKana",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "Text": "取引先の振込先口座",
       "Icon": "",
       "Style": "H2",
       "RelativeField": "",
       "OnClick": "",
       "Name": "TitleLabel",
-      "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
-    },
-    {
-      "Text": "取引先コード",
-      "Icon": "",
-      "Style": "Default",
-      "RelativeField": "Code",
-      "OnClick": "",
-      "Name": "CodeLabel",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
@@ -193,42 +154,24 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "ふりがな",
+      "Text": "振込先口座",
       "Icon": "",
       "Style": "Default",
-      "RelativeField": "Kana",
+      "RelativeField": "BankCode",
       "OnClick": "",
-      "Name": "KanaLabel",
+      "Name": "FbAccountLabel",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "登録番号",
+      "Text": "受取人名（半角カナ）",
       "Icon": "",
       "Style": "Default",
-      "RelativeField": "InvoiceRegNo",
+      "RelativeField": "PayeeKana",
       "OnClick": "",
-      "Name": "InvoiceRegNoLabel",
+      "Name": "PayeeKanaLabel",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
-    },
-    {
-      "Text": "国税庁で番号を確認",
-      "Icon": "",
-      "Variant": "Secondary",
-      "OnClick": "CheckInvoice_OnClick",
-      "ImageResourcePath": "",
-      "ImageResourceSet": {
-        "Default": "",
-        "Focus": "",
-        "Active": "",
-        "Hover": "",
-        "Disabled": ""
-      },
-      "ShowTextInToolTip": false,
-      "Name": "CheckInvoiceButton",
-      "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
       "Text": "登録",
@@ -287,7 +230,24 @@
     }
   },
   "UserReadCondition": {
-    "ModuleName": ""
+    "ModuleName": "AppUser",
+    "Condition": {
+      "IsOrMatch": false,
+      "IsNot": false,
+      "Children": [
+        {
+          "SearchTargetVariable": "Role.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "accounting",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        }
+      ],
+      "Name": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+    }
   },
   "DataWriteCondition": {
     "ModuleName": ""
@@ -396,75 +356,6 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "CodeLabel",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 154,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "VerticalAlignment": "Middle",
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "Code",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 200,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
                   "FieldName": "NameLabel",
                   "ContextMenu": "",
                   "ClassName": "",
@@ -495,10 +386,11 @@
                   "FontFamily": "",
                   "Color": "",
                   "BackgroundColor": "",
+                  "IsViewOnly": true,
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 300,
+                "Width": 350,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -507,6 +399,7 @@
                   "RightColor": "",
                   "BottomColor": ""
                 },
+                "VerticalAlignment": "Middle",
                 "CanResize": false,
                 "Border": "None"
               },
@@ -534,7 +427,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "KanaLabel",
+                  "FieldName": "FbAccountLabel",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -558,7 +451,7 @@
               },
               {
                 "Layout": {
-                  "FieldName": "Kana",
+                  "FieldName": "BankCode",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -567,7 +460,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 300,
+                "Width": 140,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -576,6 +469,79 @@
                   "RightColor": "",
                   "BottomColor": ""
                 },
+                "VerticalAlignment": "Middle",
+                "CanResize": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "BranchCode",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 140,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "VerticalAlignment": "Middle",
+                "CanResize": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "AccountTypeSel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 120,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "VerticalAlignment": "Middle",
+                "CanResize": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "AccountNo",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 160,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "VerticalAlignment": "Middle",
                 "CanResize": false,
                 "Border": "None"
               },
@@ -603,7 +569,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "InvoiceRegNoLabel",
+                  "FieldName": "PayeeKanaLabel",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -627,7 +593,7 @@
               },
               {
                 "Layout": {
-                  "FieldName": "InvoiceRegNo",
+                  "FieldName": "PayeeKana",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -636,76 +602,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 250,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "CheckInvoiceButton",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 190,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None",
-                "VerticalAlignment": "Middle"
-              },
-              {
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "IsCustomer",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 154,
+                "Width": 420,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -719,17 +616,6 @@
                 "Border": "None"
               },
               {
-                "Layout": {
-                  "FieldName": "IsSupplier",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 154,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -738,63 +624,6 @@
                   "RightColor": "",
                   "BottomColor": ""
                 },
-                "VerticalAlignment": "Middle",
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "IsTaxExempt",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "VerticalAlignment": "Middle",
-                "CanResize": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "IsActive",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "VerticalAlignment": "Middle",
                 "CanResize": false,
                 "Border": "None"
               }
@@ -848,22 +677,6 @@
       "Elements": [
         [
           {
-            "FieldName": "Code",
-            "ContextMenu": "",
-            "Label": "コード",
-            "ColumnSpan": 1,
-            "RowSpan": 1,
-            "TextWrap": "Unset",
-            "CanResize": true,
-            "CanUserSort": true,
-            "ClassName": "",
-            "FontFamily": "",
-            "Color": "",
-            "BackgroundColor": "",
-            "DetailLayoutName": "",
-            "ListElementComponent": ""
-          },
-          {
             "FieldName": "Name",
             "ContextMenu": "",
             "Label": "取引先名",
@@ -880,14 +693,14 @@
             "ListElementComponent": ""
           },
           {
-            "FieldName": "IsCustomer",
+            "FieldName": "BankCode",
             "ContextMenu": "",
-            "Label": "得意先",
+            "Label": "銀行",
             "ColumnSpan": 1,
             "RowSpan": 1,
             "TextWrap": "Unset",
             "CanResize": false,
-            "CanUserSort": true,
+            "CanUserSort": false,
             "ClassName": "",
             "FontFamily": "",
             "Color": "",
@@ -896,14 +709,14 @@
             "ListElementComponent": ""
           },
           {
-            "FieldName": "IsSupplier",
+            "FieldName": "BranchCode",
             "ContextMenu": "",
-            "Label": "仕入先",
+            "Label": "支店",
             "ColumnSpan": 1,
             "RowSpan": 1,
             "TextWrap": "Unset",
             "CanResize": false,
-            "CanUserSort": true,
+            "CanUserSort": false,
             "ClassName": "",
             "FontFamily": "",
             "Color": "",
@@ -912,46 +725,30 @@
             "ListElementComponent": ""
           },
           {
-            "FieldName": "InvoiceRegNo",
+            "FieldName": "AccountNo",
             "ContextMenu": "",
-            "Label": "登録番号",
+            "Label": "口座番号",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": false,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "PayeeKana",
+            "ContextMenu": "",
+            "Label": "受取人名（カナ）",
             "ColumnSpan": 1,
             "RowSpan": 1,
             "TextWrap": "Unset",
             "CanResize": true,
-            "CanUserSort": true,
-            "ClassName": "",
-            "FontFamily": "",
-            "Color": "",
-            "BackgroundColor": "",
-            "DetailLayoutName": "",
-            "ListElementComponent": ""
-          },
-          {
-            "FieldName": "IsTaxExempt",
-            "ContextMenu": "",
-            "Label": "免税",
-            "ColumnSpan": 1,
-            "RowSpan": 1,
-            "TextWrap": "Unset",
-            "CanResize": false,
-            "CanUserSort": true,
-            "ClassName": "",
-            "FontFamily": "",
-            "Color": "",
-            "BackgroundColor": "",
-            "DetailLayoutName": "",
-            "ListElementComponent": ""
-          },
-          {
-            "FieldName": "IsActive",
-            "ContextMenu": "",
-            "Label": "有効",
-            "ColumnSpan": 1,
-            "RowSpan": 1,
-            "TextWrap": "Unset",
-            "CanResize": false,
-            "CanUserSort": true,
+            "CanUserSort": false,
             "ClassName": "",
             "FontFamily": "",
             "Color": "",
@@ -980,96 +777,7 @@
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",
         "BackgroundColor": "",
-        "Rows": [
-          {
-            "IsWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "Code",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "Name",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "Kana",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None"
-              }
-            ]
-          }
-        ],
+        "Rows": [],
         "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SearchGridLayoutDesign"
       }
     }
@@ -1086,7 +794,7 @@
       "LimitCount": 50,
       "SelectFields": [],
       "SortConditions": [],
-      "SortFieldVariable": "Code.Value",
+      "SortFieldVariable": "Name.Value",
       "SortDescending": false,
       "ModuleName": ""
     },
@@ -1095,7 +803,7 @@
     "DeleteTogether": false,
     "CanCreate": false,
     "CanUpdate": false,
-    "CanDelete": true,
+    "CanDelete": false,
     "CanUserSort": true,
     "CanSelect": false,
     "OnDataChanged": "",
@@ -1109,5 +817,5 @@
   },
   "CanBulkDataUpdate": false,
   "CanBulkDataDownload": false,
-  "PageTitle": "取引先"
+  "PageTitle": "取引先口座"
 }
