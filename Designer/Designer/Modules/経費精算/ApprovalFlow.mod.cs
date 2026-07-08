@@ -593,18 +593,11 @@ void NotifyUser(object recipientUserId, string title, string body, string linkMo
     n.IsRead.Value = false;
     n.CreatedAt.Value = DateTime.Now;
     var ret = n.Submit();
-    if (ret != true)
-    {
-        // Submit の戻り値は実際には作成できていても true 以外になることがある（全通知経路で誤警告を実測 2026-07-08）。
-        // DB を正として再検索し、本当に作成できていない場合のみ警告する
-        var s = new ModuleSearcher<Notification>();
-        s.AddEquals(x => x.RecipientUser.Value, recipientUserId);
-        s.AddEquals(x => x.Title.Value, title);
-        s.OrderByDescending(x => x.Id.Value);
-        s.Limit(1);
-        var latest = s.ExecuteFirstOrDefault();
-        if (latest == null || latest.Body.Value != body) { Logger.Warn($"通知の作成に失敗: {title}"); }
-    }
+    // 他ユーザー宛の通知は Notification の DataReadCondition（自分宛のみ）により Submit 後の再読込が
+    // 0 件になり、INSERT 自体は成功していても true 以外が返る（2026-07-08 実測。再検索での成否確認も
+    // 同じ読取条件で不可能）。戻り値では成否を判定できないため、警告トーストは出さずログのみ残す。
+    // 実際の作成有無は notifications テーブルを DB で確認する
+    if (ret != true) { Logger.Log($"通知 Submit の戻り値が true 以外（他ユーザー宛では正常挙動）: {title}"); }
     Logger.Log($"SLACK(mock): to user#{recipientUserId} {title} - {body}");
 }
 
