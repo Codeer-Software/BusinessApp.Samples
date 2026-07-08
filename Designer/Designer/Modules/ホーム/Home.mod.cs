@@ -15,9 +15,10 @@ void Detail_OnAfterInit()
     DateLabel.Text = $"{DateTime.Today:yyyy年M月d日}";
 
     // やることサマリ（全ロール）
-    var afs = new ModuleSearcher<ApprovalFlow>();
+    // 承認待ち件数は approval_inbox_view ベースの ApprovalInbox で数える
+    // （ADR-0016: フローの CurrentApprover は代表1名のため、並列承認の2人目に件数が出ない）
+    var afs = new ModuleSearcher<ApprovalInbox>();
     afs.AddEquals(f => f.CurrentApprover.Value, CurrentUser.Id.Value);
-    afs.AddEquals(f => f.Status.Value, "Pending");
     var myApprovals = afs.Execute().Count;
     var ers = new ModuleSearcher<ExpenseRequest>();
     ers.AddEquals(e => e.Creator.Value, CurrentUser.Id.Value);

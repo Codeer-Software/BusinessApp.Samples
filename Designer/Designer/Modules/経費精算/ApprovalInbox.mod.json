@@ -1,7 +1,7 @@
 {
   "Name": "ApprovalInbox",
   "DataSourceName": "AccountingSQLite",
-  "DbTable": "approval_flow",
+  "DbTable": "approval_inbox_view",
   "CanCreate": false,
   "CanUpdate": false,
   "CanDelete": false,

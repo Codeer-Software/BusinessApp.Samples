@@ -1,5 +1,7 @@
-// ApprovalInbox.mod.cs — 承認待ち（自分が承認する番の申請一覧・approval_flow の読み取り専用ビュー）
-// 行の絞り込みは DataReadCondition（現在の承認者=自分）で宣言的に行う。
+// ApprovalInbox.mod.cs — 承認待ち（自分が承認する番の申請一覧）
+// ADR-0016: approval_inbox_view（approval_flow_member × Active Order × Pending Flow の SQLite VIEW）を読む。
+// 1行 = 「Active な Order で自分が Waiting のメンバー」なので、複数課長の並列承認でも全員の受信箱に出る。
+// 行の絞り込みは DataReadCondition（current_approver 列 = 自分。ビューでは approver_user_id を同名で公開）で宣言的に行う。
 // 表示は承認者・経理のみ（UserReadCondition。一般社員はメニューにも出ない）。
 
 void OpenRequest_OnClick()

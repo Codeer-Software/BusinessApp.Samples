@@ -37,20 +37,39 @@ bool LoadFromTemplate()
         var checkSearcher = new ModuleSearcher<ApprovalFlowTemplateMember>();
         checkSearcher.AddEquals(m => m.TemplateOrderId.Value, tmplOrder.Id.Value);
         var checkMembers = checkSearcher.Execute();
+        var roleMemberCount = 0;
         foreach (var tmplMember in checkMembers)
         {
             var role = tmplMember.ApproverRole.Value;
-            if (tmplMember.ApproverUser.Value == null && role != "manager" && role != "director")
+            if (role == "manager" || role == "director")
             {
-                Toaster.Error("承認テンプレートに承認者未設定のメンバーがあります");
-                return false;
+                roleMemberCount++;
+                var approvers = ResolveRoleApprovers(dept, role);
+                if (approvers.Count == 0)
+                {
+                    Toaster.Error("承認者を決定できません: 部門の課長/部長の設定、または自己承認の代替となる経理ユーザーを確認してください（自己承認は禁止です）");
+                    return false;
+                }
             }
-            var resolved = ResolveApproverAvoidingSelf(dept, role, tmplMember.ApproverUser.Value);
-            if (resolved == null)
+            else
             {
-                Toaster.Error("承認者を決定できません: 部門の課長/部長の設定、または自己承認の代替となる経理ユーザーを確認してください（自己承認は禁止です）");
-                return false;
+                if (tmplMember.ApproverUser.Value == null)
+                {
+                    Toaster.Error("承認テンプレートに承認者未設定のメンバーがあります");
+                    return false;
+                }
+                if (ResolveFixedApproverAvoidingSelf(tmplMember.ApproverUser.Value) == null)
+                {
+                    Toaster.Error("承認者を決定できません: 自己承認の代替となる経理ユーザーを確認してください（自己承認は禁止です）");
+                    return false;
+                }
             }
+        }
+        // 役職メンバーは複数名に展開されるため、同一 Order に他メンバーと混載できない（ADR-0016 の前提）
+        if (roleMemberCount > 0 && checkMembers.Count > 1)
+        {
+            Toaster.Error("承認テンプレート構成エラー: 役職指定の承認者は単独の承認段階にしてください");
+            return false;
         }
     }
 
@@ -66,37 +85,72 @@ bool LoadFromTemplate()
         var tmplMembers = memberSearcher.Execute();
         foreach (var tmplMember in tmplMembers)
         {
-            var approver = ResolveApproverAvoidingSelf(dept, tmplMember.ApproverRole.Value, tmplMember.ApproverUser.Value);
-
-            var newMember = newOrder.Members.AddRow();
-            newMember.IsRequired.Value = tmplMember.IsRequired.Value;
-            newMember.ApproverUser.Value = approver;
-            newMember.Status.Value = "Waiting";
-            newMember.ParentModuleName.Value = ParentModuleName.Value;
-            newMember.ParentId.Value = ParentId.Value;
+            var role = tmplMember.ApproverRole.Value;
+            if (role == "manager" || role == "director")
+            {
+                // 役職の全員を同一 Order に並列展開。2名以上なら1人の承認で段完了の OR 型（ADR-0016）
+                var approvers = ResolveRoleApprovers(dept, role);
+                newOrder.ApprovalType.Value = approvers.Count > 1 ? "any" : "all";
+                foreach (var approver in approvers)
+                {
+                    var newMember = newOrder.Members.AddRow();
+                    newMember.IsRequired.Value = tmplMember.IsRequired.Value;
+                    newMember.ApproverUser.Value = approver;
+                    newMember.Status.Value = "Waiting";
+                    newMember.ParentModuleName.Value = ParentModuleName.Value;
+                    newMember.ParentId.Value = ParentId.Value;
+                }
+            }
+            else
+            {
+                var newMember = newOrder.Members.AddRow();
+                newMember.IsRequired.Value = tmplMember.IsRequired.Value;
+                newMember.ApproverUser.Value = ResolveFixedApproverAvoidingSelf(tmplMember.ApproverUser.Value);
+                newMember.Status.Value = "Waiting";
+                newMember.ParentModuleName.Value = ParentModuleName.Value;
+                newMember.ParentId.Value = ParentId.Value;
+            }
         }
     }
     RecalculateCurrentApproverDisplay();
     return true;
 }
 
-// 承認者の解決＋自己承認の禁止 (decisions/0010)
-// 役職解決/固定指定が申請者本人の場合: manager→director へ格上げ、
-// それも本人（or director/固定が本人）→ 経理ロールの他ユーザー(最小Id)を代替承認者にする。
-// 解決不能なら null（呼び出し側で申請ブロック）
-object ResolveApproverAvoidingSelf(Department dept, string role, object fixedApprover)
+// 役職承認者の解決＋自己承認禁止の一般化 (decisions/0010, 0016)
+// 部門の該当役職の全員から申請者本人を除外した候補リストを返す。
+// - 役職が1人も設定されていない部門 → 空リスト（マスタ設定不備として呼び出し側で申請ブロック）
+// - 候補全員が申請者本人 → manager は部長へ格上げ、それも無ければ経理代替（1名）
+List<object> ResolveRoleApprovers(Department dept, string role)
 {
-    var resolved = fixedApprover;
-    if (role == "manager" || role == "director") resolved = ResolveDeptRole(dept, role);
-    if (resolved == null) return null;
-    if (resolved != CurrentUser.Id.Value) return resolved;
-
-    // 申請者本人だった: まず部門の部長へ格上げ (manager 解決時のみ意味を持つ)
-    if (role == "manager" && dept != null)
+    var candidates = ResolveDeptRoleAll(dept, role);
+    if (candidates.Count == 0) return new List<object>();
+    var filtered = new List<object>();
+    foreach (var c in candidates)
     {
-        var director = dept.DirectorUser.Value;
-        if (director != null && director != CurrentUser.Id.Value) return director;
+        if (c != CurrentUser.Id.Value) filtered.Add(c);
     }
+    if (filtered.Count > 0) return filtered;
+    if (role == "manager")
+    {
+        var directors = ResolveDeptRoleAll(dept, "director");
+        var directorsFiltered = new List<object>();
+        foreach (var c in directors)
+        {
+            if (c != CurrentUser.Id.Value) directorsFiltered.Add(c);
+        }
+        if (directorsFiltered.Count > 0) return directorsFiltered;
+    }
+    var result = new List<object>();
+    var fallback = FindFallbackApprover();
+    if (fallback != null) result.Add(fallback);
+    return result;
+}
+
+// 固定指定承認者の自己承認回避 (decisions/0010)。本人なら経理代替、解決不能なら null
+object ResolveFixedApproverAvoidingSelf(object fixedApprover)
+{
+    if (fixedApprover == null) return null;
+    if (fixedApprover != CurrentUser.Id.Value) return fixedApprover;
     return FindFallbackApprover();
 }
 
@@ -131,13 +185,23 @@ Department FindCurrentUserDepartment()
     return (Department)depts[0];
 }
 
-// 部門の役職 (manager=課長 / director=部長) を承認者ユーザー ID に解決
-object ResolveDeptRole(Department dept, string role)
+// 部門の役職 (manager=課長 / director=部長) の全員を department_managers から解決（重複登録は除去。ADR-0016）
+List<object> ResolveDeptRoleAll(Department dept, string role)
 {
-    if (dept == null) return null;
-    if (role == "manager") return dept.ManagerUser.Value;
-    if (role == "director") return dept.DirectorUser.Value;
-    return null;
+    var result = new List<object>();
+    if (dept == null) return result;
+    var s = new ModuleSearcher<DepartmentManager>();
+    s.AddEquals(m => m.DepartmentId.Value, dept.Id.Value);
+    s.AddEquals(m => m.Role.Value, role);
+    s.OrderBy(m => m.Id.Value);
+    var rows = s.Execute();
+    foreach (var row in rows)
+    {
+        var userId = row.UserId.Value;
+        if (userId == null) continue;
+        if (!result.Contains(userId)) result.Add(userId);
+    }
+    return result;
 }
 
 // 現在 Active な Order の最初の Waiting Member の承認者を CurrentApprover にセット
@@ -196,10 +260,20 @@ void UpdateFlowSummary()
         if (!string.IsNullOrEmpty(creatorName)) parts.Add("✓" + creatorName);
     }
 
-    // 各 Order のメンバー (Order.Status は遅延ロードで取れないことがあるので「最初の Waiting に ▶」戦略)
+    // 各 Order のメンバー (Order.Status は遅延ロードで取れないことがあるので「最初に Waiting を含む Order が現在の段」戦略)
+    // 並列 OR 承認では現在の段の Waiting 全員に ▶ を付ける（どちらが承認してもよいことが読み取れるように）
     var currentMarked = false;
     foreach (var o in Orders.Rows)
     {
+        var hasWaiting = false;
+        foreach (var m in o.Members.Rows)
+        {
+            var ms0 = m.Status.Value;
+            if (ms0 != "Approved" && ms0 != "Rejected" && ms0 != "Skipped") hasWaiting = true;
+        }
+        var isCurrentOrder = hasWaiting && !currentMarked;
+        if (isCurrentOrder) currentMarked = true;
+
         var names = new List<string>();
         foreach (var m in o.Members.Rows)
         {
@@ -208,7 +282,7 @@ void UpdateFlowSummary()
             if (ms == "Approved") mark = "✓";
             else if (ms == "Rejected") mark = "✗";
             else if (ms == "Skipped") mark = "—";
-            else if (!currentMarked) { mark = "▶"; currentMarked = true; }
+            else if (isCurrentOrder) mark = "▶";
             names.Add(mark + m.ApproverUser.DisplayText);
         }
         if (names.Count == 0) continue;
@@ -294,13 +368,19 @@ void OnAfterInitialization()
     UpdateButtons();
 }
 
-// UI 側: 現在ユーザー宛の Waiting Member がいるか DB から判定 (Order.Id 経由)
+// UI 側: 現在ユーザー宛の Waiting Member が「Active な Order」にあるか DB から判定
+// （ADR-0016 二重承認の多層防御: OR 承認で段が完了した後の残メンバーには承認させない）
 bool HasWaitingMemberForCurrentUser()
 {
     var parent = GetParentModule();
-    if (parent.IsNewData) return false;
-    foreach (var o in Orders.Rows)
+    if (parent.IsNewData || this.IsNewData) return false;
+    var os = new ModuleSearcher<ApprovalFlowOrder>();
+    os.AddEquals(o => o.ApprovalFlowId.Value, this.Id.Value);
+    os.AddEquals(o => o.Status.Value, "Active");
+    var activeOrders = os.Execute();
+    foreach (var oRow in activeOrders)
     {
+        var o = (ApprovalFlowOrder)oRow;
         var s = new ModuleSearcher<ApprovalFlowMember>();
         s.AddEquals(m => m.ApprovalFlowOrderId.Value, o.Id.Value);
         s.AddEquals(m => m.ApproverUser.Value, CurrentUser.Id.Value);
@@ -310,21 +390,32 @@ bool HasWaitingMemberForCurrentUser()
     return false;
 }
 
-// Approve/Reject 実行時: Order.Id 経由で DB から自分宛の Waiting Member を検索 + メモリ Member を返す
+// Approve/Reject 実行時: DB の Active Order から自分宛の Waiting Member を検索 + 対応するメモリ Member を返す
+// （Active でない Order のメンバーは対象外 = 完了済みの段への stale な承認操作を弾く）
 ApprovalFlowMember GetCurrentMemberForUserStrict()
 {
-    foreach (var o in Orders.Rows)
+    if (this.IsNewData) return null;
+    var os = new ModuleSearcher<ApprovalFlowOrder>();
+    os.AddEquals(o => o.ApprovalFlowId.Value, this.Id.Value);
+    os.AddEquals(o => o.Status.Value, "Active");
+    var activeOrders = os.Execute();
+    foreach (var oRow in activeOrders)
     {
+        var dbOrder = (ApprovalFlowOrder)oRow;
         var s = new ModuleSearcher<ApprovalFlowMember>();
-        s.AddEquals(m => m.ApprovalFlowOrderId.Value, o.Id.Value);
+        s.AddEquals(m => m.ApprovalFlowOrderId.Value, dbOrder.Id.Value);
         s.AddEquals(m => m.ApproverUser.Value, CurrentUser.Id.Value);
         s.AddEquals(m => m.Status.Value, "Waiting");
         var members = s.Execute();
         if (members.Count == 0) continue;
         var dbMember = members[0];
-        foreach (var m in o.Members.Rows)
+        foreach (var o in Orders.Rows)
         {
-            if (m.Id.Value == dbMember.Id.Value) return m;
+            if (o.Id.Value != dbOrder.Id.Value) continue;
+            foreach (var m in o.Members.Rows)
+            {
+                if (m.Id.Value == dbMember.Id.Value) return m;
+            }
         }
     }
     return null;
@@ -561,9 +652,10 @@ void Approve_OnClick()
     member.ApprovedAt.Value = DateTime.Now;
 
     var order = GetOrderById(member.ApprovalFlowOrderId.Value);
-    if (order != null && IsOrderCompleted(order))
+    if (order != null && IsOrderCompleted(order, member.Id.Value))
     {
         order.Status.Value = "Approved";
+        SkipRemainingWaitingMembers(order, member.Id.Value);
         AdvanceToNextOrder();
     }
 
@@ -598,24 +690,61 @@ ApprovalFlowOrder GetOrderById(string orderId)
     return null;
 }
 
-// Order の承認完了判定: 必須メンバー全員 Approved、または必須ゼロで誰か1人 Approved
-bool IsOrderCompleted(ApprovalFlowOrder order)
+// Order の承認完了判定（ADR-0016: DB ベース。メモリ Rows の遅延ロード #60 を信用しない）
+// approval_type='any' なら誰か1人 Approved で完了（複数課長/部長の並列 OR 承認）。
+// 'all'/NULL は従来どおり: 必須メンバー全員 Approved、または必須ゼロで誰か1人 Approved。
+// justApprovedMemberId: 直前にメモリ上で Approved にした Member（この時点で DB 未反映）を Approved とみなす
+bool IsOrderCompleted(ApprovalFlowOrder order, string justApprovedMemberId)
 {
-    int requiredCount = 0, requiredApproved = 0, optionalApproved = 0;
-    foreach (var m in order.Members.Rows)
+    // approval_type も遅延ロードがありうるため DB から解決する
+    var os = new ModuleSearcher<ApprovalFlowOrder>();
+    os.AddEquals(o => o.Id.Value, order.Id.Value);
+    var dbOrders = os.Execute();
+    var approvalType = dbOrders.Count > 0 ? dbOrders[0].ApprovalType.Value : null;
+
+    var ms = new ModuleSearcher<ApprovalFlowMember>();
+    ms.AddEquals(m => m.ApprovalFlowOrderId.Value, order.Id.Value);
+    var members = ms.Execute();
+
+    int requiredCount = 0, requiredApproved = 0, anyApproved = 0;
+    foreach (var mRow in members)
     {
+        var m = (ApprovalFlowMember)mRow;
+        var status = m.Status.Value;
+        if (m.Id.Value == justApprovedMemberId) status = "Approved";
+        if (status == "Approved") anyApproved++;
         if (m.IsRequired.Value == true)
         {
             requiredCount++;
-            if (m.Status.Value == "Approved") requiredApproved++;
-        }
-        else
-        {
-            if (m.Status.Value == "Approved") optionalApproved++;
+            if (status == "Approved") requiredApproved++;
         }
     }
+    if (approvalType == "any") return anyApproved >= 1;
     if (requiredCount > 0) return requiredApproved == requiredCount;
-    return optionalApproved >= 1;
+    return anyApproved >= 1;
+}
+
+// OR 承認で段が完了したら、同一 Order の残り Waiting メンバーを Skipped にする（二重承認防止・履歴の可読性）
+// DB の Waiting メンバーを対応するメモリ行に反映して Submit で保存する
+void SkipRemainingWaitingMembers(ApprovalFlowOrder order, string approvedMemberId)
+{
+    var s = new ModuleSearcher<ApprovalFlowMember>();
+    s.AddEquals(m => m.ApprovalFlowOrderId.Value, order.Id.Value);
+    s.AddEquals(m => m.Status.Value, "Waiting");
+    var dbMembers = s.Execute();
+    foreach (var dbRow in dbMembers)
+    {
+        var dbMember = (ApprovalFlowMember)dbRow;
+        if (dbMember.Id.Value == approvedMemberId) continue;
+        foreach (var m in order.Members.Rows)
+        {
+            if (m.Id.Value == dbMember.Id.Value)
+            {
+                m.Status.Value = "Skipped";
+                break;
+            }
+        }
+    }
 }
 
 // 次の Waiting な Order を Active 化。なければフロー全体を Approved に。

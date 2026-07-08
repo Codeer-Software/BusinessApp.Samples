@@ -105,6 +105,25 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
+      "DbColumn": "approval_type",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "StringEmpty",
+      "ShouldTrimAfterEdit": false,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "承認方式",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "ApprovalType",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
       "LayoutName": "",
       "DisplayName": "承認者",
       "SearchCondition": {
@@ -200,7 +219,9 @@
       "OnAfterInitialization": "",
       "OnLocationChanging": "",
       "OnFieldDataChanged": "",
-      "DataOnlyFields": [],
+      "DataOnlyFields": [
+        "ApprovalType"
+      ],
       "ClassName": "",
       "Color": "",
       "BackgroundColor": "",

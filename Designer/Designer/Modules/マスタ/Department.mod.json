@@ -133,90 +133,53 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "SearchCondition": {
-        "LimitCount": 50,
-        "SelectFields": [],
-        "SortConditions": [],
-        "SortFieldVariable": "",
-        "SortDescending": false,
-        "ModuleName": "AppUser",
-        "Condition": {
-          "IsOrMatch": false,
-          "IsNot": false,
-          "Children": [],
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
-        }
-      },
-      "ValueVariable": "Id.Value",
-      "DisplayTextVariable": "表示名.Value",
-      "DbColumn": "manager_user",
-      "ListLayoutName": "",
-      "SearchLayoutName": "",
-      "OnSearchButtonClicked": "",
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "課長",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "ManagerUser",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LinkFieldDesign"
-    },
-    {
-      "SearchCondition": {
-        "LimitCount": 50,
-        "SelectFields": [],
-        "SortConditions": [],
-        "SortFieldVariable": "",
-        "SortDescending": false,
-        "ModuleName": "AppUser",
-        "Condition": {
-          "IsOrMatch": false,
-          "IsNot": false,
-          "Children": [],
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
-        }
-      },
-      "ValueVariable": "Id.Value",
-      "DisplayTextVariable": "表示名.Value",
-      "DbColumn": "director_user",
-      "ListLayoutName": "",
-      "SearchLayoutName": "",
-      "OnSearchButtonClicked": "",
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "部長",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "DirectorUser",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LinkFieldDesign"
-    },
-    {
-      "Text": "課長（承認ルート用）",
+      "Text": "役職者（承認ルート用）",
       "Icon": "",
       "Style": "Default",
-      "RelativeField": "ManagerUser",
+      "RelativeField": "",
       "OnClick": "",
-      "Name": "ManagerUserLabel",
+      "Name": "ManagersLabel",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "部長（承認ルート用）",
-      "Icon": "",
-      "Style": "Default",
-      "RelativeField": "DirectorUser",
-      "OnClick": "",
-      "Name": "DirectorUserLabel",
+      "ModuleName": "DepartmentManager",
+      "LayoutName": "",
+      "CanNavigateToDetail": false,
+      "SearchCondition": {
+        "LimitCount": null,
+        "SelectFields": [],
+        "SortConditions": [],
+        "SortFieldVariable": "",
+        "SortDescending": false,
+        "ModuleName": "DepartmentManager",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [
+            {
+              "SearchTargetVariable": "DepartmentId.Value",
+              "Comparison": "Equal",
+              "Variable": "Id.Value",
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldVariableMatchCondition"
+            }
+          ],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
+      },
+      "PagerPosition": "Bottom",
+      "UseIndexSort": false,
+      "DeleteTogether": true,
+      "CanCreate": true,
+      "CanUpdate": true,
+      "CanDelete": true,
+      "CanUserSort": false,
+      "CanSelect": false,
+      "OnDataChanged": "",
+      "Name": "Managers",
       "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
     },
     {
       "Text": "登録",
@@ -602,7 +565,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "ManagerUserLabel",
+                  "FieldName": "ManagersLabel",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -611,7 +574,6 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 154,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -623,10 +585,20 @@
                 "VerticalAlignment": "Middle",
                 "CanResize": false,
                 "Border": "None"
-              },
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
               {
                 "Layout": {
-                  "FieldName": "ManagerUser",
+                  "FieldName": "Managers",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -635,7 +607,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 250,
+                "Width": 480,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -644,56 +616,6 @@
                   "RightColor": "",
                   "BottomColor": ""
                 },
-                "VerticalAlignment": "Middle",
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "DirectorUserLabel",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 154,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "VerticalAlignment": "Middle",
-                "HorizontalAlignment": "Right",
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "DirectorUser",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 250,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "VerticalAlignment": "Middle",
                 "CanResize": false,
                 "Border": "None"
               },
