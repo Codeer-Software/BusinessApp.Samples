@@ -16,10 +16,17 @@ void Detail_OnAfterInit()
 
     // やることサマリ（全ロール）
     // 承認待ち件数は approval_inbox_view ベースの ApprovalInbox で数える
-    // （ADR-0016: フローの CurrentApprover は代表1名のため、並列承認の2人目に件数が出ない）
-    var afs = new ModuleSearcher<ApprovalInbox>();
-    afs.AddEquals(f => f.CurrentApprover.Value, CurrentUser.Id.Value);
-    var myApprovals = afs.Execute().Count;
+    // （ADR-0016: フローの CurrentApprover は代表1名のため、並列承認の2人目に件数が出ない）。
+    // ApprovalInbox は UserReadCondition（approver/accounting）付きのため、権限のないロールでは検索しない
+    // （一般社員の承認待ちは常に0件。権限外モジュールへの検索でホーム初期化が途中停止するのを防ぐ）
+    var myApprovals = 0;
+    var roleForInbox = CurrentUser.Role.Value;
+    if (roleForInbox == "approver" || roleForInbox == "accounting")
+    {
+        var afs = new ModuleSearcher<ApprovalInbox>();
+        afs.AddEquals(f => f.CurrentApprover.Value, CurrentUser.Id.Value);
+        myApprovals = afs.Execute().Count;
+    }
     var ers = new ModuleSearcher<ExpenseRequest>();
     ers.AddEquals(e => e.Creator.Value, CurrentUser.Id.Value);
     ers.AddEquals(e => e.SettlementStatus.Value, "applying");

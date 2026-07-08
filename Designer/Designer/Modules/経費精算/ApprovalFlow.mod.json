@@ -981,7 +981,7 @@
   },
   "SearchLayouts": {
     "": {
-      "OnSearchInitialization": "OnSearchInitialization",
+      "OnSearchInitialization": "",
       "ShowDefaultSearchButtons": true,
       "Layout": {
         "Operator": "And",

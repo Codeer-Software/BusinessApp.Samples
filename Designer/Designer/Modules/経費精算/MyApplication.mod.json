@@ -293,7 +293,7 @@
           {
             "FieldName": "CurrentApprover",
             "ContextMenu": "",
-            "Label": "現在の承認者",
+            "Label": "承認担当（代表）",
             "ColumnSpan": 1,
             "RowSpan": 1,
             "IsViewOnly": true,
