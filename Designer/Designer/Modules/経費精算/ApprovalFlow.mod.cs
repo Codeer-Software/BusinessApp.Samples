@@ -252,14 +252,20 @@ void RecalculateCurrentApproverDisplay()
     {
         if (o.Status.Value != "Active") continue;
 
-        var ms = new ModuleSearcher<ApprovalFlowMember>();
-        ms.AddEquals(m => m.ApprovalFlowOrderId.Value, o.Id.Value);
-        ms.AddEquals(m => m.Status.Value, "Waiting");
-        var dbMembers = ms.Execute();
-        if (dbMembers.Count > 0)
+        // 新規生成直後の Order は Id が @temporary のため DB 検索しない
+        // （数値列に temporary Id をぶつけると FormatException。実費確定の再承認で赤トーストとして顕在化した実測 2026-07-08）
+        var orderId = $"{o.Id.Value}";
+        if (!orderId.StartsWith("@temporary"))
         {
-            CurrentApprover.Value = dbMembers[0].ApproverUser.Value;
-            return;
+            var ms = new ModuleSearcher<ApprovalFlowMember>();
+            ms.AddEquals(m => m.ApprovalFlowOrderId.Value, o.Id.Value);
+            ms.AddEquals(m => m.Status.Value, "Waiting");
+            var dbMembers = ms.Execute();
+            if (dbMembers.Count > 0)
+            {
+                CurrentApprover.Value = dbMembers[0].ApproverUser.Value;
+                return;
+            }
         }
 
         foreach (var m in o.Members.Rows)
@@ -587,7 +593,18 @@ void NotifyUser(object recipientUserId, string title, string body, string linkMo
     n.IsRead.Value = false;
     n.CreatedAt.Value = DateTime.Now;
     var ret = n.Submit();
-    if (ret != true) { Logger.Warn($"通知の作成に失敗: {title}"); }
+    if (ret != true)
+    {
+        // Submit の戻り値は実際には作成できていても true 以外になることがある（全通知経路で誤警告を実測 2026-07-08）。
+        // DB を正として再検索し、本当に作成できていない場合のみ警告する
+        var s = new ModuleSearcher<Notification>();
+        s.AddEquals(x => x.RecipientUser.Value, recipientUserId);
+        s.AddEquals(x => x.Title.Value, title);
+        s.OrderByDescending(x => x.Id.Value);
+        s.Limit(1);
+        var latest = s.ExecuteFirstOrDefault();
+        if (latest == null || latest.Body.Value != body) { Logger.Warn($"通知の作成に失敗: {title}"); }
+    }
     Logger.Log($"SLACK(mock): to user#{recipientUserId} {title} - {body}");
 }
 
