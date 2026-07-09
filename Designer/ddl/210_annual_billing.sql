@@ -10,16 +10,6 @@
 ALTER TABLE recurring_billings ADD COLUMN billing_cycle TEXT DEFAULT 'monthly';  -- monthly / yearly
 ALTER TABLE recurring_billings ADD COLUMN annual_amount INTEGER;                 -- 年額（税抜）。yearly のとき使用
 
--- seed: 年額プラン（割り切れる 1,200,000/年 = 月 100,000 で検証しやすく）
-INSERT INTO recurring_billings (partner_id, project_id, title, monthly_amount, annual_amount, billing_cycle, start_month, end_month, is_active)
-SELECT
-    (SELECT id FROM partners WHERE code = 'C001'),
-    (SELECT id FROM projects WHERE project_type = 'saas' AND is_active = 1 ORDER BY id LIMIT 1),
-    'クラウド勤怠 SaaS 年額プラン',
-    NULL,
-    1200000,
-    'yearly',
-    '2026-07-01',
-    NULL,
-    1
-WHERE NOT EXISTS (SELECT 1 FROM recurring_billings WHERE title = 'クラウド勤怠 SaaS 年額プラン');
+-- 年額プランの seed は置かない（2026-07-10 削除）:
+-- 業務データは E2E シナリオ（docs/11 の 02_販売 ステップ 2-9）が画面から登録する方針。
+-- 検証用の値はシナリオ側に記載（年額 1,200,000 = 月 100,000 で割り切れる設定）。
