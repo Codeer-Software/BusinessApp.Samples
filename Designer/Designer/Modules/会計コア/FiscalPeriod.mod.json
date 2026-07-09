@@ -121,7 +121,7 @@
   "UserReadCondition": {
     "ModuleName": "AppUser",
     "Condition": {
-      "IsOrMatch": false,
+      "IsOrMatch": true,
       "IsNot": false,
       "Children": [
         {
@@ -129,6 +129,15 @@
           "Comparison": "Equal",
           "Value": {
             "Value": "accounting",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        },
+        {
+          "SearchTargetVariable": "Role.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "sysadmin",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
           },
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"

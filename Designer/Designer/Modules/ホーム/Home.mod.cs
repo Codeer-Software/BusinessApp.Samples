@@ -21,7 +21,7 @@ void Detail_OnAfterInit()
     // （一般社員の承認待ちは常に0件。権限外モジュールへの検索でホーム初期化が途中停止するのを防ぐ）
     var myApprovals = 0;
     var roleForInbox = CurrentUser.Role.Value;
-    if (roleForInbox == "approver" || roleForInbox == "accounting")
+    if (roleForInbox == "approver" || roleForInbox == "accounting" || roleForInbox == "sysadmin")
     {
         var afs = new ModuleSearcher<ApprovalInbox>();
         afs.AddEquals(f => f.CurrentApprover.Value, CurrentUser.Id.Value);
@@ -34,7 +34,7 @@ void Detail_OnAfterInit()
     TodoLabel.Text = $"あなたの承認待ち: {myApprovals} 件 ／ 進行中のあなたの申請: {myApplying} 件";
 
     // 経理以外はここまで（経理セクションと経理専用ページへのショートカットは非表示）
-    if (CurrentUser.Role.Value != "accounting")
+    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
     {
         KpiHeadLabel.IsVisible = false;
         KpiLine1.IsVisible = false;

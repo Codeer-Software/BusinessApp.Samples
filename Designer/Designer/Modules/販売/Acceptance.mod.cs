@@ -85,7 +85,7 @@ string NextAcceptanceNo()
 // D 売掛金1100 (税込) / C 売上科目 (税抜, 案件区分で 4000/4010/4020) / C 仮受消費税2200 (税行)
 void Confirm_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting")
+    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
     {
         Toaster.Error("検収の確定（売上計上）は経理ロールのみ実行できます");
         return;

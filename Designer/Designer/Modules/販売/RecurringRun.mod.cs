@@ -14,7 +14,7 @@ void Detail_OnAfterInit()
 
 void Run_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting")
+    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
     {
         Toaster.Error("定期請求の実行（売上計上を伴う）は経理ロールのみ実行できます");
         return;

@@ -6,7 +6,7 @@
 
 void Run_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting")
+    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
     {
         Toaster.Error("予算の登録は経理ロールのみ実行できます");
         return;

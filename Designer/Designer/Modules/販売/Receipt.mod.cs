@@ -66,7 +66,7 @@ int SumReceipts(object invoiceId, bool excludeSelf)
 // 入金確定: 保存 → 消込仕訳 → 請求書ステータス更新 (経理ロール専用)
 void Confirm_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting")
+    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
     {
         Toaster.Error("入金の確定（消込）は経理ロールのみ実行できます");
         return;

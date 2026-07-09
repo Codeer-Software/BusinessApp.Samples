@@ -21,7 +21,7 @@ void Detail_OnAfterInit()
 
 void Run_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting")
+    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
     {
         Toaster.Error("入出金の起票は経理ロールのみ実行できます");
         return;

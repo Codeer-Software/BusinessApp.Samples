@@ -195,7 +195,7 @@
           "SearchTargetVariable": "Role.Value",
           "Comparison": "Equal",
           "Value": {
-            "Value": "accounting",
+            "Value": "sysadmin",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
           },
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"

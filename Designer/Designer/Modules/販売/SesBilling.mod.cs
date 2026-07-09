@@ -57,7 +57,7 @@ void Calc_OnClick()
 
 void Run_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting")
+    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
     {
         Toaster.Error("SES 請求の一括生成（売上計上を伴う）は経理ロールのみ実行できます");
         return;

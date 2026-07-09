@@ -53,7 +53,7 @@ void Duplicate_OnClick()
 
 void UpdateButtons()
 {
-    var isAccounting = CurrentUser.Role.Value == "accounting";
+    var isAccounting = CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin";
     AccrueButton.IsVisible = isAccounting && !this.IsNewData && Status.Value == "received";
     PayButton.IsVisible = isAccounting && !this.IsNewData && Status.Value == "accrued";
 }

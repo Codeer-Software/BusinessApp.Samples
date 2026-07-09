@@ -109,7 +109,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Candidates": ["一般社員,general", "承認者,approver", "経理,accounting"],
+      "Candidates": ["一般社員,general", "承認者,approver", "経理,accounting", "システム管理者,sysadmin"],
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [],
@@ -249,7 +249,7 @@
           "SearchTargetVariable": "Role.Value",
           "Comparison": "Equal",
           "Value": {
-            "Value": "accounting",
+            "Value": "sysadmin",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
           },
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
