@@ -22,10 +22,11 @@ void Detail_OnAfterInit()
         SaveDraftButton.IsVisible = false;
         PostButton.IsVisible = false;
     }
-    if (!this.IsNewData && Status.Value == "draft")
+    if (!this.IsNewData && Status.Value == "draft" && SourceType.Value != "import")
     {
         // 旧仕様の下書き（税抜変換済み・税行あり）を入力状態へ戻す。
         // 現仕様の下書きは生の入力のまま保存されるので通常は no-op。
+        // CSV インポート由来（source_type='import'）は税行込みの生データが正なので畳まない。
         inLinesHandler = true;
         RestoreInputState();
         inLinesHandler = false;
@@ -215,21 +216,30 @@ void SaveEntry(bool post)
     // 税行の生成（税込→税抜の変換）は確定時のみ行う。
     // 下書きは入力そのままで保存する——変換済みの Amount を再変換する二重税抜化を防ぐため
     // （下書き保存→確定、確定失敗→再確定 の順路で必ず踏む罠だった）。
+    // CSV インポート由来の下書き（source_type='import'）は税行込みの生データを
+    // 無加工のまま確定する（移行元と 1 円もズレない保証。税の再計算はしない）。
+    var isRawImport = (SourceType.Value == "import");
     if (post)
     {
-        inLinesHandler = true;
-        RegenerateTaxLines();
-        inLinesHandler = false;
+        if (!isRawImport)
+        {
+            inLinesHandler = true;
+            RegenerateTaxLines();
+            inLinesHandler = false;
+        }
         UpdateTotals();
 
         if (DebitTotal.Value != CreditTotal.Value)
         {
             var diff = BalanceDiff.Value;
-            // 変換を巻き戻して入力状態に復元（このまま再確定しても二重変換しない）
-            inLinesHandler = true;
-            RestoreInputState();
-            inLinesHandler = false;
-            UpdateTotals();
+            if (!isRawImport)
+            {
+                // 変換を巻き戻して入力状態に復元（このまま再確定しても二重変換しない）
+                inLinesHandler = true;
+                RestoreInputState();
+                inLinesHandler = false;
+                UpdateTotals();
+            }
             Toaster.Error($"貸借が一致していません（差額 {diff:#,0} 円）");
             return;
         }
@@ -247,10 +257,13 @@ void SaveEntry(bool post)
         if (post)
         {
             Status.Value = "draft";
-            inLinesHandler = true;
-            RestoreInputState();
-            inLinesHandler = false;
-            UpdateTotals();
+            if (!isRawImport)
+            {
+                inLinesHandler = true;
+                RestoreInputState();
+                inLinesHandler = false;
+                UpdateTotals();
+            }
         }
         return;
     }
