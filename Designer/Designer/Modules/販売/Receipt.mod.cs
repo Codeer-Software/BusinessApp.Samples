@@ -78,13 +78,24 @@ void Confirm_OnClick()
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 
-    // 未保存なら先に保存 (保存→確定を 1 ボタンで)
-    if (this.IsNewData)
+    // 過入金ガードは保存より前に判定する（拒否された金額をレコードに残さない）
+    var ivGuard = FindInvoice(InvoiceRef.Value);
+    if (ivGuard == null) { Toaster.Error("請求書が見つかりません"); return; }
+    int guardGross = (ivGuard.Amount.Value ?? 0) + (ivGuard.TaxAmount.Value ?? 0);
+    int guardOthers = SumReceipts(InvoiceRef.Value, true);
+    int guardRemain = guardGross - guardOthers;
+    if (Amount.Value > guardRemain)
     {
-        if (this.ValidateInput() != true) { Toaster.Error("入力内容を確認してください"); return; }
-        var retSave = this.Submit();
-        if (retSave != true) { Toaster.Error("入金の保存に失敗しました"); return; }
+        Toaster.Error($"入金額 {Amount.Value:#,0} 円が請求残額 {guardRemain:#,0} 円を超えています。過入金分は前受金(2100)として振替伝票で起票してください");
+        return;
     }
+
+    // 保存 (保存→確定を 1 ボタンで)。既存レコードでも金額等の修正を必ず反映する
+    // （過入金で弾かれた後に金額を直して再確定すると、修正が保存されず
+    //   仕訳と入金レコードの金額が食い違うバグがあった。Submit の null は変更なし=正常）
+    if (this.ValidateInput() != true) { Toaster.Error("入力内容を確認してください"); return; }
+    var retSave = this.Submit();
+    if (retSave == false) { Toaster.Error("入金の保存に失敗しました"); return; }
 
     // 二重生成ガード
     var js = new ModuleSearcher<JournalEntry>();
