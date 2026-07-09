@@ -37,6 +37,12 @@ INSERT INTO projects (code, name, partner_id, project_type, status, is_active)
 SELECT 'PRJ-002', 'クラウド勤怠SaaS', (SELECT id FROM partners WHERE code = 'C001'), 'saas', 'active', 1
 WHERE NOT EXISTS (SELECT 1 FROM projects WHERE code = 'PRJ-002');
 
+-- 120_recurring.sql の月額契約 seed は projects より先に走るため project_id が NULL 解決になる
+-- （2026-07-10 の実機実行で発覚: 月額売上仕訳に案件が付かず案件損益から漏れる）。ここで補完する。
+UPDATE recurring_billings
+SET project_id = (SELECT id FROM projects WHERE code = 'PRJ-002')
+WHERE project_id IS NULL AND title = 'クラウド勤怠 SaaS 利用料';
+
 -- 月次人件費コストの seed は 2026-07-09 の組織再編（docs/decisions/0018）で廃止した。
 -- 旧ユーザー（admin/hanako/jiro/soumu）前提だったため。テストデータは E2E シナリオ
 -- （docs/11）が画面から登録する（まっさら DB では 0 件が正しい状態）。
