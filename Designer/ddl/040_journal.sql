@@ -74,6 +74,13 @@ CREATE INDEX IF NOT EXISTS idx_journal_entries_year_no ON journal_entries(fiscal
 CREATE INDEX IF NOT EXISTS idx_journal_lines_entry ON journal_lines(journal_entry_id);
 CREATE INDEX IF NOT EXISTS idx_journal_lines_account ON journal_lines(account_id);
 
+-- ---- seed: 基幹取引先（2026-07-10 追加 → docs/decisions/0018 補遺）----
+-- C001 は旧環境では UI 登録だったため seed に無く、新規 DB で 120/150/180/210/220/230/240 の
+-- C001 参照（案件・定期契約・AL-7005・口座情報・補助科目）が NULL 解決になる事故が起きた。
+-- 基幹デモ取引先はここで seed する（C003/C004 等のテスト用取引先は E2E シナリオが画面から登録する）。
+INSERT OR IGNORE INTO partners (code, name, kana, is_customer, is_supplier, is_active) VALUES
+    ('C001', '株式会社アルタイル商事', 'アルタイルしょうじ', 1, 1, 1);
+
 -- ---- seed: 部門（ペルソナ docs/02 §3。2026-07-09 組織再編で管理部→総務部に改称 → docs/decisions/0018） ----
 -- 全社共通(00) はユーザーを置かない費用集計軸（家賃・全社ライセンス等の共通費の帰属先）
 INSERT OR IGNORE INTO departments (code, name, display_order) VALUES
