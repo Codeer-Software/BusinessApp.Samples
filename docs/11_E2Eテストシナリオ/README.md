@@ -54,7 +54,7 @@
 ### 2.2 実行環境
 
 - URL: `http://localhost:5085`（Cookie 認証）。ユーザー切替はサイドバー最下部の Logout から。
-- 帳票 PDF 出力には `C:\Codeer.LowCode.Blazor.Local\Font\NotoSansJP.ttf` が必要（無いと PDF 出力が Object reference エラーで全滅する）。
+- 帳票 PDF 出力には `LocalData\font\NotoSansJP.ttf` が必要（リポジトリにコミット済み。無いと PDF 出力が Object reference エラーで全滅する）。
 - AI 領収書読み取り・AI 科目推定は、サーバ設定 `AISettings.Provider` が未設定なら**モック**で動作する（本書はモック前提。実 AI は appsettings で Provider と API キーを設定）。
 - インボイス番号の国税庁照合も、`ApplicationId` 未設定なら**モック応答**（形式チェックのみ）。
 

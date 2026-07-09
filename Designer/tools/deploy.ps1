@@ -1,4 +1,4 @@
-# deploy.ps1 — Designer ワークスペースを App.zip に固めて Designs.Cookie へ配置する
+# deploy.ps1 — Designer ワークスペースを App.zip に固めて LocalData\designs へ配置する
 #
 # デザイナ GUI の「送信」の代替。FileWatcher が *.zip を検知して hot-reload する。
 # zip エントリ名はデザイナ独自形式（バックスラッシュ区切り・ディレクトリエントリ無し・
@@ -11,7 +11,7 @@
 
 param(
     [string]$Workspace = "C:\Users\REDACTED\DEV\accounting-app\AccountingApp\Designer\Designer",
-    [string]$Destination = "C:\Codeer.LowCode.Blazor.Local\Designs.Cookie\App.zip"
+    [string]$Destination = "C:\Users\REDACTED\DEV\accounting-app\AccountingApp\LocalData\designs\App.zip"
 )
 
 $ErrorActionPreference = "Stop"

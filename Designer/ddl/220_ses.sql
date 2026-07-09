@@ -18,9 +18,6 @@ INSERT OR IGNORE INTO projects (id, code, name, partner_id, project_type, status
      'ses', 'active', 1,
      800000, 140, 180, 5000, 4500);
 
--- ---- seed: 2026-06 の工数実績（部長 次郎 user_id=3・計 11,400 分 = 190h → 上限180h を 10h 超過） ----
-INSERT OR IGNORE INTO time_entries (id, user_id, project_id, work_date, minutes, note) VALUES
-    (101, 3, (SELECT id FROM projects WHERE code = 'PRJ-003'), '2026-06-08', 3000, 'SES 6月稼働 週1'),
-    (102, 3, (SELECT id FROM projects WHERE code = 'PRJ-003'), '2026-06-15', 3000, 'SES 6月稼働 週2'),
-    (103, 3, (SELECT id FROM projects WHERE code = 'PRJ-003'), '2026-06-22', 3000, 'SES 6月稼働 週3'),
-    (104, 3, (SELECT id FROM projects WHERE code = 'PRJ-003'), '2026-06-29', 2400, 'SES 6月稼働 週4');
+-- 2026-06 の工数実績 seed は 2026-07-09 の組織再編（docs/decisions/0018）で廃止した。
+-- user_id=3 の直値が旧ユーザー（次郎）前提で、新組織では別人に紐づいてしまうため。
+-- 工数のテストデータは E2E シナリオ（docs/11）が画面から登録する。

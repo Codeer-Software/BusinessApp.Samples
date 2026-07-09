@@ -367,3 +367,9 @@ Designer/temporary/
 
 # Designer IDE per-machine state (70ef403 で誤コミットされたため明示的に除外)
 .ide/
+
+# LocalData: 実行環境データ（DB・デプロイzip・添付・バックアップは追跡しない。README とフォントのみコミット）
+LocalData/db/
+LocalData/designs/
+LocalData/storages/
+LocalData/backup/

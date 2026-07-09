@@ -37,18 +37,6 @@ INSERT INTO projects (code, name, partner_id, project_type, status, is_active)
 SELECT 'PRJ-002', 'クラウド勤怠SaaS', (SELECT id FROM partners WHERE code = 'C001'), 'saas', 'active', 1
 WHERE NOT EXISTS (SELECT 1 FROM projects WHERE code = 'PRJ-002');
 
--- ---- seed: 月次人件費コスト（第18期=fiscal_year_id 2、period 1〜12 × 4ユーザー） ----
-INSERT INTO monthly_salaries (user_id, fiscal_year_id, period_no, cost)
-SELECT u.id, 2, p.period_no, v.cost
-FROM (
-    SELECT 'admin' AS user_name, 800000 AS cost UNION ALL
-    SELECT 'hanako', 700000 UNION ALL
-    SELECT 'jiro', 900000 UNION ALL
-    SELECT 'soumu', 600000
-) v
-JOIN app_users u ON u.user_name = v.user_name
-JOIN (SELECT DISTINCT period_no FROM fiscal_periods WHERE fiscal_year_id = 2) p
-WHERE NOT EXISTS (
-    SELECT 1 FROM monthly_salaries ms
-    WHERE ms.user_id = u.id AND ms.fiscal_year_id = 2 AND ms.period_no = p.period_no
-);
+-- 月次人件費コストの seed は 2026-07-09 の組織再編（docs/decisions/0018）で廃止した。
+-- 旧ユーザー（admin/hanako/jiro/soumu）前提だったため。テストデータは E2E シナリオ
+-- （docs/11）が画面から登録する（まっさら DB では 0 件が正しい状態）。

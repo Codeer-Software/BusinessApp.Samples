@@ -70,7 +70,7 @@ FROM approval_flow_template t JOIN approval_flow_template_order o ON o.template_
 WHERE t.name = '経費_課長＋総務'
   AND NOT EXISTS (SELECT 1 FROM approval_flow_template_member m WHERE m.template_order_id = o.id);
 INSERT INTO approval_flow_template_member (template_order_id, is_required, approver_user_id, approver_role)
-SELECT o.id, 1, (SELECT id FROM app_users WHERE user_name = 'soumu'), NULL
+SELECT o.id, 1, (SELECT id FROM app_users WHERE user_name = 'soumu_kacho1'), NULL
 FROM approval_flow_template t JOIN approval_flow_template_order o ON o.template_id = t.id AND o.order_no = 1
 WHERE t.name = '経費_課長＋総務'
   AND NOT EXISTS (SELECT 1 FROM approval_flow_template_member m WHERE m.template_order_id = o.id);
@@ -93,14 +93,11 @@ FROM approval_flow_template t JOIN approval_flow_template_order o ON o.template_
 WHERE t.name = '経費_部長＋総務'
   AND NOT EXISTS (SELECT 1 FROM approval_flow_template_member m WHERE m.template_order_id = o.id);
 INSERT INTO approval_flow_template_member (template_order_id, is_required, approver_user_id, approver_role)
-SELECT o.id, 1, (SELECT id FROM app_users WHERE user_name = 'soumu'), NULL
+SELECT o.id, 1, (SELECT id FROM app_users WHERE user_name = 'soumu_kacho1'), NULL
 FROM approval_flow_template t JOIN approval_flow_template_order o ON o.template_id = t.id AND o.order_no = 1
 WHERE t.name = '経費_部長＋総務'
   AND NOT EXISTS (SELECT 1 FROM approval_flow_template_member m WHERE m.template_order_id = o.id);
 
--- ---- テストデータ: 部門役職者と所属（jiro=部長 次郎 id3 / soumu=総務 三郎 id4 は UI で作成済み） ----
-UPDATE departments SET manager_user = (SELECT id FROM app_users WHERE user_name = 'hanako'),
-                       director_user = (SELECT id FROM app_users WHERE user_name = 'jiro')
-WHERE name = '開発1部';
-UPDATE app_users SET department_id = (SELECT id FROM departments WHERE name = '開発1部')
-WHERE user_name IN ('admin', 'hanako', 'jiro');
+-- 旧テストユーザー（hanako/jiro）の役職・所属 seed は 2026-07-09 の組織再編で廃止した。
+-- 役職者は 255_org_managers.sql（department_managers）、所属は 085_org_users.sql が正。
+-- ※departments.manager_user / director_user 列は 250 の移行後は使用しない旧仕様。

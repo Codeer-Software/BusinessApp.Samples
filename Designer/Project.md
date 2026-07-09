@@ -7,7 +7,7 @@
 ## 接続先 DB / データソース
 
 - **AccountingSQLite**（本アプリの唯一のデータソース。→ `docs/decisions/0001`）
-  - 種別: SQLite / 接続先: `C:\Codeer.LowCode.Blazor.Local\Data\accounting_v1.db`
+  - 種別: SQLite / 接続先: `<リポジトリ>\LocalData\db\accounting_v1.db`（2026-07-09 に C:\Codeer.LowCode.Blazor.Local から移設 → `docs/decisions/0017`・`LocalData/README.md`）
   - `AllowCliSqlAccess: true`（ローカル専用 DB。本番を指さない）
   - 認証テーブル（app_users）・一時ファイル（temporary_files）も同居
 - 旧 `SampleSQLite`（sqlite_sample_auth.db）はフェーズ A-0 で撤去予定。**会計テーブルを置かないこと**

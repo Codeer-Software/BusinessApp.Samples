@@ -74,10 +74,11 @@ CREATE INDEX IF NOT EXISTS idx_journal_entries_year_no ON journal_entries(fiscal
 CREATE INDEX IF NOT EXISTS idx_journal_lines_entry ON journal_lines(journal_entry_id);
 CREATE INDEX IF NOT EXISTS idx_journal_lines_account ON journal_lines(account_id);
 
--- ---- seed: 部門（ペルソナ docs/02 §3） ----
+-- ---- seed: 部門（ペルソナ docs/02 §3。2026-07-09 組織再編で管理部→総務部に改称 → docs/decisions/0018） ----
+-- 全社共通(00) はユーザーを置かない費用集計軸（家賃・全社ライセンス等の共通費の帰属先）
 INSERT OR IGNORE INTO departments (code, name, display_order) VALUES
     ('00', '全社共通', 0),
-    ('10', '管理部', 10),
+    ('10', '総務部', 10),
     ('20', '営業部', 20),
     ('31', '開発1部', 31),
     ('32', '開発2部', 32),

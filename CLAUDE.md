@@ -83,7 +83,7 @@ Fable が**自分でドキュメントを作成・管理**する。計画・仕�
 |---|---|---|
 | デザイン読込妥当性 | `designcheck` CLI | 作成・編集の都度。`findingCount` が 0 になるまで直す。詳細は `Designer/ClaudeCodeForDesigner/CLAUDE.md` |
 | DB（DDL・投入・確認） | `sql` CLI | モジュールを作ったらテーブルも用意する。主キーは INTEGER 自動採番が原則 |
-| 稼働アプリへの反映（デプロイ） | **`Designer/Designer/` 一式を zip 化 → `C:\Codeer.LowCode.Blazor.Local\Designs.Cookie\App.zip` に置く** | `FileWatcher` が `*.zip` を検知して hot-reload（GUI「送信」の代替）。**zip 内のパス区切りは `\`（デザイナ独自の詰め方）**。Phase 0 でこの packing を実測で確立すること（forward-slash で読めるかも実測）。zip には `app.clprj` `Modules/` `PageFrames/` `Resources/` を含め、接続設定ファイルは含めない |
+| 稼働アプリへの反映（デプロイ） | **`Designer/tools/deploy.ps1` を実行**（`Designer/Designer/` 一式を zip 化 → `LocalData\designs\App.zip` に配置） | `FileWatcher` が `*.zip` を検知して hot-reload（GUI「送信」の代替）。zip 内のパス区切りは `\`（デザイナ独自の詰め方・deploy.ps1 が再現） |
 | 画面・挙動 | サーバ起動（`http://localhost:5085`）→ ブラウザでスクショ／操作 | `designcheck` で拾えない意味的バグ（合計計算・状態による出し分け等）を実際に見て潰す |
 
 **検証系は設定済み（この環境で確認済み）**:
@@ -92,8 +92,8 @@ Fable が**自分でドキュメントを作成・管理**する。計画・仕�
 
 ## 6. この環境の既知事実
 
-- **ランタイム**: `net8.0`。Server は作業フォルダを直読みせず、`C:\Codeer.LowCode.Blazor.Local\Designs.Cookie\App.zip` からデザインを読む。`UseHotReload:true`。
-- **DB**: SQLite（`C:\Codeer.LowCode.Blazor.Local\Data\`）。会計アプリ用のデータソース／DB を新設するか既存を使うかは Fable が決め、`Project.md` に記録。**`AllowCliSqlAccess:true` のデータソースだけ** `sql` CLI の対象になる（安全境界）。
+- **ランタイム**: `net8.0`。Server は作業フォルダを直読みせず、`LocalData\designs\App.zip` からデザインを読む。`UseHotReload:true`。
+- **DB**: SQLite（`LocalData\db\accounting_v1.db`。実行環境データの構成は `LocalData/README.md`・移設経緯は `docs/decisions/0017`）。**`AllowCliSqlAccess:true` のデータソースだけ** `sql` CLI の対象になる（安全境界）。
 - **認証**: Cookie 認証（`AppUser` モジュール、初期ユーザー admin/admin）。承認ワークフローは認証前提。
 - **AI 連携**: 既存の AI 系は OpenAI/Azure 前提（Server の `AISettings`／`Services/AI/`）。AI 仕訳提案を Claude API で作る場合は**最新モデル（例: Claude Opus 4.8）**を使い、サーバ経由で実装する。実装前に `claude-api` の情報を確認すること。
 - **CLB バージョン**: 1.2.51.0。
