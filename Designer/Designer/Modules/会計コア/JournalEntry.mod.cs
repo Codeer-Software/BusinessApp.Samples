@@ -22,6 +22,14 @@ void Detail_OnAfterInit()
         SaveDraftButton.IsVisible = false;
         PostButton.IsVisible = false;
     }
+    if (!this.IsNewData && Status.Value == "draft")
+    {
+        // 旧仕様の下書き（税抜変換済み・税行あり）を入力状態へ戻す。
+        // 現仕様の下書きは生の入力のまま保存されるので通常は no-op。
+        inLinesHandler = true;
+        RestoreInputState();
+        inLinesHandler = false;
+    }
     UpdateTotals();
 }
 
@@ -195,16 +203,25 @@ void SaveEntry(bool post)
         return;
     }
 
-    inLinesHandler = true;
-    RegenerateTaxLines();
-    inLinesHandler = false;
-    UpdateTotals();
-
+    // 税行の生成（税込→税抜の変換）は確定時のみ行う。
+    // 下書きは入力そのままで保存する——変換済みの Amount を再変換する二重税抜化を防ぐため
+    // （下書き保存→確定、確定失敗→再確定 の順路で必ず踏む罠だった）。
     if (post)
     {
+        inLinesHandler = true;
+        RegenerateTaxLines();
+        inLinesHandler = false;
+        UpdateTotals();
+
         if (DebitTotal.Value != CreditTotal.Value)
         {
-            Toaster.Error($"貸借が一致していません（差額 {BalanceDiff.Value:#,0} 円）");
+            var diff = BalanceDiff.Value;
+            // 変換を巻き戻して入力状態に復元（このまま再確定しても二重変換しない）
+            inLinesHandler = true;
+            RestoreInputState();
+            inLinesHandler = false;
+            UpdateTotals();
+            Toaster.Error($"貸借が一致していません（差額 {diff:#,0} 円）");
             return;
         }
         if (JournalNo.Value == null)
@@ -221,6 +238,10 @@ void SaveEntry(bool post)
         if (post)
         {
             Status.Value = "draft";
+            inLinesHandler = true;
+            RestoreInputState();
+            inLinesHandler = false;
+            UpdateTotals();
         }
         return;
     }
@@ -235,6 +256,36 @@ void SaveEntry(bool post)
     else
     {
         Toaster.Success("下書きを保存しました");
+    }
+}
+
+// 税行を取り除き、本体行の金額をユーザー入力額（InputAmount）に戻す。
+// RegenerateTaxLines の逆操作: 確定失敗時・旧仕様下書きの読込時に呼び、二重税抜化を防ぐ。
+void RestoreInputState()
+{
+    var taxRows = new List<object>();
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.IsTaxLine.Value == true)
+        {
+            taxRows.Add(row);
+        }
+    }
+    foreach (var r in taxRows)
+    {
+        Lines.DeleteRow(r);
+    }
+    var no = 0;
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        no = no + 1;
+        l.LineNo.Value = no;
+        if (l.InputAmount.Value != null)
+        {
+            l.Amount.Value = l.InputAmount.Value;
+        }
     }
 }
 
