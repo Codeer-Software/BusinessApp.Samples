@@ -203,6 +203,15 @@ void SaveEntry(bool post)
         return;
     }
 
+    // 行番号は保存経路によらず必ず振る（line_no は NOT NULL）
+    var lineNo = 0;
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        lineNo = lineNo + 1;
+        l.LineNo.Value = lineNo;
+    }
+
     // 税行の生成（税込→税抜の変換）は確定時のみ行う。
     // 下書きは入力そのままで保存する——変換済みの Amount を再変換する二重税抜化を防ぐため
     // （下書き保存→確定、確定失敗→再確定 の順路で必ず踏む罠だった）。
