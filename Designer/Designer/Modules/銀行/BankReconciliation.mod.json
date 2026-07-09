@@ -11,14 +11,54 @@
         "QuerySortType": "None",
         "QueryPagingType": "None",
         "Parameters": [
-          { "IsParameter": true, "Name": "bank_account_id", "DbType": "bigint", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "acct_name", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "line_date", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "stmt_balance", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "ledger_balance", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "diff", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "pending_count", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "verdict", "DbType": "text", "DbParameterDirection": "Input" }
+          {
+            "IsParameter": true,
+            "Name": "bank_account_id",
+            "DbType": "bigint",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "acct_name",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "line_date",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "stmt_balance",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "ledger_balance",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "diff",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "pending_count",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "verdict",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          }
         ]
       },
       "Name": "Query",
@@ -174,6 +214,16 @@
       "Name": "Verdict",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "Text": "対象口座：",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "SearchLblBankAccountSel",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -366,6 +416,35 @@
             "BackgroundColor": "",
             "IsRowMarginRemoved": false,
             "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "SearchLblBankAccountSel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": null,
+                "Padding": {
+                  "Left": 8,
+                  "Top": null,
+                  "Right": 4,
+                  "Bottom": null
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None",
+                "VerticalAlignment": "Middle"
+              },
               {
                 "Layout": {
                   "FieldName": "BankAccountSel",

@@ -11,16 +11,66 @@
         "QuerySortType": "None",
         "QueryPagingType": "None",
         "Parameters": [
-          { "IsParameter": true, "Name": "fiscal_year_id", "DbType": "bigint", "DbParameterDirection": "Input" },
-          { "IsParameter": true, "Name": "department_id", "DbType": "bigint", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "department_name", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "account_code", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "account_name", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "budget_amount", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "actual_amount", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "diff_amount", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "usage_rate", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "alert_mark", "DbType": "text", "DbParameterDirection": "Input" }
+          {
+            "IsParameter": true,
+            "Name": "fiscal_year_id",
+            "DbType": "bigint",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": true,
+            "Name": "department_id",
+            "DbType": "bigint",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "department_name",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "account_code",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "account_name",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "budget_amount",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "actual_amount",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "diff_amount",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "usage_rate",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "alert_mark",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          }
         ]
       },
       "Name": "Query",
@@ -234,6 +284,26 @@
       "Name": "AlertMark",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "Text": "会計年度：",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "SearchLblFiscalYearRef",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "部門：",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "SearchLblDepartmentRef",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -453,6 +523,35 @@
             "Columns": [
               {
                 "Layout": {
+                  "FieldName": "SearchLblFiscalYearRef",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": null,
+                "Padding": {
+                  "Left": 8,
+                  "Top": null,
+                  "Right": 4,
+                  "Bottom": null
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None",
+                "VerticalAlignment": "Middle"
+              },
+              {
+                "Layout": {
                   "FieldName": "FiscalYearRef",
                   "ContextMenu": "",
                   "ClassName": "",
@@ -472,6 +571,35 @@
                 },
                 "CanResize": false,
                 "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "SearchLblDepartmentRef",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": null,
+                "Padding": {
+                  "Left": 8,
+                  "Top": null,
+                  "Right": 4,
+                  "Bottom": null
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None",
+                "VerticalAlignment": "Middle"
               },
               {
                 "Layout": {

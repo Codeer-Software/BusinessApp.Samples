@@ -11,24 +11,114 @@
         "QuerySortType": "None",
         "QueryPagingType": "None",
         "Parameters": [
-          { "IsParameter": true, "Name": "fiscal_year_id", "DbType": "bigint", "DbParameterDirection": "Input" },
-          { "IsParameter": true, "Name": "statement", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "sort_key", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "section", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "item", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "m01", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "m02", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "m03", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "m04", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "m05", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "m06", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "m07", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "m08", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "m09", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "m10", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "m11", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "m12", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "total", "DbType": "integer", "DbParameterDirection": "Input" }
+          {
+            "IsParameter": true,
+            "Name": "fiscal_year_id",
+            "DbType": "bigint",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": true,
+            "Name": "statement",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "sort_key",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "section",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "item",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "m01",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "m02",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "m03",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "m04",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "m05",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "m06",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "m07",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "m08",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "m09",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "m10",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "m11",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "m12",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "total",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          }
         ]
       },
       "Name": "Query",
@@ -62,7 +152,10 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
-      "Candidates": ["損益計算書（PL）,PL", "貸借対照表（BS）,BS"],
+      "Candidates": [
+        "損益計算書（PL）,PL",
+        "貸借対照表（BS）,BS"
+      ],
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [],
@@ -371,6 +464,26 @@
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "Text": "対象年度：",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "SearchLblFiscalYearRef",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "表示帳票：",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "SearchLblStatementSel",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -415,7 +528,9 @@
   "ListLayouts": {
     "": {
       "HeaderTitle": "",
-      "DataOnlyFields": ["SortKey"],
+      "DataOnlyFields": [
+        "SortKey"
+      ],
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "",
       "OnFieldDataChanged": "",
@@ -693,6 +808,35 @@
             "Columns": [
               {
                 "Layout": {
+                  "FieldName": "SearchLblFiscalYearRef",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": null,
+                "Padding": {
+                  "Left": 8,
+                  "Top": null,
+                  "Right": 4,
+                  "Bottom": null
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None",
+                "VerticalAlignment": "Middle"
+              },
+              {
+                "Layout": {
                   "FieldName": "FiscalYearRef",
                   "ContextMenu": "",
                   "ClassName": "",
@@ -712,6 +856,35 @@
                 },
                 "CanResize": false,
                 "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "SearchLblStatementSel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": null,
+                "Padding": {
+                  "Left": 8,
+                  "Top": null,
+                  "Right": 4,
+                  "Bottom": null
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None",
+                "VerticalAlignment": "Middle"
               },
               {
                 "Layout": {

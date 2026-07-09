@@ -11,17 +11,72 @@
         "QuerySortType": "None",
         "QueryPagingType": "System",
         "Parameters": [
-          { "IsParameter": true, "Name": "date_from", "DbType": "DATE", "DbParameterDirection": "Input" },
-          { "IsParameter": true, "Name": "date_to", "DbType": "DATE", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "entry_date", "DbType": "DATE", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "journal_no", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "line_no", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "account_code", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "account_name", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "sub_account_name", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "debit_amount", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "credit_amount", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "line_description", "DbType": "text", "DbParameterDirection": "Input" }
+          {
+            "IsParameter": true,
+            "Name": "date_from",
+            "DbType": "DATE",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": true,
+            "Name": "date_to",
+            "DbType": "DATE",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "entry_date",
+            "DbType": "DATE",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "journal_no",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "line_no",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "account_code",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "account_name",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "sub_account_name",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "debit_amount",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "credit_amount",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "line_description",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          }
         ]
       },
       "Name": "Query",
@@ -215,6 +270,26 @@
       "Name": "LineDescription",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "Text": "日付（自）：",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "SearchLblDateFrom",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "日付（至）：",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "SearchLblDateTo",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -259,7 +334,9 @@
   "ListLayouts": {
     "": {
       "HeaderTitle": "",
-      "DataOnlyFields": ["LineNo"],
+      "DataOnlyFields": [
+        "LineNo"
+      ],
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "",
       "OnFieldDataChanged": "",
@@ -425,6 +502,35 @@
             "Columns": [
               {
                 "Layout": {
+                  "FieldName": "SearchLblDateFrom",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": null,
+                "Padding": {
+                  "Left": 8,
+                  "Top": null,
+                  "Right": 4,
+                  "Bottom": null
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None",
+                "VerticalAlignment": "Middle"
+              },
+              {
+                "Layout": {
                   "FieldName": "DateFrom",
                   "ContextMenu": "",
                   "ClassName": "",
@@ -444,6 +550,35 @@
                 },
                 "CanResize": false,
                 "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "SearchLblDateTo",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": null,
+                "Padding": {
+                  "Left": 8,
+                  "Top": null,
+                  "Right": 4,
+                  "Bottom": null
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None",
+                "VerticalAlignment": "Middle"
               },
               {
                 "Layout": {
