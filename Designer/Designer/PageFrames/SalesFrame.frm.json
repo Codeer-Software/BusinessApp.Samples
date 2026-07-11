@@ -602,7 +602,7 @@
         }
       },
       {
-        "Title": "マスタ/取引先",
+        "Title": "取引先一覧",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -610,7 +610,7 @@
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "",
-        "Module": "Partner",
+        "Module": "PartnerView",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -621,10 +621,10 @@
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
-          "UseNavigateToCreate": true,
+          "UseNavigateToCreate": false,
           "ListFieldDesign": {
             "LayoutName": "",
-            "CanNavigateToDetail": true,
+            "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
             "DisplayName": "",
@@ -641,7 +641,7 @@
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
-            "CanDelete": true,
+            "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
             "OnDataChanged": "",
@@ -661,7 +661,7 @@
         }
       },
       {
-        "Title": "マスタ/案件",
+        "Title": "案件一覧",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -669,7 +669,7 @@
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "",
-        "Module": "Project",
+        "Module": "ProjectView",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -680,10 +680,10 @@
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
-          "UseNavigateToCreate": true,
+          "UseNavigateToCreate": false,
           "ListFieldDesign": {
             "LayoutName": "",
-            "CanNavigateToDetail": true,
+            "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
             "DisplayName": "",
@@ -700,7 +700,7 @@
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
-            "CanDelete": true,
+            "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
             "OnDataChanged": "",

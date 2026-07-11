@@ -17,6 +17,45 @@
     #app.pre-auth .loading-progress-text {
       visibility: hidden !important;
     }
+
+    /* ログアウト確認ダイアログ（index.html の常駐スクリプトが生成） */
+    #logout-confirm-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #logout-confirm-overlay .lc-box {
+      background: #fff;
+      border-radius: 8px;
+      padding: 24px 28px;
+      min-width: 320px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+    #logout-confirm-overlay .lc-msg {
+      font-size: 1.05rem;
+      margin-bottom: 18px;
+    }
+    #logout-confirm-overlay .lc-btns {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    #logout-confirm-overlay button {
+      padding: 6px 16px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      background: #f8f9fa;
+      cursor: pointer;
+    }
+    #logout-confirm-overlay button.lc-primary {
+      background: #dc3545;
+      border-color: #dc3545;
+      color: #fff;
+    }
   </style>
 
   <script>
@@ -25,6 +64,34 @@
         return document.cookie || "";
       }
     };
+
+    // Logout の誤クリック防止: data-system="logout" のクリックに確認ダイアログを挟む
+    // （capture フェーズで Blazor より先に受け、確認 OK 時のみ元のクリックを再送する）
+    document.addEventListener('click', function (e) {
+      const a = e.target.closest('[data-system="logout"]');
+      if (!a || a.dataset.logoutConfirmed === '1') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (document.getElementById('logout-confirm-overlay')) return;
+      const ov = document.createElement('div');
+      ov.id = 'logout-confirm-overlay';
+      ov.innerHTML =
+        '<div class="lc-box"><div class="lc-msg">ログアウトしますか？</div>' +
+        '<div class="lc-btns">' +
+        '<button type="button" class="lc-cancel">キャンセル</button>' +
+        '<button type="button" class="lc-primary">ログアウト</button>' +
+        '</div></div>';
+      document.body.appendChild(ov);
+      const close = () => ov.remove();
+      ov.addEventListener('click', (ev) => { if (ev.target === ov) close(); });
+      ov.querySelector('.lc-cancel').addEventListener('click', close);
+      ov.querySelector('.lc-primary').addEventListener('click', () => {
+        close();
+        a.dataset.logoutConfirmed = '1';
+        a.click();
+        delete a.dataset.logoutConfirmed;
+      });
+    }, true);
   </script>
 </head>
 

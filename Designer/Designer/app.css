@@ -16,3 +16,27 @@
   display: block;
   text-align: right;
 }
+
+/* サイドバー: Logout をメニュー群から切り離して下端に固定（誤クリック防止）。
+   DOM: [data-system=sidebar] > nav.sidebar-nav > div.nav-item > a[data-system=logout]（AppCss.md）
+   注: CLB 本体の CSS が後から読み込まれ同点特異度で勝つため !important が必要（実測）。
+   flex の margin-top:auto でサイドバー最下部へ寄せ、さらに position:sticky で
+   ページが縦に長い場合もビューポート下端に留める（スクロールしても常に見える）。 */
+[data-system="sidebar"] {
+  display: flex !important;
+  flex-direction: column !important;
+}
+[data-system="sidebar"] nav.sidebar-nav {
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+[data-system="sidebar"] nav.sidebar-nav .nav-item:has(> a[data-system="logout"]) {
+  margin-top: auto !important;
+  position: sticky;
+  bottom: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.3);
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: rgba(20, 16, 58, 0.9);
+}

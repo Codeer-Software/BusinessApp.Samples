@@ -208,7 +208,7 @@
           "CanBulkDataUpdate": true,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
-          "UseNavigateToCreate": true,
+          "UseNavigateToCreate": false,
           "ListFieldDesign": {
             "LayoutName": "",
             "CanNavigateToDetail": true,
@@ -228,7 +228,7 @@
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
-            "CanDelete": true,
+            "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
             "OnDataChanged": "",

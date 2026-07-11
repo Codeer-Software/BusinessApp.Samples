@@ -27,6 +27,11 @@ void Detail_OnAfterInit()
         afs.AddEquals(f => f.CurrentApprover.Value, CurrentUser.Id.Value);
         myApprovals = afs.Execute().Count;
     }
+    else
+    {
+        // 承認待ち受信箱は承認者・経理・sysadmin 専用（一般社員にはショートカットも出さない）
+        GoInbox.IsVisible = false;
+    }
     var ers = new ModuleSearcher<ExpenseRequest>();
     ers.AddEquals(e => e.Creator.Value, CurrentUser.Id.Value);
     ers.AddEquals(e => e.SettlementStatus.Value, "applying");
