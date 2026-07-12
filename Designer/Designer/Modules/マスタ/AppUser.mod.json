@@ -109,7 +109,12 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Candidates": ["一般社員,general", "承認者,approver", "経理,accounting", "システム管理者,sysadmin"],
+      "Candidates": [
+        "一般社員,general",
+        "承認者,approver",
+        "経理,accounting",
+        "システム管理者,sysadmin"
+      ],
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [],
@@ -762,7 +767,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",

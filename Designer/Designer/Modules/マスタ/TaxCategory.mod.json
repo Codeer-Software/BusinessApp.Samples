@@ -287,33 +287,7 @@
     }
   },
   "UserReadCondition": {
-    "ModuleName": "AppUser",
-    "Condition": {
-      "IsOrMatch": true,
-      "IsNot": false,
-      "Children": [
-        {
-          "SearchTargetVariable": "Role.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": "accounting",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-        },
-        {
-          "SearchTargetVariable": "Role.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": "sysadmin",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-        }
-      ],
-      "Name": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
-    }
+    "ModuleName": ""
   },
   "DataWriteCondition": {
     "ModuleName": ""
@@ -959,7 +933,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",

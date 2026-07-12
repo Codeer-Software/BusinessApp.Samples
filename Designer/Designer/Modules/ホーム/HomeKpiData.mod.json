@@ -11,12 +11,42 @@
         "QuerySortType": "None",
         "QueryPagingType": "None",
         "Parameters": [
-          { "IsParameter": false, "Name": "cash_balance", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "ar_balance", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "ap_balance", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "month_sales", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "month_expense", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "month_profit", "DbType": "integer", "DbParameterDirection": "Input" }
+          {
+            "IsParameter": false,
+            "Name": "cash_balance",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "ar_balance",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "ap_balance",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "month_sales",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "month_expense",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "month_profit",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          }
         ]
       },
       "Name": "Query",
@@ -292,7 +322,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",

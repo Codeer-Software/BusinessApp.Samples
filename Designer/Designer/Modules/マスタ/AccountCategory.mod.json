@@ -57,7 +57,10 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
-      "Candidates": ["貸借対照表,BS", "損益計算書,PL"],
+      "Candidates": [
+        "貸借対照表,BS",
+        "損益計算書,PL"
+      ],
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [],
@@ -735,7 +738,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",

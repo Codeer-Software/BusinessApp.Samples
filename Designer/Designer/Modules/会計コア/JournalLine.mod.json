@@ -57,7 +57,10 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
-      "Candidates": ["借方,D", "貸方,C"],
+      "Candidates": [
+        "借方,D",
+        "貸方,C"
+      ],
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [],
@@ -290,7 +293,11 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
-      "Candidates": ["内税,inclusive", "外税,exclusive", "なし,none"],
+      "Candidates": [
+        "内税,inclusive",
+        "外税,exclusive",
+        "なし,none"
+      ],
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [],
@@ -447,7 +454,12 @@
   "ListLayouts": {
     "": {
       "HeaderTitle": "",
-      "DataOnlyFields": ["LineNo", "InputAmount", "IsTaxLine", "ParentLineNo"],
+      "DataOnlyFields": [
+        "LineNo",
+        "InputAmount",
+        "IsTaxLine",
+        "ParentLineNo"
+      ],
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "",
       "OnFieldDataChanged": "",
@@ -613,7 +625,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",

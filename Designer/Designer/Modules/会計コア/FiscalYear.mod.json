@@ -72,7 +72,10 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateFieldDesign"
     },
     {
-      "Candidates": ["進行中,open", "締め済み,closed"],
+      "Candidates": [
+        "進行中,open",
+        "締め済み,closed"
+      ],
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [],
@@ -256,8 +259,18 @@
           "CompareValue": ""
         },
         "Parameters": [
-          { "IsParameter": true, "Name": "id", "DbType": "bigint", "DbParameterDirection": "Input" },
-          { "IsParameter": true, "Name": "next_year_id", "DbType": "bigint", "DbParameterDirection": "Input" }
+          {
+            "IsParameter": true,
+            "Name": "id",
+            "DbType": "bigint",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": true,
+            "Name": "next_year_id",
+            "DbType": "bigint",
+            "DbParameterDirection": "Input"
+          }
         ]
       },
       "Name": "CarryOverSql",
@@ -442,7 +455,9 @@
       "OnAfterInitialization": "Detail_OnAfterInit",
       "OnLocationChanging": "",
       "OnFieldDataChanged": "",
-      "DataOnlyFields": ["NextYearId"],
+      "DataOnlyFields": [
+        "NextYearId"
+      ],
       "ClassName": "",
       "Color": "",
       "BackgroundColor": "",
@@ -1144,7 +1159,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",

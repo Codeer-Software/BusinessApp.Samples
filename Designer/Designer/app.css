@@ -17,6 +17,19 @@
   text-align: right;
 }
 
+/* 一覧ページの HeaderTitle は「画面の説明文」として使う（帳合の規約）。
+   DOM: <h4 class="row"><div class="col">説明文</div></h4>（実測）。
+   見出しの太字・大文字のままだと説明文が重いので、通常ウェイトの補足テキストに落とす */
+h4.row > .col {
+  font-size: 0.95rem !important;
+  font-weight: 400 !important;
+  color: #5a6474 !important;
+  line-height: 1.6;
+}
+h4.row {
+  margin-bottom: 0.75rem !important;
+}
+
 /* サイドバー: Logout をメニュー群から切り離して下端に固定（誤クリック防止）。
    DOM: [data-system=sidebar] > nav.sidebar-nav > div.nav-item > a[data-system=logout]（AppCss.md）
    注: CLB 本体の CSS が後から読み込まれ同点特異度で勝つため !important が必要（実測）。

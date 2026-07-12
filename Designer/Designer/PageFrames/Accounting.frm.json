@@ -1,5 +1,6 @@
 {
   "IsApplicationRoot": false,
+  "Priority": 0,
   "Name": "Accounting",
   "Description": "会計",
   "Left": {
@@ -12,6 +13,10 @@
     },
     "Links": [
       {
+        "Title": "ホームへ戻る",
+        "Icon": "bi bi-house",
+        "IconType": "Font",
+        "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
@@ -33,6 +38,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -43,13 +49,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Bottom",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -57,6 +64,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -64,11 +72,7 @@
           "PageTitle": "",
           "LayoutName": "",
           "UrlParameter": ""
-        },
-        "Title": "ホームへ戻る",
-        "Icon": "bi bi-house",
-        "IconType": "Font",
-        "HideTitle": false
+        }
       },
       {
         "Title": "仕訳/振替伝票",
@@ -85,8 +89,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "振替伝票",
+          "HeaderTitle": "複式簿記の仕訳を起票・管理できます。明細行の税区分から消費税行が自動生成され、確定すると年度内の連番が振られます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
@@ -96,6 +100,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -106,13 +111,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -120,6 +126,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -144,8 +151,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "定型仕訳",
+          "HeaderTitle": "家賃・給与など毎月同じ仕訳のテンプレートを管理できます。「この定型から伝票を起票」でワンタッチ起票できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
@@ -155,6 +162,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -165,13 +173,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -179,6 +188,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -214,6 +224,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -224,13 +235,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -238,6 +250,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -273,6 +286,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -283,13 +297,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -297,6 +312,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -321,8 +337,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "固定資産台帳",
+          "HeaderTitle": "固定資産台帳です。経費申請から自動登録された資産もここで管理し、年度ごとの減価償却仕訳を自動生成できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -332,6 +348,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -342,13 +359,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -356,6 +374,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -380,8 +399,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "仕訳帳",
+          "HeaderTitle": "仕訳帳（全仕訳の一覧帳簿）です。年度と期間で絞り込んで確認できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -391,6 +410,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -401,13 +421,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -415,6 +436,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -439,8 +461,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "総勘定元帳",
+          "HeaderTitle": "総勘定元帳です。科目ごとの明細と残高を確認できます。補助科目・部門・案件で絞り込むと補助元帳としても使えます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -450,6 +472,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -460,13 +483,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -474,6 +498,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -498,8 +523,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "出納帳",
+          "HeaderTitle": "現金・預金の出納帳です。口座ごとの入出金と残高を時系列で確認できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -509,6 +534,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -519,13 +545,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -533,6 +560,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -557,8 +585,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "合計残高試算表",
+          "HeaderTitle": "合計残高試算表です。全科目の借方・貸方合計と残高を確認できます（最下行は貸借一致の検算行）。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -568,6 +596,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 200,
@@ -578,13 +607,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -592,6 +622,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -616,8 +647,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "貸借対照表",
+          "HeaderTitle": "貸借対照表（BS）です。年度末時点の資産・負債・純資産を確認できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -627,6 +658,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 300,
@@ -637,13 +669,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -651,6 +684,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -675,8 +709,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "損益計算書",
+          "HeaderTitle": "損益計算書（PL）です。売上総利益から当期純利益までの段階利益を確認できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -686,6 +720,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 300,
@@ -696,13 +731,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -710,6 +746,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -734,8 +771,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "月次推移表",
+          "HeaderTitle": "月次推移表です。PL・BS を月別の横並びで確認でき、Excel に出力できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -745,6 +782,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 300,
@@ -755,13 +793,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -769,6 +808,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -793,8 +833,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "キャッシュ・フロー",
+          "HeaderTitle": "キャッシュ・フロー計算書（間接法）です。営業・投資・財務活動ごとの資金の動きを確認できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -804,6 +844,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 300,
@@ -814,13 +855,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -828,6 +870,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -852,8 +895,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "株主資本等変動",
+          "HeaderTitle": "株主資本等変動計算書です。純資産の期中変動を確認できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -863,6 +906,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 200,
@@ -873,13 +917,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -887,6 +932,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -911,8 +957,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "消費税集計表",
+          "HeaderTitle": "消費税集計表です。税区分ごとの課税標準と税額を確認できます（消費税申告の基礎資料）。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -922,6 +968,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 100,
@@ -932,13 +979,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -946,6 +994,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -981,6 +1030,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 100,
@@ -991,13 +1041,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -1005,6 +1056,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -1040,6 +1092,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -1050,13 +1103,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -1064,6 +1118,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -1088,8 +1143,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "明細一覧",
+          "HeaderTitle": "取り込んだ銀行・カード明細の一覧です。未起票の明細がここに残り、一括起票で仕訳になると消えます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -1099,6 +1154,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 100,
@@ -1109,13 +1165,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -1123,6 +1180,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -1147,8 +1205,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "残高照合",
+          "HeaderTitle": "明細残高と帳簿残高の照合表です。日付ごとに差額ゼロ（○）を確認します。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -1158,6 +1216,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 300,
@@ -1168,13 +1227,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -1182,6 +1242,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -1206,8 +1267,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "口座マスタ",
+          "HeaderTitle": "自社の銀行口座マスタです。明細取込・残高照合の対象口座を管理します。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
@@ -1217,6 +1278,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -1227,13 +1289,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -1241,6 +1304,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -1265,8 +1329,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "仕訳ルール",
+          "HeaderTitle": "明細の摘要から勘定科目を自動判定するルールです。ルールを育てるほど明細取込の自動仕訳が賢くなります。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
@@ -1276,6 +1340,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -1286,13 +1351,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -1300,6 +1366,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -1324,8 +1391,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "会計年度",
+          "HeaderTitle": "会計年度と月次期間を管理します。期間の締め・再オープン、決算後の翌期繰越もここから行います。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
@@ -1335,6 +1402,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -1345,13 +1413,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -1359,6 +1428,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -1383,8 +1453,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "取引先",
+          "HeaderTitle": "取引先マスタを登録・編集できます。得意先・仕入先の区分やインボイス登録番号を管理します。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
@@ -1394,6 +1464,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -1404,13 +1475,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -1418,6 +1490,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -1442,8 +1515,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "案件",
+          "HeaderTitle": "案件マスタを登録・編集できます。受託/SaaS/SES の区分や SES 精算条件を管理します。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
@@ -1453,6 +1526,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -1463,13 +1537,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -1477,6 +1552,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -1491,6 +1567,7 @@
     "Color": "#ffffff",
     "BackgroundColorStart": "#052767",
     "BackgroundColorEnd": "#3a0647",
+    "MobileBehavior": "CollapseToHamburger",
     "UserName": "",
     "ModuleName": "",
     "Foreground": "#ffffff",
@@ -1510,6 +1587,7 @@
     "Color": "#ffffff",
     "BackgroundColorStart": "#052767",
     "BackgroundColorEnd": "#3a0647",
+    "MobileBehavior": "CollapseToHamburger",
     "UserName": "",
     "ModuleName": "",
     "Foreground": "#ffffff",
@@ -1589,6 +1667,7 @@
         "CanNavigateToDetail": true,
         "NavigateModuleUrlSegment": "",
         "CanCustomizeColumns": false,
+        "ApplyBackgroundToBoxInput": false,
         "DisplayName": "",
         "SearchCondition": {
           "LimitCount": 50,
@@ -1599,13 +1678,14 @@
           "ModuleName": ""
         },
         "PagerPosition": "Top",
-        "UseIndexSort": false,
+        "ReplaceMode": "None",
         "DeleteTogether": false,
         "CanCreate": false,
         "CanUpdate": false,
         "CanDelete": true,
         "CanUserSort": true,
         "CanSelect": false,
+        "UseIndexSort": false,
         "OnDataChanged": "",
         "OnSearchDataChanged": "",
         "OnSelectedIndexChanged": "",
@@ -1613,6 +1693,7 @@
         "OnDoubleClickRow": "",
         "Name": "",
         "IgnoreModification": false,
+        "OnValidateInput": "",
         "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
       }
     },
@@ -1622,6 +1703,8 @@
       "UrlParameter": ""
     }
   },
+  "AutoZoom": "None",
+  "TargetDevice": "Any",
   "TopPageModule": "Home",
   "OtherPages": []
 }

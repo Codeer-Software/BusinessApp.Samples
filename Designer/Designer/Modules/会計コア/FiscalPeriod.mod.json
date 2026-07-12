@@ -89,7 +89,10 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateFieldDesign"
     },
     {
-      "Candidates": ["進行中,open", "締め済み,closed"],
+      "Candidates": [
+        "進行中,open",
+        "締め済み,closed"
+      ],
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [],
@@ -243,7 +246,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",

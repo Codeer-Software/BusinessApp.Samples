@@ -23,7 +23,11 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateFieldDesign"
     },
     {
-      "Candidates": ["現金,1000", "小口現金,1010", "普通預金,1020"],
+      "Candidates": [
+        "現金,1000",
+        "小口現金,1010",
+        "普通預金,1020"
+      ],
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [],
@@ -49,7 +53,10 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
-      "Candidates": ["入金,in", "出金,out"],
+      "Candidates": [
+        "入金,in",
+        "出金,out"
+      ],
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [],
@@ -834,7 +841,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",

@@ -1,5 +1,6 @@
 {
   "IsApplicationRoot": false,
+  "Priority": 0,
   "Name": "Projects",
   "Description": "案件管理",
   "Left": {
@@ -12,6 +13,10 @@
     },
     "Links": [
       {
+        "Title": "ホームへ戻る",
+        "Icon": "bi bi-house",
+        "IconType": "Font",
+        "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
@@ -33,6 +38,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -43,13 +49,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Bottom",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -57,6 +64,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -64,13 +72,13 @@
           "PageTitle": "",
           "LayoutName": "",
           "UrlParameter": ""
-        },
-        "Title": "ホームへ戻る",
-        "Icon": "bi bi-house",
-        "IconType": "Font",
-        "HideTitle": false
+        }
       },
       {
+        "Title": "工数入力",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
@@ -81,8 +89,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "工数入力",
+          "HeaderTitle": "案件ごとの作業時間を入力できます（分単位）。工数は人件費配賦を通じて案件損益の原価になります。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -92,6 +100,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -102,13 +111,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -116,6 +126,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -123,11 +134,7 @@
           "PageTitle": "",
           "LayoutName": "",
           "UrlParameter": ""
-        },
-        "Title": "工数入力",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false
+        }
       },
       {
         "Title": "案件損益",
@@ -144,8 +151,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "案件損益",
+          "HeaderTitle": "案件別の損益（売上・直課費用・配賦人件費・粗利）を確認できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -155,6 +162,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 200,
@@ -165,13 +173,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -179,6 +188,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -203,8 +213,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "人件費配賦",
+          "HeaderTitle": "社員の月次人件費を工数比率で案件に配賦した結果を確認できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -214,6 +224,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 200,
@@ -224,13 +235,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -238,6 +250,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -262,8 +275,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "人件費コスト",
+          "HeaderTitle": "配賦の基礎となる社員別・月別の人件費コストを登録します。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -273,6 +286,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -283,13 +297,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -297,6 +312,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -321,8 +337,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "工数管理（経理）",
+          "HeaderTitle": "全社員の工数を代理入力・修正できます（経理）。病気などで本人が入力できないときの窓口です。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -332,6 +348,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -342,11 +359,72 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "UseIndexSort": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        }
+      },
+      {
+        "Title": "案件一覧",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
+        "ModulePageType": "Auto",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "ProjectView",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "案件一覧",
+          "HeaderTitle": "案件を検索・確認できます（閲覧専用）。案件の登録・変更は経理に依頼してください。",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": false,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": false,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [],
+              "SortFieldVariable": "Code.Value",
+              "SortDescending": false,
+              "ModuleName": ""
+            },
+            "PagerPosition": "Top",
+            "UseIndexSort": false,
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
             "OnDataChanged": "",
@@ -370,6 +448,7 @@
     "Color": "#ffffff",
     "BackgroundColorStart": "#052767",
     "BackgroundColorEnd": "#3a0647",
+    "MobileBehavior": "CollapseToHamburger",
     "UserName": "",
     "ModuleName": "",
     "Foreground": "#ffffff",
@@ -389,6 +468,7 @@
     "Color": "#ffffff",
     "BackgroundColorStart": "#052767",
     "BackgroundColorEnd": "#3a0647",
+    "MobileBehavior": "CollapseToHamburger",
     "UserName": "",
     "ModuleName": "",
     "Foreground": "#ffffff",
@@ -442,6 +522,7 @@
         "CanNavigateToDetail": true,
         "NavigateModuleUrlSegment": "",
         "CanCustomizeColumns": false,
+        "ApplyBackgroundToBoxInput": false,
         "DisplayName": "",
         "SearchCondition": {
           "LimitCount": 50,
@@ -452,13 +533,14 @@
           "ModuleName": ""
         },
         "PagerPosition": "Top",
-        "UseIndexSort": false,
+        "ReplaceMode": "None",
         "DeleteTogether": false,
         "CanCreate": false,
         "CanUpdate": false,
         "CanDelete": true,
         "CanUserSort": true,
         "CanSelect": false,
+        "UseIndexSort": false,
         "OnDataChanged": "",
         "OnSearchDataChanged": "",
         "OnSelectedIndexChanged": "",
@@ -466,6 +548,7 @@
         "OnDoubleClickRow": "",
         "Name": "",
         "IgnoreModification": false,
+        "OnValidateInput": "",
         "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
       }
     },
@@ -475,6 +558,8 @@
       "UrlParameter": ""
     }
   },
+  "AutoZoom": "None",
+  "TargetDevice": "Any",
   "TopPageModule": "TimeEntry",
   "OtherPages": []
 }

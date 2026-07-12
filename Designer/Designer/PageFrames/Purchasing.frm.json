@@ -85,8 +85,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "仕入先請求書",
+          "HeaderTitle": "仕入先からの請求書を登録・管理できます。「未払計上」で買掛仕訳、「支払登録」で支払仕訳が起票されます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -144,8 +144,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "支払予定表",
+          "HeaderTitle": "未払いの仕入先請求書を支払期限順に確認できます。期限超過・期限間近には警告が付きます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -262,8 +262,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "取引先口座",
+          "HeaderTitle": "取引先の振込先口座を管理できます（経理専用）。「振込データ作成」で使われます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,

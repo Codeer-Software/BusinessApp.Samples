@@ -81,8 +81,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "申請",
+          "HeaderTitle": "経費を申請できます。金額と費目から承認ルートが自動で決まり、承認後に経理が仕訳・精算します。レシート画像の AI 読み取りも使えます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -142,8 +142,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "申請中",
+          "HeaderTitle": "自分が申請した経費の進行状況（いま誰の承認待ちか）を確認できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
@@ -203,8 +203,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "承認待ち",
+          "HeaderTitle": "あなたの承認待ち一覧です。申請を開いて内容を確認し、承認・却下できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
@@ -264,8 +264,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "通知",
+          "HeaderTitle": "あなた宛の通知一覧です。「開く」で対象の画面へ移動できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,

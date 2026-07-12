@@ -85,8 +85,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "予実対比",
+          "HeaderTitle": "部門×科目の予算と実績を対比できます。消化率が閾値を超えると警告が付きます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -203,8 +203,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
+          "PageTitle": "予算明細",
+          "HeaderTitle": "登録済みの予算明細（部門×科目×月）を確認できます。",
           "CanBulkDataUpdate": true,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,

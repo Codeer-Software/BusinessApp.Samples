@@ -11,15 +11,60 @@
         "QuerySortType": "None",
         "QueryPagingType": "None",
         "Parameters": [
-          { "IsParameter": false, "Name": "invoice_no", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "partner_name", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "title", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "issue_date", "DbType": "DATE", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "due_date", "DbType": "DATE", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "total_amount", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "received_amount", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "balance", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "state", "DbType": "text", "DbParameterDirection": "Input" }
+          {
+            "IsParameter": false,
+            "Name": "invoice_no",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "partner_name",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "title",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "issue_date",
+            "DbType": "DATE",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "due_date",
+            "DbType": "DATE",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "total_amount",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "received_amount",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "balance",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "state",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          }
         ]
       },
       "Name": "Query",
@@ -347,7 +392,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",

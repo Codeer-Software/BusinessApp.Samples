@@ -57,7 +57,10 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
-      "Candidates": ["銀行口座,bank", "クレジットカード,card"],
+      "Candidates": [
+        "銀行口座,bank",
+        "クレジットカード,card"
+      ],
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [],
@@ -894,7 +897,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",

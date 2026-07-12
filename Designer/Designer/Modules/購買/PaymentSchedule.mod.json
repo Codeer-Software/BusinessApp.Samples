@@ -11,14 +11,54 @@
         "QuerySortType": "None",
         "QueryPagingType": "None",
         "Parameters": [
-          { "IsParameter": false, "Name": "sort_key", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "due_date", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "partner_name", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "invoice_no", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "amount", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "status_disp", "DbType": "text", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "days_left", "DbType": "integer", "DbParameterDirection": "Input" },
-          { "IsParameter": false, "Name": "warn", "DbType": "text", "DbParameterDirection": "Input" }
+          {
+            "IsParameter": false,
+            "Name": "sort_key",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "due_date",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "partner_name",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "invoice_no",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "amount",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "status_disp",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "days_left",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "warn",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          }
         ]
       },
       "Name": "Query",
@@ -206,7 +246,9 @@
   "ListLayouts": {
     "": {
       "HeaderTitle": "",
-      "DataOnlyFields": ["SortKey"],
+      "DataOnlyFields": [
+        "SortKey"
+      ],
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "",
       "OnFieldDataChanged": "",
@@ -340,7 +382,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",
