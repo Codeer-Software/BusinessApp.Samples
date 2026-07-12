@@ -1,6 +1,6 @@
 {
   "IsApplicationRoot": false,
-  "Name": "AccountingFrame",
+  "Name": "Accounting",
   "Description": "会計",
   "Left": {
     "IsVisible": true,

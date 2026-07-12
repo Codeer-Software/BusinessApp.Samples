@@ -579,7 +579,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": null,
+                "Width": 84,
                 "Padding": {
                   "Left": 8,
                   "Top": null,
@@ -604,10 +604,11 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "Name": "",
                   "BackgroundColor": "",
+                  "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "Width": 280,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -631,7 +632,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": null,
+                "Width": 66,
                 "Padding": {
                   "Left": 8,
                   "Top": null,
@@ -656,23 +657,11 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "Name": "",
                   "BackgroundColor": "",
+                  "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              },
-              {
+                "Width": 210,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {

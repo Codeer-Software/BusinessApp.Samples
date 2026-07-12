@@ -688,10 +688,12 @@
         "Rows": [
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -705,7 +707,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": null,
+                "Width": 102,
                 "Padding": {
                   "Left": 8,
                   "Top": null,
@@ -734,6 +736,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "Width": 210,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -743,6 +746,7 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               },
               {
@@ -756,7 +760,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": null,
+                "Width": 120,
                 "Padding": {
                   "Left": 8,
                   "Top": null,
@@ -785,6 +789,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "Width": 340,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -794,6 +799,7 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               },
               {
@@ -807,7 +813,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": null,
+                "Width": 120,
                 "Padding": {
                   "Left": 8,
                   "Top": null,
@@ -836,6 +842,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "Width": 340,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -845,6 +852,7 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               },
               {
@@ -857,16 +865,19 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -880,7 +891,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": null,
+                "Width": 174,
                 "Padding": {
                   "Left": 8,
                   "Top": null,
@@ -909,6 +920,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "Width": 210,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -918,6 +930,7 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               },
               {
@@ -931,7 +944,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": null,
+                "Width": 138,
                 "Padding": {
                   "Left": 8,
                   "Top": null,
@@ -960,6 +973,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "Width": 210,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -969,6 +983,7 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               },
               {
@@ -982,7 +997,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": null,
+                "Width": 138,
                 "Padding": {
                   "Left": 8,
                   "Top": null,
@@ -1011,6 +1026,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "Width": 210,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -1020,6 +1036,7 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               },
               {
@@ -1032,6 +1049,7 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]

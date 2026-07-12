@@ -22,8 +22,11 @@ void UpdateButtons()
     {
         this.IsViewOnly = true;
     }
-    ConfirmButton.IsVisible = !this.IsNewData && (st == "draft");
-    CreateInvoiceButton.IsVisible = !this.IsNewData && (st == "confirmed");
+    // 確定（売上計上）と請求書作成は経理の業務。営業には最初からボタンを見せない
+    // （役割分担: 営業=検収事実の記録（下書き）、経理=会計処理の確定）
+    var isAccountingRole = (CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin");
+    ConfirmButton.IsVisible = isAccountingRole && !this.IsNewData && (st == "draft");
+    CreateInvoiceButton.IsVisible = isAccountingRole && !this.IsNewData && (st == "confirmed");
 }
 
 // 受注選択: 受注明細の税抜合計を検収額に、SALES_10 税率で消費税を自動セット (手修正可)

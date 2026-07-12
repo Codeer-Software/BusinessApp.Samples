@@ -1,6 +1,6 @@
 {
   "IsApplicationRoot": false,
-  "Name": "AdminFrame",
+  "Name": "Admin",
   "Description": "システム管理",
   "Left": {
     "IsVisible": true,

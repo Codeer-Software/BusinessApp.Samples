@@ -143,7 +143,10 @@
     },
     {
       "DbColumn": "billing_cycle",
-      "Candidates": ["月額,monthly", "年額,yearly"],
+      "Candidates": [
+        "月額,monthly",
+        "年額,yearly"
+      ],
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [],
@@ -517,7 +520,33 @@
     }
   },
   "UserReadCondition": {
-    "ModuleName": ""
+    "ModuleName": "AppUser",
+    "Condition": {
+      "IsOrMatch": true,
+      "IsNot": false,
+      "Children": [
+        {
+          "SearchTargetVariable": "Role.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "accounting",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        },
+        {
+          "SearchTargetVariable": "Role.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "sysadmin",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        }
+      ],
+      "Name": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+    }
   },
   "DataWriteCondition": {
     "ModuleName": ""
@@ -531,7 +560,12 @@
       "OnAfterInitialization": "",
       "OnLocationChanging": "",
       "OnFieldDataChanged": "",
-      "DataOnlyFields": ["Creator", "CreatedAt", "Updater", "UpdatedAt"],
+      "DataOnlyFields": [
+        "Creator",
+        "CreatedAt",
+        "Updater",
+        "UpdatedAt"
+      ],
       "ClassName": "",
       "Color": "",
       "BackgroundColor": "",

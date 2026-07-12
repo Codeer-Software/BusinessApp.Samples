@@ -1,12 +1,12 @@
 {
   "IsApplicationRoot": false,
-  "Name": "PurchasingFrame",
-  "Description": "購買管理",
+  "Name": "Expense",
+  "Description": "経費精算",
   "Left": {
     "IsVisible": true,
     "Home": {
       "Type": "Text",
-      "Text": "購買管理",
+      "Text": "経費精算",
       "Icon": "",
       "ResourcePath": ""
     },
@@ -71,15 +71,11 @@
         "HideTitle": false
       },
       {
-        "Title": "仕入先請求書",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "",
-        "Module": "VendorInvoice",
+        "Module": "ExpenseRequest",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -96,13 +92,196 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
               "SelectFields": [],
               "SortConditions": [],
-              "SortFieldVariable": "DueDate.Value",
+              "SortFieldVariable": "",
               "SortDescending": false,
+              "ModuleName": "ExpenseRequest"
+            },
+            "PagerPosition": "Bottom",
+            "UseIndexSort": false,
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": true,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        },
+        "Title": "申請",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false
+      },
+      {
+        "ModulePageType": "List",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "MyApplication",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "",
+          "HeaderTitle": "",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": false,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": false,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [],
+              "SortFieldVariable": "CreatedAt.Value",
+              "SortDescending": true,
+              "ModuleName": "MyApplication"
+            },
+            "PagerPosition": "Bottom",
+            "UseIndexSort": false,
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": false,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        },
+        "Title": "申請中",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false
+      },
+      {
+        "ModulePageType": "List",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "ApprovalInbox",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "",
+          "HeaderTitle": "",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": false,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": false,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [],
+              "SortFieldVariable": "CreatedAt.Value",
+              "SortDescending": false,
+              "ModuleName": "ApprovalInbox"
+            },
+            "PagerPosition": "Bottom",
+            "UseIndexSort": false,
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": false,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        },
+        "Title": "承認待ち",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false
+      },
+      {
+        "ModulePageType": "List",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "Notification",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "",
+          "HeaderTitle": "",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": false,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": false,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [],
+              "SortFieldVariable": "CreatedAt.Value",
+              "SortDescending": true,
               "ModuleName": ""
             },
             "PagerPosition": "Top",
@@ -127,184 +306,11 @@
           "PageTitle": "",
           "LayoutName": "",
           "UrlParameter": ""
-        }
-      },
-      {
-        "Title": "支払予定表",
+        },
+        "Title": "通知",
         "Icon": "",
         "IconType": "Font",
-        "HideTitle": false,
-        "ModulePageType": "List",
-        "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
-        "PageFrame": "",
-        "Module": "PaymentSchedule",
-        "Id": "",
-        "Parameters": "",
-        "ListPageDesign": {
-          "SearchLayoutName": "",
-          "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
-          "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": true,
-          "UseSubmitButton": false,
-          "UseNavigateToCreate": false,
-          "ListFieldDesign": {
-            "LayoutName": "",
-            "CanNavigateToDetail": false,
-            "NavigateModuleUrlSegment": "",
-            "CanCustomizeColumns": false,
-            "DisplayName": "",
-            "SearchCondition": {
-              "LimitCount": 300,
-              "SelectFields": [],
-              "SortConditions": [],
-              "SortFieldVariable": "",
-              "SortDescending": false,
-              "ModuleName": ""
-            },
-            "PagerPosition": "Top",
-            "UseIndexSort": false,
-            "DeleteTogether": false,
-            "CanCreate": false,
-            "CanUpdate": false,
-            "CanDelete": false,
-            "CanUserSort": false,
-            "CanSelect": false,
-            "OnDataChanged": "",
-            "OnSearchDataChanged": "",
-            "OnSelectedIndexChanged": "",
-            "OnSelectedIndexChanging": "",
-            "OnDoubleClickRow": "",
-            "Name": "",
-            "IgnoreModification": false,
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
-          }
-        },
-        "DetailPageDesign": {
-          "PageTitle": "",
-          "LayoutName": "",
-          "UrlParameter": ""
-        }
-      },
-      {
-        "Title": "振込データ作成",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false,
-        "ModulePageType": "Detail",
-        "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
-        "PageFrame": "",
-        "Module": "FbExport",
-        "Id": "",
-        "Parameters": "",
-        "ListPageDesign": {
-          "SearchLayoutName": "",
-          "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
-          "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
-          "UseSubmitButton": false,
-          "UseNavigateToCreate": false,
-          "ListFieldDesign": {
-            "LayoutName": "",
-            "CanNavigateToDetail": false,
-            "NavigateModuleUrlSegment": "",
-            "CanCustomizeColumns": false,
-            "DisplayName": "",
-            "SearchCondition": {
-              "LimitCount": 50,
-              "SelectFields": [],
-              "SortConditions": [],
-              "SortFieldVariable": "",
-              "SortDescending": false,
-              "ModuleName": ""
-            },
-            "PagerPosition": "Top",
-            "UseIndexSort": false,
-            "DeleteTogether": false,
-            "CanCreate": false,
-            "CanUpdate": false,
-            "CanDelete": false,
-            "CanUserSort": false,
-            "CanSelect": false,
-            "OnDataChanged": "",
-            "OnSearchDataChanged": "",
-            "OnSelectedIndexChanged": "",
-            "OnSelectedIndexChanging": "",
-            "OnDoubleClickRow": "",
-            "Name": "",
-            "IgnoreModification": false,
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
-          }
-        },
-        "DetailPageDesign": {
-          "PageTitle": "",
-          "LayoutName": "",
-          "UrlParameter": ""
-        }
-      },
-      {
-        "Title": "取引先口座",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false,
-        "ModulePageType": "Auto",
-        "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
-        "PageFrame": "",
-        "Module": "PartnerBank",
-        "Id": "",
-        "Parameters": "",
-        "ListPageDesign": {
-          "SearchLayoutName": "",
-          "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
-          "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
-          "UseSubmitButton": false,
-          "UseNavigateToCreate": false,
-          "ListFieldDesign": {
-            "LayoutName": "",
-            "CanNavigateToDetail": true,
-            "NavigateModuleUrlSegment": "",
-            "CanCustomizeColumns": false,
-            "DisplayName": "",
-            "SearchCondition": {
-              "LimitCount": 50,
-              "SelectFields": [],
-              "SortConditions": [],
-              "SortFieldVariable": "Id.Value",
-              "SortDescending": false,
-              "ModuleName": ""
-            },
-            "PagerPosition": "Top",
-            "UseIndexSort": false,
-            "DeleteTogether": false,
-            "CanCreate": false,
-            "CanUpdate": false,
-            "CanDelete": false,
-            "CanUserSort": false,
-            "CanSelect": false,
-            "OnDataChanged": "",
-            "OnSearchDataChanged": "",
-            "OnSelectedIndexChanged": "",
-            "OnSelectedIndexChanging": "",
-            "OnDoubleClickRow": "",
-            "Name": "",
-            "IgnoreModification": false,
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
-          }
-        },
-        "DetailPageDesign": {
-          "PageTitle": "",
-          "LayoutName": "",
-          "UrlParameter": ""
-        }
+        "HideTitle": false
       }
     ],
     "FontFamily": "",
@@ -355,44 +361,133 @@
   },
   "Padding": {},
   "UserReadCondition": {
-    "ModuleName": "AppUser",
-    "Condition": {
-      "IsOrMatch": true,
-      "IsNot": false,
-      "Children": [
-        {
-          "SearchTargetVariable": "Role.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": "accounting",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-        },
-        {
-          "SearchTargetVariable": "Role.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": "sysadmin",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-        }
-      ],
-      "Name": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
-    }
+    "ModuleName": ""
   },
   "BackgroundColor": "",
   "Color": "",
   "FontFamily": "",
-  "OtherPageModuleDesigns": [],
+  "OtherPageModuleDesigns": [
+    {
+      "ModulePageType": "Auto",
+      "ModuleUrlSegment": "",
+      "ActiveModuleSegments": [],
+      "PageFrame": "",
+      "Module": "ApprovalFlowOrder",
+      "Id": "",
+      "Parameters": "",
+      "ListPageDesign": {
+        "SearchLayoutName": "",
+        "UserUrlParameter": true,
+        "PageTitle": "",
+        "HeaderTitle": "",
+        "CanBulkDataUpdate": false,
+        "CanBulkDataDownload": false,
+        "UseSubmitButton": false,
+        "UseNavigateToCreate": true,
+        "ListFieldDesign": {
+          "LayoutName": "",
+          "CanNavigateToDetail": true,
+          "NavigateModuleUrlSegment": "",
+          "CanCustomizeColumns": false,
+          "ApplyBackgroundToBoxInput": false,
+          "DisplayName": "",
+          "SearchCondition": {
+            "LimitCount": 50,
+            "SelectFields": [],
+            "SortConditions": [],
+            "SortFieldVariable": "",
+            "SortDescending": false,
+            "ModuleName": ""
+          },
+          "PagerPosition": "Bottom",
+          "UseIndexSort": false,
+          "DeleteTogether": false,
+          "CanCreate": false,
+          "CanUpdate": false,
+          "CanDelete": true,
+          "CanUserSort": true,
+          "CanSelect": false,
+          "OnDataChanged": "",
+          "OnSearchDataChanged": "",
+          "OnSelectedIndexChanged": "",
+          "OnSelectedIndexChanging": "",
+          "OnDoubleClickRow": "",
+          "Name": "",
+          "IgnoreModification": false,
+          "OnValidateInput": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+        }
+      },
+      "DetailPageDesign": {
+        "PageTitle": "",
+        "LayoutName": "",
+        "UrlParameter": ""
+      }
+    },
+    {
+      "ModulePageType": "Auto",
+      "ModuleUrlSegment": "",
+      "ActiveModuleSegments": [],
+      "PageFrame": "",
+      "Module": "ApprovalHistory",
+      "Id": "",
+      "Parameters": "",
+      "ListPageDesign": {
+        "SearchLayoutName": "",
+        "UserUrlParameter": true,
+        "PageTitle": "",
+        "HeaderTitle": "",
+        "CanBulkDataUpdate": false,
+        "CanBulkDataDownload": false,
+        "UseSubmitButton": false,
+        "UseNavigateToCreate": true,
+        "ListFieldDesign": {
+          "LayoutName": "",
+          "CanNavigateToDetail": true,
+          "NavigateModuleUrlSegment": "",
+          "CanCustomizeColumns": false,
+          "ApplyBackgroundToBoxInput": false,
+          "DisplayName": "",
+          "SearchCondition": {
+            "LimitCount": 50,
+            "SelectFields": [],
+            "SortConditions": [],
+            "SortFieldVariable": "",
+            "SortDescending": false,
+            "ModuleName": ""
+          },
+          "PagerPosition": "Bottom",
+          "UseIndexSort": false,
+          "DeleteTogether": false,
+          "CanCreate": false,
+          "CanUpdate": false,
+          "CanDelete": true,
+          "CanUserSort": true,
+          "CanSelect": false,
+          "OnDataChanged": "",
+          "OnSearchDataChanged": "",
+          "OnSelectedIndexChanged": "",
+          "OnSelectedIndexChanging": "",
+          "OnDoubleClickRow": "",
+          "Name": "",
+          "IgnoreModification": false,
+          "OnValidateInput": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+        }
+      },
+      "DetailPageDesign": {
+        "PageTitle": "",
+        "LayoutName": "",
+        "UrlParameter": ""
+      }
+    }
+  ],
   "TopPageModuleDesign": {
     "ModulePageType": "Auto",
     "ModuleUrlSegment": "Top",
     "ActiveModuleSegments": [],
     "PageFrame": "",
-    "Module": "VendorInvoice",
+    "Module": "ExpenseRequest",
     "Id": "",
     "Parameters": "",
     "ListPageDesign": {
@@ -409,16 +504,17 @@
         "CanNavigateToDetail": true,
         "NavigateModuleUrlSegment": "",
         "CanCustomizeColumns": false,
+        "ApplyBackgroundToBoxInput": false,
         "DisplayName": "",
         "SearchCondition": {
           "LimitCount": 50,
           "SelectFields": [],
           "SortConditions": [],
-          "SortFieldVariable": "DueDate.Value",
+          "SortFieldVariable": "",
           "SortDescending": false,
-          "ModuleName": ""
+          "ModuleName": "ExpenseRequest"
         },
-        "PagerPosition": "Top",
+        "PagerPosition": "Bottom",
         "UseIndexSort": false,
         "DeleteTogether": false,
         "CanCreate": false,
@@ -433,6 +529,7 @@
         "OnDoubleClickRow": "",
         "Name": "",
         "IgnoreModification": false,
+        "OnValidateInput": "",
         "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
       }
     },
@@ -442,6 +539,6 @@
       "UrlParameter": ""
     }
   },
-  "TopPageModule": "Home",
+  "TopPageModule": "ExpenseRequest",
   "OtherPages": []
 }

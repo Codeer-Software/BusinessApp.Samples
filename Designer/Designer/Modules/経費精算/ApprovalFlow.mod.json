@@ -1009,10 +1009,12 @@
         "Rows": [
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -1026,7 +1028,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": null,
+                "Width": 138,
                 "Padding": {
                   "Left": 8,
                   "Top": null,
@@ -1055,9 +1057,9 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "Width": 280,
                 "Padding": {},
                 "BackgroundColor": "",
-                "Width": 300,
                 "BorderStyle": {
                   "LeftColor": "",
                   "TopColor": "",
@@ -1065,8 +1067,8 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
-                "Border": "None",
-                "VerticalAlignment": "Middle"
+                "AllowOverflow": false,
+                "Border": "None"
               },
               {
                 "Padding": {},
@@ -1078,6 +1080,7 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
