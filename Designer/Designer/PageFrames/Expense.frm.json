@@ -204,7 +204,7 @@
           "SearchLayoutName": "",
           "UserUrlParameter": true,
           "PageTitle": "承認待ち",
-          "HeaderTitle": "あなたの承認待ち一覧です。申請を開いて内容を確認し、承認・却下できます。",
+          "HeaderTitle": "あなたの承認を待っている申請一覧です。内容を確認し、承認・却下できます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,

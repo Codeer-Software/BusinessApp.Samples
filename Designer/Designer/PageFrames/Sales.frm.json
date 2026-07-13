@@ -204,7 +204,7 @@
           "SearchLayoutName": "",
           "UserUrlParameter": true,
           "PageTitle": "検収",
-          "HeaderTitle": "検収（納品の受け入れ確認）を登録できます。経理が検収を「確定」すると売上仕訳が起票され、「請求書を作成」で請求書になります。",
+          "HeaderTitle": "相手方の検収（納品の受け入れ確認）を登録できます。経理が検収を「確定」すると売上仕訳が起票され、「請求書を作成」で請求書になります。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
