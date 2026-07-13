@@ -19,7 +19,7 @@ SELECT
   p.name AS project_name,
   u.name AS user_name,
   ROUND(te.mins / 60.0, 1) AS hours,
-  te.mins * 100 / tot.total_mins AS ratio_percent,
+  ROUND(te.mins * 100.0 / tot.total_mins, 1) AS ratio_percent,
   COALESCE(ms.cost, 0) * te.mins / tot.total_mins AS allocated_cost
 FROM te
 JOIN tot ON tot.user_id = te.user_id

@@ -155,6 +155,7 @@
     },
     {
       "Candidates": [
+        "プレビュー,preview",
         "未起票,pending",
         "起票済,journalized",
         "対象外,excluded"

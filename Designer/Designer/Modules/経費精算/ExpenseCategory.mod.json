@@ -980,6 +980,22 @@
             "ListElementComponent": ""
           },
           {
+            "FieldName": "DisplayOrder",
+            "ContextMenu": "",
+            "Label": "表示順",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": true,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
             "FieldName": "IsActive",
             "ContextMenu": "",
             "Label": "有効",

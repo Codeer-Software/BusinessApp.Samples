@@ -50,7 +50,7 @@
           {
             "IsParameter": false,
             "Name": "ratio_percent",
-            "DbType": "integer",
+            "DbType": "decimal",
             "DbParameterDirection": "Input"
           },
           {
@@ -202,7 +202,7 @@
     {
       "DbColumn": "ratio_percent",
       "Placeholder": "",
-      "Format": "#,0",
+      "Format": "#,0.0",
       "IsSlider": false,
       "OnInput": "",
       "IsUpdateProtected": false,
