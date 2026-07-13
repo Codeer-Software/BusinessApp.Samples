@@ -1,23 +1,14 @@
 -- 090_approval_route.sql — 承認ルート自動決定（B2-3、AccountingSQLite）
 -- 設計: docs/07_経費精算設計.md §3 / 台帳 B2-3
--- ルール（閾値は system_thresholds 参照。ハードコード禁止の原則）:
---   金額 < EXP_APPROVAL_MID(3万)          → 課長のみ
---   MID ≦ 金額 < EXP_APPROVAL_HIGH(20万)  → 部長のみ
---   EXP_APPROVAL_HIGH ≦ 金額              → 部長＋総務
---   交際費                                 → 常に総務を併載
---   判定額 = 立替精算は金額、事前申請は見込み額
+-- どのテンプレートを使うかの判定は 2026-07-14 以降 approval_route_rules（260・ADR-0023）が正。
+-- 判定額 = 立替精算は金額、事前申請は見込み額（実費確定後は実費）
 
 -- 承認者の役職指定（テンプレメンバー拡張）
 -- NULL/'' = approver_user_id の指定ユーザーそのまま / 'manager' = 申請者の部門の課長 / 'director' = 同・部長
 ALTER TABLE approval_flow_template_member ADD COLUMN approver_role TEXT;
 
--- 承認ルート閾値（マスタ化）
-INSERT INTO system_thresholds (code, name, amount, valid_from, valid_to)
-SELECT 'EXP_APPROVAL_MID', '経費承認: 部長決裁となる下限額', 30000, NULL, NULL
-WHERE NOT EXISTS (SELECT 1 FROM system_thresholds WHERE code = 'EXP_APPROVAL_MID');
-INSERT INTO system_thresholds (code, name, amount, valid_from, valid_to)
-SELECT 'EXP_APPROVAL_HIGH', '経費承認: 総務併載となる下限額', 200000, NULL, NULL
-WHERE NOT EXISTS (SELECT 1 FROM system_thresholds WHERE code = 'EXP_APPROVAL_HIGH');
+-- 承認ルート閾値 EXP_APPROVAL_MID/HIGH は 2026-07-14 に廃止（ADR-0023）。
+-- ルート選択は 260_approval_route_rules.sql の approval_route_rules（費目×金額範囲→テンプレート）に一本化した。
 -- B2-5: 事前申請の実費が見込み×この率(%)を超えたら再承認
 INSERT INTO system_thresholds (code, name, amount, valid_from, valid_to)
 SELECT 'EXP_OVERRUN_RATE', '経費精算: 実費超過の再承認率(%)', 110, NULL, NULL

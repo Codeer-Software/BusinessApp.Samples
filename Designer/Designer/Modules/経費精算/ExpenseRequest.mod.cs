@@ -1,20 +1,51 @@
 // 費目×金額でテンプレートを選択 (ApprovalFlow の申請/再申請から呼ばれる)
-// ルート: 判定額 < EXP_APPROVAL_MID(3万) = 課長 / MID〜HIGH(20万) = 部長 / HIGH以上 = 部長＋総務
-//         交際費は金額によらず総務を併載。閾値は system_thresholds 参照（ハードコード禁止）
+// ADR-0023: approval_route_rules マスタ（マスタ管理（システム）＞承認ルート判定）を
+// 優先度の小さい順に評価し、最初に一致した行のテンプレートを使う。
+// 一致条件: 有効 かつ (費目指定なし or 申請の費目と一致) かつ 下限 ≦ 判定額 ≦ 上限（上限 NULL=無制限）
+// テンプレートは ID で参照（テンプレート改名に影響されない）。名前を返す契約は従来どおり。
 string SelectTemplateName()
 {
     var amount = GetJudgeAmount();
-    var mid = GetThresholdAmount("EXP_APPROVAL_MID");
-    var high = GetThresholdAmount("EXP_APPROVAL_HIGH");
-    var cat = FindSelectedCategory();
-    var isEnt = (cat != null) && (cat.IsEntertainment.Value == true);
-    var needsGA = isEnt || (high > 0 && amount >= high);
+    var catId = ExpenseCategoryRef.Value;
 
-    if (mid > 0 && amount >= mid)
+    var rs = new ModuleSearcher<ApprovalRouteRule>();
+    rs.OrderBy(r => r.Priority.Value);
+    var rules = rs.Execute();
+    foreach (var rm in rules)
     {
-        return needsGA ? "経費_部長＋総務" : "経費_部長のみ";
+        var r = (ApprovalRouteRule)rm;
+        if (r.IsActive.Value != true) continue;
+        if (r.ExpenseCategorySel.Value != null && !IsSameId(r.ExpenseCategorySel.Value, catId)) continue;
+        var min = r.MinAmount.Value ?? 0;
+        if (amount < min) continue;
+        var max = r.MaxAmount.Value;
+        if (max != null && amount > max) continue;
+        return FindTemplateNameById(r.TemplateSel.Value);
     }
-    return needsGA ? "経費_課長＋総務" : "経費_課長のみ";
+    Toaster.Error($"承認ルート判定に一致するルールがありません（判定額 {amount:#,0} 円）。マスタ管理（システム）＞承認ルート判定 を確認してください");
+    return "";
+}
+
+// テンプレート ID → 名前（ApprovalFlow の名前ベース契約への橋渡し。見つからなければ ""）
+string FindTemplateNameById(object templateId)
+{
+    if (templateId == null) return "";
+    var s = new ModuleSearcher<ApprovalFlowTemplate>();
+    s.AddEquals(t => t.Id.Value, templateId);
+    var found = s.Execute();
+    if (found.Count == 0)
+    {
+        Toaster.Error("承認ルート判定ルールが参照するテンプレートが見つかりません。マスタ管理（システム）＞承認ルート判定 を確認してください");
+        return "";
+    }
+    var t = (ApprovalFlowTemplate)found[0];
+    return t.Name.Value;
+}
+
+// ID の等値判定。SelectField 由来で値の型（string/decimal）が揃わないことがあるため文字列正規化で比較
+bool IsSameId(object a, object b)
+{
+    return $"{a}" == $"{b}";
 }
 
 // 承認ルートの判定額: 立替精算は実費。事前申請は見込み額、実費確定後は実費
