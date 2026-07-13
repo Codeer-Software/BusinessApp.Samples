@@ -379,7 +379,7 @@
     },
     {
       "DbColumn": "tax_amount",
-      "Placeholder": "レシート記載の消費税額（記載がなければ空欄＝内税10%で自動計算）",
+      "Placeholder": "レシート記載の消費税額（記載がなければ空欄＝費目の税区分の税率で内税自動計算）",
       "Format": "#,0",
       "IsSlider": false,
       "OnInput": "",

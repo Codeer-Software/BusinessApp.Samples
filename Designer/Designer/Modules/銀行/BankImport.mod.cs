@@ -113,12 +113,12 @@ void Import_OnClick()
 
     if (added == 0)
     {
-        ResultLabel.Text = $"プレビュー 0 件（重複スキップ {skipped} 件 / 解析不能行 {badLines} 行）";
+        ResultLabel.Text = $"プレビュー 0 件（重複スキップ {skipped} 件 / スキップ行（ヘッダ・明細以外） {badLines} 行）";
         Toaster.Warn("取り込める明細がありませんでした");
         return;
     }
     PreviewLines.Reload();
-    ResultLabel.Text = $"プレビュー {added} 件 / ルール適用 {ruled} 件 / 重複スキップ {skipped} 件 / 解析不能行 {badLines} 行 — 内容を確認して「この内容で登録」を押してください";
+    ResultLabel.Text = $"プレビュー {added} 件 / ルール適用 {ruled} 件 / 重複スキップ {skipped} 件 / スキップ行（ヘッダ・明細以外） {badLines} 行 — 内容を確認して「この内容で登録」を押してください";
     Toaster.Success($"{added} 件をプレビューに読み込みました。内容を確認して「この内容で登録」を押してください");
 }
 
