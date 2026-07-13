@@ -1,12 +1,12 @@
 {
   "IsApplicationRoot": false,
   "Name": "Admin",
-  "Description": "システム管理",
+  "Description": "マスタ管理（システム）",
   "Left": {
     "IsVisible": true,
     "Home": {
       "Type": "Text",
-      "Text": "システム管理",
+      "Text": "マスタ管理（システム）",
       "Icon": "",
       "ResourcePath": ""
     },

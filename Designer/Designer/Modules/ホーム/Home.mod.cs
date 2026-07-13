@@ -103,7 +103,7 @@ void Detail_OnAfterInit()
         var r = (CashFlowForecastData)rm;
         if (r.AlertMark.Value != null && r.AlertMark.Value != "")
         {
-            CashAlertLabel.Text = $"⚠ {r.MonthLabel.Value} に資金ショートの予測があります。「帳票 > 資金繰り予測」を確認してください";
+            CashAlertLabel.Text = $"⚠ {r.MonthLabel.Value} に資金ショートの予測があります。「財務帳票 > 資金繰り予測」を確認してください";
             CashAlertLabel.Color = "#dc3545";
             break;
         }

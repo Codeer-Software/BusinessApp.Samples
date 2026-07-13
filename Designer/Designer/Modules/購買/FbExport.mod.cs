@@ -92,7 +92,7 @@ void Generate_OnClick()
         if (!IsDigitsLen(partner.BankCode.Value, 4) || !IsDigitsLen(partner.BranchCode.Value, 3)
             || !IsDigitsLen(partner.AccountNo.Value, 7) || partner.AccountTypeSel.Value == null)
         {
-            errors.Add($"{invNo}: {partner.Name.Value} の振込先口座情報が未登録または桁数不正（購買 > 取引先口座 で銀行4桁/支店3桁/口座7桁/種別を登録）");
+            errors.Add($"{invNo}: {partner.Name.Value} の振込先口座情報が未登録または桁数不正（マスタ管理（経理） > 取引先口座 で銀行4桁/支店3桁/口座7桁/種別を登録）");
             continue;
         }
         var kanaErr = KanaError(partner.PayeeKana.Value);
