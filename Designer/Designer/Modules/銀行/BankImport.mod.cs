@@ -284,6 +284,7 @@ void PostAll_OnClick()
     var posted = 0;
     var skippedClosed = 0;
     var failed = 0;
+    var postedNos = new List<string>();
     foreach (var t in targets)
     {
         // 二重起票ガード（既に仕訳がある明細はリンクだけ張り直して起票済みへ）
@@ -479,11 +480,14 @@ void PostAll_OnClick()
         t.Status.Value = "journalized";
         t.Submit();
         posted = posted + 1;
+        postedNos.Add($"{nextNo}");
     }
 
     PendingLines.Reload();
-    ResultLabel.Text = $"一括起票: {posted} 件起票 / 締め済み等スキップ {skippedClosed} 件 / 失敗 {failed} 件";
-    if (posted > 0) Toaster.Success($"{posted} 件を仕訳として起票しました");
+    var nosText = "";
+    if (postedNos.Count > 0) { nosText = $"（伝票 No.{string.Join(", ", postedNos)}）"; }
+    ResultLabel.Text = $"一括起票: {posted} 件起票{nosText} / 締め済み等スキップ {skippedClosed} 件 / 失敗 {failed} 件";
+    if (posted > 0) Toaster.Success($"{posted} 件を仕訳として起票しました{nosText}");
     else Toaster.Warn("起票できた明細がありませんでした");
 }
 
