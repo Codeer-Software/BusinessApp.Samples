@@ -379,7 +379,7 @@
     },
     {
       "DbColumn": "tax_amount",
-      "Placeholder": "レシート記載の消費税額",
+      "Placeholder": "レシート記載の消費税額（記載がなければ空欄＝内税10%で自動計算）",
       "Format": "#,0",
       "IsSlider": false,
       "OnInput": "",
@@ -397,7 +397,7 @@
     },
     {
       "DbColumn": "estimated_amount",
-      "Placeholder": "事前申請の見込み額",
+      "Placeholder": "見込み額を入力（金額（税込）欄は空欄のまま＝承認後の実費確定で入ります）",
       "Format": "#,0",
       "IsSlider": false,
       "OnInput": "",

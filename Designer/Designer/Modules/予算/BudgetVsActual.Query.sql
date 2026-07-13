@@ -38,7 +38,7 @@ SELECT
        ELSE NULL END AS usage_rate,
   CASE WHEN COALESCE(b.budget, 0) > 0
         AND COALESCE(act.actual, 0) * 100 / b.budget >= (SELECT rate FROM alert_rate)
-       THEN '⚠ 超過警告' ELSE '' END AS alert_mark
+       THEN '⚠ 予算警告' ELSE '' END AS alert_mark
 FROM keys k
 JOIN accounts a ON a.id = k.account_id
 LEFT JOIN departments d ON d.id = k.department_id

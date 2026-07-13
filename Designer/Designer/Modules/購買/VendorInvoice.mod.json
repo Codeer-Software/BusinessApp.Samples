@@ -122,7 +122,32 @@
         "SortConditions": [],
         "SortFieldVariable": "Code.Value",
         "SortDescending": false,
-        "ModuleName": "Account"
+        "ModuleName": "Account",
+        "Condition": {
+          "IsOrMatch": true,
+          "IsNot": false,
+          "Children": [
+            {
+              "SearchTargetVariable": "AccountType.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": "expense",
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+            },
+            {
+              "SearchTargetVariable": "AccountType.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": "asset",
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+            }
+          ],
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
       "ValueVariable": "Id.Value",
       "DisplayTextVariable": "Name.Value",

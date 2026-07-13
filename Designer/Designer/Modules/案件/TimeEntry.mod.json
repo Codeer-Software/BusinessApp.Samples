@@ -288,7 +288,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "時間（分）",
+      "Text": "時間（分・60分=1時間）",
       "Icon": "",
       "Style": "Default",
       "RelativeField": "Minutes",
