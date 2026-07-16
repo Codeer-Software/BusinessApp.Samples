@@ -174,6 +174,7 @@
     },
     {
       "Candidates": [
+        "下書き,draft",
         "発行済,issued",
         "一部入金,partial",
         "入金済,paid",
@@ -508,6 +509,24 @@
       "Name": "SubmitButton",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SubmitButtonFieldDesign"
+    },
+    {
+      "Text": "発行する",
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "Issue_OnClick",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "ShowTextInToolTip": false,
+      "Name": "IssueButton",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
       "Text": "請求書を出力（Excel）",
@@ -894,6 +913,34 @@
             "BackgroundColor": "",
             "IsRowMarginRemoved": false,
             "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "IssueButton",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 140,
+                "Padding": {
+                  "Left": null,
+                  "Top": null,
+                  "Right": 8,
+                  "Bottom": null
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              },
               {
                 "Layout": {
                   "FieldName": "PrintExcelButton",

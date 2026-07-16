@@ -61,7 +61,7 @@ FROM approval_flow_template t JOIN approval_flow_template_order o ON o.template_
 WHERE t.name = '経費_課長＋総務'
   AND NOT EXISTS (SELECT 1 FROM approval_flow_template_member m WHERE m.template_order_id = o.id);
 INSERT INTO approval_flow_template_member (template_order_id, is_required, approver_user_id, approver_role)
-SELECT o.id, 1, (SELECT id FROM app_users WHERE user_name = 'soumu_kacho1'), NULL
+SELECT o.id, 1, (SELECT id FROM app_users WHERE user_name = 'soumu_kacho1'), 'user'
 FROM approval_flow_template t JOIN approval_flow_template_order o ON o.template_id = t.id AND o.order_no = 1
 WHERE t.name = '経費_課長＋総務'
   AND NOT EXISTS (SELECT 1 FROM approval_flow_template_member m WHERE m.template_order_id = o.id);
@@ -84,7 +84,7 @@ FROM approval_flow_template t JOIN approval_flow_template_order o ON o.template_
 WHERE t.name = '経費_部長＋総務'
   AND NOT EXISTS (SELECT 1 FROM approval_flow_template_member m WHERE m.template_order_id = o.id);
 INSERT INTO approval_flow_template_member (template_order_id, is_required, approver_user_id, approver_role)
-SELECT o.id, 1, (SELECT id FROM app_users WHERE user_name = 'soumu_kacho1'), NULL
+SELECT o.id, 1, (SELECT id FROM app_users WHERE user_name = 'soumu_kacho1'), 'user'
 FROM approval_flow_template t JOIN approval_flow_template_order o ON o.template_id = t.id AND o.order_no = 1
 WHERE t.name = '経費_部長＋総務'
   AND NOT EXISTS (SELECT 1 FROM approval_flow_template_member m WHERE m.template_order_id = o.id);

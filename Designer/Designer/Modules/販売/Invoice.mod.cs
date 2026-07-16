@@ -9,13 +9,42 @@ void Detail_OnAfterInit()
 {
     if (this.IsNewData)
     {
-        Status.Value = "issued";
+        // 手作成の請求書は「下書き」始まり（U4-5・2026-07-16 ユーザー決定。見積と対称にする）。
+        // 検収・定期請求・SES からの自動生成は各スクリプトが直接 issued を書くため影響なし。
+        Status.Value = "draft";
         if (InvoiceSource.Value == null || InvoiceSource.Value == "") { InvoiceSource.Value = "manual"; }
         IssueDate.Value = DateOnly.FromDateTime(DateTime.Today);
         DueDate.Value = EndOfNextMonth();
         InvoiceNo.Value = NextInvoiceNo();
     }
     RecalcTotal();
+    UpdateIssueButton();
+}
+
+// 「発行する」は下書きのみ表示（発行済になると入金消込・売掛残高の対象になる）
+void UpdateIssueButton()
+{
+    IssueButton.IsVisible = !this.IsNewData && (Status.Value == "draft");
+}
+
+void Issue_OnClick()
+{
+    if (Status.Value != "draft") { Toaster.Error("下書きの請求書のみ発行できます"); return; }
+    var hasLine = false;
+    foreach (var row in Lines.Rows) { hasLine = true; break; }
+    if (!hasLine) { Toaster.Error("明細を入力してから発行してください"); return; }
+
+    using var loading = LoadingService.StartLoading(0);
+    Status.Value = "issued";
+    var ret = this.Submit();
+    if (ret != true)
+    {
+        Status.Value = "draft";
+        Toaster.Error("発行に失敗しました");
+        return;
+    }
+    Toaster.Success($"請求書 {InvoiceNo.Value} を発行しました（入金消込・売掛残高の対象になります）");
+    UpdateIssueButton();
 }
 
 void Lines_OnDataChanged()

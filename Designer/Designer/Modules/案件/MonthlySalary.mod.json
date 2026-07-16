@@ -83,7 +83,7 @@
     },
     {
       "DbColumn": "period_no",
-      "Placeholder": "1〜12",
+      "Placeholder": "1〜12（1=4月・4=7月・12=3月）",
       "Format": "",
       "IsSlider": false,
       "OnInput": "",

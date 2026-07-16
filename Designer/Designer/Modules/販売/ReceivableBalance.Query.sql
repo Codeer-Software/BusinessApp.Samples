@@ -28,5 +28,5 @@ SELECT
 FROM invoices i
 LEFT JOIN partners p ON p.id = i.partner_id
 LEFT JOIN rc ON rc.invoice_id = i.id
-WHERE i.status <> 'void'
+WHERE i.status <> 'void' AND i.status <> 'draft'
 ORDER BY date(i.due_date), i.invoice_no

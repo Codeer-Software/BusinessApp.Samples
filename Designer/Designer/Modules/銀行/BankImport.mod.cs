@@ -6,6 +6,16 @@
 void Detail_OnAfterInit()
 {
     ResultLabel.Text = "";
+
+    // U5-1: 前回（または他の担当者）の未登録プレビューが残っている場合は警告する
+    // （気づかず自分の取込と合流して二重登録・誤登録の温床になるため）
+    var ps = new ModuleSearcher<BankStatementLine>();
+    ps.AddEquals(e => e.Status.Value, "preview");
+    var leftovers = ps.Execute().Count;
+    if (leftovers > 0)
+    {
+        ResultLabel.Text = $"⚠ 登録されていないプレビューが {leftovers} 件残っています（前回の作業の続き、または他の担当者の作業中かもしれません）。内容を確認し、「この内容で登録」で確定するか「プレビューを取り消す」で破棄してから取込を始めてください";
+    }
 }
 
 // ============ 取込 ============

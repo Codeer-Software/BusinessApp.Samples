@@ -379,7 +379,7 @@
     {
       "Text": "請求書を作成",
       "Icon": "",
-      "Variant": "Secondary",
+      "Variant": "Primary",
       "OnClick": "CreateInvoice_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {

@@ -229,22 +229,38 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
+      "Candidates": [],
+      "SearchCondition": {
+        "LimitCount": 50,
+        "SelectFields": [],
+        "SortConditions": [],
+        "SortFieldVariable": "JournalNo.Value",
+        "SortDescending": false,
+        "ModuleName": "JournalEntry",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [],
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
+      },
+      "ValueVariable": "Id.Value",
+      "DisplayTextVariable": "JournalNo.Value",
       "DbColumn": "journal_entry_id",
-      "Placeholder": "",
-      "Format": "",
-      "IsSlider": false,
-      "OnInput": "",
+      "ListLayoutName": "",
+      "SearchLayoutName": "",
+      "OnSearchButtonClicked": "",
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "仕訳ID",
+      "DisplayName": "伝票No",
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "JournalEntryId",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LinkFieldDesign"
     },
     {
       "DbColumn": "imported_at",
@@ -517,13 +533,13 @@
           {
             "FieldName": "JournalEntryId",
             "ContextMenu": "",
-            "Label": "仕訳ID",
+            "Label": "伝票No",
             "ColumnSpan": 1,
             "RowSpan": 1,
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
-            "ClassName": "amount-cell",
+            "ClassName": "",
             "FontFamily": "",
             "Color": "",
             "BackgroundColor": "",
