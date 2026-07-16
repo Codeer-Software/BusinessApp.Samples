@@ -73,7 +73,7 @@
         }
       },
       "ValueVariable": "Id.Value",
-      "DisplayTextVariable": "InvoiceNo.Value",
+      "DisplayTextVariable": "SelectLabel.Value",
       "DbColumn": "invoice_id",
       "EmptyCandidateType": "Null",
       "AllowOrSearch": false,

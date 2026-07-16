@@ -40,6 +40,23 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
+      "DbColumn": "select_label",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "Null",
+      "ShouldTrimAfterEdit": false,
+      "IsUpdateProtected": true,
+      "IsSimpleSearchParameter": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "選択用ラベル",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "SelectLabel",
+      "IgnoreModification": true,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
@@ -49,7 +66,7 @@
         "ModuleName": "SalesOrder"
       },
       "ValueVariable": "Id.Value",
-      "DisplayTextVariable": "OrderNo.Value",
+      "DisplayTextVariable": "SelectLabel.Value",
       "DbColumn": "sales_order_id",
       "EmptyCandidateType": "Null",
       "AllowOrSearch": false,

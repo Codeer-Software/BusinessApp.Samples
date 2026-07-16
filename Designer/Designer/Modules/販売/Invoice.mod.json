@@ -141,6 +141,23 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
+      "DbColumn": "select_label",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "Null",
+      "ShouldTrimAfterEdit": false,
+      "IsUpdateProtected": true,
+      "IsSimpleSearchParameter": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "選択用ラベル",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "SelectLabel",
+      "IgnoreModification": true,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
       "DbColumn": "issue_date",
       "Format": "",
       "IsYearMonthOnly": false,
@@ -571,10 +588,26 @@
         "SortConditions": [],
         "SortFieldVariable": "Id.Value",
         "SortDescending": true,
-        "ModuleName": "Acceptance"
+        "ModuleName": "Acceptance",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [
+            {
+              "SearchTargetVariable": "Status.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": "confirmed",
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            }
+          ],
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
       "ValueVariable": "Id.Value",
-      "DisplayTextVariable": "AcceptanceNo.Value",
+      "DisplayTextVariable": "SelectLabel.Value",
       "DbColumn": "acceptance_id",
       "EmptyCandidateType": "Null",
       "AllowOrSearch": false,
@@ -1435,7 +1468,6 @@
                   "FontFamily": "",
                   "Color": "",
                   "BackgroundColor": "",
-                  "IsViewOnly": true,
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },

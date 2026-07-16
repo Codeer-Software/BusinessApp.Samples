@@ -141,6 +141,23 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
+      "DbColumn": "select_label",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "Null",
+      "ShouldTrimAfterEdit": false,
+      "IsUpdateProtected": true,
+      "IsSimpleSearchParameter": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "選択用ラベル",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "SelectLabel",
+      "IgnoreModification": true,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
       "DbColumn": "order_date",
       "Format": "",
       "IsYearMonthOnly": false,
@@ -166,7 +183,7 @@
         "ModuleName": "Quote"
       },
       "ValueVariable": "Id.Value",
-      "DisplayTextVariable": "QuoteNo.Value",
+      "DisplayTextVariable": "SelectLabel.Value",
       "DbColumn": "quote_id",
       "EmptyCandidateType": "Null",
       "AllowOrSearch": false,
