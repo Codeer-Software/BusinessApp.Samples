@@ -179,12 +179,22 @@ List<object> ResolveRoleApprovers(Department dept, string role, object applicant
     return result;
 }
 
-// 固定指定承認者の自己承認回避 (decisions/0010)。申請者本人なら経理代替、解決不能なら null
+// 固定指定承認者の自己承認回避 (decisions/0010)。申請者本人・無効ユーザー(退職者)なら経理代替、解決不能なら null
 object ResolveFixedApproverAvoidingSelf(object fixedApprover, object applicantId)
 {
     if (fixedApprover == null) return null;
-    if (!IsSameId(fixedApprover, applicantId)) return fixedApprover;
+    if (!IsSameId(fixedApprover, applicantId) && IsActiveUser(fixedApprover)) return fixedApprover;
     return FindFallbackApprover(applicantId);
+}
+
+// 有効(在職)ユーザーか (Q4: 退職者は is_active=0。承認者に選ばれると承認が永久停滞するため除外する)
+bool IsActiveUser(object userId)
+{
+    if (userId == null) return false;
+    var s = new ModuleSearcher<AppUser>();
+    s.AddEquals(u => u.Id.Value, userId);
+    s.AddEquals(u => u.IsActive.Value, true);
+    return s.Execute().Count > 0;
 }
 
 // 自己承認の代替承認者: 経理ロール (accounting) のうち申請者以外で Id 最小のユーザー
@@ -192,6 +202,7 @@ object FindFallbackApprover(object applicantId)
 {
     var s = new ModuleSearcher<AppUser>();
     s.AddEquals(u => u.Role.Value, "accounting");
+    s.AddEquals(u => u.IsActive.Value, true);
     s.OrderBy(u => u.Id.Value);
     var users = s.Execute();
     foreach (var u in users)
@@ -219,7 +230,7 @@ Department FindUserDepartment(object userId)
 }
 
 // 部門の役職 (manager=課長 / director=部長) の全員を department_managers から解決（ADR-0016）
-// 重複登録は除去し、物理削除されたユーザーの残骸行（孤児 user_id）は実在チェックで除外する
+// 重複登録は除去し、物理削除されたユーザーの残骸行（孤児 user_id）と無効ユーザー(退職者・Q4)は除外する
 List<object> ResolveDeptRoleAll(Department dept, string role)
 {
     var result = new List<object>();
@@ -234,9 +245,7 @@ List<object> ResolveDeptRoleAll(Department dept, string role)
         var userId = row.UserId.Value;
         if (userId == null) continue;
         if (ContainsId(result, userId)) continue;
-        var us = new ModuleSearcher<AppUser>();
-        us.AddEquals(u => u.Id.Value, userId);
-        if (us.Execute().Count == 0) continue;
+        if (!IsActiveUser(userId)) continue;
         result.Add(userId);
     }
     return result;
