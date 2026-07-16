@@ -82,7 +82,7 @@
           "SearchLayoutName": "",
           "UserUrlParameter": true,
           "PageTitle": "申請",
-          "HeaderTitle": "経費を申請できます。金額と費目から承認ルートが自動で決まり、承認後に経理が仕訳・精算します。レシート画像の AI 読み取りも使えます。",
+          "HeaderTitle": "経費を申請できます。金額と費目から承認ルートが自動で決まり、承認後に経理が仕訳・精算します。レシート画像の AI 読み取りも使えます。精算は 下書き→申請中→承認済→経理処理中→精算済→完了 の順に進みます。削除できるのは自分が起案した下書きのみ（詳細画面から）。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
@@ -107,7 +107,7 @@
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
-            "CanDelete": true,
+            "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
             "OnDataChanged": "",
@@ -143,7 +143,7 @@
           "SearchLayoutName": "",
           "UserUrlParameter": true,
           "PageTitle": "申請中",
-          "HeaderTitle": "自分が申請した経費の進行状況（いま誰の承認待ちか）を確認できます。",
+          "HeaderTitle": "自分が申請した経費の進行状況（いま誰の承認待ちか）を確認できます。キャンセルした申請はこの一覧から消えます（申請一覧に下書きとして残ります）。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
@@ -249,6 +249,102 @@
           "UrlParameter": ""
         },
         "Title": "承認待ち",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false
+      },
+      {
+        "ModulePageType": "List",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "ExpenseSettlementQueue",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "精算処理待ち",
+          "HeaderTitle": "経理の処理を待っている申請の一覧です（承認済=仕訳生成待ち／経理処理中=精算待ち／精算済=完了待ち）。「開く」で申請を開いて処理します。",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": false,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": false,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 100,
+              "SelectFields": [],
+              "SortConditions": [],
+              "SortFieldVariable": "Id.Value",
+              "SortDescending": false,
+              "ModuleName": "ExpenseSettlementQueue",
+              "Condition": {
+                "IsOrMatch": true,
+                "IsNot": false,
+                "Children": [
+                  {
+                    "SearchTargetVariable": "SettlementStatus.Value",
+                    "Comparison": "Equal",
+                    "Value": {
+                      "Value": "approved",
+                      "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+                    },
+                    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+                  },
+                  {
+                    "SearchTargetVariable": "SettlementStatus.Value",
+                    "Comparison": "Equal",
+                    "Value": {
+                      "Value": "accounting",
+                      "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+                    },
+                    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+                  },
+                  {
+                    "SearchTargetVariable": "SettlementStatus.Value",
+                    "Comparison": "Equal",
+                    "Value": {
+                      "Value": "settled",
+                      "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+                    },
+                    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+                  }
+                ],
+                "Name": "",
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+              }
+            },
+            "PagerPosition": "Bottom",
+            "UseIndexSort": false,
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": false,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        },
+        "Title": "精算処理待ち",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false
@@ -494,7 +590,7 @@
       "SearchLayoutName": "",
       "UserUrlParameter": true,
       "PageTitle": "",
-      "HeaderTitle": "",
+      "HeaderTitle": "経費を申請できます。金額と費目から承認ルートが自動で決まり、承認後に経理が仕訳・精算します。レシート画像の AI 読み取りも使えます。精算は 下書き→申請中→承認済→経理処理中→精算済→完了 の順に進みます。削除できるのは自分が起案した下書きのみ（詳細画面から）。",
       "CanBulkDataUpdate": false,
       "CanBulkDataDownload": true,
       "UseSubmitButton": false,
@@ -519,7 +615,7 @@
         "DeleteTogether": false,
         "CanCreate": false,
         "CanUpdate": false,
-        "CanDelete": true,
+        "CanDelete": false,
         "CanUserSort": true,
         "CanSelect": false,
         "OnDataChanged": "",

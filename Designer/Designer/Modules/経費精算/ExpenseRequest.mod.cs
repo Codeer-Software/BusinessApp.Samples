@@ -104,6 +104,11 @@ bool ValidateForApply()
             return false;
         }
     }
+    // 領収書の未添付警告（U2-6: 申請はブロックしない。添付できない実務ケースを許容）
+    if (Receipt.FileName == null || Receipt.FileName == "")
+    {
+        Toaster.Warn("領収書が添付されていません。後から添付するか、紙の原本を保管してください");
+    }
     return true;
 }
 
@@ -147,6 +152,12 @@ void OnApprovalFlowStatusChanged(string flowStatus)
     if (flowStatus == "Pending")
     {
         SettlementStatus.Value = "applying";
+        // 部門スナップショット: 申請時の申請者所属部門を記録（U2-8: 部門検索用。
+        // 人事異動後も申請時点の部門で検索できる。再申請時は初回の値を保持）
+        if (DepartmentRef.Value == null)
+        {
+            DepartmentRef.Value = CurrentUser.所属部門.Value;
+        }
     }
     else if (flowStatus == "Approved")
     {
@@ -182,6 +193,29 @@ void UpdateAccountingButtons()
     GenerateJournalButton.IsVisible = isAccounting && !IsNewData && (st == "approved") && !needsActual;
     SettleButton.IsVisible = isAccounting && !IsNewData && (st == "accounting");
     CompleteButton.IsVisible = isAccounting && !IsNewData && (st == "settled");
+
+    // 削除は「起案者本人 かつ 精算=下書き」のみ（2026-07-16 ユーザー決定。
+    // 申請後・承認後の削除は意思決定履歴の抹消になるため不可。一覧の削除ボタンは全面撤去済み）
+    DeleteDraftButton.IsVisible = !IsNewData && (st == "draft") && IsSameId(Creator.Value, CurrentUser.Id.Value);
+}
+
+// 下書きの削除（本人・下書きのみ。確認ダイアログ付き）
+void DeleteDraft_OnClick()
+{
+    if (SettlementStatus.Value != "draft") { Toaster.Error("下書きの申請のみ削除できます"); return; }
+    if (!IsSameId(Creator.Value, CurrentUser.Id.Value)) { Toaster.Error("自分が起案した申請のみ削除できます"); return; }
+    var result = MessageBox.Show($"下書き「{Title.Value}」を削除しますか？（元に戻せません）", "削除する", "キャンセル");
+    if (result != "削除する") return;
+
+    using var loading = LoadingService.StartLoading(0);
+
+    // 既知の限界: 承認フロー（子）の行はスクリプトから物理削除できず孤児として残る
+    // （ModuleSearcher 検索行/ChildModule への Delete はいずれも CLB で無効を実測 2026-07-16。
+    //   従来のリスト削除ボタンでも同じ挙動だった）。実害は「申請中ビューに出続けること」
+    // だったため、MyApplication をキャンセル除外に変更して対処。孤児の物理掃除は sql CLI で可能。
+    this.Delete();
+    Toaster.Success("下書きを削除しました");
+    NavigationService.NavigateTo("/Expense/ExpenseRequest");
 }
 
 // 事前申請の実費確定: 見込みとの乖離が大きければ再承認、問題なければそのまま経理処理へ

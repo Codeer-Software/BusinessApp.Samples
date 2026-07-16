@@ -250,6 +250,15 @@
           "Comparison": "Equal",
           "Variable": "CurrentUser.Id.Value",
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldVariableMatchCondition"
+        },
+        {
+          "SearchTargetVariable": "Status.Value",
+          "Comparison": "NotEqual",
+          "Value": {
+            "Value": "Cancelled",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
         }
       ],
       "Name": "",
