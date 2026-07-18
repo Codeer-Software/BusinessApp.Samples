@@ -134,7 +134,7 @@
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": true,
       "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
+      "OnSearchDataChanged": "Account_OnSearchDataChanged",
       "DisplayName": "勘定科目",
       "IsRequired": false,
       "OnDataChanged": "",
@@ -195,6 +195,12 @@
                 "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
               },
               "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            },
+            {
+              "SearchTargetVariable": "AccountId.Value",
+              "Comparison": "Equal",
+              "Variable": "Account.Value",
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldVariableMatchCondition"
             }
           ],
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
@@ -789,7 +795,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 340,
+                "Width": 170,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -842,7 +848,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 340,
+                "Width": 170,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {

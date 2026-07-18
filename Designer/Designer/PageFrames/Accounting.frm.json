@@ -462,7 +462,7 @@
           "SearchLayoutName": "",
           "UserUrlParameter": true,
           "PageTitle": "総勘定元帳",
-          "HeaderTitle": "総勘定元帳です。科目ごとの明細と残高を確認できます。補助科目・部門・案件で絞り込むと補助元帳としても使えます。",
+          "HeaderTitle": "総勘定元帳です。科目ごとの明細と残高を確認できます。補助科目・部門・案件で絞り込むと補助元帳としても使えます（仕訳明細にその情報が記録されている行だけが対象です。0件のときは該当の記録を持つ明細がありません。絞り込み時の残高は期首を含まない期中累計です）。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,

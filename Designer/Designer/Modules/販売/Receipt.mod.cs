@@ -202,6 +202,7 @@ void Confirm_OnClick()
 
     int amount = Amount.Value;
     var invoiceNo = iv.InvoiceNo.Value;
+    var projId = iv.ProjectRef.Value;  // 請求書の案件を消込仕訳の全行に引き継ぐ（案件別元帳・案件損益のトレーサビリティ）
 
     // 消込仕訳: D 普通預金(入金額) [+ D 支払手数料(差額本体) + D 仮払消費税(差額税)] / C 売掛金(請求残額)
     var lineCount = 2;
@@ -225,6 +226,7 @@ void Confirm_OnClick()
         l.LineNo.Value = idx;
         l.Description.Value = $"入金 {invoiceNo}";
         l.TaxInputMode.Value = "none";
+        if (projId != null) { l.ProjectRef.Value = projId; }
         if (idx == 1)
         {
             l.Dc.Value = "D";
