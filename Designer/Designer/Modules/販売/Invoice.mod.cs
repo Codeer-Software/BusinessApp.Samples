@@ -123,7 +123,7 @@ void DeleteInvoice_OnClick()
     using var loading = LoadingService.StartLoading(0);
     this.Delete();
     Toaster.Success("請求書を削除しました");
-    NavigationService.NavigateTo("/Sales/Invoice");
+    NavigationService.NavigateTo(NavigationService.GetModuleUrl("Invoice"));
 }
 
 void Lines_OnDataChanged()

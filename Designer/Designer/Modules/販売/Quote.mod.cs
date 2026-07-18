@@ -305,7 +305,7 @@ void DeleteQuote_OnClick()
     using var loading = LoadingService.StartLoading(0);
     this.Delete();
     Toaster.Success("見積を削除しました");
-    NavigationService.NavigateTo("/Sales/Quote");
+    NavigationService.NavigateTo(NavigationService.GetModuleUrl("Quote"));
 }
 
 // 受注にする: SalesOrder を新規作成して明細をコピーし、見積を accepted に更新する

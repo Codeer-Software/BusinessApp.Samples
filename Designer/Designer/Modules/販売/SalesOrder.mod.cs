@@ -73,7 +73,7 @@ void DeleteOrder_OnClick()
     using var loading = LoadingService.StartLoading(0);
     this.Delete();
     Toaster.Success("受注を削除しました");
-    NavigationService.NavigateTo("/Sales/SalesOrder");
+    NavigationService.NavigateTo(NavigationService.GetModuleUrl("SalesOrder"));
 }
 
 void Lines_OnDataChanged()

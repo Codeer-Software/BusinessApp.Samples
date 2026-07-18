@@ -148,7 +148,7 @@ void DeleteAcceptance_OnClick()
     using var loading = LoadingService.StartLoading(0);
     this.Delete();
     Toaster.Success("検収を削除しました");
-    NavigationService.NavigateTo("/Sales/Acceptance");
+    NavigationService.NavigateTo(NavigationService.GetModuleUrl("Acceptance"));
 }
 
 // 受注選択: 受注明細の税抜合計を検収額に、SALES_10 税率で消費税を自動セット (手修正可)

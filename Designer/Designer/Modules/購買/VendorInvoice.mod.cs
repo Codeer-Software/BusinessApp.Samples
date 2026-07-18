@@ -226,7 +226,7 @@ void DeleteVendorInvoice_OnClick()
     using var loading = LoadingService.StartLoading(0);
     this.Delete();
     Toaster.Success("仕入先請求書を削除しました");
-    NavigationService.NavigateTo("/Purchasing/VendorInvoice");
+    NavigationService.NavigateTo(NavigationService.GetModuleUrl("VendorInvoice"));
 }
 
 // ============ 未払計上（D 費用+税 / C 買掛金） ============

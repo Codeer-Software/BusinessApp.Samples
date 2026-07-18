@@ -140,7 +140,7 @@ void DeleteReceipt_OnClick()
     using var loading = LoadingService.StartLoading(0);
     this.Delete();
     Toaster.Success("入金記録を削除しました");
-    NavigationService.NavigateTo("/Sales/Receipt");
+    NavigationService.NavigateTo(NavigationService.GetModuleUrl("Receipt"));
 }
 
 // 請求書選択: 請求税込額 − 既存入金合計 (自分以外) を入金額に自動セット (手修正可)

@@ -215,7 +215,7 @@ void DeleteDraft_OnClick()
     // だったため、MyApplication をキャンセル除外に変更して対処。孤児の物理掃除は sql CLI で可能。
     this.Delete();
     Toaster.Success("下書きを削除しました");
-    NavigationService.NavigateTo("/Expense/ExpenseRequest");
+    NavigationService.NavigateTo(NavigationService.GetModuleUrl("ExpenseRequest"));
 }
 
 // 事前申請の実費確定: 見込みとの乖離が大きければ再承認、問題なければそのまま経理処理へ

@@ -522,5 +522,5 @@ void DeleteDraft_OnClick()
     using var loading = LoadingService.StartLoading(0);
     this.Delete();
     Toaster.Success("下書き伝票を削除しました");
-    NavigationService.NavigateTo("/Accounting/JournalEntry");
+    NavigationService.NavigateTo(NavigationService.GetModuleUrl("JournalEntry"));
 }
