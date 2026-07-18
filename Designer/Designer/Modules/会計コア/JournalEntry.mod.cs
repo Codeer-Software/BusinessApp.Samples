@@ -22,6 +22,8 @@ void Detail_OnAfterInit()
         SaveDraftButton.IsVisible = false;
         PostButton.IsVisible = false;
     }
+    // 削除は「保存済みの下書き」だけ（確定済み伝票は削除不可＝赤黒訂正で消し込む。ADR-0026）
+    DeleteDraftButton.IsVisible = !this.IsNewData && (Status.Value == "draft");
     if (!this.IsNewData && Status.Value == "draft" && SourceType.Value != "import")
     {
         // 旧仕様の下書き（税抜変換済み・税行あり）を入力状態へ戻す。
@@ -508,4 +510,17 @@ int NextJournalNo()
     var typedLast = (JournalEntry)last;
     if (typedLast.JournalNo.Value == null) { return 1; }
     return (int)typedLast.JournalNo.Value + 1;
+}
+
+// 下書き伝票の削除（確定済みは削除不可＝赤黒訂正で対応。ADR-0026）
+void DeleteDraft_OnClick()
+{
+    if (this.IsNewData) { Toaster.Error("保存されていない伝票です"); return; }
+    if (Status.Value != "draft") { Toaster.Error("下書きの伝票のみ削除できます（確定済みは赤黒訂正で対応してください）"); return; }
+    var result = MessageBox.Show("この下書き伝票を削除しますか？（元に戻せません）", "削除する", "キャンセル");
+    if (result != "削除する") return;
+    using var loading = LoadingService.StartLoading(0);
+    this.Delete();
+    Toaster.Success("下書き伝票を削除しました");
+    NavigationService.NavigateTo("/Accounting/JournalEntry");
 }

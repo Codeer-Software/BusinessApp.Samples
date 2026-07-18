@@ -22,11 +22,133 @@ void UpdateButtons()
     {
         this.IsViewOnly = true;
     }
-    // 確定（売上計上）と請求書作成は経理の業務。営業には最初からボタンを見せない
+    else
+    {
+        this.IsViewOnly = false;
+    }
+    // 確定（売上計上）・請求書作成・確定取消は経理の業務。営業には最初からボタンを見せない
     // （役割分担: 営業=検収事実の記録（下書き）、経理=会計処理の確定）
     var isAccountingRole = (CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin");
     ConfirmButton.IsVisible = isAccountingRole && !this.IsNewData && (st == "draft");
-    CreateInvoiceButton.IsVisible = isAccountingRole && !this.IsNewData && (st == "confirmed");
+
+    // 確定後は編集できないので保存ボタンは出さない（押せないボタンを見せない・ADR-0027）
+    SubmitButton.IsVisible = !(st == "confirmed" && !this.IsNewData);
+
+    // 請求書作成済みならボタンの代わりに案内ラベルを出す（押しても必ずエラーになるボタンを見せない）
+    var invoiceNo = FindExistingInvoiceNo();
+    CreateInvoiceButton.IsVisible = isAccountingRole && !this.IsNewData && (st == "confirmed") && (invoiceNo == null);
+    InvoiceDoneLabel.IsVisible = (invoiceNo != null);
+    if (invoiceNo != null)
+    {
+        InvoiceDoneLabel.Text = $"請求書 {invoiceNo} 作成済み（販売管理＞請求書から確認できます）";
+    }
+
+    CancelConfirmButton.IsVisible = isAccountingRole && !this.IsNewData && (st == "confirmed");
+    DeleteAcceptanceButton.IsVisible = !this.IsNewData && (st == "draft");
+}
+
+// 仕訳を明細→親の順に物理削除する。子持ちモジュールの検索インスタンス Delete() は
+// 親単独では静かに失敗する（実測）ため、行ごとに削除し全戻り値を検証する
+bool DeleteJournalEntryWithLines(JournalEntry je)
+{
+    var ls = new ModuleSearcher<JournalLine>();
+    ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
+    var lines = ls.Execute();
+    foreach (var row in lines)
+    {
+        var l = (JournalLine)row;
+        var okLine = l.Delete();
+        if (okLine != true) { return false; }
+    }
+    var ok = je.Delete();
+    if (ok != true) { return false; }
+    return true;
+}
+
+// この検収から作成済みの請求書番号（無ければ null）
+string FindExistingInvoiceNo()
+{
+    if (this.IsNewData) return null;
+    var s = new ModuleSearcher<Invoice>();
+    s.AddEquals(e => e.AcceptanceRef.Value, this.Id.Value);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return ((Invoice)found).InvoiceNo.Value;
+}
+
+// 確定の取り消し (confirmed → draft): 売上仕訳を削除して下書きに戻す（経理ロール専用）
+// 請求書が既にある場合・仕訳の期間が締め済みの場合は不可（先にそちらを解消する）
+void CancelConfirm_OnClick()
+{
+    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
+    {
+        Toaster.Error("確定の取り消しは経理ロールのみ実行できます");
+        return;
+    }
+    if (Status.Value != "confirmed") { Toaster.Error("確定済みの検収のみ取り消せます"); return; }
+    var invoiceNo = FindExistingInvoiceNo();
+    if (invoiceNo != null)
+    {
+        Toaster.Error($"請求書 {invoiceNo} が作成済みのため取り消せません（先に請求書側を削除してください）");
+        return;
+    }
+
+    var js = new ModuleSearcher<JournalEntry>();
+    js.AddEquals(e => e.SourceType.Value, "acceptance");
+    js.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    var found = js.ExecuteFirstOrDefault();
+    if (found != null)
+    {
+        var je = (JournalEntry)found;
+        // 仕訳日の期間が締め済みなら削除しない（帳簿の整合性優先。決算修正仕訳へ誘導）
+        var d = je.EntryDate.Value;
+        if (d != null)
+        {
+            var monthFirst = new DateOnly(d.Year, d.Month, 1);
+            var ps = new ModuleSearcher<FiscalPeriod>();
+            ps.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
+            ps.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);
+            var period = ps.ExecuteFirstOrDefault();
+            if (period != null && ((FiscalPeriod)period).Status.Value == "closed")
+            {
+                Toaster.Error("売上仕訳の期間が締め済みのため取り消せません（決算修正仕訳（赤伝）で対応してください）");
+                return;
+            }
+        }
+        var jeNo = je.JournalNo.Value;
+        var result = MessageBox.Show($"売上仕訳 No.{jeNo} を削除して検収を下書きに戻します。よろしいですか？", "取り消す", "キャンセル");
+        if (result != "取り消す") return;
+        using var loading = LoadingService.StartLoading(0);
+        if (!DeleteJournalEntryWithLines(je))
+        {
+            Toaster.Error("売上仕訳の削除に失敗しました（検収は確定済みのままです）");
+            return;
+        }
+    }
+    else
+    {
+        var result = MessageBox.Show("検収を下書きに戻します。よろしいですか？（対応する売上仕訳は見つかりませんでした）", "取り消す", "キャンセル");
+        if (result != "取り消す") return;
+    }
+
+    this.IsViewOnly = false;
+    Status.Value = "draft";
+    var ret = this.Submit();
+    if (ret != true) { Toaster.Error("検収ステータスの更新に失敗しました"); return; }
+    UpdateButtons();
+    Toaster.Success("検収の確定を取り消し、下書きに戻しました");
+}
+
+// 下書き検収の削除（確認ダイアログ付き）
+void DeleteAcceptance_OnClick()
+{
+    if (Status.Value != "draft") { Toaster.Error("下書きの検収のみ削除できます"); return; }
+    var result = MessageBox.Show($"検収「{AcceptanceNo.Value}」を削除しますか？（元に戻せません）", "削除する", "キャンセル");
+    if (result != "削除する") return;
+    using var loading = LoadingService.StartLoading(0);
+    this.Delete();
+    Toaster.Success("検収を削除しました");
+    NavigationService.NavigateTo("/Sales/Acceptance");
 }
 
 // 受注選択: 受注明細の税抜合計を検収額に、SALES_10 税率で消費税を自動セット (手修正可)

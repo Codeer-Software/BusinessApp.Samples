@@ -1,6 +1,9 @@
 // Quote.mod.cs — 見積
 // 責務: 見積番号の自動採番 (Q-{yy}-{seq}) / 明細の行番号・金額(数量×単価)・合計の再計算 /
-//        「受注にする」= SalesOrder を生成して明細コピー (docs/08 B4-1)
+//        「受注にする」= SalesOrder を生成して明細コピー (docs/08 B4-1) /
+//        状態遷移はボタン一元化 (ADR-0026): draft →(送付済にする)→ sent →(受注にする)→ accepted
+//        draft/sent →(失注にする)→ rejected ／ sent/rejected/accepted →(下書きに戻す)→ draft
+//        （accepted からは受注が存在しない場合のみ戻せる）。削除は draft のみ・詳細画面から
 
 bool inLinesHandler = false;
 
@@ -13,6 +16,33 @@ void Detail_OnAfterInit()
         QuoteNo.Value = NextQuoteNo();
     }
     RecalcTotal();
+    UpdateButtons();
+}
+
+// 状態に応じたボタン出し分け (ADR-0026/0027)。青=前進・赤=巻き戻し/削除
+void UpdateButtons()
+{
+    var st = Status.Value;
+    if (this.IsNewData)
+    {
+        MarkSentButton.IsVisible = false;
+        ConvertToOrderButton.IsVisible = false;
+        MarkRejectedButton.IsVisible = false;
+        RevertToDraftButton.IsVisible = false;
+        DeleteQuoteButton.IsVisible = false;
+        return;
+    }
+    MarkSentButton.IsVisible = (st == "draft");
+    ConvertToOrderButton.IsVisible = (st == "draft" || st == "sent");
+    MarkRejectedButton.IsVisible = (st == "draft" || st == "sent");
+    RevertToDraftButton.IsVisible = (st == "sent" || st == "rejected" || st == "accepted");
+    DeleteQuoteButton.IsVisible = (st == "draft");
+    if (st == "accepted")
+    {
+        // 受注済みの見積は編集させない（明細は受注へコピー済み。修正は受注側で行う）
+        this.IsViewOnly = true;
+        SubmitButton.IsVisible = false;
+    }
 }
 
 void Lines_OnDataChanged()
@@ -218,12 +248,77 @@ decimal GetSalesTaxRatePercent()
     return ((TaxRate)foundRate).RatePercent.Value ?? 0;
 }
 
+// 送付済にする: draft → sent
+void MarkSent_OnClick()
+{
+    if (this.IsNewData) { Toaster.Error("先に見積を保存してください"); return; }
+    if (Status.Value != "draft") { Toaster.Error("下書きの見積のみ送付済にできます"); return; }
+    Status.Value = "sent";
+    var ret = this.Submit();
+    if (ret == false) { Toaster.Error("状態の更新に失敗しました"); return; }
+    UpdateButtons();
+    Toaster.Success("見積を送付済にしました");
+}
+
+// 失注にする: draft/sent → rejected
+void MarkRejected_OnClick()
+{
+    if (this.IsNewData) { Toaster.Error("先に見積を保存してください"); return; }
+    if (Status.Value != "draft" && Status.Value != "sent") { Toaster.Error("下書きまたは送付済の見積のみ失注にできます"); return; }
+    Status.Value = "rejected";
+    var ret = this.Submit();
+    if (ret == false) { Toaster.Error("状態の更新に失敗しました"); return; }
+    UpdateButtons();
+    Toaster.Success("見積を失注にしました（「下書きに戻す」で復活できます）");
+}
+
+// 下書きに戻す: sent/rejected → draft。accepted は受注が存在しない場合のみ（誤操作の巻き戻し）
+void RevertToDraft_OnClick()
+{
+    if (Status.Value == "accepted")
+    {
+        var check = new ModuleSearcher<SalesOrder>();
+        check.AddEquals(e => e.QuoteRef.Value, this.Id.Value);
+        var found = check.ExecuteFirstOrDefault();
+        if (found != null)
+        {
+            var orderNo = ((SalesOrder)found).OrderNo.Value;
+            Toaster.Error($"受注 {orderNo} が存在するため下書きに戻せません（先に受注側を削除してください）");
+            return;
+        }
+    }
+    Status.Value = "draft";
+    this.IsViewOnly = false;
+    SubmitButton.IsVisible = true;
+    var ret = this.Submit();
+    if (ret == false) { Toaster.Error("状態の更新に失敗しました"); return; }
+    UpdateButtons();
+    Toaster.Success("見積を下書きに戻しました");
+}
+
+// 見積の削除: 下書きのみ（確認ダイアログ付き）
+void DeleteQuote_OnClick()
+{
+    if (Status.Value != "draft") { Toaster.Error("下書きの見積のみ削除できます"); return; }
+    var result = MessageBox.Show($"見積「{QuoteNo.Value} {Title.Value}」を削除しますか？（元に戻せません）", "削除する", "キャンセル");
+    if (result != "削除する") return;
+    using var loading = LoadingService.StartLoading(0);
+    this.Delete();
+    Toaster.Success("見積を削除しました");
+    NavigationService.NavigateTo("/Sales/Quote");
+}
+
 // 受注にする: SalesOrder を新規作成して明細をコピーし、見積を accepted に更新する
 void ConvertToOrder_OnClick()
 {
     if (this.IsNewData)
     {
         Toaster.Error("先に見積を保存してください");
+        return;
+    }
+    if (Status.Value == "rejected")
+    {
+        Toaster.Error("失注した見積からは受注を作成できません（「下書きに戻す」で復活してから操作してください）");
         return;
     }
 

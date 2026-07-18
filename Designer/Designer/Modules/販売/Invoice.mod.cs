@@ -18,13 +18,17 @@ void Detail_OnAfterInit()
         InvoiceNo.Value = NextInvoiceNo();
     }
     RecalcTotal();
-    UpdateIssueButton();
+    UpdateButtons();
 }
 
-// 「発行する」は下書きのみ表示（発行済になると入金消込・売掛残高の対象になる）
-void UpdateIssueButton()
+// 状態遷移はボタン経由に一本化（ADR-0026）。状態セレクトは表示専用。
+// draft: 発行する・削除 ／ issued: 下書きに戻す ／ partial・paid・void: 遷移ボタンなし（入金側で自動遷移）
+void UpdateButtons()
 {
-    IssueButton.IsVisible = !this.IsNewData && (Status.Value == "draft");
+    var st = Status.Value;
+    IssueButton.IsVisible = !this.IsNewData && (st == "draft");
+    DeleteInvoiceButton.IsVisible = !this.IsNewData && (st == "draft");
+    RevertToDraftButton.IsVisible = !this.IsNewData && (st == "issued");
 }
 
 void Issue_OnClick()
@@ -44,7 +48,82 @@ void Issue_OnClick()
         return;
     }
     Toaster.Success($"請求書 {InvoiceNo.Value} を発行しました（入金消込・売掛残高の対象になります）");
-    UpdateIssueButton();
+    UpdateButtons();
+}
+
+// この請求書に入金記録があるか（誤発行の巻き戻し・削除のガード）
+bool HasReceipts()
+{
+    var rs = new ModuleSearcher<Receipt>();
+    rs.AddEquals(e => e.InvoiceRef.Value, this.Id.Value);
+    return rs.Execute().Count > 0;
+}
+
+// 定期請求・SES など「生成と同時に売上仕訳が起票される」請求書か
+// （journal_entries.source_id に請求書 id が入る source_type 群）
+bool HasGenerationJournal()
+{
+    var js = new ModuleSearcher<JournalEntry>();
+    js.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    var rows = js.Execute();
+    foreach (var row in rows)
+    {
+        var je = (JournalEntry)row;
+        var st = je.SourceType.Value;
+        if (st == "ses" || st == "recurring" || st == "recurring_annual" || st == "recurring_defer")
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// 発行の巻き戻し（issued→draft）。入金・売上仕訳が絡む場合は不可
+void RevertToDraft_OnClick()
+{
+    if (Status.Value == "partial" || Status.Value == "paid")
+    {
+        Toaster.Error("入金記録があるため下書きに戻せません（先に入金の取消を行ってください）");
+        return;
+    }
+    if (Status.Value != "issued") { Toaster.Error("発行済の請求書のみ下書きに戻せます"); return; }
+    if (HasReceipts())
+    {
+        Toaster.Error("入金記録があるため下書きに戻せません（先に入金の取消を行ってください）");
+        return;
+    }
+    if (HasGenerationJournal())
+    {
+        Toaster.Error("この請求書は発行時に売上仕訳が起票されています（定期請求/SES）。修正は赤黒訂正で行ってください");
+        return;
+    }
+
+    using var loading = LoadingService.StartLoading(0);
+    Status.Value = "draft";
+    var ret = this.Submit();
+    if (ret != true)
+    {
+        Status.Value = "issued";
+        Toaster.Error("下書きへの変更に失敗しました");
+        return;
+    }
+    Toaster.Success("請求書を下書きに戻しました");
+    UpdateButtons();
+}
+
+// 下書きの削除（ADR-0026: 削除は詳細画面の条件付きボタンのみ・一覧の削除ボタンは撤去）
+void DeleteInvoice_OnClick()
+{
+    if (Status.Value != "draft") { Toaster.Error("下書きの請求書のみ削除できます"); return; }
+    if (HasReceipts()) { Toaster.Error("入金記録があるため削除できません"); return; }
+    if (HasGenerationJournal()) { Toaster.Error("売上仕訳が起票されているため削除できません"); return; }
+    var result = MessageBox.Show($"請求書「{InvoiceNo.Value}」を削除しますか？（元に戻せません）", "削除する", "キャンセル");
+    if (result != "削除する") return;
+
+    using var loading = LoadingService.StartLoading(0);
+    this.Delete();
+    Toaster.Success("請求書を削除しました");
+    NavigationService.NavigateTo("/Sales/Invoice");
 }
 
 void Lines_OnDataChanged()

@@ -12,17 +12,135 @@ void Detail_OnAfterInit()
         ReceiptDate.Value = DateOnly.FromDateTime(DateTime.Today);
         Method.Value = "bank";
         ConfirmButton.IsVisible = true;
+        CancelReceiptButton.IsVisible = false;
+        DeleteReceiptButton.IsVisible = false;
         return;
     }
-    // 確定済み (消込仕訳が存在) なら閲覧専用
+    UpdateButtons();
+}
+
+// 確定済み (消込仕訳が存在) なら閲覧専用＋取消ボタン、未確定なら確定＋削除ボタン
+void UpdateButtons()
+{
+    var confirmed = (FindReceiptJournal() != null);
+    this.IsViewOnly = confirmed;
+    ConfirmButton.IsVisible = !confirmed;
+    CancelReceiptButton.IsVisible = confirmed && (CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin");
+    DeleteReceiptButton.IsVisible = !confirmed;
+    SubmitButton.IsVisible = !confirmed;
+}
+
+// 仕訳を明細→親の順に物理削除する。子持ちモジュールの検索インスタンス Delete() は
+// 親単独では静かに失敗する（実測）ため、行ごとに削除し全戻り値を検証する
+bool DeleteJournalEntryWithLines(JournalEntry je)
+{
+    var ls = new ModuleSearcher<JournalLine>();
+    ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
+    var lines = ls.Execute();
+    foreach (var row in lines)
+    {
+        var l = (JournalLine)row;
+        var okLine = l.Delete();
+        if (okLine != true) { return false; }
+    }
+    var ok = je.Delete();
+    if (ok != true) { return false; }
+    return true;
+}
+
+// この入金の消込仕訳（無ければ null）
+JournalEntry FindReceiptJournal()
+{
+    if (this.IsNewData) return null;
     var js = new ModuleSearcher<JournalEntry>();
     js.AddEquals(e => e.SourceType.Value, "receipt");
     js.AddEquals(e => e.SourceId.Value, this.Id.Value);
-    if (js.Execute().Count > 0)
+    var found = js.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return (JournalEntry)found;
+}
+
+// 入金の取り消し: 消込仕訳を削除し、請求書ステータスを再計算する（経理ロール専用）
+void CancelReceipt_OnClick()
+{
+    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
     {
-        this.IsViewOnly = true;
-        ConfirmButton.IsVisible = false;
+        Toaster.Error("入金の取り消しは経理ロールのみ実行できます");
+        return;
     }
+    var je = FindReceiptJournal();
+    if (je == null) { Toaster.Error("この入金の消込仕訳が見つかりません"); return; }
+
+    // 仕訳日の期間が締め済みなら削除しない
+    var d = je.EntryDate.Value;
+    if (d != null)
+    {
+        var monthFirst = new DateOnly(d.Year, d.Month, 1);
+        var ps = new ModuleSearcher<FiscalPeriod>();
+        ps.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
+        ps.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);
+        var period = ps.ExecuteFirstOrDefault();
+        if (period != null && ((FiscalPeriod)period).Status.Value == "closed")
+        {
+            Toaster.Error("消込仕訳の期間が締め済みのため取り消せません（決算修正仕訳（赤伝）で対応してください）");
+            return;
+        }
+    }
+
+    var jeNo = je.JournalNo.Value;
+    var result = MessageBox.Show($"消込仕訳 No.{jeNo} を削除して入金を未確定に戻します。よろしいですか？", "取り消す", "キャンセル");
+    if (result != "取り消す") return;
+
+    using var loading = LoadingService.StartLoading(0);
+    if (!DeleteJournalEntryWithLines(je))
+    {
+        Toaster.Error("消込仕訳の削除に失敗しました（入金は確定済みのままです）");
+        return;
+    }
+
+    // 請求書ステータスの再計算: 消込仕訳が残っている入金の合計で判定
+    if (InvoiceRef.Value != null)
+    {
+        var iv = FindInvoice(InvoiceRef.Value);
+        if (iv != null)
+        {
+            int gross = (iv.Amount.Value ?? 0) + (iv.TaxAmount.Value ?? 0);
+            var rs = new ModuleSearcher<Receipt>();
+            rs.AddEquals(e => e.InvoiceRef.Value, InvoiceRef.Value);
+            var rows = rs.Execute();
+            var confirmedTotal = 0;
+            foreach (var row in rows)
+            {
+                var r = (Receipt)row;
+                var js2 = new ModuleSearcher<JournalEntry>();
+                js2.AddEquals(e => e.SourceType.Value, "receipt");
+                js2.AddEquals(e => e.SourceId.Value, r.Id.Value);
+                if (js2.Execute().Count == 0) continue;
+                if (r.Amount.Value != null) { confirmedTotal = confirmedTotal + r.Amount.Value; }
+            }
+            var newStatus = "issued";
+            if (confirmedTotal >= gross && gross > 0) { newStatus = "paid"; }
+            else if (confirmedTotal > 0) { newStatus = "partial"; }
+            iv.Status.Value = newStatus;
+            var retInv = iv.Submit();
+            if (retInv != true) { Toaster.Error("請求書ステータスの更新に失敗しました（仕訳は削除済みです）"); }
+        }
+    }
+
+    UpdateButtons();
+    Toaster.Success($"仕訳 No.{jeNo} を削除し、入金を未確定に戻しました（金額修正のうえ再確定するか、不要なら削除してください）");
+}
+
+// 未確定入金の削除（確認ダイアログ付き）
+void DeleteReceipt_OnClick()
+{
+    if (FindReceiptJournal() != null) { Toaster.Error("確定済みの入金は削除できません（先に「入金を取り消す」を実行してください）"); return; }
+    var result = MessageBox.Show("この入金記録を削除しますか？（元に戻せません）", "削除する", "キャンセル");
+    if (result != "削除する") return;
+    using var loading = LoadingService.StartLoading(0);
+    this.Delete();
+    Toaster.Success("入金記録を削除しました");
+    NavigationService.NavigateTo("/Sales/Receipt");
 }
 
 // 請求書選択: 請求税込額 − 既存入金合計 (自分以外) を入金額に自動セット (手修正可)
@@ -282,8 +400,7 @@ void Confirm_OnClick()
         Toaster.Error("請求書ステータスの更新に失敗しました（消込仕訳は生成済みです）");
     }
 
-    this.IsViewOnly = true;
-    ConfirmButton.IsVisible = false;
+    UpdateButtons();
     if (useDiff)
     {
         Toaster.Success($"仕訳 No.{nextNo}: 入金 {amount:#,0} 円＋差額 {diff:#,0} 円を支払手数料で処理し、{invoiceNo} を消し込みました（入金済）");

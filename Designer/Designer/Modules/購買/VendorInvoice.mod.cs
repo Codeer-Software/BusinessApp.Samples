@@ -56,6 +56,177 @@ void UpdateButtons()
     var isAccounting = CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin";
     AccrueButton.IsVisible = isAccounting && !this.IsNewData && Status.Value == "received";
     PayButton.IsVisible = isAccounting && !this.IsNewData && Status.Value == "accrued";
+    // 逆遷移（ADR-0026）: 誤操作のリカバリ。仕訳の削除を伴うため経理のみ・締め済み期間はガード
+    CancelAccrueButton.IsVisible = isAccounting && !this.IsNewData && Status.Value == "accrued";
+    CancelPayButton.IsVisible = isAccounting && !this.IsNewData && Status.Value == "paid";
+    // 削除は「受領（仕訳なし）」のみ。一覧の削除ボタンは撤去済み
+    DeleteVendorInvoiceButton.IsVisible = !this.IsNewData && Status.Value == "received";
+}
+
+// 仕訳を明細→親の順に物理削除する。子持ちモジュールの検索インスタンス Delete() は
+// 親単独では静かに失敗する（実測）ため、行ごとに削除し全戻り値を検証する
+bool DeleteJournalEntryWithLines(JournalEntry je)
+{
+    var ls = new ModuleSearcher<JournalLine>();
+    ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
+    var lines = ls.Execute();
+    foreach (var row in lines)
+    {
+        var l = (JournalLine)row;
+        var okLine = l.Delete();
+        if (okLine != true) { return false; }
+    }
+    var ok = je.Delete();
+    if (ok != true) { return false; }
+    return true;
+}
+
+// source_type + source_id で自動仕訳を1件取得（無ければ null）
+JournalEntry FindSourceJournal(string sourceType)
+{
+    var s = new ModuleSearcher<JournalEntry>();
+    s.AddEquals(e => e.SourceType.Value, sourceType);
+    s.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return (JournalEntry)found;
+}
+
+// 仕訳の日付が締め済み期間に落ちていないか（true=削除可能）
+bool IsJournalPeriodOpen(JournalEntry je)
+{
+    if (je.EntryDate.Value == null) return true;
+    var d = je.EntryDate.Value;
+    var firstDay = new DateTime(d.Year, d.Month, 1);
+    var ps = new ModuleSearcher<FiscalPeriod>();
+    ps.AddLessThanOrEqual(e => e.StartDate.Value, firstDay);
+    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, firstDay);
+    var period = ps.ExecuteFirstOrDefault();
+    if (period == null) return true;
+    return ((FiscalPeriod)period).Status.Value != "closed";
+}
+
+// 未払計上の取消（accrued→received）: 未払計上仕訳を削除して受領に戻す
+void CancelAccrue_OnClick()
+{
+    var isAccounting = CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin";
+    if (!isAccounting) { Toaster.Error("未払計上の取消は経理ロールのみ実行できます"); return; }
+    if (Status.Value != "accrued") { Toaster.Error("未払計上済みの請求書のみ取り消せます"); return; }
+
+    var je = FindSourceJournal("vendor_invoice");
+    if (je != null)
+    {
+        if (!IsJournalPeriodOpen(je))
+        {
+            Toaster.Error("未払計上仕訳の期間が締め済みのため取り消せません（決算修正仕訳で対応してください）");
+            return;
+        }
+        var result = MessageBox.Show($"未払計上を取り消しますか？（仕訳 No.{je.JournalNo.Value} を削除し、受領状態に戻します）", "取り消す", "キャンセル");
+        if (result != "取り消す") return;
+    }
+    else
+    {
+        var result = MessageBox.Show("対応する仕訳が見つかりません。状態だけを受領に戻しますか？", "取り消す", "キャンセル");
+        if (result != "取り消す") return;
+    }
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    var deletedNo = 0;
+    if (je != null)
+    {
+        if (je.JournalNo.Value != null) { deletedNo = (int)je.JournalNo.Value; }
+        // FK 制約: vendor_invoices.accrual_entry_id が仕訳を参照しているため、先に参照を外してから削除する
+        AccrualEntryId.Value = null;
+        var retClear = this.Submit();
+        if (retClear == false) { Toaster.Error("参照の解除に失敗しました（未払計上済のままです）"); return; }
+        if (!DeleteJournalEntryWithLines(je))
+        {
+            AccrualEntryId.Value = je.Id.Value;
+            this.Submit();
+            Toaster.Error("仕訳の削除に失敗しました（未払計上済のままです）");
+            return;
+        }
+    }
+    AccrualEntryId.Value = null;
+    Status.Value = "received";
+    var ret = this.Submit();
+    if (ret == false) { Toaster.Error("ステータスの更新に失敗しました"); return; }
+    UpdateButtons();
+    if (deletedNo > 0) { Toaster.Success($"未払計上を取り消しました（仕訳 No.{deletedNo} を削除）"); }
+    else { Toaster.Success("未払計上を取り消しました"); }
+}
+
+// 支払の取消（paid→accrued）: 支払仕訳を削除して未払計上済みに戻す
+void CancelPay_OnClick()
+{
+    var isAccounting = CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin";
+    if (!isAccounting) { Toaster.Error("支払の取消は経理ロールのみ実行できます"); return; }
+    if (Status.Value != "paid") { Toaster.Error("支払済みの請求書のみ取り消せます"); return; }
+
+    var je = FindSourceJournal("vendor_payment");
+    if (je != null)
+    {
+        if (!IsJournalPeriodOpen(je))
+        {
+            Toaster.Error("支払仕訳の期間が締め済みのため取り消せません（決算修正仕訳で対応してください）");
+            return;
+        }
+        var result = MessageBox.Show($"支払を取り消しますか？（仕訳 No.{je.JournalNo.Value} を削除し、未払計上済みに戻します）", "取り消す", "キャンセル");
+        if (result != "取り消す") return;
+    }
+    else
+    {
+        var result = MessageBox.Show("対応する仕訳が見つかりません。状態だけを未払計上済みに戻しますか？", "取り消す", "キャンセル");
+        if (result != "取り消す") return;
+    }
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    var deletedNo = 0;
+    if (je != null)
+    {
+        if (je.JournalNo.Value != null) { deletedNo = (int)je.JournalNo.Value; }
+        // FK 制約: vendor_invoices.payment_entry_id が仕訳を参照しているため、先に参照を外してから削除する
+        PaymentEntryId.Value = null;
+        var retClear = this.Submit();
+        if (retClear == false) { Toaster.Error("参照の解除に失敗しました（支払済のままです）"); return; }
+        if (!DeleteJournalEntryWithLines(je))
+        {
+            PaymentEntryId.Value = je.Id.Value;
+            this.Submit();
+            Toaster.Error("仕訳の削除に失敗しました（支払済のままです）");
+            return;
+        }
+    }
+    PaymentEntryId.Value = null;
+    PaidDate.Value = null;
+    Status.Value = "accrued";
+    var ret = this.Submit();
+    if (ret == false) { Toaster.Error("ステータスの更新に失敗しました"); return; }
+    UpdateButtons();
+    if (deletedNo > 0) { Toaster.Success($"支払を取り消しました（仕訳 No.{deletedNo} を削除）"); }
+    else { Toaster.Success("支払を取り消しました"); }
+}
+
+// 受領状態の削除（仕訳が無いことを確認してから）
+void DeleteVendorInvoice_OnClick()
+{
+    if (Status.Value != "received") { Toaster.Error("受領状態の請求書のみ削除できます（未払計上・支払を先に取り消してください）"); return; }
+    if (FindSourceJournal("vendor_invoice") != null || FindSourceJournal("vendor_payment") != null)
+    {
+        Toaster.Error("この請求書に紐づく仕訳があるため削除できません");
+        return;
+    }
+    var result = MessageBox.Show($"仕入先請求書「{InvoiceNo.Value}」を削除しますか？（元に戻せません）", "削除する", "キャンセル");
+    if (result != "削除する") return;
+
+    using var loading = LoadingService.StartLoading(0);
+    this.Delete();
+    Toaster.Success("仕入先請求書を削除しました");
+    NavigationService.NavigateTo("/Purchasing/VendorInvoice");
 }
 
 // ============ 未払計上（D 費用+税 / C 買掛金） ============

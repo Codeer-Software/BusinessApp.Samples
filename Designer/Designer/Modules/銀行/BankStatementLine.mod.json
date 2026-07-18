@@ -668,6 +668,7 @@
                   "FontFamily": "",
                   "Color": "",
                   "BackgroundColor": "",
+                  "IsViewOnly": true,
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
