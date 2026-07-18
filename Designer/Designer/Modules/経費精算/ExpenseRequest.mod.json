@@ -1066,7 +1066,7 @@
       "IsSimpleSearchParameter": false,
       "OnSearchDataChanged": "",
       "DisplayName": "利用日",
-      "IsRequired": false,
+      "IsRequired": true,
       "OnDataChanged": "",
       "Name": "ExpenseDate",
       "IgnoreModification": false,
