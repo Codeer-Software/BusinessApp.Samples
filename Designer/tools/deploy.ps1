@@ -10,8 +10,8 @@
 # 注意: *.mod.cs（スクリプト）変更・DB スキーマ変更の反映にはサーバ再起動が必要。
 
 param(
-    [string]$Workspace = "C:\Users\REDACTED\DEV\accounting-app\AccountingApp\Designer\Designer",
-    [string]$Destination = "C:\Users\REDACTED\DEV\accounting-app\AccountingApp\LocalData\designs\App.zip"
+    [string]$Workspace = (Join-Path $PSScriptRoot "..\Designer" | Resolve-Path),
+    [string]$Destination = (Join-Path $PSScriptRoot "..\..\LocalData\designs\App.zip")
 )
 
 $ErrorActionPreference = "Stop"

@@ -13,11 +13,12 @@
 
 ## 参照している設定（パスを変える場合はここを全部直す）
 
-- `AccountingApp/AccountingApp.Server/appsettings.Development.json` — 接続文字列 / FileStorages.Directory / DesignFileDirectory / FontFileDirectory（※このファイルは skip-worktree・API キー含む）
+- `AccountingApp/AccountingApp.Server/appsettings.Development.json` — 接続文字列 / FileStorages.Directory / DesignFileDirectory / FontFileDirectory
 - `Designer/Designer/designer.settings.Development.json` — designcheck / sql CLI の接続先・デプロイ先
-- `Designer/tools/deploy.ps1` — `$Destination` 既定値
+- `Designer/tools/deploy.ps1` — `$Workspace` / `$Destination` 既定値（`$PSScriptRoot` 相対なので書き換え不要）
 
-パスは絶対パスで記述している（`dotnet run` の作業ディレクトリに依存させないため）。**別マシンに移す場合は上記 3 ファイルのパスを書き換えること**。
+パスは絶対パスで記述している（`dotnet run` の作業ディレクトリに依存させないため）。
+**上記 2 つの設定ファイルは環境固有のため Git 追跡外**（経緯: `docs/decisions/0025`）。新環境では同じ場所にある `*.sample` をコピーして `<REPO_ROOT>` を実パスに置換する。API キー等の秘密はこれらのファイルには書かず .NET User Secrets へ（`docs/decisions/0024`）。
 
 ## まっさら DB の再構築手順
 

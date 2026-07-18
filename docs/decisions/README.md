@@ -30,3 +30,4 @@
 | [0022](0022-財務帳票フレームとマスタ管理2分割.md) | 財務帳票フレーム分離とマスタ管理の2フレーム化 | 採用 | 2026-07-13 |
 | [0023](0023-承認ルート判定のマスタ化.md) | 承認ルート判定のマスタ化（approval_route_rules・EXP_APPROVAL閾値廃止） | 採用 | 2026-07-14 |
 | [0024](0024-APIキー管理をUser-Secretsへ移行.md) | APIキー管理を .NET User Secrets へ移行（skip-worktree 運用廃止） | 採用 | 2026-07-18 |
+| [0025](0025-環境固有設定のGit除外とsample雛形.md) | 環境固有設定（appsettings.Development 等）の Git 除外と .sample 雛形方式 | 採用 | 2026-07-18 |

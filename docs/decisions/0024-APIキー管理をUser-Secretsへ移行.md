@@ -1,8 +1,8 @@
 # ADR-0024: APIキー管理を .NET User Secrets へ移行（skip-worktree 運用の廃止）
 
 - 日付: 2026-07-18
-- 状態: 採用・実装済み（実機検証済み）
-- 関連: ADR-0017（実行環境データの LocalData 移設——本 ADR で参照パス変更がようやくコミットされた）
+- 状態: 採用・実装済み（実機検証済み）。**ただし「appsettings.Development.json の Git 除外はしない」の部分は同日の ADR-0025 で変更**（User Secrets 移行自体は有効なまま）
+- 関連: ADR-0017（実行環境データの LocalData 移設——本 ADR で参照パス変更がようやくコミットされた）、ADR-0025（Git 除外＋.sample 方式へ）
 
 ## 背景
 
