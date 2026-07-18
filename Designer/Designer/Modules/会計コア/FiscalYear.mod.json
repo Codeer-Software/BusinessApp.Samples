@@ -149,7 +149,7 @@
     {
       "Text": "12ヶ月の月次期間を生成",
       "Icon": "",
-      "Variant": "Secondary",
+      "Variant": "Primary",
       "OnClick": "GeneratePeriods_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {
@@ -280,7 +280,7 @@
     {
       "Text": "翌期繰越を実行",
       "Icon": "",
-      "Variant": "Warning",
+      "Variant": "Primary",
       "OnClick": "CarryOver_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {

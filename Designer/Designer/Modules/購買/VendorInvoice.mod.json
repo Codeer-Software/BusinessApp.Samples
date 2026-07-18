@@ -358,7 +358,7 @@
     {
       "Text": "支払登録（消込仕訳）",
       "Icon": "",
-      "Variant": "Success",
+      "Variant": "Primary",
       "OnClick": "Pay_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {
@@ -376,7 +376,7 @@
     {
       "Text": "この請求書を複製",
       "Icon": "",
-      "Variant": "Secondary",
+      "Variant": "Primary",
       "OnClick": "Duplicate_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {

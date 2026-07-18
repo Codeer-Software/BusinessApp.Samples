@@ -455,7 +455,7 @@
         "Disabled": ""
       },
       "Icon": "",
-      "Variant": "Success",
+      "Variant": "Primary",
       "OnClick": "Approve_OnClick",
       "ShowTextInToolTip": false,
       "Name": "ApproveButton",
@@ -493,7 +493,7 @@
         "Disabled": ""
       },
       "Icon": "",
-      "Variant": "Warning",
+      "Variant": "Primary",
       "OnClick": "Resubmit_OnClick",
       "ShowTextInToolTip": false,
       "Name": "ResubmitButton",
@@ -512,7 +512,7 @@
         "Disabled": ""
       },
       "Icon": "",
-      "Variant": "Secondary",
+      "Variant": "Danger",
       "OnClick": "Cancel_OnClick",
       "ShowTextInToolTip": false,
       "Name": "CancelButton",
@@ -531,7 +531,7 @@
         "Disabled": ""
       },
       "Icon": "",
-      "Variant": "Info",
+      "Variant": "Primary",
       "OnClick": "OpenRequest_OnClick",
       "ShowTextInToolTip": false,
       "Name": "OpenRequestButton",

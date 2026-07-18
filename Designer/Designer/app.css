@@ -53,3 +53,13 @@ h4.row {
   padding-bottom: 10px;
   background: rgba(20, 16, 58, 0.9);
 }
+
+/* ボタン色規約（ADR-0027）: 青=前進アクション／赤=削除・取消／灰はボタンでは使わない。
+   無効ボタンは「元のアクション色を残したまま薄く」表示し、灰色（キャンセル系）と混同させない。
+   Bootstrap 既定の opacity .65 では有効ボタンとの差が弱いため .45 に強める */
+button.btn:disabled,
+button.btn.disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  pointer-events: auto !important; /* not-allowed カーソルを見せるため */
+}

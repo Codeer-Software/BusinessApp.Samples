@@ -215,7 +215,7 @@
     {
       "Text": "国税庁で番号を確認",
       "Icon": "",
-      "Variant": "Secondary",
+      "Variant": "Primary",
       "OnClick": "CheckInvoice_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {

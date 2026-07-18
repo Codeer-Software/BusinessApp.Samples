@@ -212,7 +212,7 @@
         "Disabled": ""
       },
       "Icon": "",
-      "Variant": "Info",
+      "Variant": "Primary",
       "OnClick": "OpenRequest_OnClick",
       "ShowTextInToolTip": false,
       "Name": "OpenRequestButton",

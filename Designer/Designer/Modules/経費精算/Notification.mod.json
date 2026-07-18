@@ -160,7 +160,7 @@
     {
       "Text": "開く",
       "Icon": "",
-      "Variant": "Info",
+      "Variant": "Primary",
       "OnClick": "Open_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {

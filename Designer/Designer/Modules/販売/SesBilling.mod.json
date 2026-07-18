@@ -43,7 +43,7 @@
     {
       "Text": "請求書を一括生成（売上仕訳込み）",
       "Icon": "",
-      "Variant": "Danger",
+      "Variant": "Primary",
       "OnClick": "Run_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {

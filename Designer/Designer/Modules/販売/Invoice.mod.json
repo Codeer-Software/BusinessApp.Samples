@@ -548,7 +548,7 @@
     {
       "Text": "請求書を出力（Excel）",
       "Icon": "",
-      "Variant": "Secondary",
+      "Variant": "Primary",
       "OnClick": "PrintExcel_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {
@@ -566,7 +566,7 @@
     {
       "Text": "請求書を出力（PDF）",
       "Icon": "",
-      "Variant": "Secondary",
+      "Variant": "Primary",
       "OnClick": "PrintPdf_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {

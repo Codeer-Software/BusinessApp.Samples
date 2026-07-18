@@ -497,7 +497,7 @@
     {
       "Text": "下書き保存",
       "Icon": "",
-      "Variant": "Secondary",
+      "Variant": "Primary",
       "OnClick": "SaveDraft_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {

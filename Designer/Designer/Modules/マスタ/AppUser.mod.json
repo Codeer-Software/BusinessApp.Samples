@@ -207,7 +207,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "Submit",
+      "Text": "登録",
       "ImageResourcePath": "",
       "ImageResourceSet": {
         "Default": "",

@@ -361,7 +361,7 @@
     {
       "Text": "保存",
       "Icon": "",
-      "Variant": "Secondary",
+      "Variant": "Primary",
       "IsBlock": false,
       "ImageResourcePath": "",
       "ImageResourceSet": {

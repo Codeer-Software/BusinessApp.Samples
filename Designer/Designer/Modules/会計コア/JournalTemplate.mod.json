@@ -140,7 +140,7 @@
     {
       "Text": "この定型から伝票を起票",
       "Icon": "",
-      "Variant": "Success",
+      "Variant": "Primary",
       "OnClick": "CreateEntry_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {

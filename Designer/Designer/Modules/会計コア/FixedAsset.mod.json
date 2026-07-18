@@ -344,7 +344,7 @@
     {
       "Text": "この年度の償却仕訳を生成",
       "Icon": "",
-      "Variant": "Secondary",
+      "Variant": "Primary",
       "OnClick": "GenerateDep_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {
