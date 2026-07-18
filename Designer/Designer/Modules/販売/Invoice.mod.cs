@@ -22,13 +22,56 @@ void Detail_OnAfterInit()
 }
 
 // 状態遷移はボタン経由に一本化（ADR-0026）。状態セレクトは表示専用。
-// draft: 発行する・削除 ／ issued: 下書きに戻す ／ partial・paid・void: 遷移ボタンなし（入金側で自動遷移）
+// draft: 発行する・削除 ／ issued: 下書きに戻す・取消にする ／ void: 取消を戻す ／
+// partial・paid: 遷移ボタンなし（入金側で自動遷移）
 void UpdateButtons()
 {
     var st = Status.Value;
     IssueButton.IsVisible = !this.IsNewData && (st == "draft");
     DeleteInvoiceButton.IsVisible = !this.IsNewData && (st == "draft");
     RevertToDraftButton.IsVisible = !this.IsNewData && (st == "issued");
+    VoidButton.IsVisible = !this.IsNewData && (st == "issued");
+    UnvoidButton.IsVisible = !this.IsNewData && (st == "void");
+}
+
+// 請求書の取消（issued→void）: 貸倒れ・二重発行などで請求を無効化し、売掛残高の対象から外す。
+// 入金記録がある請求書は不可（先に入金の取消を）。売上仕訳は消さない——貸倒れは貸倒損失の
+// 振替伝票（07_特殊取引の手順）で別途処理する
+void Void_OnClick()
+{
+    if (Status.Value != "issued") { Toaster.Error("発行済の請求書のみ取消にできます"); return; }
+    if (HasReceipts()) { Toaster.Error("入金記録があるため取消にできません（先に入金の取消を行ってください）"); return; }
+    var result = MessageBox.Show($"請求書「{InvoiceNo.Value}」を取消にしますか？（入金消込・売掛残高の対象から外れます。計上済みの売上仕訳はそのまま残るため、貸倒れ等は別途振替伝票で処理してください）", "取消にする", "キャンセル");
+    if (result != "取消にする") return;
+
+    using var loading = LoadingService.StartLoading(0);
+    Status.Value = "void";
+    var ret = this.Submit();
+    if (ret != true)
+    {
+        Status.Value = "issued";
+        Toaster.Error("取消に失敗しました");
+        return;
+    }
+    Toaster.Success($"請求書 {InvoiceNo.Value} を取消にしました");
+    UpdateButtons();
+}
+
+// 取消の取り消し（void→issued）: 誤って取消にした場合のリカバリ
+void Unvoid_OnClick()
+{
+    if (Status.Value != "void") { Toaster.Error("取消状態の請求書のみ戻せます"); return; }
+    using var loading = LoadingService.StartLoading(0);
+    Status.Value = "issued";
+    var ret = this.Submit();
+    if (ret != true)
+    {
+        Status.Value = "void";
+        Toaster.Error("発行済への変更に失敗しました");
+        return;
+    }
+    Toaster.Success($"請求書 {InvoiceNo.Value} を発行済に戻しました");
+    UpdateButtons();
 }
 
 void Issue_OnClick()
