@@ -152,7 +152,7 @@
           "SearchLayoutName": "",
           "UserUrlParameter": true,
           "PageTitle": "貸借対照表",
-          "HeaderTitle": "貸借対照表（BS）です。年度末時点の資産・負債・純資産を確認できます。",
+          "HeaderTitle": "貸借対照表（BS）です。年度末時点の資産・負債・純資産を勘定式（左＝資産／右＝負債・純資産）で確認できます。最終行の資産合計と負債・純資産合計が一致していれば貸借は整合しています。Excel ダウンロードも同じ左右形式で出力されます。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,

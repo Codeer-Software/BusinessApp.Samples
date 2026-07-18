@@ -1,3 +1,7 @@
+-- 貸借対照表（勘定式・左右対照）
+-- 左列=資産の部／右列=負債・純資産の部 を行番号でペアリングし、
+-- 最終行に「資産合計」と「負債・純資産合計」を同じ行で対置する（一致が一目で検算できる）。
+-- 一覧の Excel ダウンロードもこの4列がそのまま出力される。
 WITH yr AS (
   SELECT id, start_date FROM fiscal_years
   WHERE id = COALESCE(@fiscal_year_id,
@@ -34,50 +38,71 @@ bal AS (
 ),
 bs AS (SELECT * FROM bal WHERE statement = 'BS'),
 pl AS (SELECT * FROM bal WHERE statement = 'PL'),
-ni AS (SELECT COALESCE(-SUM(dmc), 0) AS net_income FROM pl)
+ni AS (SELECT COALESCE(-SUM(dmc), 0) AS net_income FROM pl),
 
--- 科目行
+-- 左側: 資産の部（区分見出し・科目・区分計。資産合計は最終行に固定するため含めない）
+lsrc AS (
+  SELECT printf('%02d', b.section_order) || '-0-0000' AS sort_key,
+         '【' || b.cat_name || '】' AS item, NULL AS amount
+  FROM bs b WHERE b.account_type = 'asset'
+  GROUP BY b.section_order, b.cat_name
+  UNION ALL
+  SELECT printf('%02d', b.section_order) || '-1-' || b.code, '　' || b.name, b.dmc
+  FROM bs b WHERE b.account_type = 'asset'
+  UNION ALL
+  SELECT printf('%02d', b.section_order) || '-2-ZZZZ', b.cat_name || ' 計', SUM(b.dmc)
+  FROM bs b WHERE b.account_type = 'asset'
+  GROUP BY b.section_order, b.cat_name
+),
+-- 右側: 負債・純資産の部（負債合計・当期純利益・純資産合計を含む）
+rsrc AS (
+  SELECT printf('%02d', b.section_order) || '-0-0000' AS sort_key,
+         '【' || b.cat_name || '】' AS item, NULL AS amount
+  FROM bs b WHERE b.account_type IN ('liability', 'equity')
+  GROUP BY b.section_order, b.cat_name
+  UNION ALL
+  SELECT printf('%02d', b.section_order) || '-1-' || b.code, '　' || b.name, -b.dmc
+  FROM bs b WHERE b.account_type IN ('liability', 'equity')
+  UNION ALL
+  SELECT printf('%02d', b.section_order) || '-2-ZZZZ', b.cat_name || ' 計', SUM(-b.dmc)
+  FROM bs b WHERE b.account_type IN ('liability', 'equity')
+  GROUP BY b.section_order, b.cat_name
+  UNION ALL
+  SELECT '39-8-ZZZZ', '負債合計', COALESCE(SUM(-b.dmc), 0)
+  FROM bs b WHERE b.account_type = 'liability'
+  UNION ALL
+  SELECT '48-1-ZZZZ', '　当期純利益', (SELECT net_income FROM ni)
+  UNION ALL
+  SELECT '48-9-ZZZZ', '純資産合計',
+    COALESCE((SELECT SUM(-b.dmc) FROM bs b WHERE b.account_type = 'equity'), 0)
+    + (SELECT net_income FROM ni)
+),
+lrows AS (SELECT ROW_NUMBER() OVER (ORDER BY sort_key) AS rn, item, amount FROM lsrc),
+rrows AS (SELECT ROW_NUMBER() OVER (ORDER BY sort_key) AS rn, item, amount FROM rsrc),
+-- 総合計行は左右の長い方の次の行に揃えて配置する
+tot AS (SELECT MAX((SELECT COUNT(*) FROM lrows), (SELECT COUNT(*) FROM rrows)) + 1 AS rn),
+lall AS (
+  SELECT rn, item, amount FROM lrows
+  UNION ALL
+  SELECT (SELECT rn FROM tot), '資産合計',
+    COALESCE((SELECT SUM(b.dmc) FROM bs b WHERE b.account_type = 'asset'), 0)
+),
+rall AS (
+  SELECT rn, item, amount FROM rrows
+  UNION ALL
+  SELECT (SELECT rn FROM tot), '負債・純資産合計',
+    COALESCE((SELECT SUM(-b.dmc) FROM bs b WHERE b.account_type IN ('liability', 'equity')), 0)
+    + (SELECT net_income FROM ni)
+),
+seq AS (SELECT DISTINCT rn FROM (SELECT rn FROM lall UNION ALL SELECT rn FROM rall))
+
 SELECT
-  printf('%02d', b.section_order) || '-1-' || b.code AS sort_key,
-  b.cat_name AS section,
-  b.name AS item,
-  CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END AS amount
-FROM bs b
-
-UNION ALL
--- 区分小計
-SELECT
-  printf('%02d', b.section_order) || '-2-ZZZZ',
-  b.cat_name,
-  b.cat_name || ' 計',
-  SUM(CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END)
-FROM bs b
-GROUP BY b.section_order, b.cat_name
-
-UNION ALL
--- 資産合計
-SELECT '29-9-ZZZZ', '資産', '資産合計', COALESCE(SUM(b.dmc), 0)
-FROM bs b WHERE b.account_type = 'asset'
-
-UNION ALL
--- 負債合計
-SELECT '39-9-ZZZZ', '負債', '負債合計', COALESCE(SUM(-b.dmc), 0)
-FROM bs b WHERE b.account_type = 'liability'
-
-UNION ALL
--- 当期純利益
-SELECT '48-1-ZZZZ', '純資産', '当期純利益', (SELECT net_income FROM ni)
-
-UNION ALL
--- 純資産合計（当期純利益込み）
-SELECT '48-9-ZZZZ', '純資産', '純資産合計',
-  COALESCE((SELECT SUM(-b.dmc) FROM bs b WHERE b.account_type = 'equity'), 0) + (SELECT net_income FROM ni)
-
-UNION ALL
--- 負債・純資産合計（＝資産合計と一致すべき検算行）
-SELECT '59-9-ZZZZ', '検算', '負債・純資産合計',
-  COALESCE((SELECT SUM(-b.dmc) FROM bs b WHERE b.account_type = 'liability'), 0)
-  + COALESCE((SELECT SUM(-b.dmc) FROM bs b WHERE b.account_type = 'equity'), 0)
-  + (SELECT net_income FROM ni)
-
-ORDER BY sort_key
+  s.rn AS row_no,
+  COALESCE(l.item, '') AS asset_item,
+  l.amount AS asset_amount,
+  COALESCE(r.item, '') AS liab_item,
+  r.amount AS liab_amount
+FROM seq s
+LEFT JOIN lall l ON l.rn = s.rn
+LEFT JOIN rall r ON r.rn = s.rn
+ORDER BY s.rn

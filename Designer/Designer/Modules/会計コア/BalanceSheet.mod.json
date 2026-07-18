@@ -19,25 +19,31 @@
           },
           {
             "IsParameter": false,
-            "Name": "sort_key",
+            "Name": "row_no",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "asset_item",
             "DbType": "text",
             "DbParameterDirection": "Input"
           },
           {
             "IsParameter": false,
-            "Name": "section",
+            "Name": "asset_amount",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "liab_item",
             "DbType": "text",
             "DbParameterDirection": "Input"
           },
           {
             "IsParameter": false,
-            "Name": "item",
-            "DbType": "text",
-            "DbParameterDirection": "Input"
-          },
-          {
-            "IsParameter": false,
-            "Name": "amount",
+            "Name": "liab_amount",
             "DbType": "integer",
             "DbParameterDirection": "Input"
           }
@@ -74,7 +80,25 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
-      "DbColumn": "sort_key",
+      "DbColumn": "row_no",
+      "Placeholder": "",
+      "Format": "",
+      "IsSlider": false,
+      "OnInput": "",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "行",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "RowNo",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "DbColumn": "asset_item",
       "IsMultiline": false,
       "IsAutoFitRows": false,
       "Placeholder": "",
@@ -83,49 +107,15 @@
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "整列",
+      "DisplayName": "資産の部",
       "IsRequired": false,
       "OnDataChanged": "",
-      "Name": "SortKey",
+      "Name": "AssetItem",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
-      "DbColumn": "section",
-      "IsMultiline": false,
-      "IsAutoFitRows": false,
-      "Placeholder": "",
-      "TextEditEmptyType": "StringEmpty",
-      "ShouldTrimAfterEdit": false,
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "区分",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "Section",
-      "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
-    },
-    {
-      "DbColumn": "item",
-      "IsMultiline": false,
-      "IsAutoFitRows": false,
-      "Placeholder": "",
-      "TextEditEmptyType": "StringEmpty",
-      "ShouldTrimAfterEdit": false,
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "科目",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "Item",
-      "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
-    },
-    {
-      "DbColumn": "amount",
+      "DbColumn": "asset_amount",
       "Placeholder": "",
       "Format": "#,0",
       "IsSlider": false,
@@ -137,7 +127,42 @@
       "DisplayName": "金額",
       "IsRequired": false,
       "OnDataChanged": "",
-      "Name": "Amount",
+      "Name": "AssetAmount",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "DbColumn": "liab_item",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "StringEmpty",
+      "ShouldTrimAfterEdit": false,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "負債・純資産の部",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "LiabItem",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "DbColumn": "liab_amount",
+      "Placeholder": "",
+      "Format": "#,0",
+      "IsSlider": false,
+      "OnInput": "",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "金額",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "LiabAmount",
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
@@ -196,7 +221,7 @@
     "": {
       "HeaderTitle": "",
       "DataOnlyFields": [
-        "SortKey"
+        "RowNo"
       ],
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "",
@@ -204,9 +229,9 @@
       "Elements": [
         [
           {
-            "FieldName": "Section",
+            "FieldName": "AssetItem",
             "ContextMenu": "",
-            "Label": "区分",
+            "Label": "資産の部",
             "ColumnSpan": 1,
             "RowSpan": 1,
             "TextWrap": "Unset",
@@ -220,9 +245,25 @@
             "ListElementComponent": ""
           },
           {
-            "FieldName": "Item",
+            "FieldName": "AssetAmount",
             "ContextMenu": "",
-            "Label": "科目",
+            "Label": "金額",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": false,
+            "ClassName": "amount-cell",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "LiabItem",
+            "ContextMenu": "",
+            "Label": "負債・純資産の部",
             "ColumnSpan": 1,
             "RowSpan": 1,
             "TextWrap": "Unset",
@@ -236,7 +277,7 @@
             "ListElementComponent": ""
           },
           {
-            "FieldName": "Amount",
+            "FieldName": "LiabAmount",
             "ContextMenu": "",
             "Label": "金額",
             "ColumnSpan": 1,
