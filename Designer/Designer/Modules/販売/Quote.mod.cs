@@ -37,13 +37,18 @@ void UpdateButtons()
     MarkRejectedButton.IsVisible = (st == "draft" || st == "sent");
     RevertToDraftButton.IsVisible = (st == "sent" || st == "rejected" || st == "accepted");
     DeleteQuoteButton.IsVisible = (st == "draft");
-    if (st == "accepted")
+
+    // 編集できるのは下書きのみ。送付済（顧客に提示済み）・失注・受注は確定文書として閲覧専用。
+    // 修正したいときは「下書きに戻す」で明示的に差し戻してから編集する
+    var editable = (st == "draft");
+    this.IsViewOnly = !editable;
+    SubmitButton.IsVisible = editable;
+    if (!editable)
     {
-        // 受注済みの見積は編集させない（明細は受注へコピー済み。修正は受注側で行う）
-        this.IsViewOnly = true;
-        SubmitButton.IsVisible = false;
         // CLB 1.3: モジュール全体を閲覧専用にするとボタンの OnClick も発火しなくなるため、
-        // 操作ボタンだけ個別に閲覧専用を解除する
+        // 閲覧専用中も使う操作ボタンだけ個別に閲覧専用を解除する
+        ConvertToOrderButton.IsViewOnly = false;
+        MarkRejectedButton.IsViewOnly = false;
         RevertToDraftButton.IsViewOnly = false;
         PrintExcelButton.IsViewOnly = false;
         PrintPdfButton.IsViewOnly = false;
