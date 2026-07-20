@@ -13,6 +13,52 @@ void Detail_OnAfterInit()
         AcceptanceNo.Value = NextAcceptanceNo();
     }
     UpdateButtons();
+    UpdateOrderProgress();
+}
+
+// 受注額・検収済み累計（確定）・残額の表示（P2: 分割検収・変更契約時の二重計上防止）
+void UpdateOrderProgress()
+{
+    if (SalesOrderRef.Value == null)
+    {
+        OrderProgressLabel.IsVisible = false;
+        return;
+    }
+    var orderTotal = GetOrderTotal(SalesOrderRef.Value);
+    var confirmedTotal = GetConfirmedTotal(SalesOrderRef.Value);
+    OrderProgressLabel.Text = $"受注額 {orderTotal:#,0} 円 ／ 検収済み累計（確定） {confirmedTotal:#,0} 円 ／ 残額 {orderTotal - confirmedTotal:#,0} 円";
+    OrderProgressLabel.IsVisible = true;
+}
+
+// 受注明細の税抜合計
+int GetOrderTotal(object salesOrderId)
+{
+    var ls = new ModuleSearcher<SalesOrderLine>();
+    ls.AddEquals(l => l.SalesOrderId.Value, salesOrderId);
+    var lines = ls.Execute();
+    var total = 0;
+    foreach (var row in lines)
+    {
+        var l = (SalesOrderLine)row;
+        if (l.Amount.Value != null) total = total + l.Amount.Value;
+    }
+    return total;
+}
+
+// この受注の確定済み検収額の合計
+int GetConfirmedTotal(object salesOrderId)
+{
+    var s = new ModuleSearcher<Acceptance>();
+    s.AddEquals(e => e.SalesOrderRef.Value, salesOrderId);
+    s.AddEquals(e => e.Status.Value, "confirmed");
+    var rows = s.Execute();
+    var total = 0;
+    foreach (var m in rows)
+    {
+        var a = (Acceptance)m;
+        if (a.Amount.Value != null) total = total + a.Amount.Value;
+    }
+    return total;
 }
 
 void UpdateButtons()
@@ -22,9 +68,10 @@ void UpdateButtons()
     {
         this.IsViewOnly = true;
         // CLB 1.3: モジュール全体を閲覧専用にするとボタンの OnClick も発火しなくなるため、
-        // 確定後も操作する取消・請求書作成ボタンだけ個別に閲覧専用を解除する
+        // 確定後も操作する取消・請求書作成ボタン・合算先セレクトだけ個別に閲覧専用を解除する
         CancelConfirmButton.IsViewOnly = false;
         CreateInvoiceButton.IsViewOnly = false;
+        BilledInvoiceRef.IsViewOnly = false;
     }
     else
     {
@@ -38,14 +85,25 @@ void UpdateButtons()
     // 確定後は編集できないので保存ボタンは出さない（押せないボタンを見せない・ADR-0027）
     SubmitButton.IsVisible = !(st == "confirmed" && !this.IsNewData);
 
-    // 請求書作成済みならボタンの代わりに案内ラベルを出す（押しても必ずエラーになるボタンを見せない）
+    // 請求書作成済み（直接 or 合算）ならボタンの代わりに案内ラベルを出す
     var invoiceNo = FindExistingInvoiceNo();
-    CreateInvoiceButton.IsVisible = isAccountingRole && !this.IsNewData && (st == "confirmed") && (invoiceNo == null);
-    InvoiceDoneLabel.IsVisible = (invoiceNo != null);
+    var billedNo = FindBilledInvoiceNo();
+    CreateInvoiceButton.IsVisible = isAccountingRole && !this.IsNewData && (st == "confirmed") && (invoiceNo == null) && (billedNo == null);
+    InvoiceDoneLabel.IsVisible = (invoiceNo != null || billedNo != null);
     if (invoiceNo != null)
     {
         InvoiceDoneLabel.Text = $"請求書 {invoiceNo} 作成済み（販売管理＞請求書から確認できます）";
     }
+    else if (billedNo != null)
+    {
+        InvoiceDoneLabel.Text = $"請求書 {billedNo} に合算済み（販売管理＞請求書から確認できます）";
+    }
+
+    // 合算先請求書の選択欄: 経理のみ・確定済み・直接請求書が無いときだけ出す
+    var showBilled = isAccountingRole && !this.IsNewData && (st == "confirmed") && (invoiceNo == null);
+    BilledInvoiceLabel.IsVisible = showBilled;
+    BilledInvoiceRef.IsVisible = showBilled;
+    BilledInvoiceHint.IsVisible = showBilled && (billedNo == null);
 
     CancelConfirmButton.IsVisible = isAccountingRole && !this.IsNewData && (st == "confirmed");
     DeleteAcceptanceButton.IsVisible = !this.IsNewData && (st == "draft");
@@ -140,6 +198,7 @@ void CancelConfirm_OnClick()
     var ret = this.Submit();
     if (ret != true) { Toaster.Error("検収ステータスの更新に失敗しました"); return; }
     UpdateButtons();
+    UpdateOrderProgress();
     Toaster.Success("検収の確定を取り消し、下書きに戻しました");
 }
 
@@ -155,23 +214,60 @@ void DeleteAcceptance_OnClick()
     NavigationService.NavigateTo(NavigationService.GetModuleUrl("Acceptance"));
 }
 
-// 受注選択: 受注明細の税抜合計を検収額に、SALES_10 税率で消費税を自動セット (手修正可)
+// 受注選択: 受注の未検収残額（受注額−確定済み検収累計）を検収額に、SALES_10 税率で消費税を自動セット (手修正可)
+// 初回検収では残額＝受注全額。分割検収の2回目以降は残額がセットされ、うっかり全額の再計上を防ぐ（P2）
 void SalesOrderRef_OnDataChanged()
 {
-    if (SalesOrderRef.Value == null) return;
-    var ls = new ModuleSearcher<SalesOrderLine>();
-    ls.AddEquals(l => l.SalesOrderId.Value, SalesOrderRef.Value);
-    var lines = ls.Execute();
-    var total = 0;
-    foreach (var row in lines)
+    if (SalesOrderRef.Value == null)
     {
-        var l = (SalesOrderLine)row;
-        if (l.Amount.Value != null) total = total + l.Amount.Value;
+        UpdateOrderProgress();
+        return;
     }
-    Amount.Value = total;
+    var orderTotal = GetOrderTotal(SalesOrderRef.Value);
+    var confirmedTotal = GetConfirmedTotal(SalesOrderRef.Value);
+    var remaining = orderTotal - confirmedTotal;
+    if (remaining < 0) remaining = 0;
+    Amount.Value = remaining;
     decimal pct = GetSalesTaxRatePercent();
-    int tax = total * pct / 100;
+    int tax = remaining * pct / 100;
     TaxAmount.Value = tax;
+    UpdateOrderProgress();
+}
+
+// この検収の合算先請求書の番号（未設定なら null）
+string FindBilledInvoiceNo()
+{
+    if (BilledInvoiceRef.Value == null) return null;
+    var s = new ModuleSearcher<Invoice>();
+    s.AddEquals(e => e.Id.Value, BilledInvoiceRef.Value);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return ((Invoice)found).InvoiceNo.Value;
+}
+
+// 合算先請求書の選択・解除は即保存する（確定済み検収は閲覧専用で保存ボタンが無いため）
+void BilledInvoiceRef_OnDataChanged()
+{
+    if (this.IsNewData) return;
+    if (Status.Value != "confirmed") return;
+    using var loading = LoadingService.StartLoading(0);
+    this.IsViewOnly = false;
+    var ret = this.Submit();
+    if (ret == false)
+    {
+        Toaster.Error("合算先請求書の保存に失敗しました");
+        UpdateButtons();
+        return;
+    }
+    UpdateButtons();
+    if (BilledInvoiceRef.Value != null)
+    {
+        Toaster.Success("合算先請求書を記録しました（この検収からの請求書作成はできなくなります）");
+    }
+    else
+    {
+        Toaster.Info("合算先請求書を解除しました（「請求書を作成」が再び使えます）");
+    }
 }
 
 // 課税売上 10% (tax_categories.code='SALES_10') の税率をマスタから解決
@@ -224,6 +320,17 @@ void Confirm_OnClick()
     if (Amount.Value == null || Amount.Value <= 0) { Toaster.Error("検収額を入力してください"); return; }
     if (AcceptanceDate.Value == null) { Toaster.Error("検収日を入力してください"); return; }
     if (SalesOrderRef.Value == null) { Toaster.Error("受注を選択してください"); return; }
+
+    // 受注額超過の警告（P2: 分割検収・変更契約時の二重計上防止）。
+    // 増額検収は実務上ありうるため、ブロックはせず確認だけ求める
+    var warnOrderTotal = GetOrderTotal(SalesOrderRef.Value);
+    var warnConfirmedTotal = GetConfirmedTotal(SalesOrderRef.Value);
+    if (warnOrderTotal > 0 && warnConfirmedTotal + Amount.Value > warnOrderTotal)
+    {
+        var over = warnConfirmedTotal + Amount.Value - warnOrderTotal;
+        var answer = MessageBox.Show($"確定済みの検収累計 {warnConfirmedTotal:#,0} 円にこの検収 {Amount.Value:#,0} 円を加えると、受注額 {warnOrderTotal:#,0} 円を {over:#,0} 円超過します。このまま確定しますか？", "確定する", "キャンセル");
+        if (answer != "確定する") return;
+    }
 
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
@@ -370,6 +477,7 @@ void Confirm_OnClick()
     var ret2 = this.Submit();
     if (ret2 != true) { Toaster.Error("検収ステータスの更新に失敗しました（仕訳は生成済みです）"); return; }
     UpdateButtons();
+    UpdateOrderProgress();
     Toaster.Success($"仕訳 No.{nextNo} を生成し検収を確定しました（売掛金 {gross:#,0} 円 / 売上 {amount:#,0} 円）");
 }
 

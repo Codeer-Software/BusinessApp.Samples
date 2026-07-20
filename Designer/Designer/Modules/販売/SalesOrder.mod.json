@@ -518,6 +518,16 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
+      "Text": "検収が登録済みのため、この受注は編集できません（追加・変更は「変更契約」として新しい見積→受注を作成してください。docs/06 の運用規約参照）",
+      "Icon": "bi bi-lock-fill",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "LockedNoteLabel",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
       "Text": "保存",
       "Icon": "",
       "Variant": "Primary",
@@ -740,6 +750,39 @@
                   "RightColor": "",
                   "BottomColor": ""
                 },
+                "CanResize": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "LockedNoteLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "#b02a37",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "VerticalAlignment": "Middle",
                 "CanResize": false,
                 "Border": "None"
               }

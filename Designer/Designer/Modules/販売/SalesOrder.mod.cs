@@ -19,6 +19,8 @@ void Detail_OnAfterInit()
 }
 
 // 状態に応じたボタン出し分け (ADR-0026/0027)
+// P1（docs/15）: 検収が1件でも存在する受注は編集不可（下書き検収の自動セット額の根拠を守る）。
+// 内容の追加・変更は「変更契約」として新しい見積→受注で行う
 void UpdateButtons()
 {
     var st = Status.Value;
@@ -27,11 +29,27 @@ void UpdateButtons()
         CloseOrderButton.IsVisible = false;
         ReopenOrderButton.IsVisible = false;
         DeleteOrderButton.IsVisible = false;
+        LockedNoteLabel.IsVisible = false;
         return;
     }
     CloseOrderButton.IsVisible = (st == "open");
     ReopenOrderButton.IsVisible = (st == "closed");
-    DeleteOrderButton.IsVisible = true;
+
+    var check = new ModuleSearcher<Acceptance>();
+    check.AddEquals(e => e.SalesOrderRef.Value, this.Id.Value);
+    var hasAcceptance = (check.Execute().Count > 0);
+
+    this.IsViewOnly = hasAcceptance;
+    SubmitButton.IsVisible = !hasAcceptance;
+    LockedNoteLabel.IsVisible = hasAcceptance;
+    // 検収がある受注の削除はどうせガードされるのでボタン自体を出さない（ADR-0027）
+    DeleteOrderButton.IsVisible = !hasAcceptance;
+    if (hasAcceptance)
+    {
+        // CLB 1.3: モジュール閲覧専用時はボタンの OnClick が発火しないため、状態遷移ボタンだけ解除
+        CloseOrderButton.IsViewOnly = false;
+        ReopenOrderButton.IsViewOnly = false;
+    }
 }
 
 // 完了にする: open → closed
@@ -39,6 +57,7 @@ void CloseOrder_OnClick()
 {
     if (this.IsNewData) { Toaster.Error("先に受注を保存してください"); return; }
     if (Status.Value != "open") { Toaster.Error("進行中の受注のみ完了にできます"); return; }
+    this.IsViewOnly = false;  // 検収済みロック中でも状態遷移は許可（UpdateButtons が再ロックする）
     Status.Value = "closed";
     var ret = this.Submit();
     if (ret == false) { Toaster.Error("状態の更新に失敗しました"); return; }
@@ -50,6 +69,7 @@ void CloseOrder_OnClick()
 void ReopenOrder_OnClick()
 {
     if (Status.Value != "closed") { Toaster.Error("完了した受注のみ進行中に戻せます"); return; }
+    this.IsViewOnly = false;  // 検収済みロック中でも状態遷移は許可（UpdateButtons が再ロックする）
     Status.Value = "open";
     var ret = this.Submit();
     if (ret == false) { Toaster.Error("状態の更新に失敗しました"); return; }
