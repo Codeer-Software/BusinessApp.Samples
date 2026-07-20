@@ -1408,7 +1408,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -1466,7 +1466,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -1524,7 +1524,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -1582,7 +1582,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -1640,7 +1640,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -1688,7 +1688,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -1746,7 +1746,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -1794,7 +1794,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -1852,7 +1852,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -1935,7 +1935,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -1983,7 +1983,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -2041,7 +2041,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -2089,7 +2089,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -2147,7 +2147,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -2195,7 +2195,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -2253,7 +2253,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -2334,7 +2334,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -2392,7 +2392,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -2440,7 +2440,7 @@
                           "CanResize": false,
                           "Border": "None",
                           "VerticalAlignment": "Middle",
-                          "HorizontalAlignment": "Right",
+                          "HorizontalAlignment": "End",
                           "Width": 140
                         },
                         {
@@ -2515,7 +2515,7 @@
                 "CanResize": false,
                 "Border": "None",
                 "VerticalAlignment": "Middle",
-                "HorizontalAlignment": "Right",
+                "HorizontalAlignment": "End",
                 "Width": 140
               },
               {
@@ -2646,7 +2646,7 @@
                 "CanResize": false,
                 "Border": "None",
                 "VerticalAlignment": "Middle",
-                "HorizontalAlignment": "Right",
+                "HorizontalAlignment": "End",
                 "Width": 140
               },
               {

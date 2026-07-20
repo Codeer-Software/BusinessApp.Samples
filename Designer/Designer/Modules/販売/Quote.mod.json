@@ -1056,7 +1056,7 @@
                   "RightColor": "",
                   "BottomColor": ""
                 },
-                "HorizontalAlignment": "Start",
+                "HorizontalAlignment": "End",
                 "VerticalAlignment": "Middle",
                 "CanResize": false,
                 "AllowOverflow": false,
@@ -1184,7 +1184,7 @@
                   "RightColor": "",
                   "BottomColor": ""
                 },
-                "HorizontalAlignment": "Start",
+                "HorizontalAlignment": "End",
                 "VerticalAlignment": "Middle",
                 "CanResize": false,
                 "AllowOverflow": false,
@@ -1373,7 +1373,7 @@
                   "RightColor": "",
                   "BottomColor": ""
                 },
-                "HorizontalAlignment": "Start",
+                "HorizontalAlignment": "End",
                 "VerticalAlignment": "Middle",
                 "CanResize": false,
                 "AllowOverflow": false,
@@ -1536,7 +1536,7 @@
                   "RightColor": "",
                   "BottomColor": ""
                 },
-                "HorizontalAlignment": "Start",
+                "HorizontalAlignment": "End",
                 "VerticalAlignment": "Middle",
                 "CanResize": false,
                 "AllowOverflow": false,

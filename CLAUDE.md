@@ -96,7 +96,7 @@ Fable が**自分でドキュメントを作成・管理**する。計画・仕�
 - **DB**: SQLite（`LocalData\db\accounting_v1.db`。実行環境データの構成は `LocalData/README.md`・移設経緯は `docs/decisions/0017`）。**`AllowCliSqlAccess:true` のデータソースだけ** `sql` CLI の対象になる（安全境界）。
 - **認証**: Cookie 認証（`AppUser` モジュール、初期ユーザー admin/admin）。承認ワークフローは認証前提。
 - **AI 連携**: 既存の AI 系は OpenAI/Azure 前提（Server の `AISettings`／`Services/AI/`）。AI 仕訳提案を Claude API で作る場合は**最新モデル（例: Claude Opus 4.8）**を使い、サーバ経由で実装する。実装前に `claude-api` の情報を確認すること。
-- **CLB バージョン**: 1.2.51.0。
+- **CLB バージョン**: ランタイム 1.3.4／デザイナ 1.3.6（2026-07-20 更新。`HorizontalAlignment` は新列挙 `Start/Center/End/Stretch`——旧値 `Left/Right` は**エラーにならず既定 Start に化ける**ので使用禁止）。
 
 ## 7. 参照ドキュメント（索引）
 

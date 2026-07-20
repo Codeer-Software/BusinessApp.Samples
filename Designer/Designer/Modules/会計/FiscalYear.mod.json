@@ -945,7 +945,7 @@
                   "BottomColor": ""
                 },
                 "VerticalAlignment": "Middle",
-                "HorizontalAlignment": "Right",
+                "HorizontalAlignment": "End",
                 "CanResize": false,
                 "Border": "None"
               },
