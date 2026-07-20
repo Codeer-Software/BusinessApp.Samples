@@ -16,12 +16,12 @@
       "Version": "0.0.17.0"
     },
     {
-      "AssemblyName": "Codeer.LowCode.Bindings.ApexCharts",
-      "Version": "0.23.0.0"
-    },
-    {
       "AssemblyName": "AccountingApp.Client.Shared",
       "Version": "1.0.0.0"
+    },
+    {
+      "AssemblyName": "Codeer.LowCode.Bindings.ApexCharts",
+      "Version": "0.23.0.0"
     }
   ],
   "LocalizeResourcePath": ""
