@@ -187,7 +187,7 @@
         "SortConditions": [],
         "SortFieldVariable": "Id.Value",
         "SortDescending": true,
-        "ModuleName": "Invoice"
+        "ModuleName": "InvoiceLookup"
       },
       "ValueVariable": "Id.Value",
       "DisplayTextVariable": "SelectLabel.Value",

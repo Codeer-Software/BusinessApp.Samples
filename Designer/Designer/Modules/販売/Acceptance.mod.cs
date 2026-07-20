@@ -85,9 +85,16 @@ void UpdateButtons()
     // 確定後は編集できないので保存ボタンは出さない（押せないボタンを見せない・ADR-0027）
     SubmitButton.IsVisible = !(st == "confirmed" && !this.IsNewData);
 
-    // 請求書作成済み（直接 or 合算）ならボタンの代わりに案内ラベルを出す
-    var invoiceNo = FindExistingInvoiceNo();
-    var billedNo = FindBilledInvoiceNo();
+    // 請求書作成済み（直接 or 合算）ならボタンの代わりに案内ラベルを出す。
+    // Invoice モジュールは経理専用（UserReadCondition）のため、general/approver で検索すると
+    // "No permission to read module" で画面ごと落ちる——経理ロールのときだけ照会する
+    string invoiceNo = null;
+    string billedNo = null;
+    if (isAccountingRole)
+    {
+        invoiceNo = FindExistingInvoiceNo();
+        billedNo = FindBilledInvoiceNo();
+    }
     CreateInvoiceButton.IsVisible = isAccountingRole && !this.IsNewData && (st == "confirmed") && (invoiceNo == null) && (billedNo == null);
     InvoiceDoneLabel.IsVisible = (invoiceNo != null || billedNo != null);
     if (invoiceNo != null)
