@@ -518,7 +518,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "検収が登録済みのため、この受注は編集できません（追加・変更は「変更契約」として新しい見積→受注を作成してください。docs/06 の運用規約参照）",
+      "Text": "検収が登録済みのため、この受注は編集できません（追加・変更は「変更契約」として新しい見積→受注を作成してください。docs/tests/06 の運用規約参照）",
       "Icon": "bi bi-lock-fill",
       "Style": "Default",
       "RelativeField": "",

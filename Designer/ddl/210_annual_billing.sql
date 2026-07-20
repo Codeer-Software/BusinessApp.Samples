@@ -11,5 +11,5 @@ ALTER TABLE recurring_billings ADD COLUMN billing_cycle TEXT DEFAULT 'monthly'; 
 ALTER TABLE recurring_billings ADD COLUMN annual_amount INTEGER;                 -- 年額（税抜）。yearly のとき使用
 
 -- 年額プランの seed は置かない（2026-07-10 削除）:
--- 業務データは E2E シナリオ（docs/11 の 02_販売 ステップ 2-9）が画面から登録する方針。
+-- 業務データは E2E シナリオ（docs/tests/11 の 02_販売 ステップ 2-9）が画面から登録する方針。
 -- 検証用の値はシナリオ側に記載（年額 1,200,000 = 月 100,000 で割り切れる設定）。

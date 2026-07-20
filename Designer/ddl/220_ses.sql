@@ -20,4 +20,4 @@ INSERT OR IGNORE INTO projects (id, code, name, partner_id, project_type, status
 
 -- 2026-06 の工数実績 seed は 2026-07-09 の組織再編（docs/decisions/0018）で廃止した。
 -- user_id=3 の直値が旧ユーザー（次郎）前提で、新組織では別人に紐づいてしまうため。
--- 工数のテストデータは E2E シナリオ（docs/11）が画面から登録する。
+-- 工数のテストデータは E2E シナリオ（docs/tests/11）が画面から登録する。

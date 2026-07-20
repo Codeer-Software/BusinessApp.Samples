@@ -45,4 +45,4 @@ WHERE project_id IS NULL AND title = 'クラウド勤怠 SaaS 利用料';
 
 -- 月次人件費コストの seed は 2026-07-09 の組織再編（docs/decisions/0018）で廃止した。
 -- 旧ユーザー（admin/hanako/jiro/soumu）前提だったため。テストデータは E2E シナリオ
--- （docs/11）が画面から登録する（まっさら DB では 0 件が正しい状態）。
+-- （docs/tests/11）が画面から登録する（まっさら DB では 0 件が正しい状態）。
