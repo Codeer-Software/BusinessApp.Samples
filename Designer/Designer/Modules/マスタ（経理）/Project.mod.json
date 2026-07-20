@@ -107,7 +107,7 @@
       "OnSearchDataChanged": "",
       "DisplayName": "種別",
       "IsRequired": true,
-      "OnDataChanged": "",
+      "OnDataChanged": "ProjectType_OnDataChanged",
       "Name": "ProjectType",
       "IgnoreModification": false,
       "OnValidateInput": "",
@@ -454,7 +454,7 @@
   "DetailLayouts": {
     "": {
       "OnBeforeInitialization": "",
-      "OnAfterInitialization": "",
+      "OnAfterInitialization": "Detail_OnAfterInitialization",
       "OnLocationChanging": "",
       "OnFieldDataChanged": "",
       "DataOnlyFields": [],
