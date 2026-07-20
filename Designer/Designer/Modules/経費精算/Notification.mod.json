@@ -176,6 +176,24 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
+      "Text": "未読に戻す",
+      "Icon": "",
+      "Variant": "Danger",
+      "OnClick": "MarkUnread_OnClick",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "ShowTextInToolTip": false,
+      "Name": "MarkUnreadButton",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+    },
+    {
       "Text": "既読：",
       "Icon": "",
       "Style": "Default",
@@ -297,6 +315,24 @@
             "ContextMenu": "",
             "Label": " ",
             "Width": 80,
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "IsViewOnly": false,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": false,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "MarkUnreadButton",
+            "ContextMenu": "",
+            "Label": " ",
+            "Width": 110,
             "ColumnSpan": 1,
             "RowSpan": 1,
             "IsViewOnly": false,

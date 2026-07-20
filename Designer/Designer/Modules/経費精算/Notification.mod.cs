@@ -30,3 +30,23 @@ void Open_OnClick()
         Toaster.Info("既読にしました");
     }
 }
+
+// 未読に戻す（誤既読のリカバリ。2026-07-21 ユーザー要望）
+void MarkUnread_OnClick()
+{
+    var s = new ModuleSearcher<Notification>();
+    s.AddEquals(n => n.Id.Value, Id.Value);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return;
+    var typed = (Notification)found;
+    if (typed.IsRead.Value != true)
+    {
+        Toaster.Info("この通知は未読です");
+        return;
+    }
+    typed.IsRead.Value = false;
+    var ret = typed.Submit();
+    if (ret != true) { Toaster.Error("未読に戻せませんでした"); return; }
+    IsRead.Value = false;
+    Toaster.Success("通知を未読に戻しました");
+}

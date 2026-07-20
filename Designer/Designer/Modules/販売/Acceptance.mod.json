@@ -824,7 +824,6 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 200,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -1165,7 +1164,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 280,
+                "Width": 440,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {

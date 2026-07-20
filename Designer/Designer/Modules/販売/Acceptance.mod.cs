@@ -540,7 +540,10 @@ void CreateInvoice_OnClick()
     inv.Title.Value = typedSo.Title.Value;
     inv.IssueDate.Value = DateOnly.FromDateTime(DateTime.Today);
     inv.DueDate.Value = EndOfNextMonth();
-    inv.Status.Value = "issued";
+    // 下書きで生成し、ユーザーが請求書画面で明示的に「発行する」を押して発行済みにする
+    // （自動で発行済みになるのは驚きが大きい・2026-07-21 ユーザー指摘。
+    //   定期請求・SES の一括生成は月次発行バッチなので従来どおり issued 直書き）
+    inv.Status.Value = "draft";
     inv.InvoiceSource.Value = "acceptance";
     inv.Amount.Value = Amount.Value;
     inv.TaxAmount.Value = TaxAmount.Value;
@@ -571,7 +574,7 @@ void CreateInvoice_OnClick()
     var ret = inv.Submit();
     if (ret != true) { Toaster.Error("請求書の作成に失敗しました"); return; }
 
-    Toaster.Success($"請求書 {invoiceNo} を作成しました");
+    Toaster.Success($"請求書 {invoiceNo} を下書きで作成しました（内容を確認して「発行する」を押してください）");
 
     var nsInv = new ModuleSearcher<Invoice>();
     nsInv.AddEquals(e => e.InvoiceNo.Value, invoiceNo);
