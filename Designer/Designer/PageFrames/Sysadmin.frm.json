@@ -126,7 +126,7 @@
           "LayoutName": "",
           "UrlParameter": ""
         },
-        "Title": "経費精算/申請",
+        "Title": "一般業務/経費精算/申請",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false
@@ -187,7 +187,7 @@
           "LayoutName": "",
           "UrlParameter": ""
         },
-        "Title": "経費精算/申請中",
+        "Title": "一般業務/経費精算/申請中",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false
@@ -248,7 +248,7 @@
           "LayoutName": "",
           "UrlParameter": ""
         },
-        "Title": "経費精算/承認待ち",
+        "Title": "一般業務/経費精算/承認待ち",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false
@@ -344,7 +344,7 @@
           "LayoutName": "",
           "UrlParameter": ""
         },
-        "Title": "経費精算/精算処理待ち",
+        "Title": "一般業務/経費精算/精算処理待ち",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false
@@ -403,13 +403,13 @@
           "LayoutName": "",
           "UrlParameter": ""
         },
-        "Title": "経費精算/通知",
+        "Title": "一般業務/経費精算/通知",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false
       },
       {
-        "Title": "販売/見積",
+        "Title": "一般業務/販売/見積",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -468,7 +468,7 @@
         }
       },
       {
-        "Title": "販売/受注",
+        "Title": "一般業務/販売/受注",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -527,7 +527,7 @@
         }
       },
       {
-        "Title": "販売/検収",
+        "Title": "一般業務/販売/検収",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -586,7 +586,7 @@
         }
       },
       {
-        "Title": "販売/請求書",
+        "Title": "一般業務/販売/請求書",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -645,7 +645,7 @@
         }
       },
       {
-        "Title": "販売/入金",
+        "Title": "一般業務/販売/入金",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -704,7 +704,7 @@
         }
       },
       {
-        "Title": "販売/売掛残高",
+        "Title": "一般業務/販売/売掛残高",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -763,7 +763,7 @@
         }
       },
       {
-        "Title": "販売/定期請求",
+        "Title": "一般業務/販売/定期請求",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -822,7 +822,7 @@
         }
       },
       {
-        "Title": "販売/定期請求の実行",
+        "Title": "一般業務/販売/定期請求の実行",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -881,7 +881,7 @@
         }
       },
       {
-        "Title": "販売/SES精算・請求",
+        "Title": "一般業務/販売/SES精算・請求",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -940,7 +940,7 @@
         }
       },
       {
-        "Title": "購買/仕入先請求書",
+        "Title": "一般業務/購買/仕入先請求書",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -999,7 +999,7 @@
         }
       },
       {
-        "Title": "購買/支払予定表",
+        "Title": "一般業務/購買/支払予定表",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1058,7 +1058,7 @@
         }
       },
       {
-        "Title": "購買/振込データ作成",
+        "Title": "一般業務/購買/振込データ作成",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1117,7 +1117,7 @@
         }
       },
       {
-        "Title": "仕訳/振替伝票",
+        "Title": "会計/仕訳/振替伝票",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1179,7 +1179,7 @@
         }
       },
       {
-        "Title": "仕訳/定型仕訳",
+        "Title": "会計/仕訳/定型仕訳",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1241,7 +1241,7 @@
         }
       },
       {
-        "Title": "仕訳/入出金起票",
+        "Title": "会計/仕訳/入出金起票",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1303,7 +1303,7 @@
         }
       },
       {
-        "Title": "仕訳/仕訳インポート",
+        "Title": "会計/仕訳/仕訳インポート",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1365,69 +1365,7 @@
         }
       },
       {
-        "Title": "仕訳/固定資産台帳",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false,
-        "ModulePageType": "Auto",
-        "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
-        "PageFrame": "",
-        "Module": "FixedAsset",
-        "Id": "",
-        "Parameters": "",
-        "ListPageDesign": {
-          "SearchLayoutName": "",
-          "UserUrlParameter": true,
-          "PageTitle": "固定資産台帳",
-          "HeaderTitle": "固定資産台帳です。経費申請から自動登録された資産もここで管理し、年度ごとの減価償却仕訳を自動生成できます。",
-          "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": true,
-          "UseSubmitButton": false,
-          "UseNavigateToCreate": true,
-          "ListFieldDesign": {
-            "LayoutName": "",
-            "CanNavigateToDetail": true,
-            "NavigateModuleUrlSegment": "",
-            "CanCustomizeColumns": false,
-            "ApplyBackgroundToBoxInput": false,
-            "DisplayName": "",
-            "SearchCondition": {
-              "LimitCount": 50,
-              "SelectFields": [],
-              "SortConditions": [],
-              "SortFieldVariable": "Code.Value",
-              "SortDescending": false,
-              "ModuleName": ""
-            },
-            "PagerPosition": "Top",
-            "ReplaceMode": "None",
-            "DeleteTogether": false,
-            "CanCreate": false,
-            "CanUpdate": false,
-            "CanDelete": true,
-            "CanUserSort": true,
-            "CanSelect": false,
-            "UseIndexSort": false,
-            "OnDataChanged": "",
-            "OnSearchDataChanged": "",
-            "OnSelectedIndexChanged": "",
-            "OnSelectedIndexChanging": "",
-            "OnDoubleClickRow": "",
-            "Name": "",
-            "IgnoreModification": false,
-            "OnValidateInput": "",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
-          }
-        },
-        "DetailPageDesign": {
-          "PageTitle": "",
-          "LayoutName": "",
-          "UrlParameter": ""
-        }
-      },
-      {
-        "Title": "帳簿/仕訳帳",
+        "Title": "会計/帳簿/仕訳帳",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1489,7 +1427,7 @@
         }
       },
       {
-        "Title": "帳簿/総勘定元帳",
+        "Title": "会計/帳簿/総勘定元帳",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1551,7 +1489,7 @@
         }
       },
       {
-        "Title": "帳簿/出納帳",
+        "Title": "会計/帳簿/出納帳",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1613,7 +1551,69 @@
         }
       },
       {
-        "Title": "銀行/明細取込",
+        "Title": "会計/帳簿/固定資産台帳",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
+        "ModulePageType": "Auto",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "FixedAsset",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "固定資産台帳",
+          "HeaderTitle": "固定資産台帳です。経費申請から自動登録された資産もここで管理し、年度ごとの減価償却仕訳を自動生成できます。",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": true,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": true,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": true,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [],
+              "SortFieldVariable": "Code.Value",
+              "SortDescending": false,
+              "ModuleName": ""
+            },
+            "PagerPosition": "Top",
+            "ReplaceMode": "None",
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": true,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "UseIndexSort": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        }
+      },
+      {
+        "Title": "会計/銀行/明細取込",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1675,7 +1675,7 @@
         }
       },
       {
-        "Title": "銀行/明細一覧",
+        "Title": "会計/銀行/明細一覧",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1737,7 +1737,7 @@
         }
       },
       {
-        "Title": "銀行/残高照合",
+        "Title": "会計/銀行/残高照合",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1799,7 +1799,7 @@
         }
       },
       {
-        "Title": "銀行/仕訳ルール",
+        "Title": "会計/銀行/仕訳ルール",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1861,7 +1861,69 @@
         }
       },
       {
-        "Title": "財務帳票/合計残高試算表",
+        "Title": "会計/設定/会計年度",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
+        "ModulePageType": "Auto",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "FiscalYear",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "会計年度",
+          "HeaderTitle": "会計年度と月次期間を管理します。期間の締め・再オープン、決算後の翌期繰越もここから行います。",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": true,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": true,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [],
+              "SortFieldVariable": "StartDate.Value",
+              "SortDescending": true,
+              "ModuleName": ""
+            },
+            "PagerPosition": "Top",
+            "ReplaceMode": "None",
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": true,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "UseIndexSort": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        }
+      },
+      {
+        "Title": "財務・経営/財務帳票/合計残高試算表",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1923,7 +1985,7 @@
         }
       },
       {
-        "Title": "財務帳票/貸借対照表",
+        "Title": "財務・経営/財務帳票/貸借対照表",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -1985,7 +2047,7 @@
         }
       },
       {
-        "Title": "財務帳票/損益計算書",
+        "Title": "財務・経営/財務帳票/損益計算書",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -2047,7 +2109,7 @@
         }
       },
       {
-        "Title": "財務帳票/月次推移表",
+        "Title": "財務・経営/財務帳票/月次推移表",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -2109,7 +2171,7 @@
         }
       },
       {
-        "Title": "財務帳票/キャッシュ・フロー",
+        "Title": "財務・経営/財務帳票/キャッシュ・フロー",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -2171,7 +2233,7 @@
         }
       },
       {
-        "Title": "財務帳票/株主資本等変動",
+        "Title": "財務・経営/財務帳票/株主資本等変動",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -2233,7 +2295,7 @@
         }
       },
       {
-        "Title": "財務帳票/消費税集計表",
+        "Title": "財務・経営/財務帳票/消費税集計表",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -2295,7 +2357,7 @@
         }
       },
       {
-        "Title": "財務帳票/資金繰り予測",
+        "Title": "財務・経営/財務帳票/資金繰り予測",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -2357,7 +2419,7 @@
         }
       },
       {
-        "Title": "予算/予実対比",
+        "Title": "財務・経営/予算/予実対比",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -2416,7 +2478,7 @@
         }
       },
       {
-        "Title": "予算/予算入力",
+        "Title": "財務・経営/予算/予算入力",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -2475,7 +2537,7 @@
         }
       },
       {
-        "Title": "予算/予算明細",
+        "Title": "財務・経営/予算/予算明細",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -2534,7 +2596,7 @@
         }
       },
       {
-        "Title": "案件/工数入力",
+        "Title": "財務・経営/案件/工数入力",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -2596,7 +2658,7 @@
         }
       },
       {
-        "Title": "案件/工数管理（経理）",
+        "Title": "財務・経営/案件/工数管理（経理）",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -2658,7 +2720,7 @@
         }
       },
       {
-        "Title": "案件/人件費コスト",
+        "Title": "財務・経営/案件/人件費コスト",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -2720,7 +2782,7 @@
         }
       },
       {
-        "Title": "案件/人件費配賦",
+        "Title": "財務・経営/案件/人件費配賦",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -2782,7 +2844,7 @@
         }
       },
       {
-        "Title": "案件/案件損益",
+        "Title": "財務・経営/案件/案件損益",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -3089,68 +3151,6 @@
         }
       },
       {
-        "Title": "設定/会計年度",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false,
-        "ModulePageType": "Auto",
-        "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
-        "PageFrame": "",
-        "Module": "FiscalYear",
-        "Id": "",
-        "Parameters": "",
-        "ListPageDesign": {
-          "SearchLayoutName": "",
-          "UserUrlParameter": true,
-          "PageTitle": "会計年度",
-          "HeaderTitle": "会計年度と月次期間を管理します。期間の締め・再オープン、決算後の翌期繰越もここから行います。",
-          "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
-          "UseSubmitButton": false,
-          "UseNavigateToCreate": true,
-          "ListFieldDesign": {
-            "LayoutName": "",
-            "CanNavigateToDetail": true,
-            "NavigateModuleUrlSegment": "",
-            "CanCustomizeColumns": false,
-            "ApplyBackgroundToBoxInput": false,
-            "DisplayName": "",
-            "SearchCondition": {
-              "LimitCount": 50,
-              "SelectFields": [],
-              "SortConditions": [],
-              "SortFieldVariable": "StartDate.Value",
-              "SortDescending": true,
-              "ModuleName": ""
-            },
-            "PagerPosition": "Top",
-            "ReplaceMode": "None",
-            "DeleteTogether": false,
-            "CanCreate": false,
-            "CanUpdate": false,
-            "CanDelete": true,
-            "CanUserSort": true,
-            "CanSelect": false,
-            "UseIndexSort": false,
-            "OnDataChanged": "",
-            "OnSearchDataChanged": "",
-            "OnSelectedIndexChanged": "",
-            "OnSelectedIndexChanging": "",
-            "OnDoubleClickRow": "",
-            "Name": "",
-            "IgnoreModification": false,
-            "OnValidateInput": "",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
-          }
-        },
-        "DetailPageDesign": {
-          "PageTitle": "",
-          "LayoutName": "",
-          "UrlParameter": ""
-        }
-      },
-      {
         "Title": "システム管理/概要",
         "Icon": "",
         "IconType": "Font",
@@ -3210,7 +3210,7 @@
         }
       },
       {
-        "Title": "システム管理/ユーザー管理",
+        "Title": "システム管理/組織/ユーザー管理",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -3269,7 +3269,7 @@
         }
       },
       {
-        "Title": "システム管理/部門",
+        "Title": "システム管理/組織/部門",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -3328,7 +3328,7 @@
         }
       },
       {
-        "Title": "システム管理/承認フローテンプレート",
+        "Title": "システム管理/承認/承認フローテンプレート",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -3389,7 +3389,7 @@
         }
       },
       {
-        "Title": "システム管理/承認ルート判定",
+        "Title": "システム管理/承認/承認ルート判定",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -3450,7 +3450,7 @@
         }
       },
       {
-        "Title": "システム管理/費目",
+        "Title": "システム管理/会計マスタ/費目",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -3509,7 +3509,7 @@
         }
       },
       {
-        "Title": "システム管理/勘定科目",
+        "Title": "システム管理/会計マスタ/勘定科目",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -3568,7 +3568,7 @@
         }
       },
       {
-        "Title": "システム管理/科目表示区分",
+        "Title": "システム管理/会計マスタ/科目表示区分",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -3627,7 +3627,7 @@
         }
       },
       {
-        "Title": "システム管理/税率",
+        "Title": "システム管理/税制/税率",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -3686,7 +3686,7 @@
         }
       },
       {
-        "Title": "システム管理/税区分",
+        "Title": "システム管理/税制/税区分",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -3745,7 +3745,7 @@
         }
       },
       {
-        "Title": "システム管理/経過措置控除割合",
+        "Title": "システム管理/税制/経過措置控除割合",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -3804,7 +3804,7 @@
         }
       },
       {
-        "Title": "システム管理/制度閾値",
+        "Title": "システム管理/税制/制度閾値",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -3863,6 +3863,7 @@
         }
       }
     ],
+    "Width": 320,
     "FontFamily": "",
     "Color": "#ffffff",
     "BackgroundColorStart": "#052767",
