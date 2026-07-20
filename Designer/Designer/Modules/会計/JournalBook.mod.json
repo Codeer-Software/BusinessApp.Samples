@@ -8,7 +8,7 @@
   "Fields": [
     {
       "QuerySetting": {
-        "QuerySortType": "None",
+        "QuerySortType": "System",
         "QueryPagingType": "System",
         "Parameters": [
           {
@@ -350,7 +350,7 @@
             "RowSpan": 1,
             "TextWrap": "Unset",
             "CanResize": false,
-            "CanUserSort": false,
+            "CanUserSort": true,
             "ClassName": "",
             "FontFamily": "",
             "Color": "",
@@ -366,7 +366,7 @@
             "RowSpan": 1,
             "TextWrap": "Unset",
             "CanResize": false,
-            "CanUserSort": false,
+            "CanUserSort": true,
             "ClassName": "",
             "FontFamily": "",
             "Color": "",
@@ -382,7 +382,7 @@
             "RowSpan": 1,
             "TextWrap": "Unset",
             "CanResize": false,
-            "CanUserSort": false,
+            "CanUserSort": true,
             "ClassName": "",
             "FontFamily": "",
             "Color": "",
@@ -398,7 +398,7 @@
             "RowSpan": 1,
             "TextWrap": "Unset",
             "CanResize": true,
-            "CanUserSort": false,
+            "CanUserSort": true,
             "ClassName": "",
             "FontFamily": "",
             "Color": "",
@@ -430,7 +430,7 @@
             "RowSpan": 1,
             "TextWrap": "Unset",
             "CanResize": false,
-            "CanUserSort": false,
+            "CanUserSort": true,
             "ClassName": "amount-cell",
             "FontFamily": "",
             "Color": "",
@@ -446,7 +446,7 @@
             "RowSpan": 1,
             "TextWrap": "Unset",
             "CanResize": false,
-            "CanUserSort": false,
+            "CanUserSort": true,
             "ClassName": "amount-cell",
             "FontFamily": "",
             "Color": "",
@@ -639,7 +639,20 @@
     "SearchCondition": {
       "LimitCount": 50,
       "SelectFields": [],
-      "SortConditions": [],
+      "SortConditions": [
+        {
+          "Variable": "EntryDate.Value",
+          "IsDescending": false
+        },
+        {
+          "Variable": "JournalNo.Value",
+          "IsDescending": false
+        },
+        {
+          "Variable": "LineNo.Value",
+          "IsDescending": false
+        }
+      ],
       "SortFieldVariable": "",
       "SortDescending": false,
       "ModuleName": ""
@@ -650,7 +663,7 @@
     "CanCreate": false,
     "CanUpdate": false,
     "CanDelete": false,
-    "CanUserSort": false,
+    "CanUserSort": true,
     "CanSelect": false,
     "OnDataChanged": "",
     "OnSearchDataChanged": "",

@@ -15,4 +15,3 @@ LEFT JOIN sub_accounts s ON s.id = l.sub_account_id
 WHERE e.status = 'posted'
   AND (@date_from IS NULL OR date(e.entry_date) >= date(@date_from))
   AND (@date_to IS NULL OR date(e.entry_date) <= date(@date_to))
-ORDER BY date(e.entry_date), e.journal_no, l.line_no
