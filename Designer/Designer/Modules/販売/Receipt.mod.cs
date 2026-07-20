@@ -24,6 +24,9 @@ void UpdateButtons()
 {
     var confirmed = (FindReceiptJournal() != null);
     this.IsViewOnly = confirmed;
+    // CLB 1.3: モジュール全体を閲覧専用にするとボタンの OnClick も発火しなくなるため、
+    // 確定後も操作する取消ボタンだけ個別に閲覧専用を解除する
+    if (confirmed) { CancelReceiptButton.IsViewOnly = false; }
     ConfirmButton.IsVisible = !confirmed;
     CancelReceiptButton.IsVisible = confirmed && (CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin");
     DeleteReceiptButton.IsVisible = !confirmed;

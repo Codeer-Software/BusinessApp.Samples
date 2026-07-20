@@ -42,6 +42,11 @@ void UpdateButtons()
         // 受注済みの見積は編集させない（明細は受注へコピー済み。修正は受注側で行う）
         this.IsViewOnly = true;
         SubmitButton.IsVisible = false;
+        // CLB 1.3: モジュール全体を閲覧専用にするとボタンの OnClick も発火しなくなるため、
+        // 操作ボタンだけ個別に閲覧専用を解除する
+        RevertToDraftButton.IsViewOnly = false;
+        PrintExcelButton.IsViewOnly = false;
+        PrintPdfButton.IsViewOnly = false;
     }
 }
 

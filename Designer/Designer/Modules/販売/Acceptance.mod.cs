@@ -21,6 +21,10 @@ void UpdateButtons()
     if (!this.IsNewData && st == "confirmed")
     {
         this.IsViewOnly = true;
+        // CLB 1.3: モジュール全体を閲覧専用にするとボタンの OnClick も発火しなくなるため、
+        // 確定後も操作する取消・請求書作成ボタンだけ個別に閲覧専用を解除する
+        CancelConfirmButton.IsViewOnly = false;
+        CreateInvoiceButton.IsViewOnly = false;
     }
     else
     {
