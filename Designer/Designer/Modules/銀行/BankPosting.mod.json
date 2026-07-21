@@ -1,5 +1,5 @@
 {
-  "Name": "BankImport",
+  "Name": "BankPosting",
   "DataSourceName": "",
   "DbTable": "",
   "CanCreate": false,
@@ -7,7 +7,7 @@
   "CanDelete": false,
   "Fields": [
     {
-      "Text": "銀行・カード明細取込",
+      "Text": "一括起票",
       "Icon": "",
       "Style": "H2",
       "RelativeField": "",
@@ -17,115 +17,32 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "取込先口座",
+      "Text": "未起票の明細に相手科目の候補を設定し、「候補科目で一括起票」で仕訳を作成します。起票しない明細は「対象外」にチェックして保存すると一覧から外れます（明細一覧から戻せます）。ルール・AI の推定はこの画面上だけの変更で、「変更を保存」または起票で確定されます。",
       "Icon": "",
       "Style": "Default",
-      "RelativeField": "BankAccountSel",
+      "RelativeField": "",
       "OnClick": "",
-      "Name": "BankAccountSelLabel",
+      "Name": "DescLabel",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
-    },
-    {
-      "Candidates": [],
-      "SearchCondition": {
-        "LimitCount": 100,
-        "SelectFields": [],
-        "SortConditions": [],
-        "SortFieldVariable": "Code.Value",
-        "SortDescending": false,
-        "ModuleName": "BankAccount"
-      },
-      "ValueVariable": "Id.Value",
-      "DisplayTextVariable": "Name.Value",
-      "DbColumn": "",
-      "EmptyCandidateType": "Null",
-      "AllowOrSearch": false,
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "取込先口座",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "BankAccountSel",
-      "IgnoreModification": true,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
-    },
-    {
-      "Text": "明細CSV貼り付け",
-      "Icon": "",
-      "Style": "Default",
-      "RelativeField": "CsvText",
-      "OnClick": "",
-      "Name": "CsvTextLabel",
-      "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
-    },
-    {
-      "DbColumn": "",
-      "IsMultiline": true,
-      "IsAutoFitRows": false,
-      "Placeholder": "銀行サイトの CSV をそのまま貼り付け（形式: 日付,摘要,出金額,入金額,残高。ヘッダ行は自動スキップ。\"1,234\" のような引用符付き金額にも対応）",
-      "Rows": 8,
-      "TextEditEmptyType": "StringEmpty",
-      "ShouldTrimAfterEdit": false,
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "明細CSV",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "CsvText",
-      "IgnoreModification": true,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
-    },
-    {
-      "Text": "明細を取り込む",
-      "Icon": "",
-      "Variant": "Primary",
-      "OnClick": "Import_OnClick",
-      "ImageResourcePath": "",
-      "ImageResourceSet": {
-        "Default": "",
-        "Focus": "",
-        "Active": "",
-        "Hover": "",
-        "Disabled": ""
-      },
-      "ShowTextInToolTip": false,
-      "Name": "ImportButton",
-      "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
-      "Style": "Default",
-      "RelativeField": "",
-      "OnClick": "",
-      "Name": "ResultLabel",
-      "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
-    },
-    {
-      "Text": "プレビュー（未登録）— 通帳どおり取り込めているかを確認し、必要なら修正・行削除してから「この内容で登録」",
-      "Icon": "",
       "Style": "H5",
       "RelativeField": "",
       "OnClick": "",
-      "Name": "PreviewLabel",
+      "Name": "SummaryLabel",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "LayoutName": "",
+      "LayoutName": "Posting",
       "CanNavigateToDetail": false,
       "NavigateModuleUrlSegment": "",
       "CanCustomizeColumns": false,
       "ApplyBackgroundToBoxInput": false,
-      "DisplayName": "プレビュー（未登録）",
+      "DisplayName": "未起票の明細",
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [
@@ -140,11 +57,21 @@
         ],
         "SortFieldVariable": "",
         "SortDescending": false,
-        "ModuleName": "BankStatementPreview",
+        "ModuleName": "BankStatementLine",
         "Condition": {
           "IsOrMatch": false,
           "IsNot": false,
-          "Children": [],
+          "Children": [
+            {
+              "SearchTargetVariable": "Status.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": "pending",
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            }
+          ],
           "Name": "",
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
         }
@@ -155,24 +82,24 @@
       "DeleteTogether": false,
       "CanCreate": false,
       "CanUpdate": true,
-      "CanDelete": true,
+      "CanDelete": false,
       "CanUserSort": false,
       "CanSelect": false,
-      "OnDataChanged": "PreviewLines_OnDataChanged",
+      "OnDataChanged": "PendingList_OnDataChanged",
       "OnSearchDataChanged": "",
       "OnSelectedIndexChanged": "",
       "OnSelectedIndexChanging": "",
       "OnDoubleClickRow": "",
-      "Name": "PreviewLines",
+      "Name": "PendingList",
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
     },
     {
-      "Text": "プレビューの変更を保存",
+      "Text": "変更を保存",
       "Icon": "",
       "Variant": "Primary",
-      "OnClick": "SavePreview_OnClick",
+      "OnClick": "Save_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {
         "Default": "",
@@ -182,15 +109,15 @@
         "Disabled": ""
       },
       "ShowTextInToolTip": false,
-      "Name": "SavePreviewButton",
+      "Name": "SaveButton",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
-      "Text": "この内容で登録",
+      "Text": "ルールを適用",
       "Icon": "",
       "Variant": "Primary",
-      "OnClick": "ConfirmImport_OnClick",
+      "OnClick": "ApplyRules_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {
         "Default": "",
@@ -200,15 +127,15 @@
         "Disabled": ""
       },
       "ShowTextInToolTip": false,
-      "Name": "ConfirmImportButton",
+      "Name": "RuleButton",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
-      "Text": "全てのプレビューを取り消す",
+      "Text": "AIで相手科目を推定",
       "Icon": "",
-      "Variant": "Danger",
-      "OnClick": "CancelImport_OnClick",
+      "Variant": "Primary",
+      "OnClick": "AiSuggest_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {
         "Default": "",
@@ -218,9 +145,37 @@
         "Disabled": ""
       },
       "ShowTextInToolTip": false,
-      "Name": "CancelImportButton",
+      "Name": "AiButton",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+    },
+    {
+      "Text": "候補科目で一括起票",
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "PostAll_OnClick",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "ShowTextInToolTip": false,
+      "Name": "PostButton",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+    },
+    {
+      "Text": "",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "ResultLabel",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -352,161 +307,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "BankAccountSelLabel",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 154,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "VerticalAlignment": "Middle",
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "BankAccountSel",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 300,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "VerticalAlignment": "Middle",
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "Margin": {
-              "Top": 8
-            },
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "CsvTextLabel",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 154,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "VerticalAlignment": "Top",
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "CsvText",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "Margin": {
-              "Top": 8,
-              "Bottom": 8
-            },
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "ImportButton",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 160,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "ResultLabel",
+                  "FieldName": "DescLabel",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -515,12 +316,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Padding": {
-                  "Left": 12,
-                  "Top": null,
-                  "Right": null,
-                  "Bottom": null
-                },
+                "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
                   "LeftColor": "",
@@ -528,7 +324,6 @@
                   "RightColor": "",
                   "BottomColor": ""
                 },
-                "VerticalAlignment": "Middle",
                 "CanResize": false,
                 "Border": "None"
               }
@@ -546,7 +341,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "PreviewLabel",
+                  "FieldName": "SummaryLabel",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -578,7 +373,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "PreviewLines",
+                  "FieldName": "PendingList",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -612,7 +407,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "SavePreviewButton",
+                  "FieldName": "SaveButton",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -621,7 +416,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 200,
+                "Width": 130,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -635,7 +430,7 @@
               },
               {
                 "Layout": {
-                  "FieldName": "ConfirmImportButton",
+                  "FieldName": "RuleButton",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -644,7 +439,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 170,
+                "Width": 140,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -658,7 +453,7 @@
               },
               {
                 "Layout": {
-                  "FieldName": "CancelImportButton",
+                  "FieldName": "AiButton",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -667,7 +462,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 220,
+                "Width": 190,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -680,6 +475,63 @@
                 "Border": "None"
               },
               {
+                "Layout": {
+                  "FieldName": "PostButton",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 190,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              },
+              {
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {
+              "Top": 8
+            },
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "ResultLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "#6c757d",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -765,5 +617,5 @@
   },
   "CanBulkDataUpdate": false,
   "CanBulkDataDownload": false,
-  "PageTitle": "明細取込"
+  "PageTitle": "一括起票"
 }
