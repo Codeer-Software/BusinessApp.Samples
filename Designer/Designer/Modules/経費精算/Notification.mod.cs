@@ -3,6 +3,11 @@
 // ListField 行モジュールのため、値は Id で DB から取り直す（B2-1 OpenRequest と同じ規律。
 // レイアウト外フィールドの .Value は信用しない）
 
+// 補足: 行単位の「未読に戻す」ボタン出し分け（既読行のみ表示）は CLB では実現できない
+// （ListLayout の OnAfterInitialization は行モジュールに配られず、フィールドの OnDataChanged も
+//  ロード時には発火しない——2026-07-21 実測）。未読行でのクリックはガードで無害化し、
+// 全行未読のホーム「未読の通知」はボタン無しの HomeUnread レイアウトを使う。
+
 void Open_OnClick()
 {
     var s = new ModuleSearcher<Notification>();
@@ -19,6 +24,7 @@ void Open_OnClick()
         var ret = typed.Submit();
         if (ret != true) { Logger.Warn("通知の既読化に失敗しました"); }
         IsRead.Value = true;
+        MarkUnreadButton.IsVisible = true;
     }
 
     if (linkModule != null && linkModule != "" && linkId != null && linkId != "")
@@ -48,5 +54,6 @@ void MarkUnread_OnClick()
     var ret = typed.Submit();
     if (ret != true) { Toaster.Error("未読に戻せませんでした"); return; }
     IsRead.Value = false;
+    MarkUnreadButton.IsVisible = false;
     Toaster.Success("通知を未読に戻しました");
 }

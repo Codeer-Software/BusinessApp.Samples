@@ -348,6 +348,88 @@
           }
         ]
       ]
+    },
+    "HomeUnread": {
+      "HeaderTitle": "",
+      "DataOnlyFields": [
+        "RecipientUser",
+        "LinkModule",
+        "LinkId",
+        "IsRead"
+      ],
+      "OnBeforeInitialization": "",
+      "OnAfterInitialization": "",
+      "OnFieldDataChanged": "",
+      "Elements": [
+        [
+          {
+            "FieldName": "CreatedAt",
+            "ContextMenu": "",
+            "Label": "日時",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": true,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "Title",
+            "ContextMenu": "",
+            "Label": "タイトル",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": true,
+            "CanUserSort": false,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "Body",
+            "ContextMenu": "",
+            "Label": "内容",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": true,
+            "CanUserSort": false,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "OpenButton",
+            "ContextMenu": "",
+            "Label": " ",
+            "Width": 80,
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "IsViewOnly": false,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": false,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          }
+        ]
+      ]
     }
   },
   "SearchLayouts": {
