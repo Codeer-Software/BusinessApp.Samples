@@ -255,7 +255,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
-      "Text": "- 通帳どおり取り込めているかを確認し、必要なら修正・行削除してください。",
+      "Text": "・ 通帳どおり取り込めているかを確認し、必要なら修正・行削除してください。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -267,7 +267,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "- 「この内容で登録」を押すと明細に登録されます（起票はまだされません）。",
+      "Text": "・ 「この内容で登録」を押すと明細に登録されます（起票はまだされません）。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -279,7 +279,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "- プレビューのまま保存したい場合は「プレビューの変更を保存」を押してください。",
+      "Text": "・ 一時的にプレビューのまま保存したい場合は「プレビューの変更を保存」を押してください。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -719,7 +719,7 @@
                   "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 200,
+                "Width": 220,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -767,7 +767,7 @@
                   "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 220,
+                "Width": 250,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {

@@ -19,7 +19,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "- 未起票の明細に相手科目の候補を設定し、「候補科目で一括起票」で仕訳を作成します。",
+      "Text": "・ 未起票の明細に相手科目の候補を設定し、「候補科目で一括起票」で仕訳を作成します。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -31,7 +31,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "- 起票しない明細は「対象外」にチェックして「変更を保存」すると一覧から外れます（明細一覧から戻せます）。",
+      "Text": "・ 起票しない明細は「対象外」にチェックして「変更を保存」すると一覧から外れます（明細一覧から未起票に戻せます）。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -43,7 +43,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "- ルール・AI の推定はこの画面上だけの変更で、「変更を保存」または起票で確定されます。",
+      "Text": "・ ルール・AI の推定はこの画面上だけの変更です。「変更を保存」または起票で確定されます。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
