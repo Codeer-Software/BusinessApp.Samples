@@ -29,6 +29,7 @@ void UpdateButtons()
     {
         MarkSentButton.IsVisible = false;
         ConvertToOrderButton.IsVisible = false;
+        ConvertToRecurringButton.IsVisible = false;
         MarkRejectedButton.IsVisible = false;
         RevertToDraftButton.IsVisible = false;
         DeleteQuoteButton.IsVisible = false;
@@ -36,6 +37,7 @@ void UpdateButtons()
     }
     MarkSentButton.IsVisible = (st == "draft");
     ConvertToOrderButton.IsVisible = (st == "draft" || st == "sent");
+    ConvertToRecurringButton.IsVisible = (st == "draft" || st == "sent");
     MarkRejectedButton.IsVisible = (st == "draft" || st == "sent");
     RevertToDraftButton.IsVisible = (st == "sent" || st == "rejected" || st == "accepted");
     DeleteQuoteButton.IsVisible = (st == "draft");
@@ -50,6 +52,7 @@ void UpdateButtons()
         // CLB 1.3: モジュール全体を閲覧専用にするとボタンの OnClick も発火しなくなるため、
         // 閲覧専用中も使う操作ボタンだけ個別に閲覧専用を解除する
         ConvertToOrderButton.IsViewOnly = false;
+        ConvertToRecurringButton.IsViewOnly = false;
         MarkRejectedButton.IsViewOnly = false;
         RevertToDraftButton.IsViewOnly = false;
         PrintExcelButton.IsViewOnly = false;
@@ -404,5 +407,86 @@ void ConvertToOrder_OnClick()
     {
         var typedCreated = (SalesOrder)created;
         NavigationService.NavigateTo(NavigationService.GetModuleDataUrl("SalesOrder", $"{typedCreated.Id.Value}"));
+    }
+}
+
+// 定期請求契約にする: 下書きの契約を生成して見積を accepted に更新する（SaaS・保守等の定期案件向け）。
+// 変換は「下書き契約を作って詳細へ遷移する」だけに留め、金額（税抜合計を月額欄へ仮置き）・
+// 課金サイクル・開始月（翌月を初期値）は契約の下書き上で人間が整え、経理の「確定」で発効する
+void ConvertToRecurring_OnClick()
+{
+    if (this.IsNewData)
+    {
+        Toaster.Error("先に見積を保存してください");
+        return;
+    }
+    if (Status.Value == "rejected")
+    {
+        Toaster.Error("失注した見積からは契約を作成できません（「下書きに戻す」で復活してから操作してください）");
+        return;
+    }
+
+    // 既変換ガード（受注・契約の両方を確認）
+    var checkRb = new ModuleSearcher<RecurringBilling>();
+    checkRb.AddEquals(e => e.QuoteRef.Value, this.Id.Value);
+    if (checkRb.Execute().Count > 0)
+    {
+        Toaster.Error("この見積からは既に定期請求契約が作成されています");
+        return;
+    }
+    var checkSo = new ModuleSearcher<SalesOrder>();
+    checkSo.AddEquals(e => e.QuoteRef.Value, this.Id.Value);
+    if (checkSo.Execute().Count > 0)
+    {
+        Toaster.Error("この見積は既に受注済みです");
+        return;
+    }
+
+    var answer = MessageBox.Show("この見積から定期請求契約（下書き）を作成し、見積を「受注」にします。金額・課金サイクル・開始月は契約画面で確認してください。よろしいですか？", "契約を作成", "キャンセル");
+    if (answer != "契約を作成") return;
+
+    // ローディングは確認ダイアログの後に開始する（先に出すとオーバーレイがダイアログを塞ぐ・実測）
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    var today = DateOnly.FromDateTime(DateTime.Today);
+    var rb = new RecurringBilling();
+    rb.QuoteRef.Value = this.Id.Value;
+    rb.PartnerRef.Value = PartnerRef.Value;
+    rb.ProjectRef.Value = ProjectRef.Value;
+    rb.DepartmentRef.Value = DepartmentRef.Value;
+    rb.Title.Value = Title.Value;
+    rb.Status.Value = "draft";
+    rb.IsActive.Value = true;
+    rb.BillingCycle.Value = "monthly";
+    rb.MonthlyAmount.Value = TotalAmount.Value;
+    rb.StartMonth.Value = new DateOnly(today.Year, today.Month, 1).AddMonths(1);
+    rb.Note.Value = Note.Value;
+
+    var retRb = rb.Submit();
+    if (retRb != true)
+    {
+        Toaster.Error("定期請求契約の作成に失敗しました");
+        return;
+    }
+
+    Status.Value = "accepted";
+    var retSelf = this.Submit();
+    if (retSelf != true)
+    {
+        Toaster.Error("見積の状態更新に失敗しました（契約は作成済みです）");
+        return;
+    }
+
+    Toaster.Success("定期請求契約（下書き）を作成しました。内容を確認し、経理が「確定」すると請求が始まります");
+
+    // 作成した契約へ遷移 (Submit 後の Id はテンポラリの可能性があるため DB から取り直す)
+    var ns2 = new ModuleSearcher<RecurringBilling>();
+    ns2.AddEquals(e => e.QuoteRef.Value, this.Id.Value);
+    var createdRb = ns2.ExecuteFirstOrDefault();
+    if (createdRb != null)
+    {
+        var typedRb = (RecurringBilling)createdRb;
+        NavigationService.NavigateTo(NavigationService.GetModuleDataUrl("RecurringBilling", $"{typedRb.Id.Value}"));
     }
 }
