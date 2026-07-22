@@ -5,9 +5,24 @@
 // 科目の確定・対象外分別・起票は「一括起票」(BankPosting)、監査・例外操作は「明細一覧」で行う。
 // 保存規律: リストの編集・行削除はメモリ上の変化。保存/登録ボタンで初めて DB に反映する
 //          （スナップショット差分同期。DB全行との突き合わせはページング誤削除の恐れがあるため行わない）
+// 注意: スナップショットは初期化・各操作後に**明示的に** CaptureSnapshot() で取る。
+//       ListField の OnDataChanged は自動ロード時に発火しない（2026-07-22 実測。
+//       イベント頼みだと「前回のプレビューが残った画面を開き直す→行削除→保存」で
+//       スナップショットが空のまま＝削除が検出されないバグになった）
 
 List<object> previewSnapshot = new List<object>();
-bool snapshotValid = false;
+
+// いまロードされている行の Id 集合を記録する（差分同期のスナップショット）。
+// 保存時に「スナップショットにあるがメモリに無い行」＝ユーザーが削除した行として DELETE する
+void CaptureSnapshot()
+{
+    previewSnapshot.Clear();
+    foreach (var r in PreviewLines.Rows)
+    {
+        var p = (BankStatementPreview)r;
+        previewSnapshot.Add(p.Id.Value);
+    }
+}
 
 void Detail_OnAfterInit()
 {
@@ -25,27 +40,15 @@ void Detail_OnAfterInit()
         }
     }
 
-    // 前回（または他の担当者）の未登録プレビューが残っている場合は警告する
-    var ps = new ModuleSearcher<BankStatementPreview>();
-    var leftovers = ps.Execute().Count;
-    if (leftovers > 0)
-    {
-        ResultLabel.Text = $"⚠ 登録されていないプレビューが {leftovers} 件残っています（前回の作業の続き、または他の担当者の作業中かもしれません）。内容を確認して「この内容で登録」で確定するか、「全てのプレビューを取り消す」で破棄してから取込を始めてください";
-    }
-}
+    // 初期表示分のスナップショットを確定させる（自動ロード待ちにせず明示ロード）
+    PreviewLines.Reload();
+    CaptureSnapshot();
 
-// プレビュー一覧のロード完了時に「ロード済み行の Id 集合」を記録する（差分同期のスナップショット）。
-// 保存時に「スナップショットにあるがメモリに無い行」＝ユーザーが削除した行として DELETE する
-void PreviewLines_OnDataChanged()
-{
-    if (snapshotValid) return;
-    previewSnapshot.Clear();
-    foreach (var r in PreviewLines.Rows)
+    // 前回（または他の担当者）の未登録プレビューが残っている場合は警告する
+    if (previewSnapshot.Count > 0)
     {
-        var p = (BankStatementPreview)r;
-        previewSnapshot.Add(p.Id.Value);
+        ResultLabel.Text = $"⚠ 登録されていないプレビューが {previewSnapshot.Count} 件残っています（前回の作業の続き、または他の担当者の作業中かもしれません）。内容を確認して「この内容で登録」で確定するか、「全てのプレビューを取り消す」で破棄してから取込を始めてください";
     }
-    snapshotValid = true;
 }
 
 // ============ 取込 ============
@@ -131,8 +134,8 @@ void Import_OnClick()
         else { badLines = badLines + 1; }
     }
 
-    snapshotValid = false;
     PreviewLines.Reload();
+    CaptureSnapshot();
     if (added == 0)
     {
         ResultLabel.Text = $"プレビュー 0 件（重複スキップ {skipped} 件 / スキップ行（ヘッダ・明細以外） {badLines} 行）";
@@ -191,8 +194,8 @@ void SavePreviewEdits()
         p.Submit();
     }
 
-    snapshotValid = false;
     PreviewLines.Reload();
+    CaptureSnapshot();
 }
 
 // ============ 登録（プレビュー → 本番へ移送。ルール適用を含む） ============
@@ -278,8 +281,8 @@ void ConfirmImport_OnClick()
         }
     }
 
-    snapshotValid = false;
     PreviewLines.Reload();
+    CaptureSnapshot();
     ResultLabel.Text = $"{done} 件を未起票の明細として登録しました（ルール適用 {ruled} 件 / 重複スキップ {dup} 件）。科目の確定と起票は「一括起票」で行います";
     Toaster.Success($"{done} 件の明細を登録しました");
 }
@@ -305,8 +308,8 @@ void CancelImport_OnClick()
         var ok = r.Delete();
         if (ok == true) { done = done + 1; }
     }
-    snapshotValid = false;
     PreviewLines.Reload();
+    CaptureSnapshot();
     ResultLabel.Text = $"プレビュー {done} 件を取り消しました";
     Toaster.Info($"プレビュー {done} 件を取り消しました（同じ CSV を貼り直せます）");
 }
