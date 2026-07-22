@@ -67,7 +67,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "有効な定期請求契約のうち対象月に該当するものへ、請求書と売上仕訳（SaaS売上高）を一括生成します。生成済みの月はスキップされます。",
+      "Text": "「確定済」かつ「有効」の定期請求契約のうち対象月に該当するものへ、請求書と売上仕訳（SaaS売上高）を一括生成します。生成済みの月はスキップされます（下書きの契約は対象外です）。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",

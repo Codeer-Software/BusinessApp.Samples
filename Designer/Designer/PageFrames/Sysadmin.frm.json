@@ -792,7 +792,7 @@
         }
       },
       {
-        "Title": "一般業務/販売/定期請求",
+        "Title": "一般業務/販売/定期請求契約",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -806,8 +806,8 @@
         "ListPageDesign": {
           "SearchLayoutName": "",
           "UserUrlParameter": true,
-          "PageTitle": "定期請求",
-          "HeaderTitle": "SaaS 月額・年額などの定期請求契約を登録できます。「定期請求の実行」で対象月の請求書が一括生成されます。",
+          "PageTitle": "定期請求契約",
+          "HeaderTitle": "SaaS 月額・年額などの定期請求契約を管理できます。契約は下書きで作成し、経理が「確定」すると「定期請求の実行」の対象になります。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,

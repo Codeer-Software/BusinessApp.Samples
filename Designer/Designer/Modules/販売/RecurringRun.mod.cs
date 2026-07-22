@@ -91,8 +91,10 @@ void Run_OnClick()
         }
     }
 
-    // 有効な契約を取得し、対象月に該当するものへ生成
+    // 確定済かつ有効な契約を取得し、対象月に該当するものへ生成
+    // （下書き=経理未確認の契約は対象外。docs/tests/16 §0.3 の権限マトリクス）
     var bs = new ModuleSearcher<RecurringBilling>();
+    bs.AddEquals(b => b.Status.Value, "confirmed");
     bs.AddEquals(b => b.IsActive.Value, true);
     var billings = bs.Execute();
 
