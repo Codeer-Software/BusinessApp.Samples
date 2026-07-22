@@ -447,6 +447,7 @@ void Confirm_OnClick()
         l.LineNo.Value = idx;
         l.Description.Value = typedSo.Title.Value;
         if (typedSo.ProjectRef.Value != null) { l.ProjectRef.Value = typedSo.ProjectRef.Value; }
+        if (typedSo.DepartmentRef.Value != null) { l.Department.Value = typedSo.DepartmentRef.Value; }
         if (idx == 1)
         {
             l.Dc.Value = "D";
@@ -536,6 +537,7 @@ void CreateInvoice_OnClick()
     inv.InvoiceNo.Value = invoiceNo;
     inv.PartnerRef.Value = typedSo.PartnerRef.Value;
     inv.ProjectRef.Value = typedSo.ProjectRef.Value;
+    inv.DepartmentRef.Value = typedSo.DepartmentRef.Value;
     inv.AcceptanceRef.Value = this.Id.Value;
     inv.Title.Value = typedSo.Title.Value;
     inv.IssueDate.Value = DateOnly.FromDateTime(DateTime.Today);

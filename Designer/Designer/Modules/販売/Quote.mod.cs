@@ -12,6 +12,8 @@ void Detail_OnAfterInit()
     if (this.IsNewData)
     {
         Status.Value = "draft";
+        // 部門の初期値: 作成者の所属部門（スナップショット思想。ddl/330・経費申請と同じ）
+        if (DepartmentRef.Value == null) { DepartmentRef.Value = CurrentUser.所属部門.Value; }
         IssueDate.Value = DateOnly.FromDateTime(DateTime.Today);
         QuoteNo.Value = NextQuoteNo();
     }
@@ -351,6 +353,7 @@ void ConvertToOrder_OnClick()
     so.QuoteRef.Value = this.Id.Value;
     so.PartnerRef.Value = PartnerRef.Value;
     so.ProjectRef.Value = ProjectRef.Value;
+    so.DepartmentRef.Value = DepartmentRef.Value;
     so.Title.Value = Title.Value;
     so.OrderDate.Value = DateOnly.FromDateTime(DateTime.Today);
     so.Status.Value = "open";

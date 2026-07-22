@@ -161,6 +161,7 @@ void Run_OnClick()
                 inv.InvoiceNo.Value = invoiceNo;
                 inv.PartnerRef.Value = b.PartnerRef.Value;
                 inv.ProjectRef.Value = b.ProjectRef.Value;
+                inv.DepartmentRef.Value = b.DepartmentRef.Value;
                 inv.Title.Value = invTitle;
                 inv.IssueDate.Value = monthEnd;
                 inv.DueDate.Value = dueDate;
@@ -221,6 +222,7 @@ void Run_OnClick()
                     l.Description.Value = invTitle;
                     l.TaxInputMode.Value = "none";
                     if (b.ProjectRef.Value != null) { l.ProjectRef.Value = b.ProjectRef.Value; }
+                    if (b.DepartmentRef.Value != null) { l.Department.Value = b.DepartmentRef.Value; }
                     if (idxA == 1)
                     {
                         l.Dc.Value = "D";
@@ -307,6 +309,7 @@ void Run_OnClick()
                 l.Description.Value = $"{b.Title.Value}（{monthFirst:yyyy年M月}分）";
                 l.TaxInputMode.Value = "none";
                 if (b.ProjectRef.Value != null) { l.ProjectRef.Value = b.ProjectRef.Value; }
+                if (b.DepartmentRef.Value != null) { l.Department.Value = b.DepartmentRef.Value; }
                 if (idxD == 1)
                 {
                     l.Dc.Value = "D";
@@ -361,6 +364,7 @@ void Run_OnClick()
         inv.InvoiceNo.Value = invoiceNo;
         inv.PartnerRef.Value = b.PartnerRef.Value;
         inv.ProjectRef.Value = b.ProjectRef.Value;
+        inv.DepartmentRef.Value = b.DepartmentRef.Value;
         inv.Title.Value = invTitle;
         inv.IssueDate.Value = monthEnd;
         inv.DueDate.Value = dueDate;
@@ -424,6 +428,7 @@ void Run_OnClick()
             l.Description.Value = invTitle;
             l.TaxInputMode.Value = "none";
             if (b.ProjectRef.Value != null) { l.ProjectRef.Value = b.ProjectRef.Value; }
+            if (b.DepartmentRef.Value != null) { l.Department.Value = b.DepartmentRef.Value; }
             if (idx == 1)
             {
                 l.Dc.Value = "D";
