@@ -4,7 +4,9 @@
 -- 債権は消えているため。入金累計だけで判定すると差額分が「一部入金」に見えてしまう）。
 -- 検索パラメータ:
 --   @partner_id   取引先（NULL=絞り込みなし。無効化済み取引先の残高も探せるよう
---                 ドロップダウン側は IsActive で絞らない）
+--                 ドロップダウン側は IsActive で絞らない。案件・部門も同じ思想）
+--   @project_id   案件（NULL=絞り込みなし）
+--   @department_id 部門（NULL=絞り込みなし）
 --   @state_filter 状態（exclude_paid=「入金済を除く」／それ以外は状態ラベルの完全一致）
 --   @due_from / @due_to 支払期限の範囲
 WITH rc AS (
@@ -16,6 +18,8 @@ base AS (
   SELECT
     i.invoice_no AS invoice_no,
     i.partner_id AS partner_id,
+    i.project_id AS project_id,
+    i.department_id AS department_id,
     p.name AS partner_name,
     i.title AS title,
     i.issue_date AS issue_date,
@@ -41,6 +45,8 @@ SELECT invoice_no, partner_name, title, issue_date, due_date,
        total_amount, received_amount, balance, state
 FROM base
 WHERE (@partner_id IS NULL OR partner_id = @partner_id)
+  AND (@project_id IS NULL OR project_id = @project_id)
+  AND (@department_id IS NULL OR department_id = @department_id)
   AND (@state_filter IS NULL OR @state_filter = ''
        OR (@state_filter = 'exclude_paid' AND state <> '入金済')
        OR state = @state_filter)
