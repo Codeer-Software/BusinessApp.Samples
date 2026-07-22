@@ -330,8 +330,9 @@ void PrintInvoice(bool asPdf)
                 excel.SetCellValue(rowCell, l.LineNo.Value ?? 0);
                 excel.SetCellValue(rowCell.GetNext(0, 1), l.Description.Value ?? "");
                 excel.SetCellValue(rowCell.GetNext(0, 2), l.Qty.Value ?? 0);
-                excel.SetCellValue(rowCell.GetNext(0, 3), $"{l.UnitPrice.Value ?? 0:#,0}");
-                excel.SetCellValue(rowCell.GetNext(0, 4), $"{l.Amount.Value ?? 0:#,0}");
+                excel.SetCellValue(rowCell.GetNext(0, 3), l.Unit.Value ?? "");
+                excel.SetCellValue(rowCell.GetNext(0, 4), $"{l.UnitPrice.Value ?? 0:#,0}");
+                excel.SetCellValue(rowCell.GetNext(0, 5), $"{l.Amount.Value ?? 0:#,0}");
                 i = i + 1;
             }
             if (lines.Count > 10)

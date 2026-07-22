@@ -190,6 +190,7 @@ void Run_OnClick()
             line.LineNo.Value = 1;
             line.Description.Value = detail;
             line.Qty.Value = 1;
+            line.Unit.Value = "式";
             line.UnitPrice.Value = amount;
             line.Amount.Value = amount;
             line.TaxCategoryRef.Value = salesTaxCatId;

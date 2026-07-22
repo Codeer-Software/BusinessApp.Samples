@@ -565,6 +565,7 @@ void CreateInvoice_OnClick()
             dst.LineNo.Value = src.LineNo.Value;
             dst.Description.Value = src.Description.Value;
             dst.Qty.Value = src.Qty.Value;
+            dst.Unit.Value = src.Unit.Value;
             dst.UnitPrice.Value = src.UnitPrice.Value;
             dst.Amount.Value = src.Amount.Value;
             dst.TaxCategoryRef.Value = src.TaxCategoryRef.Value;
