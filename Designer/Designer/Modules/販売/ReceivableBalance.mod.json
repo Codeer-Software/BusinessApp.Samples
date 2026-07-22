@@ -13,8 +13,8 @@
         "Parameters": [
           {
             "IsParameter": true,
-            "Name": "partner_kw",
-            "DbType": "text",
+            "Name": "partner_id",
+            "DbType": "bigint",
             "DbParameterDirection": "Input"
           },
           {
@@ -250,12 +250,31 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
-      "DbColumn": "partner_kw",
-      "IsMultiline": false,
-      "IsAutoFitRows": false,
-      "Placeholder": "部分一致",
-      "TextEditEmptyType": "StringEmpty",
-      "ShouldTrimAfterEdit": true,
+      "Candidates": [],
+      "SearchCondition": {
+        "SelectFields": [],
+        "SortConditions": [
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
+        "SortFieldVariable": "",
+        "SortDescending": false,
+        "ModuleName": "Partner",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
+      },
+      "ValueVariable": "Id.Value",
+      "DisplayTextVariable": "Name.Value",
+      "DbColumn": "partner_id",
+      "EmptyCandidateType": "Null",
+      "AllowOrSearch": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": true,
       "AllowEmptySearch": false,
@@ -263,10 +282,10 @@
       "DisplayName": "取引先",
       "IsRequired": false,
       "OnDataChanged": "",
-      "Name": "PartnerKw",
+      "Name": "PartnerSel",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
       "Candidates": [
@@ -601,7 +620,7 @@
               },
               {
                 "Layout": {
-                  "FieldName": "PartnerKw",
+                  "FieldName": "PartnerSel",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",

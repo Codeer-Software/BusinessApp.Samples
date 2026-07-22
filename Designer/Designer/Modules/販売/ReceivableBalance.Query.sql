@@ -3,7 +3,8 @@
 -- status='paid' は残額 0・入金済として扱う（少額差額の自動処理＝手数料処理済みで
 -- 債権は消えているため。入金累計だけで判定すると差額分が「一部入金」に見えてしまう）。
 -- 検索パラメータ:
---   @partner_kw   取引先名の部分一致
+--   @partner_id   取引先（NULL=絞り込みなし。無効化済み取引先の残高も探せるよう
+--                 ドロップダウン側は IsActive で絞らない）
 --   @state_filter 状態（exclude_paid=「入金済を除く」／それ以外は状態ラベルの完全一致）
 --   @due_from / @due_to 支払期限の範囲
 WITH rc AS (
@@ -14,6 +15,7 @@ WITH rc AS (
 base AS (
   SELECT
     i.invoice_no AS invoice_no,
+    i.partner_id AS partner_id,
     p.name AS partner_name,
     i.title AS title,
     i.issue_date AS issue_date,
@@ -38,7 +40,7 @@ base AS (
 SELECT invoice_no, partner_name, title, issue_date, due_date,
        total_amount, received_amount, balance, state
 FROM base
-WHERE (@partner_kw IS NULL OR @partner_kw = '' OR partner_name LIKE '%' || @partner_kw || '%')
+WHERE (@partner_id IS NULL OR partner_id = @partner_id)
   AND (@state_filter IS NULL OR @state_filter = ''
        OR (@state_filter = 'exclude_paid' AND state <> '入金済')
        OR state = @state_filter)
