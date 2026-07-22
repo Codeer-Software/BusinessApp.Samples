@@ -43,6 +43,8 @@
 
 ## 作業中に得た知見（追記していく）
 
+- 2026-07-22: **一覧の行単位の条件付きハイライトは「ListLayout の行イベント＋app.css の `:has()`」で実現できる**（実測）。`ListLayouts[""].OnAfterInitialization` は一覧の**行モジュールごと**に発火するので、そこで条件判定してフィールドに `ClassName` を付け、CSS 側で `[list-module="モジュール名"] table tbody tr:has(.クラス) > * { --bs-table-bg: 色; --bs-table-striped-bg: 色; }` と行（tr）全体に効かせる（背景は Bootstrap の CSS 変数経由。フィールドの `BackgroundColor` 直接設定はセル内要素しか塗れない）。実装例: BankStatementLine の未起票行の黄色ハイライト
+- 2026-07-22: クエリ専用モジュールの検索条件は「`IsParameter:true` パラメータ＋同名 `DbColumn` のフィールド＋SearchLayout 配置」の3点セット（正典: ReceiptList）。**検索の初期値は `SearchLayouts[""].OnSearchInitialization` で `SearchValue` に設定**する（サイドバー Link 経由の `?initialize_search=true` でのみ発火）。実装例: ReceivableBalance の「入金済を除く」既定
 - 2026-07-05: インボイス経過措置は令和8年度改正で4段階（80/70/50/30%）に変更済み。事前知識と異なっていた——**税制は必ずリサーチしてから実装する**こと（→ `docs/research/2026-07_税制・会計制度リサーチ.md`）
 - 2026-07-05: **認証のデータソースは `app.clprj` の `CurrentUserModuleDesignName`（=AppUser モジュール）の `DataSourceName` から解決される**（`CookieAuthentication.GetDataSourceName()`）。app_users が空ならサーバ起動時に admin/admin が自動作成される
 - 2026-07-05: 認証 DB を切り替えるとブラウザの旧セッション Cookie が「アプリへのアクセス権限がありません」エラーを出す。**対処: `POST /api/account/logout`**（JS なら `X-ANTIFORGERY-TOKEN` Cookie（非 HttpOnly）をヘッダに付けて fetch）→ login.html が出る

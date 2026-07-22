@@ -10,6 +10,16 @@ void Detail_OnAfterInit()
     UpdateButtons();
 }
 
+// 明細一覧（ListLayouts ""）の行初期化: 未起票（pending）の行にマーカークラスを付ける。
+// 行全体の背景色は app.css の tr:has(.row-unposted) がこのクラスを拾って効かせる
+void ListRow_OnAfterInit()
+{
+    if (Status.Value == "pending")
+    {
+        Status.ClassName = "row-unposted";
+    }
+}
+
 // 相手科目候補の手修正時に推定元を manual にする（一括起票のリスト編集用。
 // ルール/AI がスクリプトから設定する場合は、この後で rule/ai を上書きするので影響しない）
 void SuggestedAccount_OnDataChanged()

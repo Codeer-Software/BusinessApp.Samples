@@ -1659,7 +1659,7 @@
         "ImportedAt"
       ],
       "OnBeforeInitialization": "",
-      "OnAfterInitialization": "",
+      "OnAfterInitialization": "ListRow_OnAfterInit",
       "OnFieldDataChanged": "",
       "Elements": [
         [

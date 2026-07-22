@@ -54,6 +54,15 @@ h4.row {
   background: rgba(20, 16, 58, 0.9);
 }
 
+/* 銀行明細一覧: 未起票（pending）の行を黄色でハイライト。
+   スクリプト（BankStatementLine.ListRow_OnAfterInit）が Status フィールドに
+   row-unposted クラスを付け、:has() で行（tr）全体に背景を効かせる。
+   Bootstrap テーブルの背景は CSS 変数経由のため、通常行・ストライプ行の両方を上書きする */
+[list-module="BankStatementLine"] table tbody tr:has(.row-unposted) > * {
+  --bs-table-bg: #fff3cd;
+  --bs-table-striped-bg: #fff3cd;
+}
+
 /* ボタン色規約（ADR-0027）: 青=前進アクション／赤=削除・取消／灰はボタンでは使わない。
    無効ボタンは「元のアクション色を残したまま薄く」表示し、灰色（キャンセル系）と混同させない。
    Bootstrap 既定の opacity .65 では有効ボタンとの差が弱いため .45 に強める */
