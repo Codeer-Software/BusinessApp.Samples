@@ -1,5 +1,6 @@
 {
   "IsApplicationRoot": false,
+  "Priority": 0,
   "Name": "Accounting",
   "Description": "経理",
   "Left": {
@@ -12,6 +13,10 @@
     },
     "Links": [
       {
+        "Title": "ホーム",
+        "Icon": "bi bi-house",
+        "IconType": "Font",
+        "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
@@ -33,6 +38,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -43,13 +49,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Bottom",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -57,6 +64,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -64,13 +72,13 @@
           "PageTitle": "",
           "LayoutName": "",
           "UrlParameter": ""
-        },
-        "Title": "ホーム",
-        "Icon": "bi bi-house",
-        "IconType": "Font",
-        "HideTitle": false
+        }
       },
       {
+        "Title": "一般業務/経費精算/申請",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
@@ -103,13 +111,14 @@
               "ModuleName": "ExpenseRequest"
             },
             "PagerPosition": "Bottom",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -125,13 +134,13 @@
           "PageTitle": "",
           "LayoutName": "",
           "UrlParameter": ""
-        },
-        "Title": "一般業務/経費精算/申請",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false
+        }
       },
       {
+        "Title": "一般業務/経費精算/申請中",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
         "ModulePageType": "List",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
@@ -164,13 +173,14 @@
               "ModuleName": "MyApplication"
             },
             "PagerPosition": "Bottom",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -186,13 +196,13 @@
           "PageTitle": "",
           "LayoutName": "",
           "UrlParameter": ""
-        },
-        "Title": "一般業務/経費精算/申請中",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false
+        }
       },
       {
+        "Title": "一般業務/経費精算/承認待ち",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
         "ModulePageType": "List",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
@@ -225,13 +235,14 @@
               "ModuleName": "ApprovalInbox"
             },
             "PagerPosition": "Bottom",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -247,13 +258,13 @@
           "PageTitle": "",
           "LayoutName": "",
           "UrlParameter": ""
-        },
-        "Title": "一般業務/経費精算/承認待ち",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false
+        }
       },
       {
+        "Title": "一般業務/経費精算/精算処理待ち",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
         "ModulePageType": "List",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
@@ -321,13 +332,14 @@
               }
             },
             "PagerPosition": "Bottom",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -343,13 +355,13 @@
           "PageTitle": "",
           "LayoutName": "",
           "UrlParameter": ""
-        },
-        "Title": "一般業務/経費精算/精算処理待ち",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false
+        }
       },
       {
+        "Title": "一般業務/経費精算/通知",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
         "ModulePageType": "List",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
@@ -371,6 +383,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -381,13 +394,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -395,6 +409,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -402,11 +417,7 @@
           "PageTitle": "",
           "LayoutName": "",
           "UrlParameter": ""
-        },
-        "Title": "一般業務/経費精算/通知",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false
+        }
       },
       {
         "Title": "一般業務/販売/見積",
@@ -434,6 +445,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -444,13 +456,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -458,6 +471,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -493,6 +507,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -503,13 +518,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -517,6 +533,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -552,6 +569,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -562,13 +580,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -576,6 +595,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -611,6 +631,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -621,13 +642,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -635,6 +657,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -670,6 +693,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -680,13 +704,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -694,6 +719,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -729,6 +755,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 200,
@@ -739,13 +766,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -753,6 +781,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -788,6 +817,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -798,13 +828,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -812,6 +843,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -847,6 +879,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -857,13 +890,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -871,6 +905,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -906,6 +941,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -916,13 +952,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -930,6 +967,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -965,6 +1003,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -975,13 +1014,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -989,6 +1029,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -1024,6 +1065,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 300,
@@ -1034,13 +1076,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -1048,6 +1091,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -1083,6 +1127,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -1093,13 +1138,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -1107,6 +1153,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -2519,6 +2566,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 200,
@@ -2529,13 +2577,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -2543,6 +2592,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -2578,6 +2628,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -2588,13 +2639,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -2602,6 +2654,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -2637,6 +2690,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -2647,13 +2701,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -2661,6 +2716,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -3130,6 +3186,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
@@ -3140,13 +3197,14 @@
               "ModuleName": ""
             },
             "PagerPosition": "Top",
-            "UseIndexSort": false,
+            "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
             "CanUserSort": false,
             "CanSelect": false,
+            "UseIndexSort": false,
             "OnDataChanged": "",
             "OnSearchDataChanged": "",
             "OnSelectedIndexChanged": "",
@@ -3154,6 +3212,7 @@
             "OnDoubleClickRow": "",
             "Name": "",
             "IgnoreModification": false,
+            "OnValidateInput": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -3226,11 +3285,12 @@
         }
       }
     ],
-    "Width": 320,
     "FontFamily": "",
     "Color": "#ffffff",
     "BackgroundColorStart": "#052767",
     "BackgroundColorEnd": "#3a0647",
+    "MobileBehavior": "CollapseToHamburger",
+    "Width": 320,
     "UserName": "",
     "ModuleName": "",
     "Foreground": "#ffffff",
@@ -3250,6 +3310,7 @@
     "Color": "#ffffff",
     "BackgroundColorStart": "#052767",
     "BackgroundColorEnd": "#3a0647",
+    "MobileBehavior": "CollapseToHamburger",
     "UserName": "",
     "ModuleName": "",
     "Foreground": "#ffffff",
@@ -3331,13 +3392,14 @@
             "ModuleName": ""
           },
           "PagerPosition": "Bottom",
-          "UseIndexSort": false,
+          "ReplaceMode": "None",
           "DeleteTogether": false,
           "CanCreate": false,
           "CanUpdate": false,
           "CanDelete": false,
           "CanUserSort": true,
           "CanSelect": false,
+          "UseIndexSort": false,
           "OnDataChanged": "",
           "OnSearchDataChanged": "",
           "OnSelectedIndexChanged": "",
@@ -3388,13 +3450,14 @@
             "ModuleName": ""
           },
           "PagerPosition": "Bottom",
-          "UseIndexSort": false,
+          "ReplaceMode": "None",
           "DeleteTogether": false,
           "CanCreate": false,
           "CanUpdate": false,
           "CanDelete": false,
           "CanUserSort": true,
           "CanSelect": false,
+          "UseIndexSort": false,
           "OnDataChanged": "",
           "OnSearchDataChanged": "",
           "OnSelectedIndexChanged": "",
@@ -3445,13 +3508,14 @@
             "ModuleName": ""
           },
           "PagerPosition": "Bottom",
-          "UseIndexSort": false,
+          "ReplaceMode": "None",
           "DeleteTogether": false,
           "CanCreate": false,
           "CanUpdate": false,
           "CanDelete": true,
           "CanUserSort": true,
           "CanSelect": false,
+          "UseIndexSort": false,
           "OnDataChanged": "",
           "OnSearchDataChanged": "",
           "OnSelectedIndexChanged": "",
@@ -3502,13 +3566,14 @@
             "ModuleName": ""
           },
           "PagerPosition": "Bottom",
-          "UseIndexSort": false,
+          "ReplaceMode": "None",
           "DeleteTogether": false,
           "CanCreate": false,
           "CanUpdate": false,
           "CanDelete": true,
           "CanUserSort": true,
           "CanSelect": false,
+          "UseIndexSort": false,
           "OnDataChanged": "",
           "OnSearchDataChanged": "",
           "OnSelectedIndexChanged": "",
@@ -3585,6 +3650,8 @@
       "UrlParameter": ""
     }
   },
+  "AutoZoom": "None",
+  "TargetDevice": "Any",
   "TopPageModule": "Home",
   "OtherPages": []
 }
