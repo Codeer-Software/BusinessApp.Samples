@@ -1,8 +1,4 @@
 // ReceiptBoard.mod.cs — 入金一覧（カスタム一覧）
-// 責務: 消込状態を読み取り時導出するクエリ一覧（ReceiptList）を、検索＋新規作成ボタン付きで表示する。
+// 責務: 消込状態を読み取り時導出するクエリ一覧（ReceiptList）を検索付きで表示する。
 // 消込済みか否かの真実は「消込仕訳の有無」であり、DB に状態列は持たない（2026-07-21 ユーザー決定）。
-
-void NewButton_OnClick()
-{
-    NavigationService.NavigateTo(NavigationService.GetModuleDataUrl("Receipt", "-"));
-}
+// 入金の手動新規作成は廃止（ADR-0033）——入金予定は請求書の発行時に自動作成される。

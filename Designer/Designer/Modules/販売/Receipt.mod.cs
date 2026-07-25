@@ -9,17 +9,17 @@ void Detail_OnAfterInit()
 {
     if (this.IsNewData)
     {
-        ReceiptDate.Value = DateOnly.FromDateTime(DateTime.Today);
-        Method.Value = "bank";
-        ConfirmButton.IsVisible = true;
-        CancelReceiptButton.IsVisible = false;
-        DeleteReceiptButton.IsVisible = false;
+        // 入金の手動新規作成は廃止（ADR-0033）。入金予定は請求書の発行時・一部入金の確定時に
+        // 自動作成される——URL 直打ち等で新規画面に来た場合は一覧へ戻す
+        Toaster.Info("入金は請求書の発行時に自動作成されます（入金一覧の「未確定」から確定してください）");
+        NavigationService.NavigateTo(NavigationService.GetModuleUrl("ReceiptBoard"));
         return;
     }
     UpdateButtons();
 }
 
-// 確定済み (消込仕訳が存在) なら閲覧専用＋取消ボタン、未確定なら確定＋削除ボタン
+// 確定済み (消込仕訳が存在) なら閲覧専用＋取消ボタン、未確定なら確定ボタン
+// （未確定の削除ボタンは廃止・ADR-0033。予定の削除は請求書側の巻き戻し/取消が自動で行う）
 void UpdateButtons()
 {
     var confirmed = (FindReceiptJournal() != null);
@@ -29,7 +29,6 @@ void UpdateButtons()
     if (confirmed) { CancelReceiptButton.IsViewOnly = false; }
     ConfirmButton.IsVisible = !confirmed;
     CancelReceiptButton.IsVisible = confirmed && (CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin");
-    DeleteReceiptButton.IsVisible = !confirmed;
     SubmitButton.IsVisible = !confirmed;
 }
 
@@ -132,18 +131,6 @@ void CancelReceipt_OnClick()
 
     UpdateButtons();
     Toaster.Success($"仕訳 No.{jeNo} を削除し、入金を未確定に戻しました（金額修正のうえ再確定するか、不要なら削除してください）");
-}
-
-// 未確定入金の削除（確認ダイアログ付き）
-void DeleteReceipt_OnClick()
-{
-    if (FindReceiptJournal() != null) { Toaster.Error("確定済みの入金は削除できません（先に「入金を取り消す」を実行してください）"); return; }
-    var result = MessageBox.Show("この入金記録を削除しますか？（元に戻せません）", "削除する", "キャンセル");
-    if (result != "削除する") return;
-    using var loading = LoadingService.StartLoading(0);
-    this.Delete();
-    Toaster.Success("入金記録を削除しました");
-    NavigationService.NavigateTo(NavigationService.GetModuleUrl("Receipt"));
 }
 
 // 請求書選択: 請求税込額 − 既存入金合計 (自分以外) を入金額に自動セット (手修正可)
@@ -409,6 +396,14 @@ void Confirm_OnClick()
         Toaster.Error("請求書ステータスの更新に失敗しました（消込仕訳は生成済みです）");
     }
 
+    // 一部入金なら残額分の入金予定を自動で作り直す（分割入金の2回目以降・ADR-0033。
+    // 手動新規作成の廃止とセットで「未回収の発行済み請求書には常に残額分の予定が1件ある」を保つ）
+    if (newStatus == "partial")
+    {
+        var remainAfter = grossAll - received;
+        if (remainAfter > 0) { CreateRemainderPendingReceipt(remainAfter, iv); }
+    }
+
     UpdateButtons();
     if (useDiff)
     {
@@ -418,6 +413,31 @@ void Confirm_OnClick()
     {
         Toaster.Success($"仕訳 No.{nextNo}: 入金 {amount:#,0} 円を消し込みました（{invoiceNo} は{newStatusText}）");
     }
+}
+
+// 残額分の未確定入金（入金予定）を作成する。未確定行がまだ残っている場合は作らない（二重予定の防止）
+void CreateRemainderPendingReceipt(int remainAmount, Invoice iv)
+{
+    var s = new ModuleSearcher<Receipt>();
+    s.AddEquals(e => e.InvoiceRef.Value, iv.Id.Value);
+    var rows = s.Execute();
+    foreach (var row in rows)
+    {
+        var r = (Receipt)row;
+        var js = new ModuleSearcher<JournalEntry>();
+        js.AddEquals(e => e.SourceType.Value, "receipt");
+        js.AddEquals(e => e.SourceId.Value, r.Id.Value);
+        if (js.Execute().Count == 0) { return; }
+    }
+    var nr = new Receipt();
+    nr.InvoiceRef.Value = iv.Id.Value;
+    nr.ReceiptDate.Value = iv.DueDate.Value;
+    nr.Method.Value = "bank";
+    nr.Amount.Value = remainAmount;
+    nr.Note.Value = "一部入金の確定時に自動作成された残額分の入金予定です（入金日・金額を実額に修正して確定してください）";
+    var okNr = nr.Submit();
+    if (okNr != true) { Toaster.Warn("残額分の入金予定の自動作成に失敗しました"); }
+    else { Toaster.Info($"残額 {remainAmount:#,0} 円の入金予定を自動作成しました"); }
 }
 
 // system_thresholds から指定コードの閾値を期間解決して取得（該当なしは 0。ExpenseRequest と同型）

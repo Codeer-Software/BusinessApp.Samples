@@ -265,7 +265,11 @@ void Run_OnClick()
             }
             else
             {
-                annualInvId = ((Invoice)annualInvRow).Id.Value;
+                var anchorInv = (Invoice)annualInvRow;
+                annualInvId = anchorInv.Id.Value;
+                // 取消（void）された年額請求書は按分振替の対象から外す（ADR-0033。
+                // 期間が締め済みで「発行を取り消す」（全削除）が使えない場合の停止手段）
+                if (anchorInv.Status.Value == "void") { skipped = skipped + 1; continue; }
                 if (cycleIndex == 0) { skipped = skipped + 1; }
             }
 

@@ -34,9 +34,12 @@ void UpdateButtons()
     if (!isAccounting) { DepartmentRef.IsViewOnly = true; }
 
     var st = Status.Value;
+    // 定期請求・SES の自動生成分は「下書きに戻す」の代わりに「発行を取り消す」（生成仕訳ごと削除・ADR-0033）
+    var generated = IsGeneratedInvoice();
     IssueButton.IsVisible = !this.IsNewData && (st == "draft");
     DeleteInvoiceButton.IsVisible = !this.IsNewData && (st == "draft");
-    RevertToDraftButton.IsVisible = !this.IsNewData && (st == "issued");
+    RevertToDraftButton.IsVisible = !this.IsNewData && (st == "issued") && !generated;
+    CancelIssueButton.IsVisible = !this.IsNewData && (st == "issued") && generated;
     VoidButton.IsVisible = !this.IsNewData && (st == "issued");
     UnvoidButton.IsVisible = !this.IsNewData && (st == "void");
 
@@ -50,6 +53,7 @@ void UpdateButtons()
         // CLB 1.3: モジュール全体を閲覧専用にするとボタンの OnClick も発火しなくなるため、
         // 閲覧専用中も使う操作ボタンだけ個別に閲覧専用を解除する
         RevertToDraftButton.IsViewOnly = false;
+        CancelIssueButton.IsViewOnly = false;
         VoidButton.IsViewOnly = false;
         UnvoidButton.IsViewOnly = false;
         PrintExcelButton.IsViewOnly = false;
@@ -184,6 +188,88 @@ void DeletePendingReceipts()
         var ok = r.Delete();
         if (ok != true) { Toaster.Warn("未確定の入金予定の削除に失敗しました（入金一覧から手動で削除してください）"); }
     }
+}
+
+// 定期請求・SES の実行で自動生成された請求書か（発行の取り消し＝生成物の一括削除の対象）
+bool IsGeneratedInvoice()
+{
+    var src = InvoiceSource.Value;
+    return src == "ses" || src == "recurring" || src == "recurring_annual";
+}
+
+// 発行の取り消し（定期請求・SES の自動生成分・ADR-0033）: 生成された仕訳・入金予定・請求書本体を
+// 丸ごと削除して「未生成」に戻す。冪等ガードは請求書の存在で判定しているため、削除すれば
+// 「定期請求の実行」「SES精算・請求」で正しく再生成できる。
+// 締め済み期間の仕訳が絡む場合は削除せず、赤黒訂正＋「取消にする」（以後の按分停止）を案内する
+void CancelIssue_OnClick()
+{
+    if (Status.Value != "issued") { Toaster.Error("発行済の請求書のみ発行を取り消せます"); return; }
+    if (!IsGeneratedInvoice()) { Toaster.Error("この操作は定期請求・SES で生成された請求書専用です"); return; }
+    if (HasConfirmedReceipts()) { Toaster.Error("消込済みの入金記録があるため取り消せません（先に入金の取消を行ってください）"); return; }
+
+    // 関連仕訳の収集（月額/SES=売上仕訳、年額=前受計上＋全按分振替）と締め済みチェック
+    var js = new ModuleSearcher<JournalEntry>();
+    js.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    js.AddIn(e => e.SourceType.Value, "ses", "recurring", "recurring_annual", "recurring_defer");
+    var journals = js.Execute();
+    foreach (var row in journals)
+    {
+        var je = (JournalEntry)row;
+        var d = je.EntryDate.Value;
+        if (d == null) continue;
+        var monthFirst = new DateOnly(d.Year, d.Month, 1);
+        var ps = new ModuleSearcher<FiscalPeriod>();
+        ps.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
+        ps.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);
+        var period = ps.ExecuteFirstOrDefault();
+        if (period != null && ((FiscalPeriod)period).Status.Value == "closed")
+        {
+            Toaster.Error($"仕訳 No.{je.JournalNo.Value}（{d:yyyy/MM/dd}）の期間が締め済みのため発行を取り消せません。過去分は赤黒訂正で修正し、以後の按分振替を止めたい場合は「取消にする」を使ってください");
+            return;
+        }
+    }
+
+    var result = MessageBox.Show($"請求書「{InvoiceNo.Value}」の発行を取り消します。生成された仕訳 {journals.Count} 本・未確定の入金予定・請求書本体を削除し、未生成の状態に戻します（「定期請求の実行」「SES精算・請求」で再生成できます）。よろしいですか？", "発行を取り消す", "キャンセル");
+    if (result != "発行を取り消す") return;
+
+    using var loading = LoadingService.StartLoading(0);
+    foreach (var row in journals)
+    {
+        var je = (JournalEntry)row;
+        if (!DeleteJournalEntryWithLines(je))
+        {
+            Toaster.Error($"仕訳 No.{je.JournalNo.Value} の削除に失敗しました（処理を中断します）");
+            return;
+        }
+    }
+    DeletePendingReceipts();
+    this.IsViewOnly = false;  // 発行済ロック中でも削除は許可
+    var ok = this.Delete();
+    if (ok != true)
+    {
+        Toaster.Error("請求書の削除に失敗しました（生成仕訳は削除済みです。再生成してやり直してください）");
+        return;
+    }
+    Toaster.Success($"請求書 {InvoiceNo.Value} の発行を取り消しました（必要なら定期請求の実行／SES精算・請求で再生成できます）");
+    NavigationService.NavigateTo(NavigationService.GetModuleUrl("Invoice"));
+}
+
+// 仕訳を明細→親の順に物理削除する。子持ちモジュールの検索インスタンス Delete() は
+// 親単独では静かに失敗する（実測）ため、行ごとに削除し全戻り値を検証する（Receipt と同型）
+bool DeleteJournalEntryWithLines(JournalEntry je)
+{
+    var ls = new ModuleSearcher<JournalLine>();
+    ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
+    var lines = ls.Execute();
+    foreach (var row in lines)
+    {
+        var l = (JournalLine)row;
+        var okLine = l.Delete();
+        if (okLine != true) { return false; }
+    }
+    var okJe = je.Delete();
+    if (okJe != true) { return false; }
+    return true;
 }
 
 // 定期請求・SES など「生成と同時に売上仕訳が起票される」請求書か
