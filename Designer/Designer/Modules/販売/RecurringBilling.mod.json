@@ -124,8 +124,13 @@
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
-        "SortFieldVariable": "DisplayOrder.Value",
+        "SortConditions": [
+          {
+            "Variable": "DisplayOrder.Value",
+            "IsDescending": false
+          }
+        ],
+        "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "Department",
         "Condition": {
@@ -651,7 +656,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "・「確定済」かつ「有効」の契約のみ、「定期請求の実行」で請求書・仕訳が生成されます（開始月〜終了月の範囲が対象）",
+      "Text": "・「確定済」かつ「有効」の契約のみ、「定期請求の実行」で請求書・仕訳が生成されます（開始月〜終了月の範囲が対象）。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -663,7 +668,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "・「有効」チェックは請求の一時停止に使います。解約は終了月の入力で表します",
+      "Text": "・「有効」チェックは請求の一時停止に使います。解約は終了月の入力で表します。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -675,7 +680,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "・月額契約は毎月、対象月分の請求書が作られます",
+      "Text": "・月額契約は毎月、対象月分の請求書が作られます。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -687,7 +692,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "・年額契約は開始月（以後、毎年の応当月）に年額をまとめて請求し、売上は毎月 1/12 ずつ計上されます",
+      "Text": "・年額契約は開始月（以後、毎年の応当月）に年額をまとめて請求し、売上は毎月 1/12 ずつ計上されます。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
