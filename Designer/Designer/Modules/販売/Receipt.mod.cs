@@ -101,6 +101,7 @@ void CancelReceipt_OnClick()
     }
 
     // 請求書ステータスの再計算: 消込仕訳が残っている入金の合計で判定
+    var mergedRemaining = 0;
     if (InvoiceRef.Value != null)
     {
         var iv = FindInvoice(InvoiceRef.Value);
@@ -126,11 +127,43 @@ void CancelReceipt_OnClick()
             iv.Status.Value = newStatus;
             var retInv = iv.Submit();
             if (retInv != true) { Toaster.Error("請求書ステータスの更新に失敗しました（仕訳は削除済みです）"); }
+
+            // 入金予定の統合（ADR-0033 追補・2026-07-26）: 取消で未確定に戻った本人の行を
+            // 「残額の入金予定」に更新し、他の未確定予定（一部入金の確定時に自動作成した残額予定など）は
+            // 削除する。確定・取消をどの順で繰り返しても「未確定はちょうど1行＝残額」に収束させる
+            foreach (var row in rows)
+            {
+                var r = (Receipt)row;
+                if (r.Id.Value == this.Id.Value) continue;
+                var js3 = new ModuleSearcher<JournalEntry>();
+                js3.AddEquals(e => e.SourceType.Value, "receipt");
+                js3.AddEquals(e => e.SourceId.Value, r.Id.Value);
+                if (js3.Execute().Count > 0) continue;
+                var okDel = r.Delete();
+                if (okDel != true) { Toaster.Warn("他の未確定の入金予定の削除に失敗しました（入金一覧を確認してください）"); }
+            }
+            var remaining = gross - confirmedTotal;
+            if (remaining > 0)
+            {
+                this.IsViewOnly = false;  // 確定中ロックの解除（UpdateButtons が最終状態を再設定する）
+                Amount.Value = remaining;
+                Note.Value = "入金の取消により残額の入金予定に戻りました（入金日・金額を実額に修正して確定してください）";
+                var retSelf = this.Submit();
+                if (retSelf != true) { Toaster.Warn("入金予定の金額更新に失敗しました（金額を確認してください）"); }
+                else { mergedRemaining = remaining; }
+            }
         }
     }
 
     UpdateButtons();
-    Toaster.Success($"仕訳 No.{jeNo} を削除し、入金を未確定に戻しました（金額修正のうえ再確定するか、不要なら削除してください）");
+    if (mergedRemaining > 0)
+    {
+        Toaster.Success($"仕訳 No.{jeNo} を削除し、入金予定を残額 {mergedRemaining:#,0} 円に統合しました（入金日・金額を実額に修正して確定してください）");
+    }
+    else
+    {
+        Toaster.Success($"仕訳 No.{jeNo} を削除し、入金を未確定に戻しました");
+    }
 }
 
 // 請求書選択: 請求税込額 − 既存入金合計 (自分以外) を入金額に自動セット (手修正可)
