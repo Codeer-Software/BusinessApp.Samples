@@ -1592,7 +1592,7 @@
                   "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 240,
+                "Width": 400,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -1617,7 +1617,7 @@
                   "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 100,
+                "Width": 120,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -1643,7 +1643,7 @@
                   "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 240,
+                "Width": 640,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
