@@ -199,7 +199,7 @@
         "SortKey"
       ],
       "OnBeforeInitialization": "",
-      "OnAfterInitialization": "",
+      "OnAfterInitialization": "PLRow_OnAfterInit",
       "OnFieldDataChanged": "",
       "Elements": [
         [

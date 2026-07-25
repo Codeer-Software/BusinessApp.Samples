@@ -63,6 +63,20 @@ h4.row {
   --bs-table-striped-bg: #fff3cd;
 }
 
+/* 損益計算書: カテゴリ境界を太罫線で区切る（2026-07-25 ユーザー要望）。
+   スクリプト（ProfitLoss.PLRow_OnAfterInit）が Item フィールドに
+   pl-subtotal-row（区分小計）／pl-profit-row（段階利益）クラスを付け、
+   :has() で行（tr）全体に効かせる（BankStatementLine の行ハイライトと同パターン） */
+[list-module="ProfitLoss"] table tbody tr:has(.pl-subtotal-row) > * {
+  border-bottom: 2px solid #6c757d;
+}
+[list-module="ProfitLoss"] table tbody tr:has(.pl-profit-row) > * {
+  border-bottom: 2px solid #343a40;
+  font-weight: 700;
+  --bs-table-bg: #f6f8fa;
+  --bs-table-striped-bg: #f6f8fa;
+}
+
 /* ボタン色規約（ADR-0027）: 青=前進アクション／赤=削除・取消／灰はボタンでは使わない。
    無効ボタンは「元のアクション色を残したまま薄く」表示し、灰色（キャンセル系）と混同させない。
    Bootstrap 既定の opacity .65 では有効ボタンとの差が弱いため .45 に強める */
