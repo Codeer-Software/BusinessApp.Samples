@@ -24,6 +24,11 @@ void Detail_OnAfterInit()
 // 状態に応じたボタン出し分け (ADR-0026/0027)。青=前進・赤=巻き戻し/削除
 void UpdateButtons()
 {
+    // 部門は経理のみ変更可（2026-07-25 ユーザー要望）。一般・承認者は自部門（初期値）固定。
+    // 部門の付け替え＝損益の付け替えなので経理業務とする（全社共通も経理のみ選択できる）
+    var isAccounting = (CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin");
+    if (!isAccounting) { DepartmentRef.IsViewOnly = true; }
+
     var st = Status.Value;
     if (this.IsNewData)
     {
@@ -192,7 +197,12 @@ void PrintQuote(bool asPdf)
     var validStr = "";
     if (ValidUntil.Value != null) { validStr = $"{ValidUntil.Value:yyyy年M月d日}"; }
 
-    using (var excel = new Excel(stream, $"見積書_{QuoteNo.Value}.xlsx"))
+    // ファイル名: 見積書_{発行日}_{見積番号}_{相手方}_{件名}（2026-07-25 ユーザー要望。請求書と同形式）
+    var issueForFile = "";
+    if (IssueDate.Value != null) { issueForFile = $"{IssueDate.Value:yyyyMMdd}"; }
+    var fileName = SanitizeFileName($"見積書_{issueForFile}_{QuoteNo.Value}_{partnerName}_{Title.Value}") + ".xlsx";
+
+    using (var excel = new Excel(stream, fileName))
     {
         SetByMarker(excel, "{{PARTNER}}", $"{partnerName}　御中");
         SetByMarker(excel, "{{QUOTE_NO}}", QuoteNo.Value ?? "");
@@ -246,6 +256,14 @@ void SetByMarker(Excel excel, string marker, object value)
 {
     var cell = excel.FindCellByText(marker);
     if (cell != null) { excel.SetCellValue(cell, value); }
+}
+
+// Windows で使えないファイル名文字を「-」に置換（取引先名・件名由来の事故防止）
+string SanitizeFileName(string name)
+{
+    var s = name ?? "";
+    s = s.Replace("\\", "-").Replace("/", "-").Replace(":", "-").Replace("*", "-").Replace("?", "-").Replace("\"", "-").Replace("<", "-").Replace(">", "-").Replace("|", "-");
+    return s;
 }
 
 // 課税売上 10% (tax_categories.code='SALES_10') の税率をマスタから解決（Invoice と同方式）

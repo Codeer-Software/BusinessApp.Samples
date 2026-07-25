@@ -168,7 +168,9 @@ Invoice FindInvoice(object invoiceId)
     return (Invoice)found;
 }
 
-// 同一請求書への入金合計。excludeSelf=true なら自分の保存済み行を除外
+// 同一請求書への入金合計。excludeSelf=true なら自分の保存済み行を除外。
+// 消込済み（消込仕訳あり）のみ数える——未確定は「入金予定」であってまだ入金ではない
+// （請求書発行時の入金予定の自動作成に伴い変更・2026-07-25。含めると残額計算・過入金ガードが狂う）
 int SumReceipts(object invoiceId, bool excludeSelf)
 {
     var s = new ModuleSearcher<Receipt>();
@@ -179,6 +181,10 @@ int SumReceipts(object invoiceId, bool excludeSelf)
     {
         var r = (Receipt)row;
         if (excludeSelf && !this.IsNewData && r.Id.Value == this.Id.Value) continue;
+        var js = new ModuleSearcher<JournalEntry>();
+        js.AddEquals(e => e.SourceType.Value, "receipt");
+        js.AddEquals(e => e.SourceId.Value, r.Id.Value);
+        if (js.Execute().Count == 0) continue;
         if (r.Amount.Value != null) total = total + r.Amount.Value;
     }
     return total;

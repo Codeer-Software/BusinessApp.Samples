@@ -25,6 +25,10 @@ void Detail_OnAfterInit()
 // 内容の追加・変更は「変更契約」として新しい見積→受注で行う
 void UpdateButtons()
 {
+    // 部門は経理のみ変更可（2026-07-25 ユーザー要望）。一般・承認者は自部門（初期値）固定
+    var isAccounting = (CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin");
+    if (!isAccounting) { DepartmentRef.IsViewOnly = true; }
+
     var st = Status.Value;
     if (this.IsNewData)
     {

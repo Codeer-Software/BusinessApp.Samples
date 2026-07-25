@@ -28,12 +28,33 @@ void Detail_OnAfterInit()
 // partial・paid: 遷移ボタンなし（入金側で自動遷移）
 void UpdateButtons()
 {
+    // 部門は経理のみ変更可（2026-07-25 ユーザー要望）。一般・承認者は自部門（初期値）固定
+    // （請求書自体は経理専用モジュールだが、権限方針を見積・受注と揃えて明示しておく）
+    var isAccounting = (CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin");
+    if (!isAccounting) { DepartmentRef.IsViewOnly = true; }
+
     var st = Status.Value;
     IssueButton.IsVisible = !this.IsNewData && (st == "draft");
     DeleteInvoiceButton.IsVisible = !this.IsNewData && (st == "draft");
     RevertToDraftButton.IsVisible = !this.IsNewData && (st == "issued");
     VoidButton.IsVisible = !this.IsNewData && (st == "issued");
     UnvoidButton.IsVisible = !this.IsNewData && (st == "void");
+
+    // 編集できるのは下書きのみ（2026-07-25 ユーザー要望。見積と同じ確定文書ロック）。
+    // 発行済・一部入金・入金済・取消は閲覧専用——修正は「下書きに戻す」で明示的に差し戻してから行う
+    var editable = this.IsNewData || (st == "draft");
+    this.IsViewOnly = !editable;
+    SubmitButton.IsVisible = editable;
+    if (!editable)
+    {
+        // CLB 1.3: モジュール全体を閲覧専用にするとボタンの OnClick も発火しなくなるため、
+        // 閲覧専用中も使う操作ボタンだけ個別に閲覧専用を解除する
+        RevertToDraftButton.IsViewOnly = false;
+        VoidButton.IsViewOnly = false;
+        UnvoidButton.IsViewOnly = false;
+        PrintExcelButton.IsViewOnly = false;
+        PrintPdfButton.IsViewOnly = false;
+    }
 }
 
 // 請求書の取消（issued→void）: 貸倒れ・二重発行などで請求を無効化し、売掛残高の対象から外す。
@@ -42,19 +63,22 @@ void UpdateButtons()
 void Void_OnClick()
 {
     if (Status.Value != "issued") { Toaster.Error("発行済の請求書のみ取消にできます"); return; }
-    if (HasReceipts()) { Toaster.Error("入金記録があるため取消にできません（先に入金の取消を行ってください）"); return; }
+    if (HasConfirmedReceipts()) { Toaster.Error("消込済みの入金記録があるため取消にできません（先に入金の取消を行ってください）"); return; }
     var result = MessageBox.Show($"請求書「{InvoiceNo.Value}」を取消にしますか？（入金消込・売掛残高の対象から外れます。計上済みの売上仕訳はそのまま残るため、貸倒れ等は別途振替伝票で処理してください）", "取消にする", "キャンセル");
     if (result != "取消にする") return;
 
     using var loading = LoadingService.StartLoading(0);
+    this.IsViewOnly = false;  // 発行済ロック中でも状態遷移は許可（UpdateButtons が再ロックする）
     Status.Value = "void";
     var ret = this.Submit();
     if (ret != true)
     {
         Status.Value = "issued";
         Toaster.Error("取消に失敗しました");
+        UpdateButtons();
         return;
     }
+    DeletePendingReceipts();  // 未確定の入金予定は取消と同時に片付ける（消込対象から外す）
     Toaster.Success($"請求書 {InvoiceNo.Value} を取消にしました");
     UpdateButtons();
 }
@@ -64,14 +88,17 @@ void Unvoid_OnClick()
 {
     if (Status.Value != "void") { Toaster.Error("取消状態の請求書のみ戻せます"); return; }
     using var loading = LoadingService.StartLoading(0);
+    this.IsViewOnly = false;  // 取消ロック中でも状態遷移は許可（UpdateButtons が再ロックする）
     Status.Value = "issued";
     var ret = this.Submit();
     if (ret != true)
     {
         Status.Value = "void";
         Toaster.Error("発行済への変更に失敗しました");
+        UpdateButtons();
         return;
     }
+    CreatePendingReceipt();  // 取消の取り消しで消込対象に復帰するため、入金予定も作り直す
     Toaster.Success($"請求書 {InvoiceNo.Value} を発行済に戻しました");
     UpdateButtons();
 }
@@ -92,16 +119,71 @@ void Issue_OnClick()
         Toaster.Error("発行に失敗しました");
         return;
     }
-    Toaster.Success($"請求書 {InvoiceNo.Value} を発行しました（入金消込・売掛残高の対象になります）");
+    CreatePendingReceipt();
+    Toaster.Success($"請求書 {InvoiceNo.Value} を発行しました（入金予定を自動作成。入金一覧の「未確定」から消込できます）");
     UpdateButtons();
 }
 
-// この請求書に入金記録があるか（誤発行の巻き戻し・削除のガード）
+// この請求書に入金記録があるか（下書き削除のガード。未確定の入金予定も孤児にしないため含める）
 bool HasReceipts()
 {
     var rs = new ModuleSearcher<Receipt>();
     rs.AddEquals(e => e.InvoiceRef.Value, this.Id.Value);
     return rs.Execute().Count > 0;
+}
+
+// 消込済み（消込仕訳が存在する）入金があるか（取消・巻き戻しのガード。
+// 発行時に自動作成される未確定の入金予定はブロックしない——それは DeletePendingReceipts で片付ける）
+bool HasConfirmedReceipts()
+{
+    var rs = new ModuleSearcher<Receipt>();
+    rs.AddEquals(e => e.InvoiceRef.Value, this.Id.Value);
+    var rows = rs.Execute();
+    foreach (var row in rows)
+    {
+        var r = (Receipt)row;
+        var js = new ModuleSearcher<JournalEntry>();
+        js.AddEquals(e => e.SourceType.Value, "receipt");
+        js.AddEquals(e => e.SourceId.Value, r.Id.Value);
+        if (js.Execute().Count > 0) { return true; }
+    }
+    return false;
+}
+
+// 入金予定（未確定入金）の自動作成（2026-07-25 ユーザー要望）。
+// 発行と同時に入金一覧へ「未確定」の行ができ、それがそのまま経理の消込 ToDo になる。
+// 入金日は支払期限を予定日として仮置き・金額は税込請求額——確定時に経理が実額へ修正する
+void CreatePendingReceipt()
+{
+    var rs = new ModuleSearcher<Receipt>();
+    rs.AddEquals(e => e.InvoiceRef.Value, this.Id.Value);
+    if (rs.Execute().Count > 0) { return; }  // 既に入金記録がある請求書には作らない（二重作成ガード）
+    var r = new Receipt();
+    r.InvoiceRef.Value = this.Id.Value;
+    r.ReceiptDate.Value = DueDate.Value;
+    r.Method.Value = "bank";
+    r.Amount.Value = (Amount.Value ?? 0) + (TaxAmount.Value ?? 0);
+    r.Note.Value = "請求書の発行時に自動作成された入金予定です（入金日・金額を実額に修正して確定してください）";
+    var ok = r.Submit();
+    if (ok != true) { Toaster.Warn("入金予定の自動作成に失敗しました（入金画面から手動で登録してください）"); }
+}
+
+// 未確定（消込仕訳なし）の入金予定を削除する（下書きへの巻き戻し・取消時の後始末）
+void DeletePendingReceipts()
+{
+    var rs = new ModuleSearcher<Receipt>();
+    rs.AddEquals(e => e.InvoiceRef.Value, this.Id.Value);
+    var rows = rs.Execute();
+    foreach (var row in rows)
+    {
+        var r = (Receipt)row;
+        var js = new ModuleSearcher<JournalEntry>();
+        js.AddEquals(e => e.SourceType.Value, "receipt");
+        js.AddEquals(e => e.SourceId.Value, r.Id.Value);
+        if (js.Execute().Count > 0) { continue; }
+        var ok = r.Delete();
+        if (ok != true) { Toaster.Warn("未確定の入金予定の削除に失敗しました（入金一覧から手動で削除してください）"); }
+    }
 }
 
 // 定期請求・SES など「生成と同時に売上仕訳が起票される」請求書か
@@ -132,9 +214,9 @@ void RevertToDraft_OnClick()
         return;
     }
     if (Status.Value != "issued") { Toaster.Error("発行済の請求書のみ下書きに戻せます"); return; }
-    if (HasReceipts())
+    if (HasConfirmedReceipts())
     {
-        Toaster.Error("入金記録があるため下書きに戻せません（先に入金の取消を行ってください）");
+        Toaster.Error("消込済みの入金記録があるため下書きに戻せません（先に入金の取消を行ってください）");
         return;
     }
     if (HasGenerationJournal())
@@ -144,14 +226,17 @@ void RevertToDraft_OnClick()
     }
 
     using var loading = LoadingService.StartLoading(0);
+    this.IsViewOnly = false;  // 発行済ロック中でも状態遷移は許可（UpdateButtons が再ロックする）
     Status.Value = "draft";
     var ret = this.Submit();
     if (ret != true)
     {
         Status.Value = "issued";
         Toaster.Error("下書きへの変更に失敗しました");
+        UpdateButtons();
         return;
     }
+    DeletePendingReceipts();  // 発行時に自動作成した入金予定は巻き戻しと同時に片付ける
     Toaster.Success("請求書を下書きに戻しました");
     UpdateButtons();
 }
@@ -306,7 +391,12 @@ void PrintInvoice(bool asPdf)
     var dueStr = "";
     if (DueDate.Value != null) { dueStr = $"{DueDate.Value:yyyy年M月d日}"; }
 
-    using (var excel = new Excel(stream, $"請求書_{InvoiceNo.Value}.xlsx"))
+    // ファイル名: 請求書_{発行日}_{請求書番号}_{相手方}_{件名}（2026-07-25 ユーザー要望。見積書と同形式）
+    var issueForFile = "";
+    if (IssueDate.Value != null) { issueForFile = $"{IssueDate.Value:yyyyMMdd}"; }
+    var fileName = SanitizeFileName($"請求書_{issueForFile}_{InvoiceNo.Value}_{partnerName}_{Title.Value}") + ".xlsx";
+
+    using (var excel = new Excel(stream, fileName))
     {
         SetByMarker(excel, "{{PARTNER}}", $"{partnerName}　御中");
         SetByMarker(excel, "{{INVOICE_NO}}", InvoiceNo.Value ?? "");
@@ -360,4 +450,12 @@ void SetByMarker(Excel excel, string marker, object value)
 {
     var cell = excel.FindCellByText(marker);
     if (cell != null) { excel.SetCellValue(cell, value); }
+}
+
+// Windows で使えないファイル名文字を「-」に置換（取引先名・件名由来の事故防止）
+string SanitizeFileName(string name)
+{
+    var s = name ?? "";
+    s = s.Replace("\\", "-").Replace("/", "-").Replace(":", "-").Replace("*", "-").Replace("?", "-").Replace("\"", "-").Replace("<", "-").Replace(">", "-").Replace("|", "-");
+    return s;
 }

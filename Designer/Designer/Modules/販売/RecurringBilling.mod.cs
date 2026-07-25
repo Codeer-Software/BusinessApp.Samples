@@ -54,6 +54,9 @@ void UpdateUi()
     // 有効チェックは経理のみ操作可（確定後の一時停止スイッチ）
     if (!isAccounting) { IsActive.IsViewOnly = true; }
 
+    // 部門は経理のみ変更可（2026-07-25 ユーザー要望）。一般・承認者は自部門（初期値）固定
+    if (!isAccounting) { DepartmentRef.IsViewOnly = true; }
+
     // 状態遷移ボタン（経理のみ。ADR-0026: 状態変更はボタン経由に一本化）
     ConfirmButton.IsVisible = isAccounting && st == "draft";
     RevertButton.IsVisible = isAccounting && st == "confirmed";

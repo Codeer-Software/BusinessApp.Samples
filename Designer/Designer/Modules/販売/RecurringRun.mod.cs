@@ -261,6 +261,7 @@ void Run_OnClick()
                 }
                 journalNos.Add($"No.{nextNo}");
                 annualCreated = annualCreated + 1;
+                CreatePendingReceiptFor(annualInvId, invoiceNo);
             }
             else
             {
@@ -468,6 +469,7 @@ void Run_OnClick()
 
         journalNos.Add($"No.{nextNo}");
         created = created + 1;
+        CreatePendingReceiptFor(invoiceId, invoiceNo);
     }
 
     var summary = $"{monthFirst:yyyy年M月}分: 月額請求 {created}件 / 年額請求 {annualCreated}件 / 按分振替 {deferCreated}件 / スキップ {skipped}件（既生成・対象外）";
@@ -485,6 +487,28 @@ void Run_OnClick()
     {
         Toaster.Info("生成対象はありませんでした");
     }
+}
+
+// 入金予定（未確定入金）の自動作成（Invoice.CreatePendingReceipt と同方針・2026-07-25 ユーザー要望）。
+// 発行済み請求書ごとに入金一覧へ「未確定」の行を作り、経理の消込 ToDo にする
+void CreatePendingReceiptFor(object invoiceId, string invoiceNo)
+{
+    var rs = new ModuleSearcher<Receipt>();
+    rs.AddEquals(e => e.InvoiceRef.Value, invoiceId);
+    if (rs.Execute().Count > 0) { return; }  // 二重作成ガード
+    var fs = new ModuleSearcher<Invoice>();
+    fs.AddEquals(e => e.Id.Value, invoiceId);
+    var found = fs.ExecuteFirstOrDefault();
+    if (found == null) { return; }
+    var iv = (Invoice)found;
+    var r = new Receipt();
+    r.InvoiceRef.Value = invoiceId;
+    r.ReceiptDate.Value = iv.DueDate.Value;
+    r.Method.Value = "bank";
+    r.Amount.Value = (iv.Amount.Value ?? 0) + (iv.TaxAmount.Value ?? 0);
+    r.Note.Value = "請求書の発行時に自動作成された入金予定です（入金日・金額を実額に修正して確定してください）";
+    var ok = r.Submit();
+    if (ok != true) { Toaster.Warn($"入金予定の自動作成に失敗しました（{invoiceNo}。入金画面から手動で登録してください）"); }
 }
 
 // 請求書番号採番: INV-{西暦下2桁}-{連番3桁}（Invoice 側と同一ロジック・.Value 規約）

@@ -175,6 +175,8 @@ void Run_OnClick()
         inv.InvoiceNo.Value = invoiceNo;
         inv.PartnerRef.Value = p.PartnerRef.Value;
         inv.ProjectRef.Value = p.Id.Value;
+        // 部門: SES 精算は案件・契約に部門ソースが無いため「全社共通」を既定にする（部門必須化・2026-07-25）
+        inv.DepartmentRef.Value = CommonDepartmentId();
         inv.Title.Value = invTitle;
         inv.IssueDate.Value = monthEnd;
         inv.DueDate.Value = dueDate;
@@ -278,6 +280,7 @@ void Run_OnClick()
         journalNos.Add($"No.{nextNo}");
         text = text + $"{p.Code.Value} {p.Name.Value}: {detail} → {invoiceNo}（税込 {gross:#,0} 円・仕訳 No.{nextNo}）\n";
         created = created + 1;
+        CreatePendingReceiptFor(invoiceId, invoiceNo);
     }
 
     CalcResult.Value = text;
@@ -373,6 +376,38 @@ void BuildPlan(DateOnly monthFirst)
         planAmounts.Add(amount);
         planDetails.Add(formula);
     }
+}
+
+// 「全社共通」(code=00) の部門 Id。SES 精算は案件・契約に部門ソースが無いため既定部門として使う
+object CommonDepartmentId()
+{
+    var s = new ModuleSearcher<Department>();
+    s.AddEquals(d => d.Code.Value, "00");
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) { return null; }
+    return ((Department)found).Id.Value;
+}
+
+// 入金予定（未確定入金）の自動作成（Invoice.CreatePendingReceipt と同方針・2026-07-25 ユーザー要望）。
+// 発行済み請求書ごとに入金一覧へ「未確定」の行を作り、経理の消込 ToDo にする
+void CreatePendingReceiptFor(object invoiceId, string invoiceNo)
+{
+    var rs = new ModuleSearcher<Receipt>();
+    rs.AddEquals(e => e.InvoiceRef.Value, invoiceId);
+    if (rs.Execute().Count > 0) { return; }  // 二重作成ガード
+    var fs = new ModuleSearcher<Invoice>();
+    fs.AddEquals(e => e.Id.Value, invoiceId);
+    var found = fs.ExecuteFirstOrDefault();
+    if (found == null) { return; }
+    var iv = (Invoice)found;
+    var r = new Receipt();
+    r.InvoiceRef.Value = invoiceId;
+    r.ReceiptDate.Value = iv.DueDate.Value;
+    r.Method.Value = "bank";
+    r.Amount.Value = (iv.Amount.Value ?? 0) + (iv.TaxAmount.Value ?? 0);
+    r.Note.Value = "請求書の発行時に自動作成された入金予定です（入金日・金額を実額に修正して確定してください）";
+    var ok = r.Submit();
+    if (ok != true) { Toaster.Warn($"入金予定の自動作成に失敗しました（{invoiceNo}。入金画面から手動で登録してください）"); }
 }
 
 // 請求書番号採番: INV-{西暦下2桁}-{連番3桁}（Invoice / RecurringRun と同一ロジック・.Value 規約）
