@@ -66,10 +66,22 @@
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
-        "SortFieldVariable": "Code.Value",
+        "SortConditions": [
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
+        "SortFieldVariable": "",
         "SortDescending": false,
-        "ModuleName": "Partner"
+        "ModuleName": "Partner",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
       "ValueVariable": "Id.Value",
       "DisplayTextVariable": "Name.Value",
@@ -100,7 +112,14 @@
         "SortConditions": [],
         "SortFieldVariable": "",
         "SortDescending": false,
-        "ModuleName": ""
+        "ModuleName": "",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
       "ValueVariable": "",
       "DisplayTextVariable": "",
@@ -130,7 +149,14 @@
         "SortConditions": [],
         "SortFieldVariable": "",
         "SortDescending": false,
-        "ModuleName": ""
+        "ModuleName": "",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
       "ValueVariable": "",
       "DisplayTextVariable": "",
@@ -169,7 +195,7 @@
     },
     {
       "DbColumn": "ses_monthly_rate",
-      "Placeholder": "SES のみ。税抜",
+      "Placeholder": "税抜",
       "Format": "#,0",
       "IsSlider": false,
       "OnInput": "",
@@ -258,7 +284,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
-      "Text": "SES 契約条件（月額・精算幅）",
+      "Text": "\u3000SES 契約条件\r\n（月額・精算幅）",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -712,7 +738,7 @@
                   "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 350,
+                "Width": 640,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -1023,7 +1049,7 @@
                   "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 180,
+                "Width": 200,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -1047,7 +1073,7 @@
                   "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 160,
+                "Width": 180,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -1497,7 +1523,7 @@
                   "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 400,
+                "Width": 680,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
