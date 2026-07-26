@@ -93,3 +93,4 @@
 - 2026-07-25: **一覧の列幅は行モジュール ListLayouts の ListElement.Width（px・未設定=auto）で固定できる**（数量70/単位70/単価110/金額120/税区分150・摘要のみ auto にして「摘要をぐっと広く」を実現。ヘッダは同じ ListElement から生成されるので自動で揃う。Quote/SalesOrder/InvoiceLine で実測）
 - 2026-07-25: **SelectField を IsRequired:true にしても検索フォームの空選択肢（=絞り込みなし）は消えない**（請求書の部門検索で実測）。編集側の空欄禁止は EmptyCandidateType を NotExist にせず「IsRequired＋初期値＋非経理 IsViewOnly」で実現し、検索用の Null 空選択肢は残すのが正解（NotExist は検索の「指定なし」まで消すリスクがある）
 - 2026-07-25: **行単位の条件付きスタイル（ListLayouts OnAfterInitialization で ClassName 付与→app.css の tr:has()）は罫線にも有効**。P/L のカテゴリ境界太線（小計行=下2px・段階利益行=太字＋薄背景）を BankStatementLine の背景ハイライトと同パターンで実装（border は CSS 変数でなく通常の border-bottom で効く）
+- 2026-07-26: **`ListLayouts[""].OnAfterInitialization` は「詳細ページ埋め込みの ListField」の行でも発火する**（7/23 の ListPage 文脈に続き実測。RecurringRun 詳細内の PlanLines＝RecurringRunPlan の生成予定行ハイライトで確認）。ただし埋め込み一覧のルート div に `list-module` 属性は付かないため、**CSS のスコープは親詳細ページの `data-module`（例: `[data-module="RecurringRun"] table tbody tr:has(.row-planned)`）で取る**

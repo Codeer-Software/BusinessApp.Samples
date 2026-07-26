@@ -63,6 +63,15 @@ h4.row {
   --bs-table-striped-bg: #fff3cd;
 }
 
+/* 定期請求の実行: 生成プラン一覧の「生成予定」(planned) の行を黄色でハイライト
+   （2026-07-26 ユーザー要望）。スクリプト（RecurringRunPlan.ListRow_OnAfterInit）が
+   Status フィールドに row-planned クラスを付け、:has() で行（tr）全体に背景を効かせる。
+   一覧は RecurringRun 詳細ページへの埋め込み ListField のため data-module でスコープする */
+[data-module="RecurringRun"] table tbody tr:has(.row-planned) > * {
+  --bs-table-bg: #fff3cd;
+  --bs-table-striped-bg: #fff3cd;
+}
+
 /* 損益計算書: カテゴリ境界を太罫線で区切る（2026-07-25 ユーザー要望）。
    スクリプト（ProfitLoss.PLRow_OnAfterInit）が Item フィールドに
    pl-subtotal-row（区分小計）／pl-profit-row（段階利益）クラスを付け、

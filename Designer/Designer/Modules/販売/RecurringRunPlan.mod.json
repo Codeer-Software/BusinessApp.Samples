@@ -416,7 +416,7 @@
       "HeaderTitle": "",
       "DataOnlyFields": [],
       "OnBeforeInitialization": "",
-      "OnAfterInitialization": "",
+      "OnAfterInitialization": "ListRow_OnAfterInit",
       "OnFieldDataChanged": "",
       "Elements": [
         [
