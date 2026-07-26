@@ -26,13 +26,16 @@ void Detail_OnAfterInit()
 
 void Generate_OnClick()
 {
+    // 全銀の書式検証（数字桁数・使用可能文字）の正典は PartnerBank.mod.cs（取引先口座マスタ）。
+    // 自社側（委託者・仕向）の項目も同じ基準で検証する
+    var fmt = new PartnerBank();
     if (PayDate.Value == null) { Toaster.Error("振込指定日を入力してください"); return; }
-    if (!IsDigitsLen(ConsignorCode.Value, 10)) { Toaster.Error("委託者コードは数字10桁で入力してください"); return; }
-    if (!IsDigitsLen(HeadBankCode.Value, 4)) { Toaster.Error("仕向銀行コードは数字4桁で入力してください"); return; }
-    if (!IsDigitsLen(HeadBranchCode.Value, 3)) { Toaster.Error("仕向支店コードは数字3桁で入力してください"); return; }
+    if (!fmt.IsDigitsLen(ConsignorCode.Value, 10)) { Toaster.Error("委託者コードは数字10桁で入力してください"); return; }
+    if (!fmt.IsDigitsLen(HeadBankCode.Value, 4)) { Toaster.Error("仕向銀行コードは数字4桁で入力してください"); return; }
+    if (!fmt.IsDigitsLen(HeadBranchCode.Value, 3)) { Toaster.Error("仕向支店コードは数字3桁で入力してください"); return; }
     if (HeadAccountType.Value == null) { Toaster.Error("口座種別を選択してください"); return; }
-    if (!IsDigitsLen(HeadAccountNo.Value, 7)) { Toaster.Error("口座番号は数字7桁で入力してください"); return; }
-    var consignorKanaErr = KanaError(ConsignorKana.Value);
+    if (!fmt.IsDigitsLen(HeadAccountNo.Value, 7)) { Toaster.Error("口座番号は数字7桁で入力してください"); return; }
+    var consignorKanaErr = fmt.KanaError(ConsignorKana.Value);
     if (consignorKanaErr != "") { Toaster.Error($"委託者名に使用できない文字があります: {consignorKanaErr}"); return; }
 
     using var suspend = this.SuspendNotifyStateChanged();
@@ -89,21 +92,11 @@ void Generate_OnClick()
             errors.Add($"{invNo}: 仕入先が見つかりません");
             continue;
         }
-        if (!IsDigitsLen(partner.BankCode.Value, 4) || !IsDigitsLen(partner.BranchCode.Value, 3)
-            || !IsDigitsLen(partner.AccountNo.Value, 7) || partner.AccountTypeSel.Value == null)
+        // 口座5項目の検証は PartnerBank（取引先口座マスタ）と共通のロジックで行う
+        var accErr = partner.AccountValidationError();
+        if (accErr != "")
         {
-            errors.Add($"{invNo}: {partner.Name.Value} の振込先口座情報が未登録または桁数不正（マスタ管理（経理） > 取引先口座 で銀行4桁/支店3桁/口座7桁/種別を登録）");
-            continue;
-        }
-        var kanaErr = KanaError(partner.PayeeKana.Value);
-        if (partner.PayeeKana.Value == null || partner.PayeeKana.Value == "")
-        {
-            errors.Add($"{invNo}: {partner.Name.Value} の受取人名（半角カナ）が未登録");
-            continue;
-        }
-        if (kanaErr != "")
-        {
-            errors.Add($"{invNo}: 受取人名に使用できない文字（{kanaErr}）。半角ｶﾅ大文字・英大文字・数字で登録してください");
+            errors.Add($"{invNo}: {partner.Name.Value} — {accErr}（マスタ管理（経理） > 取引先口座 で登録）");
             continue;
         }
         var amt = inv.Amount.Value ?? 0;
@@ -198,27 +191,4 @@ string PadN(string s, int n)
     return t;
 }
 
-bool IsDigitsLen(string s, int n)
-{
-    if (s == null || s.Length != n) return false;
-    var digits = "0123456789";
-    for (int i = 0; i < s.Length; i++)
-    {
-        if (!digits.Contains(s.Substring(i, 1))) return false;
-    }
-    return true;
-}
-
-// 全銀で使用可能な半角文字（カナ大文字・英大文字・数字・記号）以外が含まれれば
-// 最初の不正文字を返す。空文字なら問題なし
-string KanaError(string s)
-{
-    if (s == null || s == "") return "";
-    var ok = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜｦﾝﾞﾟｰABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ()｢｣/-.\\";
-    for (int i = 0; i < s.Length; i++)
-    {
-        var c = s.Substring(i, 1);
-        if (!ok.Contains(c)) return c;
-    }
-    return "";
-}
+// 数字桁数・使用可能文字の検証は PartnerBank.mod.cs（IsDigitsLen / KanaError）に共通化した
