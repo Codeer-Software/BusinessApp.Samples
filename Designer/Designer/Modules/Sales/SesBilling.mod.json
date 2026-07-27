@@ -16,34 +16,14 @@
       "OnSearchDataChanged": "",
       "DisplayName": "対象月",
       "IsRequired": false,
-      "OnDataChanged": "",
+      "OnDataChanged": "TargetMonth_OnDataChanged",
       "Name": "TargetMonth",
       "IgnoreModification": true,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateFieldDesign"
     },
     {
-      "Text": "精算を計算",
-      "ImageResourcePath": "",
-      "ImageResourceSet": {
-        "Default": "",
-        "Focus": "",
-        "Active": "",
-        "Hover": "",
-        "Disabled": ""
-      },
-      "Icon": "",
-      "Variant": "Primary",
-      "OnClick": "Calc_OnClick",
-      "ShowTextInToolTip": false,
-      "IsHtml": false,
-      "Name": "CalcButton",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
-    },
-    {
-      "Text": "請求書を一括生成（売上仕訳込み）",
+      "Text": "対象月の請求書・仕訳を一括生成",
       "ImageResourcePath": "",
       "ImageResourceSet": {
         "Default": "",
@@ -61,26 +41,6 @@
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
-    },
-    {
-      "DbColumn": "",
-      "IsMultiline": true,
-      "IsAutoFitRows": false,
-      "Placeholder": "「精算を計算」で SES 案件ごとの実績時間と精算内訳を表示します",
-      "Rows": 8,
-      "TextEditEmptyType": "StringEmpty",
-      "ShouldTrimAfterEdit": false,
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "計算内訳",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "CalcResult",
-      "IgnoreModification": true,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
       "Text": "",
@@ -107,7 +67,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "SES 案件の月間実績時間（工数入力の合計）に精算幅（下限〜上限h・控除/超過単価）を適用して請求額を計算し、請求書＋売上仕訳（SES売上高）を一括生成します。生成済みの案件×月はスキップされます。",
+      "Text": "・対象月を選ぶと、SES 案件ごとの実績時間（工数入力の合計）に精算幅（下限〜上限h・控除/超過単価）を適用した生成プランが一覧に表示されます。\r\n・「一括生成」を押すと、一覧の「生成予定」の行（黄色）から、請求書＋売上仕訳（SES売上高）を作成します。生成済みの案件×月はスキップされます。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -129,6 +89,63 @@
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "対象月の生成プラン",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "H5",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "PlanLabel",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "LayoutName": "",
+      "CanNavigateToDetail": false,
+      "NavigateModuleUrlSegment": "",
+      "CanCustomizeColumns": false,
+      "ApplyBackgroundToBoxInput": false,
+      "DisplayName": "",
+      "SearchCondition": {
+        "SelectFields": [],
+        "SortConditions": [
+          {
+            "Variable": "Id.Value",
+            "IsDescending": false
+          }
+        ],
+        "SortFieldVariable": "",
+        "SortDescending": false,
+        "ModuleName": "SesRunPlan",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
+      },
+      "PagerPosition": "None",
+      "ReplaceMode": "None",
+      "DeleteTogether": false,
+      "CanCreate": false,
+      "CanUpdate": false,
+      "CanDelete": false,
+      "CanUserSort": false,
+      "CanSelect": false,
+      "UseIndexSort": false,
+      "OnDataChanged": "",
+      "OnSearchDataChanged": "",
+      "OnSelectedIndexChanged": "",
+      "OnSelectedIndexChanging": "",
+      "OnDoubleClickRow": "",
+      "Name": "PlanLines",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -329,31 +346,6 @@
               },
               {
                 "Layout": {
-                  "FieldName": "CalcButton",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 140,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "VerticalAlignment": "Middle",
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
                   "FieldName": "RunButton",
                   "ContextMenu": "",
                   "ClassName": "",
@@ -405,7 +397,43 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "CalcResult",
+                  "FieldName": "PlanLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "PlanLines",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",

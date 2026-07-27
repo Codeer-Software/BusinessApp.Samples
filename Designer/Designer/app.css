@@ -63,11 +63,12 @@ h4.row {
   --bs-table-striped-bg: #fff3cd;
 }
 
-/* 定期請求の実行: 生成プラン一覧の「生成予定」(planned) の行を黄色でハイライト
-   （2026-07-26 ユーザー要望）。スクリプト（RecurringRunPlan.ListRow_OnAfterInit）が
-   Status フィールドに row-planned クラスを付け、:has() で行（tr）全体に背景を効かせる。
-   一覧は RecurringRun 詳細ページへの埋め込み ListField のため data-module でスコープする */
-[data-module="RecurringRun"] table tbody tr:has(.row-planned) > * {
+/* 定期請求の実行 / SES 精算・請求: 生成プラン一覧の「生成予定」(planned) の行を黄色でハイライト
+   （2026-07-26 ユーザー要望・ADR-0034/0036）。スクリプト（RecurringRunPlan / SesRunPlan の
+   ListRow_OnAfterInit）が Status フィールドに row-planned クラスを付け、:has() で行（tr）全体に
+   背景を効かせる。一覧は詳細ページへの埋め込み ListField のため data-module でスコープする */
+[data-module="RecurringRun"] table tbody tr:has(.row-planned) > *,
+[data-module="SesBilling"] table tbody tr:has(.row-planned) > * {
   --bs-table-bg: #fff3cd;
   --bs-table-striped-bg: #fff3cd;
 }
