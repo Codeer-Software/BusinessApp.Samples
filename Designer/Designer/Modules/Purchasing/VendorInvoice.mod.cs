@@ -165,6 +165,20 @@ void CancelPay_OnClick()
     if (!isAccounting) { Toaster.Error("支払の取消は経理ロールのみ実行できます"); return; }
     if (Status.Value != "paid") { Toaster.Error("支払済みの請求書のみ取り消せます"); return; }
 
+    // 相殺で消し込まれた支払はここでは取り消せない（ADR-0035）。買掛側だけ accrued に戻すと
+    // 入金側の消込仕訳が残ったまま再支払できてしまい二重払いになる——取消経路は入金側に一本化
+    if (PaymentEntryId.Value != null)
+    {
+        var pjs = new ModuleSearcher<JournalEntry>();
+        pjs.AddEquals(e => e.Id.Value, PaymentEntryId.Value);
+        var pj = pjs.ExecuteFirstOrDefault();
+        if (pj != null && ((JournalEntry)pj).SourceType.Value == "receipt")
+        {
+            Toaster.Error("この請求書は売掛金との相殺で消し込まれています。取消は 販売＞入金 の該当入金（入金を取り消す）から行ってください");
+            return;
+        }
+    }
+
     var je = FindSourceJournal("vendor_payment");
     if (je != null)
     {

@@ -1,8 +1,10 @@
 // Receipt.mod.cs — 入金
-// 責務: 請求書選択時の残額自動セット / 入金確定→消込仕訳 (D 普通預金1020 / C 売掛金1100、経理ロール専用) /
+// 責務: 請求書選択時の残額自動セット / 入金確定→消込仕訳 (経理ロール専用) /
 //        請求書ステータスの更新 (入金合計 >= 請求税込額 → paid、それ以外 → partial) /
-//        少額差額の自動処理 (差額が RECEIPT_DIFF_MAX 円以下なら振込手数料等として
+//        少額差額の自動処理 (bank のみ。差額が RECEIPT_DIFF_MAX 円以下なら振込手数料等として
 //        支払手数料6210 で自動仕訳し paid にする。閾値は system_thresholds マスタ参照)
+// 消込仕訳の借方は入金方法で切替 (ADR-0035): bank→普通預金1020 / cash→現金1000 / offset→買掛金2000。
+// 相殺 (offset) は同一取引先の仕入先請求 (未払計上済み) を全額消込し、買掛側も paid に連動させる。
 // 仕訳生成の正典: ExpenseRequest.GenerateJournal_OnClick / Acceptance.Confirm_OnClick
 
 void Detail_OnAfterInit()
@@ -16,6 +18,38 @@ void Detail_OnAfterInit()
         return;
     }
     UpdateButtons();
+    UpdateOffsetVisibility();
+}
+
+// 「相殺する仕入請求」は入金方法が相殺のときだけ表示する
+void UpdateOffsetVisibility()
+{
+    var isOffset = (Method.Value == "offset");
+    OffsetVendorInvoiceRefLabel.IsVisible = isOffset;
+    OffsetVendorInvoiceRef.IsVisible = isOffset;
+}
+
+void Method_OnDataChanged()
+{
+    UpdateOffsetVisibility();
+}
+
+// 仕入請求の選択で入金額を税込額に自動セット（相殺は仕入請求の全額消込のみ対応・ADR-0035）
+void OffsetVendorInvoiceRef_OnDataChanged()
+{
+    if (OffsetVendorInvoiceRef.Value == null) return;
+    var vi = FindVendorInvoice(OffsetVendorInvoiceRef.Value);
+    if (vi == null) return;
+    if (vi.Amount.Value != null) { Amount.Value = vi.Amount.Value; }
+}
+
+VendorInvoice FindVendorInvoice(object viId)
+{
+    var s = new ModuleSearcher<VendorInvoice>();
+    s.AddEquals(e => e.Id.Value, viId);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return (VendorInvoice)found;
 }
 
 // 確定済み (消込仕訳が存在) なら閲覧専用＋取消ボタン、未確定なら確定ボタン
@@ -90,10 +124,35 @@ void CancelReceipt_OnClick()
     }
 
     var jeNo = je.JournalNo.Value;
-    var result = MessageBox.Show($"消込仕訳 No.{jeNo} を削除して入金を未確定に戻します。よろしいですか？", "取り消す", "キャンセル");
+    var confirmMsg = $"消込仕訳 No.{jeNo} を削除して入金を未確定に戻します。よろしいですか？";
+    if (Method.Value == "offset" && OffsetVendorInvoiceRef.Value != null)
+    {
+        confirmMsg = $"消込仕訳 No.{jeNo} を削除して入金を未確定に戻します（相殺した仕入先請求も未払計上済みに戻ります）。よろしいですか？";
+    }
+    var result = MessageBox.Show(confirmMsg, "取り消す", "キャンセル");
     if (result != "取り消す") return;
 
     using var loading = LoadingService.StartLoading(0);
+
+    // 相殺の巻き戻し（ADR-0035）: vendor_invoices.payment_entry_id が消込仕訳を FK 参照しているため、
+    // 参照解除（accrued へ戻す）→ 仕訳削除 の順序が必須。巻き戻しに失敗したら取消自体を中止する
+    if (Method.Value == "offset" && OffsetVendorInvoiceRef.Value != null)
+    {
+        var vi = FindVendorInvoice(OffsetVendorInvoiceRef.Value);
+        if (vi != null && vi.PaymentEntryId.Value != null && $"{vi.PaymentEntryId.Value}" == $"{je.Id.Value}")
+        {
+            vi.PaymentEntryId.Value = null;
+            vi.PaidDate.Value = null;
+            vi.Status.Value = "accrued";
+            var retVi = vi.Submit();
+            if (retVi == false)
+            {
+                Toaster.Error("仕入先請求の巻き戻しに失敗したため取り消せません（入金は確定済みのままです）");
+                return;
+            }
+        }
+    }
+
     if (!DeleteJournalEntryWithLines(je))
     {
         Toaster.Error("消込仕訳の削除に失敗しました（入金は確定済みのままです）");
@@ -237,6 +296,41 @@ void Confirm_OnClick()
         return;
     }
 
+    // 相殺の検証（ADR-0035）: 仕入請求の指定・状態・取引先一致・全額一致
+    VendorInvoice offsetVi = null;
+    if (Method.Value == "offset")
+    {
+        if (OffsetVendorInvoiceRef.Value == null) { Toaster.Error("相殺する仕入請求を選択してください"); return; }
+        offsetVi = FindVendorInvoice(OffsetVendorInvoiceRef.Value);
+        if (offsetVi == null) { Toaster.Error("選択した仕入請求が見つかりません"); return; }
+        if (offsetVi.Status.Value == "received")
+        {
+            Toaster.Error("選択した仕入請求は未払計上前です（買掛金が立っていないため相殺できません。購買＞仕入先請求で先に未払計上してください）");
+            return;
+        }
+        if (offsetVi.Status.Value != "accrued")
+        {
+            Toaster.Error("選択した仕入請求は既に支払済み（または相殺済み）です");
+            return;
+        }
+        if (offsetVi.Partner.Value == null || ivGuard.PartnerRef.Value == null || $"{offsetVi.Partner.Value}" != $"{ivGuard.PartnerRef.Value}")
+        {
+            Toaster.Error("相殺は同一取引先の仕入請求とのみ可能です（請求書の取引先と仕入請求の取引先が一致しません）");
+            return;
+        }
+        int viGross = offsetVi.Amount.Value ?? 0;
+        if (viGross != Amount.Value)
+        {
+            Toaster.Error($"相殺は仕入請求の全額消込のみ対応しています。入金額を仕入請求の税込額 {viGross:#,0} 円に合わせてください（売掛の残りは残額の入金予定として自動作成されます）");
+            return;
+        }
+    }
+    else if (OffsetVendorInvoiceRef.Value != null)
+    {
+        // 相殺以外に切り替えた場合は選択済みの仕入請求をクリアする（取消時の巻き戻し誤爆防止）
+        OffsetVendorInvoiceRef.Value = null;
+    }
+
     // 保存 (保存→確定を 1 ボタンで)。既存レコードでも金額等の修正を必ず反映する
     // （過入金で弾かれた後に金額を直して再確定すると、修正が保存されず
     //   仕訳と入金レコードの金額が食い違うバグがあった。Submit の null は変更なし=正常）
@@ -269,11 +363,13 @@ void Confirm_OnClick()
     var iv = FindInvoice(InvoiceRef.Value);
     if (iv == null) { Toaster.Error("請求書が見つかりません"); return; }
 
-    // 科目解決: 普通預金1020 / 売掛金1100 / 支払手数料6210 / 仮払消費税1900
+    // 科目解決: 普通預金1020 / 現金1000 / 買掛金2000 / 売掛金1100 / 支払手数料6210 / 仮払消費税1900
     var accS = new ModuleSearcher<Account>();
-    accS.AddIn(e => e.Code.Value, "1020", "1100", "6210", "1900");
+    accS.AddIn(e => e.Code.Value, "1020", "1000", "2000", "1100", "6210", "1900");
     var accounts = accS.Execute();
     object bankAccountId = null;
+    object cashAccountId = null;
+    object apAccountId = null;
     object arAccountId = null;
     Account feeAccount = null;
     object purchaseTaxAccountId = null;
@@ -281,12 +377,25 @@ void Confirm_OnClick()
     {
         var acc = (Account)a;
         if (acc.Code.Value == "1020") { bankAccountId = acc.Id.Value; }
+        if (acc.Code.Value == "1000") { cashAccountId = acc.Id.Value; }
+        if (acc.Code.Value == "2000") { apAccountId = acc.Id.Value; }
         if (acc.Code.Value == "1100") { arAccountId = acc.Id.Value; }
         if (acc.Code.Value == "6210") { feeAccount = acc; }
         if (acc.Code.Value == "1900") { purchaseTaxAccountId = acc.Id.Value; }
     }
-    if (bankAccountId == null) { Toaster.Error("普通預金(1020)の科目がありません"); return; }
     if (arAccountId == null) { Toaster.Error("売掛金(1100)の科目がありません"); return; }
+
+    // 借方科目は入金方法で切替（ADR-0035）: bank→普通預金 / cash→現金 / offset→買掛金
+    object debitAccountId = bankAccountId;
+    if (Method.Value == "cash") { debitAccountId = cashAccountId; }
+    if (Method.Value == "offset") { debitAccountId = apAccountId; }
+    if (debitAccountId == null)
+    {
+        if (Method.Value == "cash") { Toaster.Error("現金(1000)の科目がありません"); }
+        else if (Method.Value == "offset") { Toaster.Error("買掛金(2000)の科目がありません"); }
+        else { Toaster.Error("普通預金(1020)の科目がありません"); }
+        return;
+    }
 
     // 差額の判定: 入金前の請求残額 − 入金額 が 1〜閾値 なら振込手数料等として自動処理
     int grossAll = (iv.Amount.Value ?? 0) + (iv.TaxAmount.Value ?? 0);
@@ -303,7 +412,8 @@ void Confirm_OnClick()
 
     var diff = remainBefore - inputAmount;
     var diffMax = GetThresholdAmount("RECEIPT_DIFF_MAX");
-    var useDiff = (diff >= 1 && diff <= diffMax && feeAccount != null);
+    // 「振込手数料等」の差額自動処理は銀行振込のみ（現金・相殺の不足額は振込手数料ではない・ADR-0035）
+    var useDiff = (Method.Value == "bank" && diff >= 1 && diff <= diffMax && feeAccount != null);
 
     // 差額の内税分解（支払手数料の既定税区分が課税仕入のとき）
     var diffTax = 0;
@@ -350,15 +460,17 @@ void Confirm_OnClick()
     int amount = Amount.Value;
     var invoiceNo = iv.InvoiceNo.Value;
     var projId = iv.ProjectRef.Value;  // 請求書の案件を消込仕訳の全行に引き継ぐ（案件別元帳・案件損益のトレーサビリティ）
+    var entryDesc = $"入金 {invoiceNo}";
+    if (offsetVi != null) { entryDesc = $"相殺入金 {invoiceNo}（仕入先請求 {offsetVi.InvoiceNo.Value}）"; }
 
-    // 消込仕訳: D 普通預金(入金額) [+ D 支払手数料(差額本体) + D 仮払消費税(差額税)] / C 売掛金(請求残額)
+    // 消込仕訳: D 借方科目=入金方法で切替(入金額) [+ D 支払手数料(差額本体) + D 仮払消費税(差額税)] / C 売掛金(請求残額)
     var lineCount = 2;
     if (useDiff) { lineCount = (diffTax > 0) ? 4 : 3; }
     var creditAmount = useDiff ? remainBefore : amount;
     var je = new JournalEntry();
     je.EntryDate.Value = ReceiptDate.Value;
     je.EntryType.Value = "auto";
-    je.Description.Value = $"入金 {invoiceNo}";
+    je.Description.Value = entryDesc;
     je.Status.Value = "posted";
     je.JournalNo.Value = nextNo;
     je.FiscalYearRef.Value = typedFy.Id.Value;
@@ -371,13 +483,13 @@ void Confirm_OnClick()
         var l = (JournalLine)row;
         idx = idx + 1;
         l.LineNo.Value = idx;
-        l.Description.Value = $"入金 {invoiceNo}";
+        l.Description.Value = entryDesc;
         l.TaxInputMode.Value = "none";
         if (projId != null) { l.ProjectRef.Value = projId; }
         if (idx == 1)
         {
             l.Dc.Value = "D";
-            l.Account.Value = bankAccountId;
+            l.Account.Value = debitAccountId;
             l.Amount.Value = amount;
             l.InputAmount.Value = amount;
         }
@@ -413,6 +525,24 @@ void Confirm_OnClick()
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("消込仕訳の生成に失敗しました"); return; }
 
+    // 相殺（ADR-0035）: 仕入先請求を支払済みに連動させる（payment_entry_id=消込仕訳・paid_date=入金日）。
+    // 消込仕訳 1 本が売掛・買掛両方の裏付けになる。取消は入金側から（買掛側の支払取消はブロック）
+    if (offsetVi != null)
+    {
+        var cjs = new ModuleSearcher<JournalEntry>();
+        cjs.AddEquals(e => e.SourceType.Value, "receipt");
+        cjs.AddEquals(e => e.SourceId.Value, this.Id.Value);
+        var createdJe = cjs.ExecuteFirstOrDefault();
+        if (createdJe != null) { offsetVi.PaymentEntryId.Value = ((JournalEntry)createdJe).Id.Value; }
+        offsetVi.PaidDate.Value = ReceiptDate.Value;
+        offsetVi.Status.Value = "paid";
+        var retVi = offsetVi.Submit();
+        if (retVi != true)
+        {
+            Toaster.Error("仕入先請求の支払済み更新に失敗しました（消込仕訳は生成済みです。購買＞仕入先請求の状態を確認してください）");
+        }
+    }
+
     // 請求書ステータス更新: 差額自動処理なら paid / それ以外は 入金合計 >= 税込請求額 で判定
     int received = SumReceipts(InvoiceRef.Value, false);
     var newStatus = "partial";
@@ -441,6 +571,10 @@ void Confirm_OnClick()
     if (useDiff)
     {
         Toaster.Success($"仕訳 No.{nextNo}: 入金 {amount:#,0} 円＋差額 {diff:#,0} 円を支払手数料で処理し、{invoiceNo} を消し込みました（入金済）");
+    }
+    else if (offsetVi != null)
+    {
+        Toaster.Success($"仕訳 No.{nextNo}: 買掛金 {amount:#,0} 円と相殺して消し込みました（{invoiceNo} は{newStatusText}／仕入先請求 {offsetVi.InvoiceNo.Value} は支払済）");
     }
     else
     {
