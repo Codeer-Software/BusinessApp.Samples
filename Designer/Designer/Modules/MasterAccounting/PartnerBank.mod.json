@@ -204,7 +204,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "口座登録",
+      "Text": "登録",
       "ImageResourcePath": "",
       "ImageResourceSet": {
         "Default": "",
@@ -215,43 +215,12 @@
       },
       "Icon": "",
       "Variant": "Primary",
-      "OnClick": "Register_OnClick",
-      "ShowTextInToolTip": false,
-      "Name": "RegisterButton",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
-    },
-    {
-      "Text": "口座削除",
-      "ImageResourcePath": "",
-      "ImageResourceSet": {
-        "Default": "",
-        "Focus": "",
-        "Active": "",
-        "Hover": "",
-        "Disabled": ""
-      },
-      "Icon": "",
-      "Variant": "Danger",
-      "OnClick": "Delete_OnClick",
-      "ShowTextInToolTip": false,
-      "Name": "DeleteButton",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
-    },
-    {
-      "Text": "・未払いの支払予定が残っている取引先の口座を消すと、「振込データ作成」がエラーとなりますのでご注意ください。",
-      "Icon": "",
       "IsHtml": false,
-      "Style": "Default",
-      "RelativeField": "",
-      "OnClick": "",
-      "Name": "NoteLabel",
+      "IsBlock": true,
+      "Name": "SubmitButton",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SubmitButtonFieldDesign"
     },
     {
       "Style": "Text",
@@ -739,21 +708,8 @@
             "IsRowMarginRemoved": false,
             "Columns": [
               {
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              },
-              {
                 "Layout": {
-                  "FieldName": "RegisterButton",
+                  "FieldName": "SubmitButton",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -762,7 +718,6 @@
                   "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 160,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -772,80 +727,6 @@
                   "BottomColor": ""
                 },
                 "HorizontalAlignment": "Center",
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "DeleteButton",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 160,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "HorizontalAlignment": "Center",
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              },
-              {
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "IsAutoFillWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsProportionalScale": false,
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "NoteLabel",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "#dc3545",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
                 "CanResize": false,
                 "AllowOverflow": false,
                 "Border": "None"
@@ -903,22 +784,6 @@
             "FieldName": "BranchCode",
             "ContextMenu": "",
             "Label": "支店",
-            "ColumnSpan": 1,
-            "RowSpan": 1,
-            "TextWrap": "Unset",
-            "CanResize": false,
-            "CanUserSort": false,
-            "ClassName": "",
-            "FontFamily": "",
-            "Color": "",
-            "BackgroundColor": "",
-            "DetailLayoutName": "",
-            "ListElementComponent": ""
-          },
-          {
-            "FieldName": "AccountTypeSel",
-            "ContextMenu": "",
-            "Label": "口座種別",
             "ColumnSpan": 1,
             "RowSpan": 1,
             "TextWrap": "Unset",
