@@ -376,4 +376,5 @@ LocalData/backup/
 
 # ===== プロジェクト固有: 環境固有設定（雛形は *.sample、経緯は docs/decisions/0025） =====
 AccountingApp/AccountingApp.Server/appsettings.Development.json
-Designer/Designer/designer.settings.Development.json
+BusinessApp/BusinessApp.Server/appsettings.Development.json
+Designer/Design/designer.settings.Development.json
