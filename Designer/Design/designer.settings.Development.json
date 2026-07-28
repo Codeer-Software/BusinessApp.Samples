@@ -1,0 +1,12 @@
+{
+  "ConnectionStrings": {
+    "AccountingSQLite": "Data Source=C:\\Users\\REDACTED\\DEV\\accounting-app\\AccountingApp\\LocalData\\db\\accounting_v1.db;"
+  },
+  "CurrentDeployInfoName": "local",
+  "DeployInfo": {
+    "local": {
+      "DeployMethod": "FileSystem",
+      "Directory": "C:\\Users\\REDACTED\\DEV\\accounting-app\\AccountingApp\\LocalData\\designs"
+    }
+  }
+}

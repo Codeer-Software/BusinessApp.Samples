@@ -690,7 +690,7 @@
       "FileField": "Receipt",
       "Name": "AiReceiptReader",
       "IgnoreModification": false,
-      "TypeFullName": "Design.Samples.AIDocumentAnalyzer.AITextAnalyzerFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Extras.Designs.AITextAnalyzerFieldDesign"
     },
     {
       "Text": "AI読み取り（添付＋自動入力）",
