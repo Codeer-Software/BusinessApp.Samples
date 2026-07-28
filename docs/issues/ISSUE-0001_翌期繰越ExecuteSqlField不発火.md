@@ -17,7 +17,7 @@
 | 影響機能 | 会計年度画面の「翌期繰越を実行」ボタン（decisions/0006 年次繰越） |
 | 影響度 | 中（年1回の操作。回避策あり＝sql CLI で繰越 SQL を手動実行すれば完全動作） |
 | 環境 | Codeer.LowCode.Blazor **1.2.51.0** / net8.0 / SQLite / Windows 11 |
-| 関連ファイル | `Designer/Designer/Modules/FiscalYear.mod.json`（CarryOverSql）・`FiscalYear.CarryOverSql.sql`・`FiscalYear.mod.cs`（CarryOver_OnClick） |
+| 関連ファイル | `Designer/Design/Modules/FiscalYear.mod.json`（CarryOverSql）・`FiscalYear.CarryOverSql.sql`・`FiscalYear.mod.cs`（CarryOver_OnClick） |
 
 ## 概要
 

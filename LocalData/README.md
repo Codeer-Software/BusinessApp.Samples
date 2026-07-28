@@ -13,8 +13,8 @@
 
 ## 参照している設定（パスを変える場合はここを全部直す）
 
-- `AccountingApp/AccountingApp.Server/appsettings.Development.json` — 接続文字列 / FileStorages.Directory / DesignFileDirectory / FontFileDirectory
-- `Designer/Designer/designer.settings.Development.json` — designcheck / sql CLI の接続先・デプロイ先
+- `BusinessApp/BusinessApp.Server/appsettings.Development.json` — 接続文字列 / FileStorages.Directory / DesignFileDirectory / FontFileDirectory
+- `Designer/Design/designer.settings.Development.json` — designcheck / sql CLI の接続先・デプロイ先
 - `Designer/tools/deploy.ps1` — `$Workspace` / `$Destination` 既定値（`$PSScriptRoot` 相対なので書き換え不要）
 
 パスは絶対パスで記述している（`dotnet run` の作業ディレクトリに依存させないため）。
@@ -23,6 +23,6 @@
 ## まっさら DB の再構築手順
 
 1. サーバを停止し、`db/accounting_v1.db` を `backup/` へ退避（または削除）
-2. `Designer/ddl/*.sql` を番号順に sql CLI（`AccountingApp.Designer.exe sql ... --file`）で適用
+2. `Designer/ddl/*.sql` を番号順に sql CLI（`BusinessApp.Designer.exe sql ... --file`）で適用
 3. `Designer/tools/deploy.ps1` でデザインをデプロイし、サーバを起動
 4. ユーザー・部門・役職者は DDL seed 済み（`085_org_users.sql` ほか）。admin/admin でログイン可能

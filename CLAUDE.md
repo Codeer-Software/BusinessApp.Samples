@@ -8,10 +8,10 @@
 
 1. **本ファイル全体**（ミッション・スコープ・運用ルール）
 2. **`Designer/CLAUDE.md`** — CLB デザインワークスペースの運用ルール（ツールの使い方・ファイル配置・検証手順・スコープ規律）
-3. **`Designer/ClaudeCodeForDesigner/CLAUDE.md`** — **CLB 仕様リファレンス（通読）**。フィールド型・レイアウト・スクリプト・`designcheck`/`sql` CLI・`Defaults/`・`Samples/` の索引を兼ねる
+3. **`Designer/ClaudeCodeForDesigner/CLAUDE.md`** — **CLB 仕様リファレンス（通読）**。フィールド型・レイアウト・スクリプト・`designcheck`/`sql`/`rename-*` CLI・生成リファレンス（`_defaults/`・`_samples/`・`_specs/`・`_field_catalog.md`・`_script_catalog.md`）の索引を兼ねる。**このフォルダ全体はデザイナが `ai-refresh` で再生成する生成物**（Git 追跡外・手で編集しない）
 4. 補助として **CLB Web マニュアル**（人間向け解説。`ClaudeCodeForDesigner/` と対になる内容）: https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Manual
 
-設計作業の実体は **`Designer/Designer/`**（`app.clprj` を持つワークスペース）。ここに `Modules/` `PageFrames/` `Resources/` を作る。
+設計作業の実体は **`Designer/Design/`**（`app.clprj` を持つデザインプロジェクト）。ここに `Modules/` `PageFrames/` `Resources/` を作る。
 
 ## 1. ミッション（芯・変更不可）
 
@@ -32,7 +32,7 @@
   - AI 領収書 OCR／勘定科目推定（LLM 呼び出し）
   - 外部 API 連携（例: インボイス番号の国税庁照合）— WASM 直叩きは CORS／APIキー秘匿で不可。**サーバ経由が定石**
   - 標準機能で足りない帳票 等
-  - 実装先は**ランタイム側プロジェクト**: サーバ拡張＝`AccountingApp/AccountingApp.Server/Services/`（既存の `Services/AI/` が参考）、スクリプトから呼ぶ拡張サービス＝`AccountingApp/AccountingApp.Client.Shared/ScriptObjects/`・`Services/`。追加方法は `Designer/ClaudeCodeForDesigner/Docs/ScriptExtensions.md`。
+  - 実装先は**ランタイム側プロジェクト**: サーバ拡張＝`BusinessApp/BusinessApp.Server/Services/`（既存の `Services/AI/` が参考）、スクリプトから呼ぶ拡張サービス＝`BusinessApp/BusinessApp.Client.Shared/Services/` 配下。追加方法は `Designer/ClaudeCodeForDesigner/_specs/ScriptExtensions.md`。
 - 「ノーコードで大半、高度な所だけ少量の C#」——この比率自体がデモの訴求。**C# に逃げる前に「CLB で本当に無理か」を必ず確認する。**
 
 ## 3. スコープと実装順序
@@ -58,7 +58,7 @@
 
 1. **状態を読む**: 計画・進捗台帳（下記）を読み、前回の続き＝次タスクを特定
 2. **設計する**: 着手前に該当 `Docs/AppPatterns/` と `Samples/` を確認（§2）
-3. **作る**: `Designer/Designer/` に Modules／スクリプト／SQL／PageFrame を作成・編集
+3. **作る**: `Designer/Design/` に Modules／スクリプト／SQL／PageFrame を作成・編集
 4. **検証する**（§5）: `designcheck` → `sql` で DB 整合 → 必要ならデプロイしてブラウザ実機確認
    - **CLB の改善に気づいたら都度 `docs/12_CLB改善提案/` に記録する**（回避策を作った・マニュアルに無い事実を実測した・静かな失敗を踏んだ、が記録タイミング。運用ルールは同 README）
 5. **コミットする**: **Conventional Commits**。意味のある単位で。**ローカル Git のみ（リモート無し）**。ブランチの切り方・手戻りは自由
@@ -84,20 +84,20 @@ Fable が**自分でドキュメントを作成・管理**する。計画・仕�
 |---|---|---|
 | デザイン読込妥当性 | `designcheck` CLI | 作成・編集の都度。`findingCount` が 0 になるまで直す。詳細は `Designer/ClaudeCodeForDesigner/CLAUDE.md` |
 | DB（DDL・投入・確認） | `sql` CLI | モジュールを作ったらテーブルも用意する。主キーは INTEGER 自動採番が原則 |
-| 稼働アプリへの反映（デプロイ） | **`Designer/tools/deploy.ps1` を実行**（`Designer/Designer/` 一式を zip 化 → `LocalData\designs\App.zip` に配置） | `FileWatcher` が `*.zip` を検知して hot-reload（GUI「送信」の代替）。zip 内のパス区切りは `\`（デザイナ独自の詰め方・deploy.ps1 が再現） |
+| 稼働アプリへの反映（デプロイ） | **`Designer/tools/deploy.ps1` を実行**（`Designer/Design/` 一式を zip 化 → `LocalData\designs\App.zip` に配置） | `FileWatcher` が `*.zip` を検知して hot-reload（GUI「送信」の代替）。zip 内のパス区切りは `\`（デザイナ独自の詰め方・deploy.ps1 が再現） |
 | 画面・挙動 | サーバ起動（`http://localhost:5085`）→ ブラウザでスクショ／操作 | `designcheck` で拾えない意味的バグ（合計計算・状態による出し分け等）を実際に見て潰す |
 
 **検証系は設定済み（この環境で確認済み）**:
-- **デザイナ exe のパス**は `Designer/ClaudeCodeForDesigner/LocalEnvironment.md` の `DesignerExePath:` に登録済み。`designcheck`／`sql` を含む自律実行の許可は**ルート `.claude/settings.json`（手動管理の恒久リスト）**にある（不足が出たら追記して育てる方針）。exe を再ビルドしてパスが変わったら LocalEnvironment.md と settings.json を更新する。
-- build（net8.0）・run（`http://localhost:5085`）・deploy（`Designs.Cookie\App.zip`）・hot-reload・ブラウザ実機確認は動作確認済み。
+- **デザイナ exe のパス**は `Designer/LocalEnvironment.md` の `DesignerExePath:` に登録済み（1.3.15 以降の claude-workspace 方式では `Designer/` 直下に置く）。`designcheck`／`sql`／`rename-*`／`ai-refresh` 等を含む自律実行の許可は**ルート `.claude/settings.json`（手動管理の恒久リスト）**と `Designer/.claude/settings.local.json`（claude-workspace 生成）にある（不足が出たら追記して育てる方針）。exe を再ビルドしてパスが変わったら LocalEnvironment.md と両 settings を更新する。
+- build（net8.0）・run（`http://localhost:5085`）・deploy（`LocalData\designs\App.zip`）・hot-reload・ブラウザ実機確認は動作確認済み。
 
 ## 6. この環境の既知事実
 
 - **ランタイム**: `net8.0`。Server は作業フォルダを直読みせず、`LocalData\designs\App.zip` からデザインを読む。`UseHotReload:true`。
 - **DB**: SQLite（`LocalData\db\accounting_v1.db`。実行環境データの構成は `LocalData/README.md`・移設経緯は `docs/decisions/0017`）。**`AllowCliSqlAccess:true` のデータソースだけ** `sql` CLI の対象になる（安全境界）。
 - **認証**: Cookie 認証（`AppUser` モジュール、初期ユーザー admin/admin）。承認ワークフローは認証前提。
-- **AI 連携**: 既存の AI 系は OpenAI/Azure 前提（Server の `AISettings`／`Services/AI/`）。AI 仕訳提案を Claude API で作る場合は**最新モデル（例: Claude Opus 4.8）**を使い、サーバ経由で実装する。実装前に `claude-api` の情報を確認すること。
-- **CLB バージョン**: ランタイム 1.3.4／デザイナ 1.3.6（2026-07-20 更新。`HorizontalAlignment` は新列挙 `Start/Center/End/Stretch`——旧値 `Left/Right` は**エラーにならず既定 Start に化ける**ので使用禁止）。
+- **AI 連携**: プロバイダ切替式（`AISettings.Provider`: Mock／Claude／AzureOpenAI。Server の `Services/AI/`。AzureOpenAI パスは Extras.Server 0.4.0 の標準 `AITextAnalyzeService` へ委譲）。実キーは .NET User Secrets（ADR-0024）。Claude API を使う実装では**最新モデル（例: Claude Opus 4.8）**を使い、サーバ経由で実装する。実装前に `claude-api` の情報を確認すること。
+- **CLB バージョン**: ランタイム・デザイナとも 1.3.16（2026-07-29 の BusinessApp ソリューション移行で更新・ADR-0037。Extras 0.4.0／ApexCharts 0.25.3。`HorizontalAlignment` は列挙 `Start/Center/End/Stretch`——旧値 `Left/Right` は**エラーにならず既定 Start に化ける**ので使用禁止）。ソリューションは `BusinessApp.slnx`＋`BusinessApp/`（旧 AccountingApp ソリューションは廃止）。
 
 ## 7. 参照ドキュメント（索引）
 
@@ -105,8 +105,10 @@ Fable が**自分でドキュメントを作成・管理**する。計画・仕�
 |---|---|
 | `Designer/CLAUDE.md` | ワークスペース運用ルール（着手前に必読） |
 | `Designer/ClaudeCodeForDesigner/CLAUDE.md` | **CLB 仕様リファレンス（通読）** |
-| `Designer/ClaudeCodeForDesigner/Docs/` | Fields／AppPatterns／各 Guidelines |
-| `Designer/ClaudeCodeForDesigner/Samples/` | 複製元の正典（PatternShowcase／PatternShowcaseAuth） |
-| `Designer/ClaudeCodeForDesigner/Defaults/` | フィールド型ごとの既定 JSON |
+| `Designer/ClaudeCodeForDesigner/Docs/` | AppPatterns／各 Guidelines |
+| `Designer/ClaudeCodeForDesigner/_specs/` | フレームワーク仕様リファレンス（ModuleDesign／Layouts／Scripts 等） |
+| `Designer/ClaudeCodeForDesigner/_field_catalog.md`・`_script_catalog.md` | フィールド型・スクリプトオブジェクトの動的生成カタログ（真実の源） |
+| `Designer/ClaudeCodeForDesigner/_samples/` | 複製元の正典（PatternShowcase／PatternShowcaseAuth 等） |
+| `Designer/ClaudeCodeForDesigner/_defaults/` | 全デザイン型の既定 JSON |
 | `Designer/Project.md` | プロジェクト固有ルール（Fable が育てる） |
 | CLB Web マニュアル | 人間向け解説: https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Manual |

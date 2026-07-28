@@ -11,7 +11,7 @@
   - `AllowCliSqlAccess: true`（ローカル専用 DB。本番を指さない）
   - 認証テーブル（app_users）・一時ファイル（temporary_files）も同居
 - 旧 `SampleSQLite`（sqlite_sample_auth.db）はフェーズ A-0 で撤去予定。**会計テーブルを置かないこと**
-- サーバ側: `AccountingApp.Server/appsettings(.Development).json` にも同名データソースの定義が必要（変更時はサーバ再起動）
+- サーバ側: `BusinessApp.Server/appsettings(.Development).json` にも同名データソースの定義が必要（変更時はサーバ再起動）
 
 ## 命名規約
 
@@ -39,7 +39,7 @@
 - zip 仕様（GUI 製 App.zip の実測に基づく）: エントリ名は**バックスラッシュ区切り**・ディレクトリエントリ無し・`app.clprj` はルート直下・`designer.settings*.json` は含めない。書きかけ検知を避けるため一時ファイルに作成してから `Move-Item` で配置
 - 検証結果: サーバ起動時読み込み◯／稼働中の FileWatcher hot-reload ◯（ブラウザ再読み込みで反映を確認済み）
 - 注意: `*.mod.cs`（スクリプト）変更・DB スキーマ変更はサーバ再起動が必要
-- サーバ起動: `dotnet run --project AccountingApp/AccountingApp.Server --launch-profile http`（http://localhost:5085）
+- サーバ起動: `dotnet run --project BusinessApp/BusinessApp.Server --launch-profile http`（http://localhost:5085）
 
 ## 作業中に得た知見（追記していく）
 
