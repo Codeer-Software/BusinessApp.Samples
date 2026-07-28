@@ -2,18 +2,31 @@
 
 このフォルダで Claude Code を起動し、Codeer.LowCode.Blazor のデザインファイル（JSON / C# スクリプト / SQL / CSS）を編集する。デザイナ（GUI アプリ）と並行して使う。
 
+## 質問にも答える（作るだけではない）
+
+ユーザーが「このワークスペースの使い方」「Codeer.LowCode.Blazor の機能・用語」「デザインの作り方」などを**質問**してきたら、いきなりファイルを作らず、まず質問に答える。根拠は次の 3 つ:
+
+- `./ClaudeCodeForDesigner/CLAUDE.md` と `./ClaudeCodeForDesigner/Docs/` — CLB の作り方・仕様・パターン集
+- `./ClaudeCodeForDesigner/` 配下の自動生成リファレンス（フィールドカタログ・仕様・デフォルト JSON・サンプル）
+- オンラインマニュアル（日本語）: https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Designer.Standard/blob/main/Docs/claude_code_designer.md
+
+確証が持てないことは断定せず、該当ドキュメントの場所を案内する。
+
 ## まず読むもの（デザイン作業の前に必ず）
 
-- **`./ClaudeCodeForDesigner/CLAUDE.md`** — デザインファイル作成の詳細指示書（CLB の仕様・フィールド・レイアウト・designcheck / sql CLI・Defaults・規約）。**着手前に通読する**。`./ClaudeCodeForDesigner/Docs/` 各リファレンスの索引も兼ねる
+- **`./ClaudeCodeForDesigner/CLAUDE.md`** — デザインファイル作成の詳細指示書（CLB の仕様・フィールド・レイアウト・designcheck / sql / rename CLI・規約）。**着手前に通読する**。`./ClaudeCodeForDesigner/` 配下の Docs と生成リファレンス（仕様・カタログ・デフォルト・サンプル）の索引も兼ねる
 - **`./Project.md`** — このプロジェクト固有のルール（接続先 DB・命名・業務ルール・既存資産）。**絶対に守る**
 
 下の「作業の進め方」はこのワークスペースで**常に効く運用ルール**。デザインの中身の作り方は `ClaudeCodeForDesigner/` を見る。
 
 ## 作業の進め方（常時このルールで動く）
 
-### 1. 外部ツールは「セットアップは一度・以後は確認なし」
-- **デザイナ exe を起動中プロセスから勝手に特定して即実行しない。** 初回に、使う exe のパスを**ユーザーと確定**する（候補が複数あれば列挙して選ばせる）。確定したパスは `.claude/settings.local.json`（マシン固有・`settings.local.json.sample` を複製して記入）に登録する
-- 登録後は **`designcheck` / `sql` を確認なしで実行してよい**。どの DB に SQL を流せるかは、各データソースの `designer.settings.json` の **`AllowCliSqlAccess`**（ユーザーが設定済み）が決める。`false` のデータソースには CLI からそもそも実行できないので、これが安全境界
+### 1. 外部ツールはデザイナがセットアップ済み・以後は確認なし
+- このワークスペースは**デザイナの「Claude Code Workspace」メニュー（または `claude-workspace` CLI）が展開したもの**で、デザイナ exe のパスは `.claude/settings.local.json` と `LocalEnvironment.md` に**焼き込み済み**。exe パスを自分で探さない
+- **exe に繋がらないとき（パスに実在しない・CLI が動かない）は、ディスクを探索して勝手に直さず、ユーザーに正しいパスを確認する**。ユーザーから「exe のパスを変えて」「新しいパスは○○」と指示されたら自分で書き換えてよい: ① `LocalEnvironment.md` の `DesignerExePath:` 行 ② `.claude/settings.local.json` 内の旧パスの**全出現**（許可リストとフック。JSON 文字列内なので `\` は `\\` にエスケープ、ユーザーが追記した他の許可は温存）。書き換え後は `template-list` など軽いサブコマンドで疎通確認し、許可が効かないようならセッションの再起動を案内する。デザイナのメニュー Tools > Claude Code Workspace の再実行（`settings.local.json` を消してから実行するとパスが再生成される）を案内するのでもよい
+- **`designcheck` / `sql` / `rename-*`（rename-field / rename-module / rename-pageframe / rename-layout / rename-enum / rename-enum-member / 一括の rename-batch）/ `ai-refresh` / `defaults` / `template-list` / `template-extract` は確認なしで実行してよい**。どの DB に SQL を流せるかは、各データソースの `designer.settings.json` の **`AllowCliSqlAccess`**（ユーザーが設定済み）が決める。`false` のデータソースには CLI からそもそも実行できないので、これが安全境界。`sql` と `designcheck` 以外は DB 接続せず完結する（詳細は `./ClaudeCodeForDesigner/CLAUDE.md`）
+- **`designer.settings.Development.json` は基本読まない・書かない（許可制）。** 接続文字列・デプロイ設定（秘密情報）の置き場で、デザイン作業でこの中身が必要になることは無い — データソースの名前と種別は `designer.settings.json`（秘密なし）にあり、DB のスキーマ・データ確認は `sql` / `designcheck` CLI が接続文字列を内部で解決してくれる。扱うのはユーザーが明示的に依頼したときだけ（`.claude/settings.json` の ask 設定で確認が出る）。**その場合も、許可を求める前に「このファイルの内容（接続文字列やパスワード）は読むと LLM への送信と会話ログへの記録が発生する」ことを一言伝え、リスクを了解したうえで承認してもらう**。データソースやデプロイ設定の追加は、デザイナのソリューションツリーで設定ファイルを右クリック（「データソースの追加」等）からもできるので、そちらを案内するのも良い
+- **このワークスペースはデザイナ 1.3.15 以降が前提**。古い exe に未知のサブコマンドを渡すと GUI が起動してしまい `--out` が生成されない。`--out` の JSON が出来ていない／ウィンドウが開いた場合は「その版が未対応」と判断し、**作業を進めずユーザーにデザイナのバージョンアップと Tools > Claude Code Workspace の再実行を促す**（ワークスペースはデザイナと同一バージョンの内容に更新される）
 - **動作確認のサーバ URL は、ブラウザ確認に着手する時点で必ずユーザーに聞く**（毎回これで良いか確認）。依存の導入（Playwright 等）や `.claude` の許可追加も、勝手に広げずユーザーに諮る
 
 ### 2. ツールの使い方（許可ブロック・エラーを増やさない）
@@ -24,9 +37,9 @@
 - **広域なファイル探索をしない**（`C:\` 全走査等。遅く・アクセス拒否でエラー終了する）。必要な情報は最小の取得で済ませる
 
 ### 3. ファイル配置
-- **`Design/` 直下には設計ファイルのみ**（`app.clprj` / `designer.settings*.json` / `Modules` / `PageFrames` / `Resources`）。作業ファイルを混ぜない
+- **`Design/` 直下には設計ファイルのみ**（`app.clprj` / `designer.settings*.json` / `Modules` / `PageFrames` / `Enums` / `Resources`）。作業ファイルを混ぜない
 - **DDL（CREATE TABLE 等）→ `ddl/`**
-- **作業物（seed SQL・CLI の `--out` JSON・スクショ・検証スクリプト）→ `temporary/`**。作業後は不要物の片付けを提案する
+- **作業物（seed SQL・CLI の `--out` JSON・スクショ・検証スクリプト）→ 自分のスクラッチパッド（セッションの一時領域）**。ワークスペースに作業ファイルを置かない
 - **依存（Playwright 等の `npm install`）→ `tools/`**。プロジェクト直下に `node_modules` を作らない
 
 ### 4. 動作確認（ブラウザ / Playwright）は必要時のみ
@@ -37,7 +50,7 @@
 
 ### 5. スコープ（求められないものを作らない）
 - **承認・ワークフロー等を勝手に足さない／「推奨」もしない。** 既定は CRUD（ヘッダ＋明細＋合計等）に留める
-- **承認は認証前提。** 非認証アプリに承認ボタンは業務的に無意味。やるなら `./ClaudeCodeForDesigner/Samples/PatternShowcaseAuth/` の承認フローとして正式に作る
+- **承認は認証前提。** 非認証アプリに承認ボタンは業務的に無意味。やるなら `./ClaudeCodeForDesigner/_samples/PatternShowcaseAuth/` の承認フローとして正式に作る
 
 ### 6. DB を触るとき
 - テーブル作成（DDL）・テストデータ投入・中身確認（件数 / 列 / 親子の紐付け）は、自前で DB 接続せず **`sql` サブコマンド**で行う（詳細: `./ClaudeCodeForDesigner/CLAUDE.md`「SQL 実行 CLI」、`./ClaudeCodeForDesigner/Docs/DatabaseGuidelines.md`）
@@ -46,4 +59,4 @@
 
 ## プロジェクト固有の知見を貯める
 
-作業中に得た業務ルール・命名・接続先などは、`./Project.md` に追記して蓄積する。
+作業中に得た業務ルール・命名・接続先などは、ユーザーに確認のうえ `./Project.md` に追記して蓄積する。

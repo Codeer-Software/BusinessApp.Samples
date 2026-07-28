@@ -10,7 +10,7 @@
 # 注意: *.mod.cs（スクリプト）変更・DB スキーマ変更の反映にはサーバ再起動が必要。
 
 param(
-    [string]$Workspace = (Join-Path $PSScriptRoot "..\Designer" | Resolve-Path),
+    [string]$Workspace = (Join-Path $PSScriptRoot "..\Design" | Resolve-Path),
     [string]$Destination = (Join-Path $PSScriptRoot "..\..\LocalData\designs\App.zip")
 )
 
