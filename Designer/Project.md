@@ -31,7 +31,7 @@
 ## 既存資産
 
 - `Modules/AppUser.mod.json`（Cookie 認証・admin/admin）・`Home.mod.json`・`PageFrames/Main.frm.json` — 認証テンプレート由来。AppUser はフェーズ A-0 で AccountingSQLite へ切替
-- 承認フロー・経費申請の正典: `ClaudeCodeForDesigner/Samples/PatternShowcaseAuth/` と `../references/SampleProject_AuthPatterns/`
+- 承認フロー・経費申請の正典: `ClaudeCodeForDesigner/Samples/PatternShowcaseAuth/` と `../references/SampleProject_AuthPatterns/`（後者はベンダー提供サンプルのローカル参照コピー。再配布権未確認のため Git 追跡外＝ADR-0038。リポジトリを clone した環境には存在しない）
 
 ## デプロイ手順（zip packing — 2026-07-05 実測確立済み）
 

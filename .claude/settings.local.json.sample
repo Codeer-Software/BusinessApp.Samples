@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Write(<リポジトリ親フォルダ>/**)",
+      "Edit(<リポジトリ親フォルダ>/**)",
+      "Bash(\"<デザイナexeのパス>\" designcheck:*)",
+      "Bash(\"<デザイナexeのパス>\" sql:*)",
+      "Bash(\"<デザイナexeのパス>\" rename-field:*)",
+      "Bash(\"<デザイナexeのパス>\" rename-module:*)",
+      "Bash(\"<デザイナexeのパス>\" rename-pageframe:*)",
+      "Bash(\"<デザイナexeのパス>\" rename-layout:*)",
+      "Bash(\"<デザイナexeのパス>\" rename-enum:*)",
+      "Bash(\"<デザイナexeのパス>\" rename-enum-member:*)",
+      "Bash(\"<デザイナexeのパス>\" rename-batch:*)",
+      "Bash(\"<デザイナexeのパス>\" field-catalog:*)",
+      "Bash(\"<デザイナexeのパス>\" script-catalog:*)",
+      "Bash(\"<デザイナexeのパス>\" defaults:*)",
+      "Bash(\"<デザイナexeのパス>\" template-list:*)",
+      "Bash(\"<デザイナexeのパス>\" template-extract:*)",
+      "Bash(\"<デザイナexeのパス>\" ai-refresh:*)",
+      "Bash(\"<デザイナexeのパス>\" claude-workspace:*)"
+    ]
+  }
+}

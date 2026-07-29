@@ -377,3 +377,9 @@ LocalData/backup/
 # ===== プロジェクト固有: 環境固有設定（雛形は *.sample、経緯は docs/decisions/0025） =====
 BusinessApp/BusinessApp.Server/appsettings.Development.json
 Designer/Design/designer.settings.Development.json
+
+# ===== プロジェクト固有: Claude Code マシン固有許可（雛形は .claude/settings.local.json.sample、経緯は docs/decisions/0038） =====
+.claude/settings.local.json
+
+# ===== プロジェクト固有: ベンダー提供サンプルのローカル参照コピー（再配布権未確認のため追跡しない、経緯は docs/decisions/0038） =====
+references/SampleProject_AuthPatterns/

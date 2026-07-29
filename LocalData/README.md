@@ -7,7 +7,7 @@
 |---|---|---|
 | `db/` | SQLite 本体（`accounting_v1.db`） | 追跡しない |
 | `designs/` | デザインデプロイ先（`App.zip`。FileWatcher が監視・hot-reload） | 追跡しない |
-| `font/` | PDF 出力用フォント（`NotoSansJP.ttf`・SIL OFL）。**無いと全 PDF 出力が失敗する** | **コミット**（環境構築の罠解消のため） |
+| `font/` | PDF 出力用フォント（`NotoSansJP.ttf`・SIL OFL 1.1。ライセンス全文は同フォルダの `LICENSE`） 。**無いと全 PDF 出力が失敗する** | **コミット**（環境構築の罠解消のため） |
 | `storages/` | FileField の添付ファイル実体 | 追跡しない |
 | `backup/` | DB のバックアップ（手動スナップショット） | 追跡しない |
 

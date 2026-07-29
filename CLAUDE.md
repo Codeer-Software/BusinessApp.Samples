@@ -88,7 +88,7 @@ Fable が**自分でドキュメントを作成・管理**する。計画・仕�
 | 画面・挙動 | サーバ起動（`http://localhost:5085`）→ ブラウザでスクショ／操作 | `designcheck` で拾えない意味的バグ（合計計算・状態による出し分け等）を実際に見て潰す |
 
 **検証系は設定済み（この環境で確認済み）**:
-- **デザイナ exe のパス**は `Designer/LocalEnvironment.md` の `DesignerExePath:` に登録済み（1.3.15 以降の claude-workspace 方式では `Designer/` 直下に置く）。`designcheck`／`sql`／`rename-*`／`ai-refresh` 等を含む自律実行の許可は**ルート `.claude/settings.json`（手動管理の恒久リスト）**と `Designer/.claude/settings.local.json`（claude-workspace 生成）にある（不足が出たら追記して育てる方針）。exe を再ビルドしてパスが変わったら LocalEnvironment.md と両 settings を更新する。
+- **デザイナ exe のパス**は `Designer/LocalEnvironment.md` の `DesignerExePath:` に登録済み（1.3.15 以降の claude-workspace 方式では `Designer/` 直下に置く）。`designcheck`／`sql`／`rename-*`／`ai-refresh` 等を含む自律実行の許可は、**ポータブルな分がルート `.claude/settings.json`（手動管理の恒久リスト）**、**マシン固有の絶対パスを含む分が Git 追跡外の `.claude/settings.local.json`（雛形: `.claude/settings.local.json.sample`）**と `Designer/.claude/settings.local.json`（claude-workspace 生成）にある（不足が出たら追記して育てる方針。絶対パスを含む許可を追跡ファイルに書かないこと＝ADR-0038）。exe を再ビルドしてパスが変わったら LocalEnvironment.md と両 settings.local.json を更新する。
 - build（net8.0）・run（`http://localhost:5085`）・deploy（`LocalData\designs\App.zip`）・hot-reload・ブラウザ実機確認は動作確認済み。
 
 ## 6. この環境の既知事実
