@@ -2,7 +2,7 @@
 // コピーし、<REPO_ROOT> をリポジトリ絶対パスに置換する。実ファイルは Git 追跡外 — 経緯: docs/decisions/0025）
 {
   "ConnectionStrings": {
-    "AccountingSQLite": "Data Source=<REPO_ROOT>\\LocalData\\db\\accounting_v1.db;"
+    "BusinessAppSQLite": "Data Source=<REPO_ROOT>\\LocalData\\db\\business-app_v1.db;"
   },
   "CurrentDeployInfoName": "local",
   "DeployInfo": {

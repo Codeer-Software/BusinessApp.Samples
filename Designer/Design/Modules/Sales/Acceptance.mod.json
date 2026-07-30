@@ -1,6 +1,6 @@
 {
   "Name": "Acceptance",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "acceptances",
   "CanCreate": true,
   "CanUpdate": true,

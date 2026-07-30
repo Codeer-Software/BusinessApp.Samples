@@ -1,6 +1,6 @@
 {
   "Name": "RecurringRunPlan",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "recurring_run_plan",
   "CanCreate": true,
   "CanUpdate": true,

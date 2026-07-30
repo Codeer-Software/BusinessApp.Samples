@@ -1,4 +1,4 @@
--- 150_effort.sql — 工数・人件費配賦・案件損益（B'、AccountingSQLite）
+-- 150_effort.sql — 工数・人件費配賦・案件損益（B'、BusinessAppSQLite）
 -- 設計: docs/decisions/0009（配賦は管理会計レイヤ=仕訳なし・工数は分単位 INTEGER）
 -- 規律: FK 列に NOT NULL 禁止 / 日付=DATE
 

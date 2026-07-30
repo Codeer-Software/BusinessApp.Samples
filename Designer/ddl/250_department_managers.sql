@@ -1,4 +1,4 @@
--- 250_department_managers.sql — 1部門に複数の課長・部長（ADR-0016、AccountingSQLite）
+-- 250_department_managers.sql — 1部門に複数の課長・部長（ADR-0016、BusinessAppSQLite）
 -- 設計: docs/decisions/0016-1部門複数課長部長の承認ルート.md
 -- 旧 departments.manager_user / director_user は使用停止（物理削除しない。参照はモジュール・スクリプトから全除去）
 

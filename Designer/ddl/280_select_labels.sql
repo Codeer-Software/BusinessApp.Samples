@@ -1,4 +1,4 @@
--- 280_select_labels.sql — 参照ドロップダウンの表示ラベル（U4-3 / レビュー第4弾、AccountingSQLite）
+-- 280_select_labels.sql — 参照ドロップダウンの表示ラベル（U4-3 / レビュー第4弾、BusinessAppSQLite）
 -- 見積/受注/検収/請求書の参照 Select が番号のみで判別しづらいため、
 -- 「番号 取引先名 件名」を select_label 列に持たせ、参照側の DisplayTextVariable で表示する。
 --

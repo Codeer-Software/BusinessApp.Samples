@@ -1,7 +1,7 @@
 {
   "DataSources": [
     {
-      "Name": "AccountingSQLite",
+      "Name": "BusinessAppSQLite",
       "DataSourceType": "SQLite",
       "AllowCliSqlAccess": true
     }

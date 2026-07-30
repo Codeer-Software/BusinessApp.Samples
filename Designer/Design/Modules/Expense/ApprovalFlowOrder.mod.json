@@ -1,6 +1,6 @@
 {
   "Name": "ApprovalFlowOrder",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "approval_flow_order",
   "CanCreate": true,
   "CanUpdate": true,

@@ -1,4 +1,4 @@
--- 040_journal.sql — 仕訳（会計コアの心臓）＋前提マスタの器（AccountingSQLite）
+-- 040_journal.sql — 仕訳（会計コアの心臓）＋前提マスタの器（BusinessAppSQLite）
 -- 設計: docs/04_会計ドメイン設計.md §3 / decisions/0002(ヘッダ+貸借区分付き明細行) / 0003(明示税行)
 -- departments/partners/projects は仕訳行の FK 先として器を先行作成（画面はフェーズ B-1）。
 -- 注意: 日付列は DATE、日時列は DATETIME で宣言（TEXT 禁止 — Project.md 知見）。

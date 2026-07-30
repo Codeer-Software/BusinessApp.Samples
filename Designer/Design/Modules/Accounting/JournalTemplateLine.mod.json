@@ -1,6 +1,6 @@
 {
   "Name": "JournalTemplateLine",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "journal_template_lines",
   "CanCreate": true,
   "CanUpdate": true,

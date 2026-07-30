@@ -1,4 +1,4 @@
--- 260_approval_route_rules.sql — 承認ルート判定ルールのマスタ化（ADR-0023、AccountingSQLite）
+-- 260_approval_route_rules.sql — 承認ルート判定ルールのマスタ化（ADR-0023、BusinessAppSQLite）
 -- 旧方式: ExpenseRequest.mod.cs の SelectTemplateName() が閾値（EXP_APPROVAL_MID/HIGH）と
 --         交際費フラグから「テンプレート名の文字列」を直書き分岐で返していた。
 -- 新方式: 本テーブルを priority 昇順に評価し、費目と金額（下限≦判定額≦上限）が

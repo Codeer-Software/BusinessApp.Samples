@@ -1,6 +1,6 @@
 {
   "Name": "TimeEntry",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "time_entries",
   "CanCreate": true,
   "CanUpdate": true,

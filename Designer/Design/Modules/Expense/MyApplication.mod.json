@@ -1,6 +1,6 @@
 {
   "Name": "MyApplication",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "approval_flow",
   "CanCreate": false,
   "CanUpdate": false,

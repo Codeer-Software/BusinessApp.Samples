@@ -1,6 +1,6 @@
 {
   "Name": "CashFlowStatement",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "",
   "CanCreate": false,
   "CanUpdate": false,

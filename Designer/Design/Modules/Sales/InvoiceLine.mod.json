@@ -1,6 +1,6 @@
 {
   "Name": "InvoiceLine",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "invoice_lines",
   "CanCreate": true,
   "CanUpdate": true,

@@ -1,6 +1,6 @@
 {
   "Name": "PartnerBank",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "partners",
   "CanCreate": false,
   "CanUpdate": true,

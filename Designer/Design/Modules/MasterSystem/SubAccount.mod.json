@@ -1,6 +1,6 @@
 {
   "Name": "SubAccount",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "sub_accounts",
   "CanCreate": true,
   "CanUpdate": true,

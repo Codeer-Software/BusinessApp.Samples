@@ -1,6 +1,6 @@
 {
   "Name": "ExpenseRequest",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "expense_request",
   "CanCreate": true,
   "CanUpdate": true,

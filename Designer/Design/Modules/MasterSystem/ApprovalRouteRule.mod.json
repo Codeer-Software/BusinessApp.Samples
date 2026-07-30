@@ -1,6 +1,6 @@
 {
   "Name": "ApprovalRouteRule",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "approval_route_rules",
   "CanCreate": true,
   "CanUpdate": true,

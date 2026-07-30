@@ -5,7 +5,7 @@
 
 | ディレクトリ | 内容 | Git |
 |---|---|---|
-| `db/` | SQLite 本体（`accounting_v1.db`） | 追跡しない |
+| `db/` | SQLite 本体（`business-app_v1.db`） | 追跡しない |
 | `designs/` | デザインデプロイ先（`App.zip`。FileWatcher が監視・hot-reload） | 追跡しない |
 | `font/` | PDF 出力用フォント（`NotoSansJP.ttf`・SIL OFL 1.1。ライセンス全文は同フォルダの `LICENSE`） 。**無いと全 PDF 出力が失敗する** | **コミット**（環境構築の罠解消のため） |
 | `storages/` | FileField の添付ファイル実体 | 追跡しない |
@@ -22,7 +22,7 @@
 
 ## まっさら DB の再構築手順
 
-1. サーバを停止し、`db/accounting_v1.db` を `backup/` へ退避（または削除）
+1. サーバを停止し、`db/business-app_v1.db` を `backup/` へ退避（または削除）
 2. `Designer/ddl/*.sql` を番号順に sql CLI（`BusinessApp.Designer.exe sql ... --file`）で適用
 3. `Designer/tools/deploy.ps1` でデザインをデプロイし、サーバを起動
 4. ユーザー・部門・役職者は DDL seed 済み（`085_org_users.sql` ほか）。admin/admin でログイン可能

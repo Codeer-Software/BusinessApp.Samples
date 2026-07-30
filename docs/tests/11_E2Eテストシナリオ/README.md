@@ -24,7 +24,7 @@
 
 ### 2.1 データベースの初期状態
 
-本書は「**新規の AccountingSQLite DB に `Designer/ddl/` の全 DDL を番号順に適用した直後**」を前提とする（再構築手順は `LocalData/README.md`）。seed により以下が**登録済み**:
+本書は「**新規の BusinessAppSQLite DB に `Designer/ddl/` の全 DDL を番号順に適用した直後**」を前提とする（再構築手順は `LocalData/README.md`）。seed により以下が**登録済み**:
 
 | seed 済み | 内容 |
 |---|---|

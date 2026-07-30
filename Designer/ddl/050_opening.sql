@@ -1,4 +1,4 @@
--- 050_opening.sql — 期首残高（AccountingSQLite / accounting_v1.db）
+-- 050_opening.sql — 期首残高（BusinessAppSQLite / business-app_v1.db）
 -- 設計: docs/04 §6 / decisions/0006（年次繰越=翌期 opening_balances 生成方式）
 -- balance は符号付き（借方残=正・貸方残=負）。年度内の合計が 0 で貸借一致。
 

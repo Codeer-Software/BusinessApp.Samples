@@ -1,6 +1,6 @@
 {
   "Name": "TaxSummary",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "",
   "CanCreate": false,
   "CanUpdate": false,

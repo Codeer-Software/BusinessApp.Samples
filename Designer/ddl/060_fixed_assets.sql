@@ -1,4 +1,4 @@
--- 060_fixed_assets.sql — 固定資産台帳（AccountingSQLite / accounting_v1.db）
+-- 060_fixed_assets.sql — 固定資産台帳（BusinessAppSQLite / business-app_v1.db）
 -- 設計: docs/04 §7。償却累計は持たず仕訳（source_type='depreciation', source_id=資産id）から導出。
 -- 償却方法: straight_line(定額) / declining_200(200%定率) / lump_sum_3yr(一括3年) / immediate(即時) / none(非償却)
 

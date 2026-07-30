@@ -1,6 +1,6 @@
 {
   "Name": "MonthlySalary",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "monthly_salaries",
   "CanCreate": true,
   "CanUpdate": true,

@@ -1,6 +1,6 @@
 {
   "Name": "ApprovalInbox",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "approval_inbox_view",
   "CanCreate": false,
   "CanUpdate": false,

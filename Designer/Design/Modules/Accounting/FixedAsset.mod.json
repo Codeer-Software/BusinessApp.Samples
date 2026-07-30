@@ -1,6 +1,6 @@
 {
   "Name": "FixedAsset",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "fixed_assets",
   "CanCreate": true,
   "CanUpdate": true,

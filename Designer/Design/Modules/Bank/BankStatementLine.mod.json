@@ -1,6 +1,6 @@
 {
   "Name": "BankStatementLine",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "bank_statement_lines",
   "CanCreate": true,
   "CanUpdate": true,

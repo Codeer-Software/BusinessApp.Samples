@@ -1,6 +1,6 @@
 {
   "Name": "QuoteLine",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "quote_lines",
   "CanCreate": true,
   "CanUpdate": true,

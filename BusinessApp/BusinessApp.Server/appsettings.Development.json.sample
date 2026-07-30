@@ -3,7 +3,7 @@
 // API キー等の秘密は書かないこと。実キーは .NET User Secrets へ（docs/decisions/0024）。
 {
   "ConnectionStrings": {
-    "AccountingSQLite": "Data Source=<REPO_ROOT>\\LocalData\\db\\accounting_v1.db;"
+    "BusinessAppSQLite": "Data Source=<REPO_ROOT>\\LocalData\\db\\business-app_v1.db;"
   },
   "FileStorages": [
     {

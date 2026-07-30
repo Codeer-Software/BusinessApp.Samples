@@ -1,6 +1,6 @@
 {
   "Name": "ReceivableBalance",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "",
   "CanCreate": false,
   "CanUpdate": false,

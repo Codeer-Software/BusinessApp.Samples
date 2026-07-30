@@ -1,6 +1,6 @@
 {
   "Name": "VendorInvoice",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "vendor_invoices",
   "CanCreate": true,
   "CanUpdate": true,

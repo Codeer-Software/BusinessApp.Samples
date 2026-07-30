@@ -1,6 +1,6 @@
 {
   "Name": "ApprovalHistory",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "approval_history",
   "CanCreate": true,
   "CanUpdate": false,

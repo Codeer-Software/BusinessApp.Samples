@@ -1,6 +1,6 @@
 {
   "Name": "MatchingRule",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "matching_rules",
   "CanCreate": true,
   "CanUpdate": true,

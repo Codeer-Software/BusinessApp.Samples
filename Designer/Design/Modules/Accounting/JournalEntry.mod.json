@@ -1,6 +1,6 @@
 {
   "Name": "JournalEntry",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "journal_entries",
   "CanCreate": true,
   "CanUpdate": true,

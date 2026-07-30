@@ -1,6 +1,6 @@
 {
   "Name": "Account",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "accounts",
   "CanCreate": true,
   "CanUpdate": true,

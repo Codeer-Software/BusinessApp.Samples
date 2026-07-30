@@ -1,6 +1,6 @@
 {
   "Name": "SesRunPlan",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "ses_run_plan",
   "CanCreate": true,
   "CanUpdate": true,

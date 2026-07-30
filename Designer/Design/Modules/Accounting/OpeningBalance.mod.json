@@ -1,6 +1,6 @@
 {
   "Name": "OpeningBalance",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "opening_balances",
   "CanCreate": true,
   "CanUpdate": true,

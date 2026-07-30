@@ -1,4 +1,4 @@
--- 120_recurring.sql — 定期請求（SaaS 月額、B-5、AccountingSQLite）
+-- 120_recurring.sql — 定期請求（SaaS 月額、B-5、BusinessAppSQLite）
 -- 設計: docs/08_請求入金設計.md / 売上計上は月次役務完了時=請求書一括生成と同時 (ADR-0008 の月次検収扱い)
 -- 規律: FK 列に NOT NULL 禁止 / 日付=DATE (月は月初日で保存) / 金額=INTEGER 円
 

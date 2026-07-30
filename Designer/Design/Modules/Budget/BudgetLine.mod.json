@@ -1,6 +1,6 @@
 {
   "Name": "BudgetLine",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "budget_lines",
   "CanCreate": true,
   "CanUpdate": true,

@@ -1,6 +1,6 @@
 {
   "Name": "BankStatementPreview",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "bank_statement_preview",
   "CanCreate": true,
   "CanUpdate": true,

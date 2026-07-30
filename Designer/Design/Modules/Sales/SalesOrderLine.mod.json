@@ -1,6 +1,6 @@
 {
   "Name": "SalesOrderLine",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "sales_order_lines",
   "CanCreate": true,
   "CanUpdate": true,

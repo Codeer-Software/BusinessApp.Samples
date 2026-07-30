@@ -1,4 +1,4 @@
--- 130_budget.sql — 予算管理（部門×科目×月、B-7、AccountingSQLite）
+-- 130_budget.sql — 予算管理（部門×科目×月、B-7、BusinessAppSQLite）
 -- 規律: FK 列に NOT NULL 禁止 / 金額=INTEGER 円 / 閾値はマスタ化（ハードコード禁止）
 
 CREATE TABLE IF NOT EXISTS budget_lines (

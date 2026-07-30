@@ -1,6 +1,6 @@
 {
   "Name": "SystemThreshold",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "system_thresholds",
   "CanCreate": true,
   "CanUpdate": true,

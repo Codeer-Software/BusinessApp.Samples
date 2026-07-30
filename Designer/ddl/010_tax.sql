@@ -1,4 +1,4 @@
--- 010_tax.sql — 税マスタ（AccountingSQLite / accounting_v1.db）
+-- 010_tax.sql — 税マスタ（BusinessAppSQLite / business-app_v1.db）
 -- 設計: docs/04_会計ドメイン設計.md §4 / docs/decisions/0003
 -- 制度値の根拠: docs/research/2026-07_税制・会計制度リサーチ.md（令和8年度税制改正反映）
 -- 税率・区分・閾値はすべて期間付きマスタ。ハードコード禁止の中核。

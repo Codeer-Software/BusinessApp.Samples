@@ -94,7 +94,7 @@ Fable が**自分でドキュメントを作成・管理**する。計画・仕�
 ## 6. この環境の既知事実
 
 - **ランタイム**: `net8.0`。Server は作業フォルダを直読みせず、`LocalData\designs\App.zip` からデザインを読む。`UseHotReload:true`。
-- **DB**: SQLite（`LocalData\db\accounting_v1.db`。実行環境データの構成は `LocalData/README.md`・移設経緯は `docs/decisions/0017`）。**`AllowCliSqlAccess:true` のデータソースだけ** `sql` CLI の対象になる（安全境界）。
+- **DB**: SQLite（`LocalData\db\business-app_v1.db`。実行環境データの構成は `LocalData/README.md`・移設経緯は `docs/decisions/0017`）。**`AllowCliSqlAccess:true` のデータソースだけ** `sql` CLI の対象になる（安全境界）。
 - **認証**: Cookie 認証（`AppUser` モジュール、初期ユーザー admin/admin）。承認ワークフローは認証前提。
 - **AI 連携**: プロバイダ切替式（`AISettings.Provider`: Mock／Claude／AzureOpenAI。Server の `Services/AI/`。AzureOpenAI パスは Extras.Server 0.4.0 の標準 `AITextAnalyzeService` へ委譲）。実キーは .NET User Secrets（ADR-0024）。Claude API を使う実装では**最新モデル（例: Claude Opus 4.8）**を使い、サーバ経由で実装する。実装前に `claude-api` の情報を確認すること。
 - **CLB バージョン**: ランタイム・デザイナとも 1.3.16（2026-07-29 の BusinessApp ソリューション移行で更新・ADR-0037。Extras 0.4.0／ApexCharts 0.25.3。`HorizontalAlignment` は列挙 `Start/Center/End/Stretch`——旧値 `Left/Right` は**エラーにならず既定 Start に化ける**ので使用禁止）。ソリューションは `BusinessApp.slnx`＋`BusinessApp/`（旧 AccountingApp ソリューションは廃止）。

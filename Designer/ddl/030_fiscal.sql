@@ -1,4 +1,4 @@
--- 030_fiscal.sql — 会計期間（AccountingSQLite / accounting_v1.db）
+-- 030_fiscal.sql — 会計期間（BusinessAppSQLite / business-app_v1.db）
 -- 設計: docs/04_会計ドメイン設計.md §1
 -- seed: ペルソナ（docs/02）どおり 第17期(2025-04〜2026-03, 締め済み)・第18期(2026-04〜, 進行中)。
 --       第18期は 4月・5月を月次締め済み、6月以降 open（A-4 の締め済みガード検証にも使う）。

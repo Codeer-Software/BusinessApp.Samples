@@ -1,6 +1,6 @@
 {
   "Name": "InvoiceLookup",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "invoices",
   "CanCreate": false,
   "CanUpdate": false,

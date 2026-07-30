@@ -1,6 +1,6 @@
 {
   "Name": "ApprovalFlowMember",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "approval_flow_member",
   "CanCreate": true,
   "CanUpdate": true,

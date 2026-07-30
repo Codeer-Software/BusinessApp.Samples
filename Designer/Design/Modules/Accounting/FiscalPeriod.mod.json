@@ -1,6 +1,6 @@
 {
   "Name": "FiscalPeriod",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "fiscal_periods",
   "CanCreate": true,
   "CanUpdate": true,

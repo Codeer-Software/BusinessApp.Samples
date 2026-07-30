@@ -1,6 +1,6 @@
 {
   "Name": "TaxRate",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "tax_rates",
   "CanCreate": true,
   "CanUpdate": true,

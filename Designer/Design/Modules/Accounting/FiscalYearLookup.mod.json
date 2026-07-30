@@ -1,6 +1,6 @@
 {
   "Name": "FiscalYearLookup",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "fiscal_years",
   "CanCreate": false,
   "CanUpdate": false,

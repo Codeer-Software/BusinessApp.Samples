@@ -1,6 +1,6 @@
 {
   "Name": "Notification",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "notifications",
   "CanCreate": true,
   "CanUpdate": true,

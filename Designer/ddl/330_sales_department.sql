@@ -1,4 +1,4 @@
--- 330_sales_department.sql — 販売伝票への部門付与（ユーザー承認 2026-07-23・AccountingSQLite）
+-- 330_sales_department.sql — 販売伝票への部門付与（ユーザー承認 2026-07-23・BusinessAppSQLite）
 -- 設計: 部門は案件ではなく伝票（見積・受注・請求書・定期請求契約）が直接持つ。
 --   仕訳明細（journal_lines.department_id）が部門と案件を独立2軸で持つ構造と相似。
 --   発行時点の所属を固定するスナップショット思想（ddl/270 経費申請と同じ）。

@@ -1,6 +1,6 @@
 {
   "Name": "ExpenseSettlementQueue",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "expense_request",
   "CanCreate": false,
   "CanUpdate": false,

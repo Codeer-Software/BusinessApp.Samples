@@ -1,6 +1,6 @@
 {
   "Name": "ExpenseCategory",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "expense_categories",
   "CanCreate": true,
   "CanUpdate": true,

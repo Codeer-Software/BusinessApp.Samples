@@ -1,6 +1,6 @@
 {
   "Name": "RecurringBilling",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "recurring_billings",
   "CanCreate": true,
   "CanUpdate": true,

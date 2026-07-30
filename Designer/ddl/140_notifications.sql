@@ -1,4 +1,4 @@
--- 140_notifications.sql — アプリ内通知（B-9、AccountingSQLite）
+-- 140_notifications.sql — アプリ内通知（B-9、BusinessAppSQLite）
 -- Slack/メールは「口だけ実装」（作業合意）: ApprovalFlow.NotifyUser の Logger 出力が将来の連携ポイント
 CREATE TABLE IF NOT EXISTS notifications (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

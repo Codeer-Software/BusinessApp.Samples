@@ -1,4 +1,4 @@
--- 110_billing.sql — 請求・入金（B-4、AccountingSQLite）
+-- 110_billing.sql — 請求・入金（B-4、BusinessAppSQLite）
 -- 設計: docs/08_請求入金設計.md / 売上計上=検収基準 (decisions/0008)
 -- 規律: FK 列に NOT NULL 禁止（CLB 後埋め）/ 日付=DATE / 金額=INTEGER 円
 

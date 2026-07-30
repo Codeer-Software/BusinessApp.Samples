@@ -1,4 +1,4 @@
--- 090_approval_route.sql — 承認ルート自動決定（B2-3、AccountingSQLite）
+-- 090_approval_route.sql — 承認ルート自動決定（B2-3、BusinessAppSQLite）
 -- 設計: docs/07_経費精算設計.md §3 / 台帳 B2-3
 -- どのテンプレートを使うかの判定は 2026-07-14 以降 approval_route_rules（260・ADR-0023）が正。
 -- 判定額 = 立替精算は金額、事前申請は見込み額（実費確定後は実費）

@@ -1,4 +1,4 @@
--- 020_accounts.sql — 勘定科目マスタ（AccountingSQLite / accounting_v1.db）
+-- 020_accounts.sql — 勘定科目マスタ（BusinessAppSQLite / business-app_v1.db）
 -- 設計: docs/04_会計ドメイン設計.md §2 / docs/decisions/0005（4桁コード・フラット＋表示区分）
 -- プリセット科目は IT 受託ソフトハウス（docs/02_ペルソナ.md）向けの中小標準体系。
 -- 注意: 010_tax.sql（tax_categories）適用後に実行すること。

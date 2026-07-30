@@ -1,6 +1,6 @@
 {
   "Name": "InvoiceTransitionRate",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "invoice_transition_rates",
   "CanCreate": true,
   "CanUpdate": true,

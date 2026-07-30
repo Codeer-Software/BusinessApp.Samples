@@ -1,4 +1,4 @@
--- 290_user_deactivation.sql — 退職者アカウントの無効化（Q4 / レビュー第4弾、AccountingSQLite）
+-- 290_user_deactivation.sql — 退職者アカウントの無効化（Q4 / レビュー第4弾、BusinessAppSQLite）
 -- 退職者は削除せず is_active=0 にする（過去の仕訳・申請・承認履歴の参照を守るため物理削除しない）。
 --
 -- ログイン拒否の仕組み:

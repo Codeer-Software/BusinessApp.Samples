@@ -14,7 +14,7 @@ ASP.NET Core + [Codeer.LowCode.Blazor](https://github.com/Codeer-Software/Codeer
 | 項目       | 内容                                                                          |
 | ---------- | ----------------------------------------------------------------------------- |
 | ランタイム | .NET 8 / ASP.NET Core + Blazor（CLB 1.3.16、Extras 0.4.0、ApexCharts 0.25.3） |
-| DB         | SQLite（`LocalData/db/accounting_v1.db`・Git 追跡外）                         |
+| DB         | SQLite（`LocalData/db/business-app_v1.db`・Git 追跡外）                         |
 | 認証       | Cookie 認証                                                                   |
 | AI 連携    | プロバイダ切替式（Mock／Claude／AzureOpenAI）。既定は Mock でキー不要         |
 

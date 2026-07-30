@@ -1,6 +1,6 @@
 {
   "Name": "AccountLookup",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "accounts",
   "CanCreate": false,
   "CanUpdate": false,

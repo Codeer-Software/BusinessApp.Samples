@@ -1,4 +1,4 @@
--- 080_expense.sql — 経費精算の拡張（B2-2、AccountingSQLite）
+-- 080_expense.sql — 経費精算の拡張（B2-2、BusinessAppSQLite）
 -- 設計: docs/07_経費精算設計.md §2（基底: docs/references/経費精算.md）
 -- 注意: FK 列に NOT NULL を付けない（Project.md 知見）。日付=DATE / 日時=DATETIME。
 

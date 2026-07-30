@@ -1,4 +1,4 @@
--- 000_auth.sql — 認証・基盤テーブル（AccountingSQLite / accounting_v1.db）
+-- 000_auth.sql — 認証・基盤テーブル（BusinessAppSQLite / business-app_v1.db）
 -- app_users: Cookie 認証のユーザーテーブル（PasswordCheckUserTableInfo の契約列 + name）
 --   初期ユーザー admin/admin はサーバ起動時に CreateInitialUserAsync が自動投入する
 -- temporary_files: FileField（証憑添付等）用の一時ファイル管理（CLB 既定スキーマ）

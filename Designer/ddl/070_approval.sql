@@ -1,4 +1,4 @@
--- 070_approval.sql — 承認フロー一式＋経費申請（AccountingSQLite / accounting_v1.db）
+-- 070_approval.sql — 承認フロー一式＋経費申請（BusinessAppSQLite / business-app_v1.db）
 -- 出典: PatternShowcaseAuth（テンプレート駆動承認ワークフローの正典）のモジュール定義から導出。
 -- B-2 経費精算の基盤。日付=DATE / 日時=DATETIME 宣言（TEXT 禁止 — Project.md 知見）。
 -- parent_id は TEXT（申請モジュール名＋ID の多態参照。TemporaryIdResolver が解決するため FK なし）。

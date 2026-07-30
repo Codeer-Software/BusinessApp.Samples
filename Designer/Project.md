@@ -6,8 +6,8 @@
 
 ## 接続先 DB / データソース
 
-- **AccountingSQLite**（本アプリの唯一のデータソース。→ `docs/decisions/0001`）
-  - 種別: SQLite / 接続先: `<リポジトリ>\LocalData\db\accounting_v1.db`（2026-07-09 に C:\Codeer.LowCode.Blazor.Local から移設 → `docs/decisions/0017`・`LocalData/README.md`）
+- **BusinessAppSQLite**（本アプリの唯一のデータソース。→ `docs/decisions/0001`）
+  - 種別: SQLite / 接続先: `<リポジトリ>\LocalData\db\business-app_v1.db`（2026-07-09 に C:\Codeer.LowCode.Blazor.Local から移設 → `docs/decisions/0017`・`LocalData/README.md`）
   - `AllowCliSqlAccess: true`（ローカル専用 DB。本番を指さない）
   - 認証テーブル（app_users）・一時ファイル（temporary_files）も同居
 - 旧 `SampleSQLite`（sqlite_sample_auth.db）はフェーズ A-0 で撤去予定。**会計テーブルを置かないこと**
@@ -30,7 +30,7 @@
 
 ## 既存資産
 
-- `Modules/AppUser.mod.json`（Cookie 認証・admin/admin）・`Home.mod.json`・`PageFrames/Main.frm.json` — 認証テンプレート由来。AppUser はフェーズ A-0 で AccountingSQLite へ切替
+- `Modules/AppUser.mod.json`（Cookie 認証・admin/admin）・`Home.mod.json`・`PageFrames/Main.frm.json` — 認証テンプレート由来。AppUser はフェーズ A-0 で BusinessAppSQLite へ切替
 - 承認フロー・経費申請の正典: `ClaudeCodeForDesigner/Samples/PatternShowcaseAuth/` と `../references/SampleProject_AuthPatterns/`（後者はベンダー提供サンプルのローカル参照コピー。再配布権未確認のため Git 追跡外＝ADR-0038。リポジトリを clone した環境には存在しない）
 
 ## デプロイ手順（zip packing — 2026-07-05 実測確立済み）

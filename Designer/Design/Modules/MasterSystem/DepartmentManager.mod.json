@@ -1,6 +1,6 @@
 {
   "Name": "DepartmentManager",
-  "DataSourceName": "AccountingSQLite",
+  "DataSourceName": "BusinessAppSQLite",
   "DbTable": "department_managers",
   "CanCreate": true,
   "CanUpdate": true,

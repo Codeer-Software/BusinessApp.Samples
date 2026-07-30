@@ -1,4 +1,4 @@
--- 360_receipt_offset.sql — 相殺入金の本格対応（ADR-0035、AccountingSQLite）
+-- 360_receipt_offset.sql — 相殺入金の本格対応（ADR-0035、BusinessAppSQLite）
 -- 1) receipts に相殺相手の仕入先請求リンクを追加
 -- 2) vendor_invoices に select_label（番号 取引先名 摘要）を追加し、トリガーで保守
 --    （設計判断は 280_select_labels.sql と同じ: 経路を問わず整合させるため DB トリガー）
