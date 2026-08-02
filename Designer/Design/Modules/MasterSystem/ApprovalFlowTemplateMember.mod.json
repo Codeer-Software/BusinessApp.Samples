@@ -442,7 +442,7 @@
         "BackgroundColor": "",
         "Rows": [
           {
-            "IsWrap": false,
+            "IsWrap": true,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,

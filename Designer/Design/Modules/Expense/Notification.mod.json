@@ -332,7 +332,7 @@
             "FieldName": "MarkUnreadButton",
             "ContextMenu": "",
             "Label": " ",
-            "Width": 110,
+            "Width": 130,
             "ColumnSpan": 1,
             "RowSpan": 1,
             "IsViewOnly": false,
@@ -451,7 +451,7 @@
         "BackgroundColor": "",
         "Rows": [
           {
-            "IsWrap": false,
+            "IsWrap": true,
             "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",

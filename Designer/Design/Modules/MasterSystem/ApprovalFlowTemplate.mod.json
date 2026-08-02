@@ -300,6 +300,7 @@
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "Width": 340,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -638,7 +639,7 @@
         "BackgroundColor": "",
         "Rows": [
           {
-            "IsWrap": false,
+            "IsWrap": true,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,

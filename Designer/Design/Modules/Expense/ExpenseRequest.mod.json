@@ -2393,7 +2393,7 @@
                           "Border": "None",
                           "VerticalAlignment": "Middle",
                           "HorizontalAlignment": "End",
-                          "Width": 140
+                          "Width": 160
                         },
                         {
                           "Layout": {
@@ -2441,7 +2441,7 @@
                           "Border": "None",
                           "VerticalAlignment": "Middle",
                           "HorizontalAlignment": "End",
-                          "Width": 140
+                          "Width": 240
                         },
                         {
                           "Layout": {
@@ -2915,7 +2915,7 @@
         "OnKeyDown": "",
         "Rows": [
           {
-            "IsWrap": false,
+            "IsWrap": true,
             "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
@@ -2979,7 +2979,7 @@
             ]
           },
           {
-            "IsWrap": false,
+            "IsWrap": true,
             "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
@@ -3163,7 +3163,7 @@
             ]
           },
           {
-            "IsWrap": false,
+            "IsWrap": true,
             "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",

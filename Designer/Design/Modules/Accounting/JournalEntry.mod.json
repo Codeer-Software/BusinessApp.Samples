@@ -1531,7 +1531,7 @@
         "OnKeyDown": "",
         "Rows": [
           {
-            "IsWrap": false,
+            "IsWrap": true,
             "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",

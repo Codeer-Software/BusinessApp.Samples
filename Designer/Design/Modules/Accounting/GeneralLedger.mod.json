@@ -684,7 +684,7 @@
         "BackgroundColor": "",
         "Rows": [
           {
-            "IsWrap": false,
+            "IsWrap": true,
             "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
@@ -868,7 +868,7 @@
             ]
           },
           {
-            "IsWrap": false,
+            "IsWrap": true,
             "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
