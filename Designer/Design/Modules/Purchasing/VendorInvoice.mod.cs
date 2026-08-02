@@ -54,6 +54,8 @@ void Duplicate_OnClick()
 void UpdateButtons()
 {
     var isAccounting = CurrentUser.HasAccountingAccess.Value == true;
+    // 複製は保存済みの請求書に対する操作（未保存では出さない。驚き最小: 2026-08-03 UXレビュー）
+    DuplicateButton.IsVisible = !this.IsNewData;
     AccrueButton.IsVisible = isAccounting && !this.IsNewData && Status.Value == "received";
     PayButton.IsVisible = isAccounting && !this.IsNewData && Status.Value == "accrued";
     // 逆遷移（ADR-0026）: 誤操作のリカバリ。仕訳の削除を伴うため経理のみ・締め済み期間はガード

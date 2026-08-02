@@ -125,6 +125,8 @@ void OnAfterInitialization()
         PayeeType.Value = "employee";
         PayeeUser.Value = CurrentUser.Id.Value;
         SettlementStatus.Value = "draft";
+        // 複製は保存済みの申請に対する操作（未保存では出さない。驚き最小: 2026-08-03 UXレビュー）
+        DuplicateButton.IsVisible = false;
         UpdateVisibility();
         UpdateAccountingButtons();
         return;

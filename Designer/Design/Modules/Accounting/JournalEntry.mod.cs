@@ -15,6 +15,8 @@ void Detail_OnAfterInit()
         Status.Value = "draft";
         ResolveFiscalYear();
     }
+    // 確定済みの案内（編集不可の理由と赤黒訂正への誘導。驚き最小: 2026-08-03 UXレビュー）
+    PostedNote.IsVisible = !this.IsNewData && Status.Value == "posted";
     if (!this.IsNewData && Status.Value == "posted")
     {
         // 確定済み伝票は閲覧専用（訂正は赤黒訂正で行う）
