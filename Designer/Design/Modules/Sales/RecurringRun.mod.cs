@@ -303,9 +303,9 @@ void BuildYearlyPlanRow(DateOnly monthFirst, object billing, decimal taxPct)
 
 void Run_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
+    if (CurrentUser.HasAccountingAccess.Value != true)
     {
-        Toaster.Error("定期請求の実行（売上計上を伴う）は経理ロールのみ実行できます");
+        Toaster.Error("定期請求の実行（売上計上を伴う）は経理のみ実行できます");
         return;
     }
     if (TargetMonth.Value == null)

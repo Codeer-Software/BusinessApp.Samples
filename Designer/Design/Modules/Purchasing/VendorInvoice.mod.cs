@@ -53,7 +53,7 @@ void Duplicate_OnClick()
 
 void UpdateButtons()
 {
-    var isAccounting = CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin";
+    var isAccounting = CurrentUser.HasAccountingAccess.Value == true;
     AccrueButton.IsVisible = isAccounting && !this.IsNewData && Status.Value == "received";
     PayButton.IsVisible = isAccounting && !this.IsNewData && Status.Value == "accrued";
     // 逆遷移（ADR-0026）: 誤操作のリカバリ。仕訳の削除を伴うため経理のみ・締め済み期間はガード
@@ -109,8 +109,8 @@ bool IsJournalPeriodOpen(JournalEntry je)
 // 未払計上の取消（accrued→received）: 未払計上仕訳を削除して受領に戻す
 void CancelAccrue_OnClick()
 {
-    var isAccounting = CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin";
-    if (!isAccounting) { Toaster.Error("未払計上の取消は経理ロールのみ実行できます"); return; }
+    var isAccounting = CurrentUser.HasAccountingAccess.Value == true;
+    if (!isAccounting) { Toaster.Error("未払計上の取消は経理のみ実行できます"); return; }
     if (Status.Value != "accrued") { Toaster.Error("未払計上済みの請求書のみ取り消せます"); return; }
 
     var je = FindSourceJournal("vendor_invoice");
@@ -161,8 +161,8 @@ void CancelAccrue_OnClick()
 // 支払の取消（paid→accrued）: 支払仕訳を削除して未払計上済みに戻す
 void CancelPay_OnClick()
 {
-    var isAccounting = CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin";
-    if (!isAccounting) { Toaster.Error("支払の取消は経理ロールのみ実行できます"); return; }
+    var isAccounting = CurrentUser.HasAccountingAccess.Value == true;
+    if (!isAccounting) { Toaster.Error("支払の取消は経理のみ実行できます"); return; }
     if (Status.Value != "paid") { Toaster.Error("支払済みの請求書のみ取り消せます"); return; }
 
     // 相殺で消し込まれた支払はここでは取り消せない（ADR-0035）。買掛側だけ accrued に戻すと

@@ -30,7 +30,7 @@ void UpdateButtons()
 {
     // 部門は経理のみ変更可（2026-07-25 ユーザー要望）。一般・承認者は自部門（初期値）固定
     // （請求書自体は経理専用モジュールだが、権限方針を見積・受注と揃えて明示しておく）
-    var isAccounting = (CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin");
+    var isAccounting = CurrentUser.HasAccountingAccess.Value == true;
     if (!isAccounting) { DepartmentRef.IsViewOnly = true; }
 
     var st = Status.Value;

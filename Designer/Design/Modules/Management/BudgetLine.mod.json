@@ -404,26 +404,17 @@
   "UserWriteCondition": {
     "ModuleName": "AppUser",
     "Condition": {
-      "IsOrMatch": true,
+      "IsOrMatch": false,
       "IsNot": false,
       "Children": [
         {
-          "SearchTargetVariable": "Role.Value",
+          "SearchTargetVariable": "HasAccountingAccess.Value",
           "Comparison": "Equal",
           "Value": {
-            "Value": "accounting",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+            "Value": true,
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
           },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-        },
-        {
-          "SearchTargetVariable": "Role.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": "sysadmin",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
         }
       ],
       "Name": "",
@@ -437,31 +428,22 @@
       "IsNot": false,
       "Children": [
         {
-          "SearchTargetVariable": "Role.Value",
+          "SearchTargetVariable": "IsApprover.Value",
           "Comparison": "Equal",
           "Value": {
-            "Value": "approver",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+            "Value": true,
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
           },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
         },
         {
-          "SearchTargetVariable": "Role.Value",
+          "SearchTargetVariable": "HasAccountingAccess.Value",
           "Comparison": "Equal",
           "Value": {
-            "Value": "accounting",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+            "Value": true,
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
           },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-        },
-        {
-          "SearchTargetVariable": "Role.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": "sysadmin",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
         }
       ],
       "Name": "",

@@ -38,8 +38,7 @@ void UpdateUi()
 {
     UpdateCycleVisibility();
 
-    var role = CurrentUser.Role.Value;
-    var isAccounting = role == "accounting" || role == "sysadmin";
+    var isAccounting = CurrentUser.HasAccountingAccess.Value == true;
     var st = Status.Value;
     var locked = st == "confirmed" && !isAccounting;
 
@@ -66,8 +65,7 @@ void UpdateUi()
 
 void Confirm_OnClick()
 {
-    var role = CurrentUser.Role.Value;
-    if (role != "accounting" && role != "sysadmin") { Toaster.Error("契約の確定は経理ロールのみ行えます"); return; }
+    if (CurrentUser.HasAccountingAccess.Value != true) { Toaster.Error("契約の確定は経理のみ行えます"); return; }
     if (Status.Value != "draft") { Toaster.Error("下書きの契約のみ確定できます"); return; }
 
     // 確定時の入力チェック（確定後は実行対象になるため、金額の欠落をここで止める）
@@ -102,8 +100,7 @@ void Confirm_OnClick()
 
 void Revert_OnClick()
 {
-    var role = CurrentUser.Role.Value;
-    if (role != "accounting" && role != "sysadmin") { Toaster.Error("下書きへの差し戻しは経理ロールのみ行えます"); return; }
+    if (CurrentUser.HasAccountingAccess.Value != true) { Toaster.Error("下書きへの差し戻しは経理のみ行えます"); return; }
     if (Status.Value != "confirmed") { Toaster.Error("確定済の契約のみ下書きに戻せます"); return; }
 
     var answer = MessageBox.Show("この契約を下書きに戻します（「定期請求の実行」の対象から外れます。生成済みの請求書・仕訳には影響しません）。よろしいですか？", "下書きに戻す", "キャンセル");

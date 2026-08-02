@@ -101,7 +101,11 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LinkFieldDesign"
     },
     {
-      "Candidates": ["指定ユーザー,user", "申請者の部門の課長,manager", "申請者の部門の部長,director"],
+      "Candidates": [
+        "指定ユーザー,user",
+        "申請者の部門の課長,manager",
+        "申請者の部門の部長,director"
+      ],
       "SearchCondition": {
         "SelectFields": [],
         "SortConditions": [],
@@ -164,13 +168,13 @@
       "IsNot": false,
       "Children": [
         {
-          "SearchTargetVariable": "Role.Value",
+          "SearchTargetVariable": "IsSysAdmin.Value",
           "Comparison": "Equal",
           "Value": {
-            "Value": "sysadmin",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+            "Value": true,
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
           },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
         }
       ],
       "Name": "",

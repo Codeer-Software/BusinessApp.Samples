@@ -178,7 +178,7 @@ void OnApprovalFlowStatusChanged(string flowStatus)
 void UpdateAccountingButtons()
 {
     var st = SettlementStatus.Value;
-    var isAccounting = (CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin");
+    var isAccounting = CurrentUser.HasAccountingAccess.Value == true;
     SettlementStatusLabel.IsVisible = !IsNewData;
     SettlementStatus.IsVisible = !IsNewData;
 
@@ -585,9 +585,9 @@ void RegisterFixedAsset(object assetAccountId, int baseAmount, object department
 // B-6: 支払仕訳 (D 未払金2020 / C 普通預金1020) を生成してからステータスを進める
 void Settle_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
+    if (CurrentUser.HasAccountingAccess.Value != true)
     {
-        Toaster.Error("精算（支払仕訳の生成）は経理ロールのみ実行できます");
+        Toaster.Error("精算（支払仕訳の生成）は経理のみ実行できます");
         return;
     }
     if (SettlementStatus.Value != "accounting") return;

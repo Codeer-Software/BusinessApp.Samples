@@ -361,13 +361,13 @@
       "IsNot": false,
       "Children": [
         {
-          "SearchTargetVariable": "Role.Value",
+          "SearchTargetVariable": "IsSysAdmin.Value",
           "Comparison": "Equal",
           "Value": {
-            "Value": "sysadmin",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+            "Value": true,
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
           },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
         }
       ],
       "Name": "",

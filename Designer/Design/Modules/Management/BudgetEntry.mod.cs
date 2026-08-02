@@ -6,9 +6,9 @@
 
 void Run_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
+    if (CurrentUser.HasAccountingAccess.Value != true)
     {
-        Toaster.Error("予算の登録は経理ロールのみ実行できます");
+        Toaster.Error("予算の登録は経理のみ実行できます");
         return;
     }
     if (FiscalYearRef.Value == null) { Toaster.Error("会計年度を選択してください"); return; }

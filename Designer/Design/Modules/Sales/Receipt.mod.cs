@@ -62,7 +62,7 @@ void UpdateButtons()
     // 確定後も操作する取消ボタンだけ個別に閲覧専用を解除する
     if (confirmed) { CancelReceiptButton.IsViewOnly = false; }
     ConfirmButton.IsVisible = !confirmed;
-    CancelReceiptButton.IsVisible = confirmed && (CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin");
+    CancelReceiptButton.IsVisible = confirmed && CurrentUser.HasAccountingAccess.Value == true;
     SubmitButton.IsVisible = !confirmed;
 }
 
@@ -99,9 +99,9 @@ JournalEntry FindReceiptJournal()
 // 入金の取り消し: 消込仕訳を削除し、請求書ステータスを再計算する（経理ロール専用）
 void CancelReceipt_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
+    if (CurrentUser.HasAccountingAccess.Value != true)
     {
-        Toaster.Error("入金の取り消しは経理ロールのみ実行できます");
+        Toaster.Error("入金の取り消しは経理のみ実行できます");
         return;
     }
     var je = FindReceiptJournal();
@@ -272,9 +272,9 @@ int SumReceipts(object invoiceId, bool excludeSelf)
 // 入金確定: 保存 → 消込仕訳 → 請求書ステータス更新 (経理ロール専用)
 void Confirm_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
+    if (CurrentUser.HasAccountingAccess.Value != true)
     {
-        Toaster.Error("入金の確定（消込）は経理ロールのみ実行できます");
+        Toaster.Error("入金の確定（消込）は経理のみ実行できます");
         return;
     }
     if (InvoiceRef.Value == null) { Toaster.Error("請求書を選択してください"); return; }

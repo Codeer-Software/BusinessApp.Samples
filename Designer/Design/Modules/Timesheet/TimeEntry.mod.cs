@@ -10,7 +10,7 @@ void Detail_OnAfterInit()
         if (Minutes.Value == null) { Minutes.Value = 480; }
     }
     // 担当者の付け替えは経理のみ（他人名義の新規登録を防ぐ。更新・削除は DataWriteCondition がサーバ側で本人限定済み）
-    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin") { UserRef.IsViewOnly = true; }
+    if (CurrentUser.HasAccountingAccess.Value != true) { UserRef.IsViewOnly = true; }
 }
 
 // 一覧の検索初期値: 担当者=自分 (サイドバーリンク経由で発火。権限フィルタではない)

@@ -200,9 +200,9 @@ void BuildPlan()
 
 void Run_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
+    if (CurrentUser.HasAccountingAccess.Value != true)
     {
-        Toaster.Error("SES 請求の一括生成（売上計上を伴う）は経理ロールのみ実行できます");
+        Toaster.Error("SES 請求の一括生成（売上計上を伴う）は経理のみ実行できます");
         return;
     }
     if (TargetMonth.Value == null)

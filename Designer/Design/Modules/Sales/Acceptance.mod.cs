@@ -79,7 +79,7 @@ void UpdateButtons()
     }
     // 確定（売上計上）・請求書作成・確定取消は経理の業務。営業には最初からボタンを見せない
     // （役割分担: 営業=検収事実の記録（下書き）、経理=会計処理の確定）
-    var isAccountingRole = (CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin");
+    var isAccountingRole = CurrentUser.HasAccountingAccess.Value == true;
     ConfirmButton.IsVisible = isAccountingRole && !this.IsNewData && (st == "draft");
 
     // 確定後は編集できないので保存ボタンは出さない（押せないボタンを見せない・ADR-0027）
@@ -149,9 +149,9 @@ string FindExistingInvoiceNo()
 // 請求書が既にある場合・仕訳の期間が締め済みの場合は不可（先にそちらを解消する）
 void CancelConfirm_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
+    if (CurrentUser.HasAccountingAccess.Value != true)
     {
-        Toaster.Error("確定の取り消しは経理ロールのみ実行できます");
+        Toaster.Error("確定の取り消しは経理のみ実行できます");
         return;
     }
     if (Status.Value != "confirmed") { Toaster.Error("確定済みの検収のみ取り消せます"); return; }
@@ -317,9 +317,9 @@ string NextAcceptanceNo()
 // D 売掛金1100 (税込) / C 売上科目 (税抜, 案件区分で 4000/4010/4020) / C 仮受消費税2200 (税行)
 void Confirm_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
+    if (CurrentUser.HasAccountingAccess.Value != true)
     {
-        Toaster.Error("検収の確定（売上計上）は経理ロールのみ実行できます");
+        Toaster.Error("検収の確定（売上計上）は経理のみ実行できます");
         return;
     }
     if (this.IsNewData) { Toaster.Error("先に検収を保存してください"); return; }

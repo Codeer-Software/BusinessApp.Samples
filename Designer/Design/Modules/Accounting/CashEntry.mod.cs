@@ -21,9 +21,9 @@ void Detail_OnAfterInit()
 
 void Run_OnClick()
 {
-    if (CurrentUser.Role.Value != "accounting" && CurrentUser.Role.Value != "sysadmin")
+    if (CurrentUser.HasAccountingAccess.Value != true)
     {
-        Toaster.Error("入出金の起票は経理ロールのみ実行できます");
+        Toaster.Error("入出金の起票は経理のみ実行できます");
         return;
     }
     if (EntryDate.Value == null) { Toaster.Error("日付を入力してください"); return; }

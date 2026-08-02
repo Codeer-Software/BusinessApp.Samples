@@ -26,7 +26,7 @@ void UpdateButtons()
 {
     // 部門は経理のみ変更可（2026-07-25 ユーザー要望）。一般・承認者は自部門（初期値）固定。
     // 部門の付け替え＝損益の付け替えなので経理業務とする（全社共通も経理のみ選択できる）
-    var isAccounting = (CurrentUser.Role.Value == "accounting" || CurrentUser.Role.Value == "sysadmin");
+    var isAccounting = CurrentUser.HasAccountingAccess.Value == true;
     if (!isAccounting) { DepartmentRef.IsViewOnly = true; }
 
     var st = Status.Value;
