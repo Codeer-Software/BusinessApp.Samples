@@ -207,7 +207,7 @@
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "Accounting",
-        "Module": "JournalEntryBoard",
+        "Module": "AccountingHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -231,7 +231,7 @@
               "SelectFields": [],
               "SortConditions": [],
               "SortFieldVariable": "",
-              "SortDescending": true,
+              "SortDescending": false,
               "ModuleName": ""
             },
             "PagerPosition": "Top",
@@ -265,11 +265,11 @@
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
-        "ModulePageType": "Auto",
+        "ModulePageType": "Detail",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "SalesBilling",
-        "Module": "Invoice",
+        "Module": "SalesHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -292,8 +292,8 @@
               "LimitCount": 50,
               "SelectFields": [],
               "SortConditions": [],
-              "SortFieldVariable": "Id.Value",
-              "SortDescending": true,
+              "SortFieldVariable": "",
+              "SortDescending": false,
               "ModuleName": ""
             },
             "PagerPosition": "Top",
@@ -327,11 +327,11 @@
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
-        "ModulePageType": "List",
+        "ModulePageType": "Detail",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "ExpenseAccounting",
-        "Module": "ExpenseSettlementQueue",
+        "Module": "ExpenseHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -354,41 +354,13 @@
               "LimitCount": 100,
               "SelectFields": [],
               "SortConditions": [],
-              "SortFieldVariable": "Id.Value",
+              "SortFieldVariable": "",
               "SortDescending": false,
-              "ModuleName": "ExpenseSettlementQueue",
+              "ModuleName": "",
               "Condition": {
                 "IsOrMatch": true,
                 "IsNot": false,
-                "Children": [
-                  {
-                    "SearchTargetVariable": "SettlementStatus.Value",
-                    "Comparison": "Equal",
-                    "Value": {
-                      "Value": "approved",
-                      "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-                    },
-                    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-                  },
-                  {
-                    "SearchTargetVariable": "SettlementStatus.Value",
-                    "Comparison": "Equal",
-                    "Value": {
-                      "Value": "accounting",
-                      "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-                    },
-                    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-                  },
-                  {
-                    "SearchTargetVariable": "SettlementStatus.Value",
-                    "Comparison": "Equal",
-                    "Value": {
-                      "Value": "settled",
-                      "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-                    },
-                    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-                  }
-                ],
+                "Children": [],
                 "Name": "",
                 "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
               }

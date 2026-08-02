@@ -141,11 +141,11 @@
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
-        "ModulePageType": "Auto",
+        "ModulePageType": "Detail",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "ExpenseStaff",
-        "Module": "ExpenseRequest",
+        "Module": "ExpenseHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -170,7 +170,7 @@
               "SortConditions": [],
               "SortFieldVariable": "",
               "SortDescending": false,
-              "ModuleName": "ExpenseRequest"
+              "ModuleName": ""
             },
             "PagerPosition": "Bottom",
             "ReplaceMode": "None",

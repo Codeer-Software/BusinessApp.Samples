@@ -13,6 +13,67 @@
     },
     "Links": [
       {
+        "ModulePageType": "Detail",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "ExpenseHome",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "承認待ち",
+          "HeaderTitle": "あなたの承認を待っている申請一覧です。内容を確認し、承認・却下できます。",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": false,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": false,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [],
+              "SortFieldVariable": "",
+              "SortDescending": false,
+              "ModuleName": ""
+            },
+            "PagerPosition": "Bottom",
+            "UseIndexSort": false,
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": false,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        },
+        "Title": "ホーム",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false
+      },
+      {
         "ModulePageType": "List",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
@@ -629,11 +690,11 @@
     }
   ],
   "TopPageModuleDesign": {
-    "ModulePageType": "List",
+    "ModulePageType": "Detail",
     "ModuleUrlSegment": "Top",
     "ActiveModuleSegments": [],
     "PageFrame": "",
-    "Module": "ApprovalInbox",
+    "Module": "ExpenseHome",
     "Id": "",
     "Parameters": "",
     "ListPageDesign": {
@@ -656,9 +717,9 @@
           "LimitCount": 50,
           "SelectFields": [],
           "SortConditions": [],
-          "SortFieldVariable": "CreatedAt.Value",
+          "SortFieldVariable": "",
           "SortDescending": false,
-          "ModuleName": "ApprovalInbox"
+          "ModuleName": ""
         },
         "PagerPosition": "Bottom",
         "UseIndexSort": false,
@@ -687,6 +748,6 @@
   },
   "AutoZoom": "None",
   "TargetDevice": "Any",
-  "TopPageModule": "ApprovalInbox",
+  "TopPageModule": "ExpenseHome",
   "OtherPages": []
 }

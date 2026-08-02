@@ -13,6 +13,68 @@
     },
     "Links": [
       {
+        "Title": "ホーム",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
+        "ModulePageType": "Detail",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "AccountingHome",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "振替伝票",
+          "HeaderTitle": "複式簿記の仕訳を起票・管理できます。明細行の税区分から消費税行が自動生成され、確定すると年度内の連番が振られます。",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": true,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": true,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [],
+              "SortFieldVariable": "",
+              "SortDescending": false,
+              "ModuleName": ""
+            },
+            "PagerPosition": "Top",
+            "ReplaceMode": "None",
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": false,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "UseIndexSort": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        }
+      },
+      {
         "Title": "仕訳/振替伝票",
         "Icon": "",
         "IconType": "Font",
@@ -1332,11 +1394,11 @@
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
-        "ModulePageType": "Auto",
+        "ModulePageType": "Detail",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "SalesBilling",
-        "Module": "Invoice",
+        "Module": "SalesHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -1359,8 +1421,8 @@
               "LimitCount": 50,
               "SelectFields": [],
               "SortConditions": [],
-              "SortFieldVariable": "Id.Value",
-              "SortDescending": true,
+              "SortFieldVariable": "",
+              "SortDescending": false,
               "ModuleName": ""
             },
             "PagerPosition": "Top",
@@ -1456,11 +1518,11 @@
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
-        "ModulePageType": "List",
+        "ModulePageType": "Detail",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "ExpenseAccounting",
-        "Module": "ExpenseSettlementQueue",
+        "Module": "ExpenseHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -1483,41 +1545,13 @@
               "LimitCount": 100,
               "SelectFields": [],
               "SortConditions": [],
-              "SortFieldVariable": "Id.Value",
+              "SortFieldVariable": "",
               "SortDescending": false,
-              "ModuleName": "ExpenseSettlementQueue",
+              "ModuleName": "",
               "Condition": {
                 "IsOrMatch": true,
                 "IsNot": false,
-                "Children": [
-                  {
-                    "SearchTargetVariable": "SettlementStatus.Value",
-                    "Comparison": "Equal",
-                    "Value": {
-                      "Value": "approved",
-                      "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-                    },
-                    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-                  },
-                  {
-                    "SearchTargetVariable": "SettlementStatus.Value",
-                    "Comparison": "Equal",
-                    "Value": {
-                      "Value": "accounting",
-                      "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-                    },
-                    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-                  },
-                  {
-                    "SearchTargetVariable": "SettlementStatus.Value",
-                    "Comparison": "Equal",
-                    "Value": {
-                      "Value": "settled",
-                      "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-                    },
-                    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-                  }
-                ],
+                "Children": [],
                 "Name": "",
                 "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
               }
@@ -1872,7 +1906,7 @@
     "ModuleUrlSegment": "Top",
     "ActiveModuleSegments": [],
     "PageFrame": "",
-    "Module": "JournalEntryBoard",
+    "Module": "AccountingHome",
     "Id": "",
     "Parameters": "",
     "ListPageDesign": {
@@ -1896,7 +1930,7 @@
           "SelectFields": [],
           "SortConditions": [],
           "SortFieldVariable": "",
-          "SortDescending": true,
+          "SortDescending": false,
           "ModuleName": ""
         },
         "PagerPosition": "Top",
@@ -1927,6 +1961,6 @@
   },
   "AutoZoom": "None",
   "TargetDevice": "Any",
-  "TopPageModule": "JournalEntryBoard",
+  "TopPageModule": "AccountingHome",
   "OtherPages": []
 }

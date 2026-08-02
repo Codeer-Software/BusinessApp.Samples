@@ -1,0 +1,431 @@
+{
+  "Name": "AccountingHome",
+  "DataSourceName": "",
+  "DbTable": "",
+  "CanCreate": false,
+  "CanUpdate": false,
+  "CanDelete": false,
+  "Fields": [
+    {
+      "Text": "こんにちは",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "H2",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "GreetingLabel",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "DateLabel",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "OpsLabel",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "経営サマリ（当月）",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "H5",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "KpiHeadLabel",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "KpiLine1",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "KpiLine2",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    }
+  ],
+  "UserWriteCondition": {
+    "ModuleName": ""
+  },
+  "UserReadCondition": {
+    "ModuleName": "AppUser",
+    "Condition": {
+      "IsOrMatch": false,
+      "IsNot": false,
+      "Children": [
+        {
+          "SearchTargetVariable": "HasAccountingAccess.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": true,
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+        }
+      ],
+      "Name": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+    }
+  },
+  "DataWriteCondition": {
+    "ModuleName": ""
+  },
+  "DataReadCondition": {
+    "ModuleName": ""
+  },
+  "DetailLayouts": {
+    "": {
+      "OnBeforeInitialization": "",
+      "OnAfterInitialization": "Detail_OnAfterInit",
+      "OnLocationChanging": "",
+      "OnFieldDataChanged": "",
+      "DataOnlyFields": [],
+      "ClassName": "",
+      "Color": "",
+      "BackgroundColor": "",
+      "FontFamily": "",
+      "Layout": {
+        "Name": "",
+        "Padding": {},
+        "IsBordered": false,
+        "UseBorderedShrinkWrap": false,
+        "IsExpandable": false,
+        "ExpanderLabel": "",
+        "IsExpanderDefaultOpened": false,
+        "IsFlowLayout": false,
+        "IsAutoFillWrap": false,
+        "IsFillAvailable": false,
+        "ScrollDirection": "Unset",
+        "OnKeyDown": "",
+        "Rows": [
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "GreetingLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "DateLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "OpsLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "KpiHeadLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "KpiLine1",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "KpiLine2",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          }
+        ],
+        "BackgroundColor": "",
+        "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.GridLayoutDesign"
+      }
+    }
+  },
+  "ListLayouts": {
+    "": {
+      "HeaderTitle": "",
+      "DataOnlyFields": [],
+      "OnBeforeInitialization": "",
+      "OnAfterInitialization": "",
+      "OnFieldDataChanged": "",
+      "Elements": []
+    }
+  },
+  "SearchLayouts": {
+    "": {
+      "OnSearchInitialization": "",
+      "ShowDefaultSearchButtons": true,
+      "Layout": {
+        "Operator": "And",
+        "Name": "",
+        "Padding": {},
+        "IsBordered": false,
+        "UseBorderedShrinkWrap": false,
+        "IsExpandable": false,
+        "ExpanderLabel": "",
+        "IsExpanderDefaultOpened": false,
+        "IsFlowLayout": false,
+        "IsAutoFillWrap": false,
+        "IsFillAvailable": false,
+        "ScrollDirection": "Unset",
+        "OnKeyDown": "",
+        "Rows": [],
+        "BackgroundColor": "",
+        "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SearchGridLayoutDesign"
+      }
+    }
+  },
+  "LinkFieldNames": [],
+  "UseListPageSubmitButton": false,
+  "ListPageFieldDesign": {
+    "LayoutName": "",
+    "CanNavigateToDetail": false,
+    "NavigateModuleUrlSegment": "",
+    "CanCustomizeColumns": false,
+    "ApplyBackgroundToBoxInput": false,
+    "DisplayName": "",
+    "SearchCondition": {
+      "LimitCount": 50,
+      "SelectFields": [],
+      "SortConditions": [],
+      "SortFieldVariable": "",
+      "SortDescending": false,
+      "ModuleName": ""
+    },
+    "PagerPosition": "Bottom",
+    "ReplaceMode": "None",
+    "DeleteTogether": false,
+    "CanCreate": false,
+    "CanUpdate": false,
+    "CanDelete": false,
+    "CanUserSort": true,
+    "CanSelect": false,
+    "UseIndexSort": false,
+    "OnDataChanged": "",
+    "OnSearchDataChanged": "",
+    "OnSelectedIndexChanged": "",
+    "OnSelectedIndexChanging": "",
+    "OnDoubleClickRow": "",
+    "Name": "",
+    "IgnoreModification": false,
+    "OnValidateInput": "",
+    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+  },
+  "CanBulkDataUpdate": false,
+  "CanBulkDataDownload": false,
+  "PageTitle": "ホーム"
+}

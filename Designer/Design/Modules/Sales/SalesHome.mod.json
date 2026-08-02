@@ -1,5 +1,5 @@
 {
-  "Name": "Home",
+  "Name": "SalesHome",
   "DataSourceName": "",
   "DbTable": "",
   "CanCreate": false,
@@ -31,18 +31,6 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "",
-      "Icon": "",
-      "IsHtml": false,
-      "Style": "Default",
-      "RelativeField": "",
-      "OnClick": "",
-      "Name": "TodoLabel",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
-    },
-    {
       "Text": "ショートカット",
       "Icon": "",
       "IsHtml": false,
@@ -59,17 +47,17 @@
       "Target": "Url",
       "ShouldOpenInNewTab": false,
       "Icon": "",
-      "TitleText": "経費申請",
+      "TitleText": "見積へ",
       "TitleVariable": "",
       "ImageResourcePath": "",
       "PageFrame": "",
-      "Module": "ExpenseRequest",
+      "Module": "Quote",
       "ModuleVariable": "",
       "IdVariable": "",
       "Url": "",
       "OnClick": "",
       "IsHtml": false,
-      "Name": "GoExpense",
+      "Name": "GoQuote",
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
@@ -79,17 +67,17 @@
       "Target": "Url",
       "ShouldOpenInNewTab": false,
       "Icon": "",
-      "TitleText": "工数入力",
+      "TitleText": "受注へ",
       "TitleVariable": "",
       "ImageResourcePath": "",
       "PageFrame": "",
-      "Module": "TimeEntry",
+      "Module": "SalesOrder",
       "ModuleVariable": "",
       "IdVariable": "",
       "Url": "",
       "OnClick": "",
       "IsHtml": false,
-      "Name": "GoTimeEntry",
+      "Name": "GoSalesOrder",
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
@@ -99,215 +87,111 @@
       "Target": "Url",
       "ShouldOpenInNewTab": false,
       "Icon": "",
-      "TitleText": "振替伝票",
+      "TitleText": "検収へ",
       "TitleVariable": "",
       "ImageResourcePath": "",
       "PageFrame": "",
-      "Module": "JournalEntry",
+      "Module": "Acceptance",
       "ModuleVariable": "",
       "IdVariable": "",
       "Url": "",
       "OnClick": "",
       "IsHtml": false,
-      "Name": "GoJournal",
+      "Name": "GoAcceptance",
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
     },
     {
-      "Style": "Button",
-      "Target": "Url",
-      "ShouldOpenInNewTab": false,
-      "Icon": "",
-      "TitleText": "銀行明細取込",
-      "TitleVariable": "",
-      "ImageResourcePath": "",
-      "PageFrame": "",
-      "Module": "BankImport",
-      "ModuleVariable": "",
-      "IdVariable": "",
-      "Url": "",
-      "OnClick": "",
-      "IsHtml": false,
-      "Name": "GoBankImport",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
-    },
-    {
-      "Style": "Button",
-      "Target": "Url",
-      "ShouldOpenInNewTab": false,
-      "Icon": "",
-      "TitleText": "月次推移表",
-      "TitleVariable": "",
-      "ImageResourcePath": "",
-      "PageFrame": "",
-      "Module": "MonthlyTrend",
-      "ModuleVariable": "",
-      "IdVariable": "",
-      "Url": "",
-      "OnClick": "",
-      "IsHtml": false,
-      "Name": "GoMonthlyTrend",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
-    },
-    {
-      "Style": "Button",
-      "Target": "Url",
-      "ShouldOpenInNewTab": false,
-      "Icon": "",
-      "TitleText": "資金繰り予測",
-      "TitleVariable": "",
-      "ImageResourcePath": "",
-      "PageFrame": "",
-      "Module": "CashFlowForecast",
-      "ModuleVariable": "",
-      "IdVariable": "",
-      "Url": "",
-      "OnClick": "",
-      "IsHtml": false,
-      "Name": "GoCashFlow",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
-    },
-    {
-      "Text": "未読の通知",
+      "Text": "ほかの業務",
       "Icon": "",
       "IsHtml": false,
       "Style": "H5",
       "RelativeField": "",
       "OnClick": "",
-      "Name": "UnreadLabel",
+      "Name": "WsLabel",
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "LayoutName": "HomeUnread",
-      "CanNavigateToDetail": false,
-      "NavigateModuleUrlSegment": "",
-      "CanCustomizeColumns": false,
-      "ApplyBackgroundToBoxInput": false,
-      "DisplayName": "",
-      "SearchCondition": {
-        "LimitCount": 5,
-        "SelectFields": [],
-        "SortConditions": [
-          {
-            "Variable": "Id.Value",
-            "IsDescending": true
-          }
-        ],
-        "SortFieldVariable": "",
-        "SortDescending": false,
-        "ModuleName": "Notification",
-        "Condition": {
-          "IsOrMatch": false,
-          "IsNot": false,
-          "Children": [
-            {
-              "SearchTargetVariable": "IsRead.Value",
-              "Comparison": "Equal",
-              "Value": {
-                "Value": false,
-                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
-              },
-              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
-            }
-          ],
-          "Name": "",
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
-        }
+      "Text": "経費精算へ",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
       },
-      "PagerPosition": "Top",
-      "ReplaceMode": "None",
-      "DeleteTogether": false,
-      "CanCreate": false,
-      "CanUpdate": false,
-      "CanDelete": false,
-      "CanUserSort": false,
-      "CanSelect": false,
-      "UseIndexSort": false,
-      "OnDataChanged": "",
-      "OnSearchDataChanged": "",
-      "OnSelectedIndexChanged": "",
-      "OnSelectedIndexChanging": "",
-      "OnDoubleClickRow": "",
-      "Name": "UnreadNotifications",
+      "Icon": "",
+      "Variant": "Secondary",
+      "OnClick": "GoExpenseBtn_OnClick",
+      "ShowTextInToolTip": false,
+      "IsHtml": false,
+      "Name": "GoExpenseBtn",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
-      "Text": "経営サマリ（当月）",
+      "Text": "工数・案件へ",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
       "Icon": "",
+      "Variant": "Secondary",
+      "OnClick": "GoTimesheetBtn_OnClick",
+      "ShowTextInToolTip": false,
       "IsHtml": false,
-      "Style": "H5",
-      "RelativeField": "",
-      "OnClick": "",
-      "Name": "KpiHeadLabel",
+      "Name": "GoTimesheetBtn",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
-    },
-    {
-      "Text": "",
-      "Icon": "",
-      "IsHtml": false,
-      "Style": "Default",
-      "RelativeField": "",
-      "OnClick": "",
-      "Name": "KpiLine1",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
-    },
-    {
-      "Text": "",
-      "Icon": "",
-      "IsHtml": false,
-      "Style": "Default",
-      "RelativeField": "",
-      "OnClick": "",
-      "Name": "KpiLine2",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
-    },
-    {
-      "Text": "",
-      "Icon": "",
-      "IsHtml": false,
-      "Style": "Default",
-      "RelativeField": "",
-      "OnClick": "",
-      "Name": "OpsLabel",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
-    },
-    {
-      "Text": "",
-      "Icon": "",
-      "IsHtml": false,
-      "Style": "Default",
-      "RelativeField": "",
-      "OnClick": "",
-      "Name": "CashAlertLabel",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     }
   ],
   "UserWriteCondition": {
     "ModuleName": ""
   },
   "UserReadCondition": {
-    "ModuleName": ""
+    "ModuleName": "AppUser",
+    "Condition": {
+      "IsOrMatch": true,
+      "IsNot": false,
+      "Children": [
+        {
+          "SearchTargetVariable": "HasSalesAccess.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": true,
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+        },
+        {
+          "SearchTargetVariable": "HasAccountingAccess.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": true,
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+        }
+      ],
+      "Name": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+    }
   },
   "DataWriteCondition": {
     "ModuleName": ""
@@ -373,32 +257,6 @@
                 "CanResize": false,
                 "AllowOverflow": false,
                 "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "DateLabel",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 220,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "HorizontalAlignment": "Start",
-                "VerticalAlignment": "Middle",
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
               }
             ]
           },
@@ -415,7 +273,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "TodoLabel",
+                  "FieldName": "DateLabel",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -487,7 +345,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "GoExpense",
+                  "FieldName": "GoQuote",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -511,7 +369,7 @@
               },
               {
                 "Layout": {
-                  "FieldName": "GoTimeEntry",
+                  "FieldName": "GoSalesOrder",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -535,7 +393,93 @@
               },
               {
                 "Layout": {
-                  "FieldName": "GoJournal",
+                  "FieldName": "GoAcceptance",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 150,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              },
+              {
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "WsLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": true,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "GoExpenseBtn",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -559,31 +503,7 @@
               },
               {
                 "Layout": {
-                  "FieldName": "GoBankImport",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 160,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "GoMonthlyTrend",
+                  "FieldName": "GoTimesheetBtn",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -606,282 +526,6 @@
                 "Border": "None"
               },
               {
-                "Layout": {
-                  "FieldName": "GoCashFlow",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 160,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              },
-              {
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "IsAutoFillWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsProportionalScale": false,
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "UnreadLabel",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "IsAutoFillWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsProportionalScale": false,
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "UnreadNotifications",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "IsAutoFillWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsProportionalScale": false,
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "KpiHeadLabel",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "IsAutoFillWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsProportionalScale": false,
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "KpiLine1",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "IsAutoFillWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsProportionalScale": false,
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "KpiLine2",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "IsAutoFillWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsProportionalScale": false,
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "OpsLabel",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "IsAutoFillWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsProportionalScale": false,
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "CashAlertLabel",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {

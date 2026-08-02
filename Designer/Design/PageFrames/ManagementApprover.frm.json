@@ -131,11 +131,11 @@
         }
       },
       {
-        "ModulePageType": "List",
+        "ModulePageType": "Detail",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "ExpenseApprover",
-        "Module": "ApprovalInbox",
+        "Module": "ExpenseHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -158,9 +158,9 @@
               "LimitCount": 50,
               "SelectFields": [],
               "SortConditions": [],
-              "SortFieldVariable": "CreatedAt.Value",
+              "SortFieldVariable": "",
               "SortDescending": false,
-              "ModuleName": "ApprovalInbox"
+              "ModuleName": ""
             },
             "PagerPosition": "Bottom",
             "UseIndexSort": false,

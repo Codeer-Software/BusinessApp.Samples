@@ -13,6 +13,68 @@
     },
     "Links": [
       {
+        "Title": "ホーム",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
+        "ModulePageType": "Detail",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "SalesHome",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "見積",
+          "HeaderTitle": "顧客への見積書を作成・管理できます。Excel/PDF で見積書を出力でき、「受注にする」で受注が作成されます。",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": true,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": true,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": true,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [],
+              "SortFieldVariable": "",
+              "SortDescending": false,
+              "ModuleName": ""
+            },
+            "PagerPosition": "Top",
+            "ReplaceMode": "None",
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": false,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "UseIndexSort": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        }
+      },
+      {
         "Title": "見積",
         "Icon": "",
         "IconType": "Font",
@@ -579,7 +641,7 @@
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "Accounting",
-        "Module": "JournalEntryBoard",
+        "Module": "AccountingHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -603,7 +665,7 @@
               "SelectFields": [],
               "SortConditions": [],
               "SortFieldVariable": "",
-              "SortDescending": true,
+              "SortDescending": false,
               "ModuleName": ""
             },
             "PagerPosition": "Top",
@@ -699,11 +761,11 @@
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
-        "ModulePageType": "List",
+        "ModulePageType": "Detail",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "ExpenseAccounting",
-        "Module": "ExpenseSettlementQueue",
+        "Module": "ExpenseHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -726,41 +788,13 @@
               "LimitCount": 100,
               "SelectFields": [],
               "SortConditions": [],
-              "SortFieldVariable": "Id.Value",
+              "SortFieldVariable": "",
               "SortDescending": false,
-              "ModuleName": "ExpenseSettlementQueue",
+              "ModuleName": "",
               "Condition": {
                 "IsOrMatch": true,
                 "IsNot": false,
-                "Children": [
-                  {
-                    "SearchTargetVariable": "SettlementStatus.Value",
-                    "Comparison": "Equal",
-                    "Value": {
-                      "Value": "approved",
-                      "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-                    },
-                    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-                  },
-                  {
-                    "SearchTargetVariable": "SettlementStatus.Value",
-                    "Comparison": "Equal",
-                    "Value": {
-                      "Value": "accounting",
-                      "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-                    },
-                    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-                  },
-                  {
-                    "SearchTargetVariable": "SettlementStatus.Value",
-                    "Comparison": "Equal",
-                    "Value": {
-                      "Value": "settled",
-                      "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-                    },
-                    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-                  }
-                ],
+                "Children": [],
                 "Name": "",
                 "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
               }
@@ -1169,11 +1203,11 @@
     }
   ],
   "TopPageModuleDesign": {
-    "ModulePageType": "Auto",
+    "ModulePageType": "Detail",
     "ModuleUrlSegment": "Top",
     "ActiveModuleSegments": [],
     "PageFrame": "",
-    "Module": "Invoice",
+    "Module": "SalesHome",
     "Id": "",
     "Parameters": "",
     "ListPageDesign": {
@@ -1196,8 +1230,8 @@
           "LimitCount": 50,
           "SelectFields": [],
           "SortConditions": [],
-          "SortFieldVariable": "Id.Value",
-          "SortDescending": true,
+          "SortFieldVariable": "",
+          "SortDescending": false,
           "ModuleName": ""
         },
         "PagerPosition": "Top",
@@ -1228,6 +1262,6 @@
   },
   "AutoZoom": "None",
   "TargetDevice": "Any",
-  "TopPageModule": "Invoice",
+  "TopPageModule": "SalesHome",
   "OtherPages": []
 }

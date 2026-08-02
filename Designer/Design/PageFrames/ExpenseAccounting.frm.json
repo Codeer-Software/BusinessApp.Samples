@@ -13,6 +13,68 @@
     },
     "Links": [
       {
+        "Title": "ホーム",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
+        "ModulePageType": "Detail",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "ExpenseHome",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "承認待ち",
+          "HeaderTitle": "あなたの承認を待っている申請一覧です。内容を確認し、承認・却下できます。",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": false,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": false,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [],
+              "SortFieldVariable": "",
+              "SortDescending": false,
+              "ModuleName": ""
+            },
+            "PagerPosition": "Bottom",
+            "ReplaceMode": "None",
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": false,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "UseIndexSort": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        }
+      },
+      {
         "Title": "承認待ち",
         "Icon": "",
         "IconType": "Font",
@@ -366,7 +428,7 @@
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "Accounting",
-        "Module": "JournalEntryBoard",
+        "Module": "AccountingHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -390,7 +452,7 @@
               "SelectFields": [],
               "SortConditions": [],
               "SortFieldVariable": "",
-              "SortDescending": true,
+              "SortDescending": false,
               "ModuleName": ""
             },
             "PagerPosition": "Top",
@@ -424,11 +486,11 @@
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
-        "ModulePageType": "Auto",
+        "ModulePageType": "Detail",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "SalesBilling",
-        "Module": "Invoice",
+        "Module": "SalesHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -451,8 +513,8 @@
               "LimitCount": 50,
               "SelectFields": [],
               "SortConditions": [],
-              "SortFieldVariable": "Id.Value",
-              "SortDescending": true,
+              "SortFieldVariable": "",
+              "SortDescending": false,
               "ModuleName": ""
             },
             "PagerPosition": "Top",
@@ -921,11 +983,11 @@
     }
   ],
   "TopPageModuleDesign": {
-    "ModulePageType": "List",
+    "ModulePageType": "Detail",
     "ModuleUrlSegment": "Top",
     "ActiveModuleSegments": [],
     "PageFrame": "",
-    "Module": "ExpenseSettlementQueue",
+    "Module": "ExpenseHome",
     "Id": "",
     "Parameters": "",
     "ListPageDesign": {
@@ -948,41 +1010,13 @@
           "LimitCount": 100,
           "SelectFields": [],
           "SortConditions": [],
-          "SortFieldVariable": "Id.Value",
+          "SortFieldVariable": "",
           "SortDescending": false,
-          "ModuleName": "ExpenseSettlementQueue",
+          "ModuleName": "",
           "Condition": {
             "IsOrMatch": true,
             "IsNot": false,
-            "Children": [
-              {
-                "SearchTargetVariable": "SettlementStatus.Value",
-                "Comparison": "Equal",
-                "Value": {
-                  "Value": "approved",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-                },
-                "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-              },
-              {
-                "SearchTargetVariable": "SettlementStatus.Value",
-                "Comparison": "Equal",
-                "Value": {
-                  "Value": "accounting",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-                },
-                "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-              },
-              {
-                "SearchTargetVariable": "SettlementStatus.Value",
-                "Comparison": "Equal",
-                "Value": {
-                  "Value": "settled",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-                },
-                "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-              }
-            ],
+            "Children": [],
             "Name": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
           }
@@ -1015,6 +1049,6 @@
   },
   "AutoZoom": "None",
   "TargetDevice": "Any",
-  "TopPageModule": "ExpenseSettlementQueue",
+  "TopPageModule": "ExpenseHome",
   "OtherPages": []
 }
