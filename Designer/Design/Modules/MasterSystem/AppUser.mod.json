@@ -219,47 +219,6 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Candidates": [
-        "一般社員,general",
-        "承認者,approver",
-        "経理,accounting",
-        "システム管理者,sysadmin"
-      ],
-      "SearchCondition": {
-        "SelectFields": [],
-        "SortConditions": [],
-        "SortFieldVariable": "",
-        "SortDescending": false,
-        "ModuleName": ""
-      },
-      "ValueVariable": "",
-      "DisplayTextVariable": "",
-      "DbColumn": "role",
-      "EmptyCandidateType": "StringEmpty",
-      "AllowOrSearch": false,
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "ロール",
-      "IsRequired": true,
-      "OnDataChanged": "",
-      "Name": "Role",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
-    },
-    {
-      "Text": "ロール",
-      "Icon": "",
-      "Style": "Default",
-      "RelativeField": "Role",
-      "OnClick": "",
-      "Name": "RoleLabel",
-      "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
-    },
-    {
       "DisplayName": "",
       "IsRequired": false,
       "OnDataChanged": "",
@@ -621,76 +580,6 @@
               {
                 "Layout": {
                   "FieldName": "所属部門",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 250,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "VerticalAlignment": "Middle",
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "RoleLabel",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 154,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "VerticalAlignment": "Middle",
-                "CanResize": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "Role",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",

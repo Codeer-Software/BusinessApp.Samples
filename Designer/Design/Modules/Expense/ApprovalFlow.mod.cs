@@ -197,11 +197,11 @@ bool IsActiveUser(object userId)
     return s.Execute().Count > 0;
 }
 
-// 自己承認の代替承認者: 経理ロール (accounting) のうち申請者以外で Id 最小のユーザー
+// 自己承認の代替承認者: 経理アクセスを持つユーザーのうち申請者以外で Id 最小のユーザー
 object FindFallbackApprover(object applicantId)
 {
     var s = new ModuleSearcher<AppUser>();
-    s.AddEquals(u => u.Role.Value, "accounting");
+    s.AddEquals(u => u.HasAccountingAccess.Value, true);
     s.AddEquals(u => u.IsActive.Value, true);
     s.OrderBy(u => u.Id.Value);
     var users = s.Execute();
