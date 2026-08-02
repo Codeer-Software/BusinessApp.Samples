@@ -1,5 +1,5 @@
 // 費目×金額でテンプレートを選択 (ApprovalFlow の申請/再申請から呼ばれる)
-// ADR-0023: approval_route_rules マスタ（マスタ管理（システム）＞承認ルート判定）を
+// ADR-0023: approval_route_rules マスタ（システム管理 > 承認/承認ルート判定）を
 // 優先度の小さい順に評価し、最初に一致した行のテンプレートを使う。
 // 一致条件: 有効 かつ (費目指定なし or 申請の費目と一致) かつ 下限 ≦ 判定額 ≦ 上限（上限 NULL=無制限）
 // テンプレートは ID で参照（テンプレート改名に影響されない）。名前を返す契約は従来どおり。
@@ -22,7 +22,7 @@ string SelectTemplateName()
         if (max != null && amount > max) continue;
         return FindTemplateNameById(r.TemplateSel.Value);
     }
-    Toaster.Error($"承認ルート判定に一致するルールがありません（判定額 {amount:#,0} 円）。マスタ管理（システム）＞承認ルート判定 を確認してください");
+    Toaster.Error($"承認ルート判定に一致するルールがありません（判定額 {amount:#,0} 円）。システム管理 > 承認/承認ルート判定 を確認してください");
     return "";
 }
 
@@ -35,7 +35,7 @@ string FindTemplateNameById(object templateId)
     var found = s.Execute();
     if (found.Count == 0)
     {
-        Toaster.Error("承認ルート判定ルールが参照するテンプレートが見つかりません。マスタ管理（システム）＞承認ルート判定 を確認してください");
+        Toaster.Error("承認ルート判定ルールが参照するテンプレートが見つかりません。システム管理 > 承認/承認ルート判定 を確認してください");
         return "";
     }
     var t = (ApprovalFlowTemplate)found[0];
@@ -173,7 +173,7 @@ void OnApprovalFlowStatusChanged(string flowStatus)
 }
 
 // 経理ボタンと精算ステータス表示の出し分け
-// 会計処理（仕訳生成・精算・完了）は経理ロール専用（B-8）。
+// 会計処理（仕訳生成・精算・完了）は経理専用（B-8）。
 // 実費確定は申請者本人が行う業務のため全ユーザーに出す（ゲートしない）。
 void UpdateAccountingButtons()
 {

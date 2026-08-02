@@ -7,7 +7,7 @@
   "CanDelete": false,
   "Fields": [
     {
-      "Text": "マスタ管理（システム）",
+      "Text": "システム管理",
       "Icon": "",
       "Style": "H2",
       "RelativeField": "",
@@ -17,7 +17,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "組織・ユーザー・承認ルート・勘定科目・税などの制度マスタを管理します（システム管理者専用）。ここで変更した内容は全業務に即時反映されます。業務マスタ（取引先・案件・口座）はサイドバーの「マスタ」グループ、会計年度は「設定」グループにあります。",
+      "Text": "組織（ユーザー・部門・部門メンバー）と承認ガバナンス（承認フローテンプレート・承認ルート判定）を管理します（システム管理者専用）。画面の見え方と承認ルートは部門メンバーの登録から自動で導出されます。会計マスタ（勘定科目・税制・費目）と業務マスタ（取引先・案件・口座）は経理の「業務マスタ」ワークスペース、会計年度は「会計」ワークスペースの「設定」グループにあります。",
       "Icon": "",
       "Style": "Default",
       "RelativeField": "",
@@ -239,5 +239,5 @@
   },
   "CanBulkDataUpdate": false,
   "CanBulkDataDownload": false,
-  "PageTitle": "マスタ管理（システム）"
+  "PageTitle": "システム管理"
 }

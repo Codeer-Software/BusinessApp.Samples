@@ -96,7 +96,7 @@ void Generate_OnClick()
         var accErr = partner.AccountValidationError();
         if (accErr != "")
         {
-            errors.Add($"{invNo}: {partner.Name.Value} — {accErr}（マスタ管理（経理） > 取引先口座 で登録）");
+            errors.Add($"{invNo}: {partner.Name.Value} — {accErr}（業務マスタ > 取引先口座 で登録）");
             continue;
         }
         var amt = inv.Amount.Value ?? 0;

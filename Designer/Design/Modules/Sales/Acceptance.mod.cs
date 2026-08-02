@@ -1,6 +1,6 @@
 // Acceptance.mod.cs — 検収
 // 責務: 検収番号採番 (A-{yy}-{seq}) / 受注選択時の検収額・消費税の自動セット /
-//        検収確定→売上仕訳 (D 売掛金 / C 売上高+仮受消費税。検収基準 = decisions/0008、経理ロール専用) /
+//        検収確定→売上仕訳 (D 売掛金 / C 売上高+仮受消費税。検収基準 = decisions/0008、経理専用) /
 //        確定後の請求書作成 (B4-3)
 // 仕訳生成の正典: ExpenseRequest.GenerateJournal_OnClick (ガード・採番・税行の同型)
 
@@ -87,7 +87,7 @@ void UpdateButtons()
 
     // 請求書作成済み（直接 or 合算）ならボタンの代わりに案内ラベルを出す。
     // Invoice モジュールは経理専用（UserReadCondition）のため、general/approver で検索すると
-    // "No permission to read module" で画面ごと落ちる——経理ロールのときだけ照会する
+    // "No permission to read module" で画面ごと落ちる——経理アクセスのときだけ照会する
     string invoiceNo = null;
     string billedNo = null;
     if (isAccountingRole)
@@ -145,7 +145,7 @@ string FindExistingInvoiceNo()
     return ((Invoice)found).InvoiceNo.Value;
 }
 
-// 確定の取り消し (confirmed → draft): 売上仕訳を削除して下書きに戻す（経理ロール専用）
+// 確定の取り消し (confirmed → draft): 売上仕訳を削除して下書きに戻す（経理専用）
 // 請求書が既にある場合・仕訳の期間が締め済みの場合は不可（先にそちらを解消する）
 void CancelConfirm_OnClick()
 {
@@ -313,7 +313,7 @@ string NextAcceptanceNo()
     return $"{prefix}{seq:000}";
 }
 
-// 検収確定: 売上仕訳を生成して confirmed へ (経理ロール専用)
+// 検収確定: 売上仕訳を生成して confirmed へ (経理専用)
 // D 売掛金1100 (税込) / C 売上科目 (税抜, 案件区分で 4000/4010/4020) / C 仮受消費税2200 (税行)
 void Confirm_OnClick()
 {

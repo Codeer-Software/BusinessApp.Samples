@@ -48,7 +48,7 @@ CLAUDE.md                   Claude Code 向けミッションブリーフ（自�
    dotnet run --project BusinessApp/BusinessApp.Server --launch-profile http
    ```
 
-   → http://localhost:5085 を開き `admin` / `admin` でログイン
+   → http://localhost:5085 を開き `admin` / `admin` でログイン（admin はシステム管理専任で、ユーザー・部門・承認設定のみ操作可。会計・販売などの業務画面は seed 済みユーザー——例: 経理は `soumu_bucho`——でログインする。パスワードはユーザー名と同一。権限モデルの詳細: [`docs/10_部品アーキテクチャ.md`](docs/10_部品アーキテクチャ.md)）
 
 AI 機能を実プロバイダで動かす場合の API キーは .NET User Secrets に置く（`docs/decisions/0024`）。設定ファイルに書かないこと。
 

@@ -1,5 +1,5 @@
 // Receipt.mod.cs — 入金
-// 責務: 請求書選択時の残額自動セット / 入金確定→消込仕訳 (経理ロール専用) /
+// 責務: 請求書選択時の残額自動セット / 入金確定→消込仕訳 (経理専用) /
 //        請求書ステータスの更新 (入金合計 >= 請求税込額 → paid、それ以外 → partial) /
 //        少額差額の自動処理 (bank のみ。差額が RECEIPT_DIFF_MAX 円以下なら振込手数料等として
 //        支払手数料6210 で自動仕訳し paid にする。閾値は system_thresholds マスタ参照)
@@ -96,7 +96,7 @@ JournalEntry FindReceiptJournal()
     return (JournalEntry)found;
 }
 
-// 入金の取り消し: 消込仕訳を削除し、請求書ステータスを再計算する（経理ロール専用）
+// 入金の取り消し: 消込仕訳を削除し、請求書ステータスを再計算する（経理専用）
 void CancelReceipt_OnClick()
 {
     if (CurrentUser.HasAccountingAccess.Value != true)
@@ -269,7 +269,7 @@ int SumReceipts(object invoiceId, bool excludeSelf)
     return total;
 }
 
-// 入金確定: 保存 → 消込仕訳 → 請求書ステータス更新 (経理ロール専用)
+// 入金確定: 保存 → 消込仕訳 → 請求書ステータス更新 (経理専用)
 void Confirm_OnClick()
 {
     if (CurrentUser.HasAccountingAccess.Value != true)

@@ -90,7 +90,7 @@
           "SearchLayoutName": "",
           "UserUrlParameter": true,
           "PageTitle": "ユーザー管理",
-          "HeaderTitle": "ユーザーの登録・編集とロール（一般/承認者/経理/システム管理者）の設定ができます。",
+          "HeaderTitle": "ユーザーの登録・編集ができます。画面の見え方は所属部門のメンバー登録（部門詳細で編集）から自動で決まり、システム管理者はチェックボックスで指定します。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
