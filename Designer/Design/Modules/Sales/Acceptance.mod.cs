@@ -585,7 +585,9 @@ void CreateInvoice_OnClick()
     if (created != null)
     {
         var typedCreated = (Invoice)created;
-        NavigationService.NavigateTo(NavigationService.GetModuleDataUrl("Invoice", $"{typedCreated.Id.Value}"));
+        // Invoice は SalesBilling フレームにのみ登録されている。営業×経理の兼務者が SalesStaff 側で
+        // 検収を確定した場合に現在フレーム解決だと未登録で真っ白になる（FB-023）ため、フレームを明示する
+        NavigationService.NavigateTo($"/SalesBilling/Invoice/{typedCreated.Id.Value}");
     }
 }
 

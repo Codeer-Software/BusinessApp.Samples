@@ -2,7 +2,7 @@
   "IsApplicationRoot": true,
   "Priority": 0,
   "Name": "Main",
-  "Description": "",
+  "Description": "ルート（全員着地・RoleDispatch がホームフレームへ転送する専用フレーム）",
   "Left": {
     "IsVisible": true,
     "Home": {

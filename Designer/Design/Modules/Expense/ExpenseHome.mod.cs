@@ -30,7 +30,7 @@ void Detail_OnAfterInit()
     var myApplying = ers.Execute().Count;
     TodoLabel.Text = $"あなたの承認待ち: {myApprovals} 件 ／ 進行中のあなたの申請: {myApplying} 件";
 
-    // ワークスペース切替ボタン（権限がある業務だけ表示）
+    // ワークスペース切替ボタン（権限がある業務だけ表示。工数管理はゲート無し＝全社員のため常時表示）
     GoSalesBtn.IsVisible = CurrentUser.HasSalesAccess.Value == true || CurrentUser.HasAccountingAccess.Value == true;
     GoManagementBtn.IsVisible = canApprove;
 }
