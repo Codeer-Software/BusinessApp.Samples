@@ -87,6 +87,14 @@ h4.row {
   --bs-table-striped-bg: #f6f8fa;
 }
 
+/* 業務ポータル（PortalHome）: 権限で非表示になったタイルの空カラムを詰める（ADR-0042）。
+   CLB は IsVisible=false のフィールドをカラムごと空で描画するが、固定幅カラム自体は残るため
+   タイル間に 150px の空白が生じる（実測）。中身（field-layout）の無いカラムを畳んで解消する。
+   行末の filler 空セルも対象になるが、折り返し行の余白セルなので畳んでも影響は無い */
+[data-module="PortalHome"] .grid-column:not(:has(.field-layout)) {
+  display: none;
+}
+
 /* ボタン色規約（ADR-0027）: 青=前進アクション／赤=削除・取消／灰はボタンでは使わない。
    無効ボタンは「元のアクション色を残したまま薄く」表示し、灰色（キャンセル系）と混同させない。
    Bootstrap 既定の opacity .65 では有効ボタンとの差が弱いため .45 に強める */

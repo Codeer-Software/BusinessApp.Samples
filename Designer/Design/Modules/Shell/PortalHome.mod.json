@@ -1,5 +1,5 @@
 {
-  "Name": "SalesHome",
+  "Name": "PortalHome",
   "DataSourceName": "",
   "DbTable": "",
   "CanCreate": false,
@@ -31,109 +31,207 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "ショートカット",
+      "Text": "利用する業務を選んでください",
       "Icon": "",
       "IsHtml": false,
       "Style": "H5",
       "RelativeField": "",
       "OnClick": "",
-      "Name": "ShortcutLabel",
+      "Name": "GuideLabel",
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Style": "Button",
-      "Target": "Url",
-      "ShouldOpenInNewTab": false,
-      "Icon": "",
-      "TitleText": "見積へ",
-      "TitleVariable": "",
+      "Text": "経費精算",
       "ImageResourcePath": "",
-      "PageFrame": "",
-      "Module": "Quote",
-      "ModuleVariable": "",
-      "IdVariable": "",
-      "Url": "",
-      "OnClick": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "GoExpenseBtn_OnClick",
+      "ShowTextInToolTip": false,
       "IsHtml": false,
-      "Name": "GoQuote",
+      "Name": "GoExpenseBtn",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
-      "Style": "Button",
-      "Target": "Url",
-      "ShouldOpenInNewTab": false,
-      "Icon": "",
-      "TitleText": "受注へ",
-      "TitleVariable": "",
+      "Text": "工数管理",
       "ImageResourcePath": "",
-      "PageFrame": "",
-      "Module": "SalesOrder",
-      "ModuleVariable": "",
-      "IdVariable": "",
-      "Url": "",
-      "OnClick": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "GoTimesheetBtn_OnClick",
+      "ShowTextInToolTip": false,
       "IsHtml": false,
-      "Name": "GoSalesOrder",
+      "Name": "GoTimesheetBtn",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
-      "Style": "Button",
-      "Target": "Url",
-      "ShouldOpenInNewTab": false,
-      "Icon": "",
-      "TitleText": "検収へ",
-      "TitleVariable": "",
+      "Text": "営業業務",
       "ImageResourcePath": "",
-      "PageFrame": "",
-      "Module": "Acceptance",
-      "ModuleVariable": "",
-      "IdVariable": "",
-      "Url": "",
-      "OnClick": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "GoSalesBtn_OnClick",
+      "ShowTextInToolTip": false,
       "IsHtml": false,
-      "Name": "GoAcceptance",
+      "Name": "GoSalesBtn",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+    },
+    {
+      "Text": "会計",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "GoAccountingBtn_OnClick",
+      "ShowTextInToolTip": false,
+      "IsHtml": false,
+      "Name": "GoAccountingBtn",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+    },
+    {
+      "Text": "購買・支払",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "GoPurchasingBtn_OnClick",
+      "ShowTextInToolTip": false,
+      "IsHtml": false,
+      "Name": "GoPurchasingBtn",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+    },
+    {
+      "Text": "経営管理",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "GoManagementBtn_OnClick",
+      "ShowTextInToolTip": false,
+      "IsHtml": false,
+      "Name": "GoManagementBtn",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+    },
+    {
+      "Text": "業務マスタ",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "GoMasterBusinessBtn_OnClick",
+      "ShowTextInToolTip": false,
+      "IsHtml": false,
+      "Name": "GoMasterBusinessBtn",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+    },
+    {
+      "Text": "システム管理",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "GoAdminBtn_OnClick",
+      "ShowTextInToolTip": false,
+      "IsHtml": false,
+      "Name": "GoAdminBtn",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     }
   ],
   "UserWriteCondition": {
     "ModuleName": ""
   },
   "UserReadCondition": {
-    "ModuleName": "AppUser",
-    "Condition": {
-      "IsOrMatch": true,
-      "IsNot": false,
-      "Children": [
-        {
-          "SearchTargetVariable": "HasSalesAccess.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": true,
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
-        },
-        {
-          "SearchTargetVariable": "HasAccountingAccess.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": true,
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
-        }
-      ],
-      "Name": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
-    }
+    "ModuleName": ""
   },
   "DataWriteCondition": {
     "ModuleName": ""
@@ -154,7 +252,12 @@
       "FontFamily": "",
       "Layout": {
         "Name": "",
-        "Padding": {},
+        "Padding": {
+          "Left": 16,
+          "Top": 16,
+          "Right": 16,
+          "Bottom": 16
+        },
         "IsBordered": false,
         "UseBorderedShrinkWrap": false,
         "IsExpandable": false,
@@ -251,7 +354,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "ShortcutLabel",
+                  "FieldName": "GuideLabel",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -287,7 +390,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "GoQuote",
+                  "FieldName": "GoExpenseBtn",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -311,7 +414,7 @@
               },
               {
                 "Layout": {
-                  "FieldName": "GoSalesOrder",
+                  "FieldName": "GoTimesheetBtn",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -335,7 +438,127 @@
               },
               {
                 "Layout": {
-                  "FieldName": "GoAcceptance",
+                  "FieldName": "GoSalesBtn",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 150,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "GoAccountingBtn",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 150,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "GoPurchasingBtn",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 150,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "GoManagementBtn",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 150,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "GoMasterBusinessBtn",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 150,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "GoAdminBtn",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",

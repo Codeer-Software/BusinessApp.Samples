@@ -2,7 +2,7 @@
   "IsApplicationRoot": true,
   "Priority": 0,
   "Name": "Main",
-  "Description": "ルート（全員着地・RoleDispatch がホームフレームへ転送する専用フレーム）",
+  "Description": "ルート（全員着地・PortalHome がアクセス可能な業務のタイルを表示する業務ポータル）",
   "Left": {
     "IsVisible": true,
     "Home": {
@@ -73,7 +73,7 @@
     "ModuleUrlSegment": "",
     "ActiveModuleSegments": [],
     "PageFrame": "",
-    "Module": "RoleDispatch",
+    "Module": "PortalHome",
     "Id": "",
     "Parameters": "",
     "ListPageDesign": {
@@ -90,6 +90,7 @@
         "CanNavigateToDetail": false,
         "NavigateModuleUrlSegment": "",
         "CanCustomizeColumns": false,
+        "FixedColumnCount": 0,
         "ApplyBackgroundToBoxInput": false,
         "DisplayName": "",
         "SearchCondition": {
@@ -117,6 +118,9 @@
         "Name": "",
         "IgnoreModification": false,
         "OnValidateInput": "",
+        "IsFocusSkip": false,
+        "NextFocusField": "",
+        "OnFocusMoving": "",
         "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
       }
     },
@@ -128,6 +132,6 @@
   },
   "AutoZoom": "None",
   "TargetDevice": "Any",
-  "TopPageModule": "RoleDispatch",
+  "TopPageModule": "PortalHome",
   "OtherPages": []
 }
