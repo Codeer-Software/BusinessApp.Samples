@@ -235,7 +235,7 @@ List<object> ResolveDeptRoleAll(Department dept, string role)
 {
     var result = new List<object>();
     if (dept == null) return result;
-    var s = new ModuleSearcher<DepartmentManager>();
+    var s = new ModuleSearcher<DepartmentMember>();
     s.AddEquals(m => m.DepartmentId.Value, dept.Id.Value);
     s.AddEquals(m => m.Role.Value, role);
     s.OrderBy(m => m.Id.Value);

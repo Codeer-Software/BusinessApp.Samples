@@ -10,3 +10,13 @@ void Detail_OnAfterInit()
         IsActive.Value = true;
     }
 }
+
+// 自分自身のシステム管理者権限は外せない（唯一の管理者が自分を降格するとロックアウトするため）
+void IsSysAdmin_OnDataChanged()
+{
+    if (IsNewData) return;
+    if (IsSysAdmin.Value == true) return;
+    if ($"{Id.Value}" != $"{CurrentUser.Id.Value}") return;
+    IsSysAdmin.Value = true;
+    Toaster.Error("自分自身のシステム管理者権限は外せません（ロックアウト防止）。別の管理者で操作してください。");
+}
