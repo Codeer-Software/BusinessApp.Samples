@@ -140,3 +140,14 @@ button.btn.disabled {
 .sidebar-nav .grid-row:not(:has(.field-layout)) {
   display: none;
 }
+
+/* サイドバー（PortalSidebar）の Label リンク: クリック可能表示。
+   AnchorTag は OnClick 指定でも href を持ち Logout() とレースするため Label+OnClick に統一（実測） */
+.sidebar .portal-link,
+.sidebar-nav .portal-link {
+  cursor: pointer;
+}
+.sidebar .portal-link:hover,
+.sidebar-nav .portal-link:hover {
+  text-decoration: underline;
+}

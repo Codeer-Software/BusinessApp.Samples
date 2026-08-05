@@ -81,7 +81,9 @@
         "HideTitle": false,
         "ModulePageType": "List",
         "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
+        "ActiveModuleSegments": [
+          "Start"
+        ],
         "PageFrame": "",
         "Module": "BudgetVsActual",
         "Id": "",
@@ -584,7 +586,7 @@
   "OtherPageModuleDesigns": [],
   "TopPageModuleDesign": {
     "ModulePageType": "List",
-    "ModuleUrlSegment": "Top",
+    "ModuleUrlSegment": "Start",
     "ActiveModuleSegments": [],
     "PageFrame": "",
     "Module": "BudgetVsActual",

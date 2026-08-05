@@ -81,7 +81,9 @@
         "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
+        "ActiveModuleSegments": [
+          "Start"
+        ],
         "PageFrame": "",
         "Module": "Partner",
         "Id": "",
@@ -832,7 +834,7 @@
   "OtherPageModuleDesigns": [],
   "TopPageModuleDesign": {
     "ModulePageType": "Auto",
-    "ModuleUrlSegment": "Top",
+    "ModuleUrlSegment": "Start",
     "ActiveModuleSegments": [],
     "PageFrame": "",
     "Module": "Partner",
