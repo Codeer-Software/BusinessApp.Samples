@@ -70,18 +70,18 @@
   "FontFamily": "",
   "OtherPageModuleDesigns": [
     {
-      "ModulePageType": "List",
-      "ModuleUrlSegment": "",
+      "ModulePageType": "Detail",
+      "ModuleUrlSegment": "Notification",
       "ActiveModuleSegments": [],
       "PageFrame": "",
-      "Module": "Notification",
+      "Module": "NotificationCenter",
       "Id": "",
       "Parameters": "",
       "ListPageDesign": {
         "SearchLayoutName": "",
         "UserUrlParameter": true,
-        "PageTitle": "通知",
-        "HeaderTitle": "あなた宛の通知一覧です。「開く」で対象の画面へ移動できます。",
+        "PageTitle": "",
+        "HeaderTitle": "",
         "CanBulkDataUpdate": false,
         "CanBulkDataDownload": false,
         "UseSubmitButton": false,
@@ -98,8 +98,8 @@
             "LimitCount": 50,
             "SelectFields": [],
             "SortConditions": [],
-            "SortFieldVariable": "CreatedAt.Value",
-            "SortDescending": true,
+            "SortFieldVariable": "",
+            "SortDescending": false,
             "ModuleName": ""
           },
           "PagerPosition": "Top",
@@ -126,7 +126,7 @@
         }
       },
       "DetailPageDesign": {
-        "PageTitle": "",
+        "PageTitle": "通知",
         "LayoutName": "",
         "UrlParameter": ""
       }

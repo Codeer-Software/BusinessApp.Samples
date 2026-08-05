@@ -129,10 +129,37 @@ void Detail_OnAfterInit()
                 CashAlertLink.IsVisible = true;
                 CashAlertLink.Text = $"⚠ 資金ショート予測: 今後4ヶ月中 {cashMonths} ヶ月";
             }
-            if ((isApprover || hasAccounting) && budgetDepts > 0)
+            // 予算警告の表示範囲（2026-08-06 ユーザー仕様）:
+            // 経理 = どこかの部門に警告があれば表示（全部門を横断で見る役割）
+            // 非経理の承認者 = 自分の所属部に警告がある時だけ表示（他部門の警告は自分の仕事ではない）
+            if (budgetDepts > 0)
             {
-                BudgetAlertLink.IsVisible = true;
-                BudgetAlertLink.Text = $"⚠ 予算警告: {budgetDepts} 部門";
+                if (hasAccounting)
+                {
+                    BudgetAlertLink.IsVisible = true;
+                    BudgetAlertLink.Text = $"⚠ 予算警告: {budgetDepts} 部門";
+                }
+                else if (isApprover)
+                {
+                    var alertDeptIds = $",{a.BudgetAlertDeptIds.Value},";
+                    var myDept = $"{CurrentUser.所属部.Value}";
+                    if (myDept != "" && alertDeptIds.Contains($",{myDept},"))
+                    {
+                        BudgetAlertLink.IsVisible = true;
+                        // CurrentUser の SelectField は候補未ロードで DisplayText が空（実測）→ 部門マスタから名前を引く
+                        var deptName = "";
+                        var ds = new ModuleSearcher<Department>();
+                        ds.AddEquals(d => d.Id.Value, CurrentUser.所属部.Value);
+                        var deptRow = ds.ExecuteFirstOrDefault();
+                        if (deptRow != null)
+                        {
+                            deptName = ((Department)deptRow).Name.Value;
+                        }
+                        BudgetAlertLink.Text = deptName != ""
+                            ? $"⚠ 予算警告: あなたの部門（{deptName}）"
+                            : "⚠ 予算警告: あなたの部門";
+                    }
+                }
             }
             AlertSectionLabel.IsVisible = PayDueLink.IsVisible || ReceivableOverdueLink.IsVisible
                 || CashAlertLink.IsVisible || BudgetAlertLink.IsVisible;
@@ -213,7 +240,7 @@ void MyApplying_OnClick()
 
 void AllNotifications_OnClick()
 {
-    NavigationService.NavigateTo("/Main/Notification");
+    NavigationService.NavigateTo("/Main/Notification?initialize_search=true");
 }
 
 void SettlementQueue_OnClick()
@@ -259,7 +286,8 @@ void CashAlert_OnClick()
 
 void BudgetAlert_OnClick()
 {
-    NavigationService.NavigateTo($"/{ResolveManagementFrame()}/BudgetVsActual");
+    // initialize_search=true で予実対比の既定検索（現在年度＋非経理は自部門）を発火させる（#48）
+    NavigationService.NavigateTo($"/{ResolveManagementFrame()}/BudgetVsActual?initialize_search=true");
 }
 
 void AdminNote_OnClick()

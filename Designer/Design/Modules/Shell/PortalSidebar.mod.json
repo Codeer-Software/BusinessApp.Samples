@@ -17,6 +17,16 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
+      "Text": "通知",
+      "Icon": "bi bi-bell",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "Notifications_OnClick",
+      "Name": "NotificationsLink",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
       "Text": "経費精算",
       "Icon": "bi bi-receipt",
       "Style": "Default",
@@ -162,6 +172,42 @@
                   "Left": 14,
                   "Top": 12,
                   "Bottom": 16
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "NotificationsLink",
+                  "ContextMenu": "",
+                  "ClassName": "portal-link",
+                  "FontFamily": "",
+                  "Color": "#ffffff",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {
+                  "Left": 14,
+                  "Top": 8,
+                  "Bottom": 8
                 },
                 "BackgroundColor": "",
                 "BorderStyle": {

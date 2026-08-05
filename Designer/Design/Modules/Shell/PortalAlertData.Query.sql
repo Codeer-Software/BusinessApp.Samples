@@ -119,26 +119,24 @@ alert_rate AS (
   SELECT amount AS rate FROM system_thresholds WHERE code = 'BUDGET_ALERT_RATE' LIMIT 1
 ),
 budget_alert AS (
-  SELECT count(*) AS c FROM (
-    SELECT b.department_id
-    FROM (SELECT department_id, account_id, SUM(amount) AS budget
-          FROM budget_lines
-          WHERE fiscal_year_id IN (SELECT id FROM cur_yr)
-          GROUP BY department_id, account_id) b
-    LEFT JOIN (SELECT l.department_id, l.account_id,
-                      SUM(CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END) AS actual
-               FROM journal_lines l
-               JOIN journal_entries e ON e.id = l.journal_entry_id
-               JOIN accounts a ON a.id = l.account_id
-               WHERE e.status = 'posted'
-                 AND e.fiscal_year_id IN (SELECT id FROM cur_yr)
-                 AND a.account_type = 'expense'
-               GROUP BY l.department_id, l.account_id) act
-      ON act.department_id IS b.department_id AND act.account_id = b.account_id
-    WHERE b.budget > 0
-      AND COALESCE(act.actual, 0) * 100 / b.budget >= (SELECT rate FROM alert_rate)
-    GROUP BY b.department_id
-  )
+  SELECT b.department_id AS department_id
+  FROM (SELECT department_id, account_id, SUM(amount) AS budget
+        FROM budget_lines
+        WHERE fiscal_year_id IN (SELECT id FROM cur_yr)
+        GROUP BY department_id, account_id) b
+  LEFT JOIN (SELECT l.department_id, l.account_id,
+                    SUM(CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END) AS actual
+             FROM journal_lines l
+             JOIN journal_entries e ON e.id = l.journal_entry_id
+             JOIN accounts a ON a.id = l.account_id
+             WHERE e.status = 'posted'
+               AND e.fiscal_year_id IN (SELECT id FROM cur_yr)
+               AND a.account_type = 'expense'
+             GROUP BY l.department_id, l.account_id) act
+    ON act.department_id IS b.department_id AND act.account_id = b.account_id
+  WHERE b.budget > 0
+    AND COALESCE(act.actual, 0) * 100 / b.budget >= (SELECT rate FROM alert_rate)
+  GROUP BY b.department_id
 )
 SELECT
   (SELECT count(*) FROM pay WHERE days_left < 0) AS pay_overdue,
@@ -146,5 +144,7 @@ SELECT
     WHERE days_left >= 0 AND days_left <= (SELECT days FROM threshold)) AS pay_soon,
   (SELECT c FROM recv) AS receivable_overdue,
   (SELECT count(*) FROM cash_final WHERE ending < 0) AS cash_alert_months,
-  (SELECT c FROM budget_alert) AS budget_alert_depts,
+  (SELECT count(*) FROM budget_alert) AS budget_alert_depts,
+  -- 警告が出ている部門の ID リスト（カンマ区切り。非経理ユーザーの「自部門のみ表示」判定用・2026-08-06）
+  (SELECT COALESCE(group_concat(department_id), '') FROM budget_alert) AS budget_alert_dept_ids,
   (SELECT days FROM threshold) AS due_soon_days

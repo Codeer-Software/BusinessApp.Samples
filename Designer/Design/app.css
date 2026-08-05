@@ -151,3 +151,20 @@ button.btn.disabled {
 .sidebar-nav .portal-link:hover {
   text-decoration: underline;
 }
+
+/* PortalSidebar のログアウトを他フレームの標準サイドバーと同様に下端固定（2026-08-06 ユーザー要望）。
+   デスクトップ（.sidebar）のみ。モバイルのハンバーガー内はリスト末尾のままにする。
+   見た目も標準ログアウト行（上罫線＋薄背景）に合わせる */
+.sidebar {
+  position: relative;
+}
+.sidebar .grid-row:has(.field-layout[data-name="LogoutLink"]) {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.3);
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: rgba(20, 16, 58, 0.9);
+}

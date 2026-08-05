@@ -32,7 +32,7 @@
         "ModuleName": "FiscalYearLookup"
       },
       "ValueVariable": "Id.Value",
-      "DisplayTextVariable": "Name.Value",
+      "DisplayTextVariable": "Label.Value",
       "DbColumn": "fiscal_year_id",
       "EmptyCandidateType": "Null",
       "AllowOrSearch": false,

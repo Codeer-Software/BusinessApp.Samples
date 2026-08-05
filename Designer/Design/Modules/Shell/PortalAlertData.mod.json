@@ -47,6 +47,12 @@
           },
           {
             "IsParameter": false,
+            "Name": "budget_alert_dept_ids",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
             "Name": "due_soon_days",
             "DbType": "integer",
             "DbParameterDirection": "Input"
@@ -165,6 +171,23 @@
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "DbColumn": "budget_alert_dept_ids",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "StringEmpty",
+      "ShouldTrimAfterEdit": false,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "警告部門IDリスト",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "BudgetAlertDeptIds",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
       "DbColumn": "due_soon_days",
@@ -315,6 +338,22 @@
             "FieldName": "BudgetAlertDepts",
             "ContextMenu": "",
             "Label": "予算警告部門数",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": false,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "BudgetAlertDeptIds",
+            "ContextMenu": "",
+            "Label": "警告部門IDリスト",
             "ColumnSpan": 1,
             "RowSpan": 1,
             "TextWrap": "Unset",

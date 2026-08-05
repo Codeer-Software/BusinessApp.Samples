@@ -1,7 +1,7 @@
 {
   "Name": "MyApplication",
   "DataSourceName": "BusinessAppSQLite",
-  "DbTable": "approval_flow",
+  "DbTable": "my_application_view",
   "CanCreate": false,
   "CanUpdate": false,
   "CanDelete": false,
@@ -79,12 +79,45 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
+      "DbColumn": "title",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "StringEmpty",
+      "ShouldTrimAfterEdit": false,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "件名",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "Title",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "DbColumn": "amount",
+      "Placeholder": "",
+      "Format": "#,0",
+      "IsSlider": false,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "金額（税込）",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "Amount",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
       "Candidates": [
-        "下書き,Draft",
         "進行中,Pending",
-        "承認済,Approved",
-        "却下,Rejected",
-        "キャンセル,Cancelled"
+        "却下,Rejected"
       ],
       "SearchCondition": {
         "SelectFields": [],
@@ -259,6 +292,15 @@
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
           },
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        },
+        {
+          "SearchTargetVariable": "Status.Value",
+          "Comparison": "NotEqual",
+          "Value": {
+            "Value": "Approved",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
         }
       ],
       "Name": "",
@@ -281,6 +323,24 @@
             "FieldName": "ParentModuleName",
             "ContextMenu": "",
             "Label": "申請種別",
+            "Width": 110,
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "IsViewOnly": true,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": true,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "Title",
+            "ContextMenu": "",
+            "Label": "件名",
             "ColumnSpan": 1,
             "RowSpan": 1,
             "IsViewOnly": true,
@@ -288,6 +348,24 @@
             "CanResize": true,
             "CanUserSort": true,
             "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "Amount",
+            "ContextMenu": "",
+            "Label": "金額（税込）",
+            "Width": 120,
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "IsViewOnly": true,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": true,
+            "ClassName": "amount-cell",
             "FontFamily": "",
             "Color": "",
             "BackgroundColor": "",

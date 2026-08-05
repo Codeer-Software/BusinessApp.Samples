@@ -178,7 +178,7 @@
     {
       "Text": "未読に戻す",
       "Icon": "",
-      "Variant": "Danger",
+      "Variant": "Primary",
       "OnClick": "MarkUnread_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {
@@ -434,7 +434,7 @@
   },
   "SearchLayouts": {
     "": {
-      "OnSearchInitialization": "",
+      "OnSearchInitialization": "Search_OnInit",
       "ShowDefaultSearchButtons": true,
       "Layout": {
         "Operator": "And",

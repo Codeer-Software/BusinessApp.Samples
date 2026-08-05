@@ -1,3 +1,11 @@
+// 申請一覧の既定検索: 申請者=自分（2026-08-06 ユーザー要望）。
+// 経理は全社の申請を見る運用のため既定を付けない。検索ページの Link は SearchValue 系統（#48）
+void Search_OnInit()
+{
+    if (CurrentUser.HasAccountingAccess.Value == true) return;
+    Creator.SearchValue = CurrentUser.Id.Value;
+}
+
 // 費目×金額でテンプレートを選択 (ApprovalFlow の申請/再申請から呼ばれる)
 // ADR-0023: approval_route_rules マスタ（システム管理 > 承認/承認ルート判定）を
 // 優先度の小さい順に評価し、最初に一致した行のテンプレートを使う。

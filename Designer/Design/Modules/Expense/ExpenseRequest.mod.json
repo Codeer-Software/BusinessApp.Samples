@@ -1143,6 +1143,16 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
+      "Text": "申請者：",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "SearchLblCreator",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
       "Text": "案件（任意）：",
       "Icon": "",
       "Style": "Default",
@@ -2907,7 +2917,7 @@
   },
   "SearchLayouts": {
     "": {
-      "OnSearchInitialization": "",
+      "OnSearchInitialization": "Search_OnInit",
       "ShowDefaultSearchButtons": true,
       "Layout": {
         "Operator": "And",
@@ -3182,6 +3192,59 @@
             "KeepInFillAvailableGrid": false,
             "IsRowMarginRemoved": false,
             "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "SearchLblCreator",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 96,
+                "Padding": {
+                  "Left": 8,
+                  "Top": null,
+                  "Right": 4,
+                  "Bottom": null
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None",
+                "VerticalAlignment": "Middle"
+              },
+              {
+                "Layout": {
+                  "FieldName": "Creator",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 280,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              },
               {
                 "Layout": {
                   "FieldName": "SearchLblPayeeUser",

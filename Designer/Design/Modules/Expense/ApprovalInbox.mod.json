@@ -218,16 +218,6 @@
       "Name": "OpenRequestButton",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
-    },
-    {
-      "Text": "状態：",
-      "Icon": "",
-      "Style": "Default",
-      "RelativeField": "",
-      "OnClick": "",
-      "Name": "SearchLblStatus",
-      "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -387,7 +377,7 @@
   "SearchLayouts": {
     "": {
       "OnSearchInitialization": "",
-      "ShowDefaultSearchButtons": true,
+      "ShowDefaultSearchButtons": false,
       "Layout": {
         "Operator": "And",
         "Name": "SearchGridLayout",
@@ -400,86 +390,7 @@
         "IsFlowLayout": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",
-        "Rows": [
-          {
-            "IsWrap": true,
-            "IsAutoFillWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "SearchLblStatus",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 66,
-                "Padding": {
-                  "Left": 8,
-                  "Top": null,
-                  "Right": 4,
-                  "Bottom": null
-                },
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "Border": "None",
-                "VerticalAlignment": "Middle"
-              },
-              {
-                "Layout": {
-                  "FieldName": "Status",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "BackgroundColor": "",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 210,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              },
-              {
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              }
-            ]
-          }
-        ],
+        "Rows": [],
         "BackgroundColor": "",
         "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SearchGridLayoutDesign"
       }

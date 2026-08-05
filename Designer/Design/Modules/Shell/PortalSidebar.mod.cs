@@ -9,6 +9,12 @@ void Detail_OnAfterInit()
     // 表示専用モジュールの Detail はビュー専用扱いになりリンクが押せなくなる（PortalHome と同じ実測）
     IsViewOnly = false;
 
+    // 通知（全員）: 未読があれば件数バッジつきで表示（DataReadCondition により自分宛のみが数えられる）
+    var ns = new ModuleSearcher<Notification>();
+    ns.AddEquals(n => n.IsRead.Value, false);
+    var unread = ns.Execute().Count;
+    NotificationsLink.Text = unread > 0 ? $"通知 ({unread})" : "通知";
+
     var hasAccounting = CurrentUser.HasAccountingAccess.Value == true;
     GoExpenseLink.IsVisible = CurrentUser.CanUseExpense.Value == true;
     GoTimesheetLink.IsVisible = CurrentUser.CanUseTimesheet.Value == true;
@@ -92,6 +98,11 @@ void GoAdmin_OnClick()
 void GoHome_OnClick()
 {
     NavigationService.NavigateTo("/Main/PortalHome");
+}
+
+void Notifications_OnClick()
+{
+    NavigationService.NavigateTo("/Main/Notification?initialize_search=true");
 }
 
 void Logout_OnClick()
