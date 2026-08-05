@@ -125,7 +125,7 @@
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "権限",
+      "DisplayName": "役職",
       "IsRequired": true,
       "OnDataChanged": "",
       "Name": "Role",
@@ -198,7 +198,7 @@
           {
             "FieldName": "Role",
             "ContextMenu": "",
-            "Label": "権限",
+            "Label": "役職",
             "Width": 140,
             "ColumnSpan": 1,
             "RowSpan": 1,

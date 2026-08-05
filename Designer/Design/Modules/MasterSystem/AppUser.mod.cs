@@ -9,6 +9,15 @@ void Detail_OnAfterInit()
     {
         IsActive.Value = true;
     }
+    // 全社員機能（経費精算・工数入力）は既定 ON のオプトアウト型（ADR-0043）
+    if (IsNewData && CanUseExpense.Value != true)
+    {
+        CanUseExpense.Value = true;
+    }
+    if (IsNewData && CanUseTimesheet.Value != true)
+    {
+        CanUseTimesheet.Value = true;
+    }
 }
 
 // 自分自身のシステム管理者権限は外せない（唯一の管理者が自分を降格するとロックアウトするため）

@@ -23,10 +23,9 @@ void Detail_OnAfterInit()
     var isApprover = CurrentUser.IsApprover.Value == true;
     var hasSales = CurrentUser.HasSalesAccess.Value == true;
 
-    // 経費精算・工数管理はフレームゲート無し（全社員機能）だが、システム管理者には導線を出さない
-    // （職務分掌・docs/10 §2。管理者アカウントは業務用と分ける 2 アカウント運用を推奨）
-    GoExpenseBtn.IsVisible = isAdmin == false;
-    GoTimesheetBtn.IsVisible = isAdmin == false;
+    // 全ボタンが権限フラグだけで決まる（ADR-0043。admin は業務フラグ OFF がシード既定＝職務分掌）
+    GoExpenseBtn.IsVisible = CurrentUser.CanUseExpense.Value == true;
+    GoTimesheetBtn.IsVisible = CurrentUser.CanUseTimesheet.Value == true;
     GoSalesBtn.IsVisible = hasSales || hasAccounting;
     GoAccountingBtn.IsVisible = hasAccounting;
     GoPurchasingBtn.IsVisible = hasAccounting;

@@ -152,7 +152,7 @@
           "SearchLayoutName": "",
           "UserUrlParameter": true,
           "PageTitle": "ユーザー管理",
-          "HeaderTitle": "ユーザーの登録・編集ができます。画面の見え方は所属部門のメンバー登録（部門詳細で編集）から自動で決まり、システム管理者はチェックボックスで指定します。",
+          "HeaderTitle": "ユーザーの登録・編集ができます。業務機能の権限（営業・経理・経費精算・工数入力）はチェックボックスで指定します。承認者は部門の課長/部長・承認テンプレートの指名から自動判定。削除はできません — 退職者は「有効」を外して無効化します。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
