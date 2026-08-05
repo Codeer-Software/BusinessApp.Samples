@@ -104,3 +104,39 @@ button.btn.disabled {
   cursor: not-allowed !important;
   pointer-events: auto !important; /* not-allowed カーソルを見せるため */
 }
+
+/* 業務ポータル v2（ADR-0045）: 権限・件数 0 で非表示になった項目の「行」ごと畳む。
+   （上の空カラム畳みだけでは行のマージンが残り、セクション間に不自然な空白が出る＝実測） */
+[data-module="PortalHome"] .grid-row:not(:has(.field-layout)) {
+  display: none;
+}
+
+/* 業務ポータル v2: クリック可能ラベル（件数リンク・アラート）。FieldLayout の ClassName で付与 */
+[data-module="PortalHome"] .portal-link {
+  cursor: pointer;
+}
+[data-module="PortalHome"] .portal-link:hover {
+  text-decoration: underline;
+}
+
+/* Main サイドバー（PortalSidebar・ADR-0045）: ダーク背景上のリンクを白系に統一。
+   サイドバーのモジュール置換（SideBarDesign.ModuleName）は ModuleRenderer 描画のため
+   data-module 属性が付かない（実測）。サイドバー容器 .sidebar-nav × モジュール内容 .field-layout で
+   スコープする（標準サイドバーのリンクは field-layout 外なので影響しない） */
+/* デスクトップは .sidebar、モバイル（ハンバーガー）複製は .sidebar-nav 配下に描画される（実測） */
+.sidebar .field-layout a,
+.sidebar-nav .field-layout a {
+  color: #ffffff;
+  text-decoration: none;
+}
+.sidebar .field-layout a:hover,
+.sidebar-nav .field-layout a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+/* サイドバーでも権限非表示リンクの空行を畳む（PortalHome と同じ実測対策） */
+.sidebar .grid-row:not(:has(.field-layout)),
+.sidebar-nav .grid-row:not(:has(.field-layout)) {
+  display: none;
+}

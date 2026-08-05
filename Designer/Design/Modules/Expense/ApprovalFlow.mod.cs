@@ -647,27 +647,12 @@ void SubmitButton_OnClick()
 
 // ============================================================
 // アプリ内通知 (B-9)
-// Slack/メール連携は将来 NotifyUser から呼ぶ（現状は Logger のみ=口だけ実装・作業合意）。
-// 支払期限リマインドは見送り（売掛残高一覧の期限超過表示で代替）。
+// 送信の実体は基盤の Notification.Send() に一元化（ADR-0045。Slack/メール mock・
+// 他人宛 Submit 戻り値の吸収も Send 側）。支払期限リマインドは見送り（売掛残高一覧の期限超過表示で代替）。
 // ============================================================
 void NotifyUser(object recipientUserId, string title, string body, string linkModule, string linkId)
 {
-    if (recipientUserId == null) return;
-    var n = new Notification();
-    n.RecipientUser.Value = recipientUserId;
-    n.Title.Value = title;
-    n.Body.Value = body;
-    n.LinkModule.Value = linkModule;
-    n.LinkId.Value = linkId;
-    n.IsRead.Value = false;
-    n.CreatedAt.Value = DateTime.Now;
-    var ret = n.Submit();
-    // 他ユーザー宛の通知は Notification の DataReadCondition（自分宛のみ）により Submit 後の再読込が
-    // 0 件になり、INSERT 自体は成功していても true 以外が返る（2026-07-08 実測。再検索での成否確認も
-    // 同じ読取条件で不可能）。戻り値では成否を判定できないため、警告トーストは出さずログのみ残す。
-    // 実際の作成有無は notifications テーブルを DB で確認する
-    if (ret != true) { Logger.Log($"通知 Submit の戻り値が true 以外（他ユーザー宛では正常挙動）: {title}"); }
-    Logger.Log($"SLACK(mock): to user#{recipientUserId} {title} - {body}");
+    new Notification().Send(recipientUserId, title, body, linkModule, linkId);
 }
 
 // 申請モジュール名の表示名 (通知文言用)

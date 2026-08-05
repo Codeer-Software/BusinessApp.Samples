@@ -1,13 +1,13 @@
-// PortalHome.mod.cs — ルートフレーム（Main）のトップページ＝ログイン直後の業務ポータル（ADR-0042）
-// CLB は「IsApplicationRoot のフレームは全員アクセス可能」が前提のため、ルートには業務データを置かず、
-// アクセスできる部品（業務）へのタイルだけを並べる（旧 RoleDispatch の権限別自動転送を置換）。
-// 権限はロールではなく AppUser のキャッシュ列（部門メンバーシップ＋管理者フラグから DB トリガーが導出）で判定する。
-// 参照は AppUser（レイヤ0）のみ・遷移は URL のみ（部品のモジュール型を参照しない＝部品独立性の維持）。
+// PortalHome.mod.cs — 業務ポータル（ADR-0042 で着地一元化・ADR-0045 で「やること集約」へ全面改装）
+// 「この機能を使う権限があるなら、これを表示する」の宣言的合成（正典: docs/13 §3）。
+// 業務への導線は左サイドバー（PortalSidebar）に一本化し、本画面は
+// 自分あて（通知・申請・承認待ち）→ 経理の作業キュー → アラート → KPI を上から並べる。
+// 部品独立性: 参照は AppUser と Shell 所有の Portal*Data（契約 SQL）のみ。遷移は URL のみ。
+// 0 件の項目は行ごと非表示（アラート・キューは「対応が要るときだけ見える」）。
 
 void Detail_OnAfterInit()
 {
-    // 表示専用モジュール（DbTable 無し・CanCreate/Update false）の Detail はビュー専用扱いになり、
-    // ボタンが pointer-events:none で描画されてクリック不能になる（実測）。明示解除する
+    // 表示専用モジュールの Detail はビュー専用扱いになりクリック不能になる（実測）。明示解除する
     IsViewOnly = false;
 
     var name = "";
@@ -22,65 +22,247 @@ void Detail_OnAfterInit()
     var hasAccounting = CurrentUser.HasAccountingAccess.Value == true;
     var isApprover = CurrentUser.IsApprover.Value == true;
     var hasSales = CurrentUser.HasSalesAccess.Value == true;
+    var canExpense = CurrentUser.CanUseExpense.Value == true;
 
-    // 全ボタンが権限フラグだけで決まる（ADR-0043。admin は業務フラグ OFF がシード既定＝職務分掌）
-    GoExpenseBtn.IsVisible = CurrentUser.CanUseExpense.Value == true;
-    GoTimesheetBtn.IsVisible = CurrentUser.CanUseTimesheet.Value == true;
-    GoSalesBtn.IsVisible = hasSales || hasAccounting;
-    GoAccountingBtn.IsVisible = hasAccounting;
-    GoPurchasingBtn.IsVisible = hasAccounting;
-    GoManagementBtn.IsVisible = isApprover || hasAccounting;
-    GoMasterBusinessBtn.IsVisible = hasAccounting;
-    GoAdminBtn.IsVisible = isAdmin;
+    // ---- 自分あて（承認待ち・進行中の申請） ----
+    MyApprovalsLink.IsVisible = false;
+    MyApplyingLink.IsVisible = false;
+    if (isApprover || hasAccounting || canExpense)
+    {
+        var myApprovals = 0;
+        var myApplying = 0;
+        var ts = new ModuleSearcher<PortalTodoData>();
+        var todoRows = ts.Execute();
+        foreach (var r in todoRows)
+        {
+            var t = (PortalTodoData)r;
+            if ($"{t.UserId.Value}" == $"{CurrentUser.Id.Value}")
+            {
+                myApprovals = (int)(t.MyApprovals.Value ?? 0);
+                myApplying = (int)(t.MyApplying.Value ?? 0);
+            }
+        }
+        if (isApprover || hasAccounting)
+        {
+            MyApprovalsLink.IsVisible = true;
+            MyApprovalsLink.Text = $"▶ あなたの承認待ち: {myApprovals} 件";
+        }
+        if (canExpense)
+        {
+            MyApplyingLink.IsVisible = true;
+            MyApplyingLink.Text = $"▶ 進行中のあなたの申請: {myApplying} 件";
+        }
+    }
+
+    // ---- 経理の作業キュー ----
+    QueueSectionLabel.IsVisible = false;
+    SettlementQueueLink.IsVisible = false;
+    BankPendingLink.IsVisible = false;
+    JournalDraftsLink.IsVisible = false;
+    BillingPendingLink.IsVisible = false;
+    if (hasAccounting)
+    {
+        var qs = new ModuleSearcher<PortalQueueData>();
+        var qRows = qs.Execute();
+        if (qRows.Count > 0)
+        {
+            var q = (PortalQueueData)qRows[0];
+            var settlement = (int)(q.SettlementQueue.Value ?? 0);
+            var bank = (int)(q.BankPending.Value ?? 0);
+            var drafts = (int)(q.JournalDrafts.Value ?? 0);
+            var billing = (int)((q.RecurringPending.Value ?? 0) + (q.SesPending.Value ?? 0));
+            if (settlement > 0)
+            {
+                SettlementQueueLink.IsVisible = true;
+                SettlementQueueLink.Text = $"▶ 精算処理待ちの経費: {settlement} 件";
+            }
+            if (bank > 0)
+            {
+                BankPendingLink.IsVisible = true;
+                BankPendingLink.Text = $"▶ 未起票の銀行明細: {bank} 件";
+            }
+            if (drafts > 0)
+            {
+                JournalDraftsLink.IsVisible = true;
+                JournalDraftsLink.Text = $"▶ 下書きのままの伝票: {drafts} 件";
+            }
+            if (billing > 0)
+            {
+                BillingPendingLink.IsVisible = true;
+                BillingPendingLink.Text = $"▶ 定期請求・SES の当月未生成: {billing} 件";
+            }
+            QueueSectionLabel.IsVisible = settlement > 0 || bank > 0 || drafts > 0 || billing > 0;
+        }
+    }
+
+    // ---- アラート ----
+    AlertSectionLabel.IsVisible = false;
+    PayDueLink.IsVisible = false;
+    ReceivableOverdueLink.IsVisible = false;
+    CashAlertLink.IsVisible = false;
+    BudgetAlertLink.IsVisible = false;
+    if (hasSales || isApprover || hasAccounting)
+    {
+        var als = new ModuleSearcher<PortalAlertData>();
+        var aRows = als.Execute();
+        if (aRows.Count > 0)
+        {
+            var a = (PortalAlertData)aRows[0];
+            var payOver = (int)(a.PayOverdue.Value ?? 0);
+            var paySoon = (int)(a.PaySoon.Value ?? 0);
+            var recvOver = (int)(a.ReceivableOverdue.Value ?? 0);
+            var cashMonths = (int)(a.CashAlertMonths.Value ?? 0);
+            var budgetDepts = (int)(a.BudgetAlertDepts.Value ?? 0);
+            var soonDays = (int)(a.DueSoonDays.Value ?? 7);
+            if (hasAccounting && (payOver > 0 || paySoon > 0))
+            {
+                PayDueLink.IsVisible = true;
+                PayDueLink.Text = $"⚠ 支払期限: 超過 {payOver} 件 ／ {soonDays}日以内 {paySoon} 件";
+            }
+            if ((hasSales || hasAccounting) && recvOver > 0)
+            {
+                ReceivableOverdueLink.IsVisible = true;
+                ReceivableOverdueLink.Text = $"⚠ 期限超過の売掛: {recvOver} 件";
+            }
+            if ((isApprover || hasAccounting) && cashMonths > 0)
+            {
+                CashAlertLink.IsVisible = true;
+                CashAlertLink.Text = $"⚠ 資金ショート予測: 今後4ヶ月中 {cashMonths} ヶ月";
+            }
+            if ((isApprover || hasAccounting) && budgetDepts > 0)
+            {
+                BudgetAlertLink.IsVisible = true;
+                BudgetAlertLink.Text = $"⚠ 予算警告: {budgetDepts} 部門";
+            }
+            AlertSectionLabel.IsVisible = PayDueLink.IsVisible || ReceivableOverdueLink.IsVisible
+                || CashAlertLink.IsVisible || BudgetAlertLink.IsVisible;
+        }
+    }
+
+    // ---- KPI（経理のみ・リスクの高い読み取りは最後に置く規律） ----
+    KpiSectionLabel.IsVisible = hasAccounting;
+    KpiLine1.IsVisible = false;
+    KpiLine2.IsVisible = false;
+    if (hasAccounting)
+    {
+        var ks = new ModuleSearcher<PortalKpiData>();
+        var kpiRows = ks.Execute();
+        if (kpiRows.Count > 0)
+        {
+            var k = (PortalKpiData)kpiRows[0];
+            var cash = k.CashBalance.Value ?? 0;
+            var ar = k.ArBalance.Value ?? 0;
+            var ap = k.ApBalance.Value ?? 0;
+            var sales = k.MonthSales.Value ?? 0;
+            var expense = k.MonthExpense.Value ?? 0;
+            var profit = k.MonthProfit.Value ?? 0;
+            KpiLine1.IsVisible = true;
+            KpiLine2.IsVisible = true;
+            KpiLine1.Text = $"現預金 {cash:#,0} 円 ／ 売掛金 {ar:#,0} 円 ／ 買掛金 {ap:#,0} 円";
+            KpiLine2.Text = $"当月売上高 {sales:#,0} 円 ／ 当月費用 {expense:#,0} 円 ／ 当月利益 {profit:#,0} 円";
+            if (profit < 0)
+            {
+                KpiLine2.Color = "#dc3545";
+            }
+        }
+    }
+
+    // ---- システム管理者への案内（業務フラグを持たないのが既定＝職務分掌） ----
+    AdminNoteLink.IsVisible = isAdmin;
 }
 
-// 各部品への遷移。同一部品の変種フレームは権限の強い順に解決する（経理 > 承認者 > 一般）
+// ---- 変種フレームの解決（PortalSidebar と同じ規約: 経理 > 承認者 > 一般） ----
 
-void GoExpenseBtn_OnClick()
+string ResolveExpenseFrame()
 {
-    var frame = "ExpenseStaff";
-    if (CurrentUser.HasAccountingAccess.Value == true) { frame = "ExpenseAccounting"; }
-    else if (CurrentUser.IsApprover.Value == true) { frame = "ExpenseApprover"; }
-    NavigationService.NavigateTo($"/{frame}/Top");
+    if (CurrentUser.HasAccountingAccess.Value == true) return "ExpenseAccounting";
+    if (CurrentUser.IsApprover.Value == true) return "ExpenseApprover";
+    return "ExpenseStaff";
 }
 
-void GoTimesheetBtn_OnClick()
+string ResolveSalesFrame()
 {
-    var frame = "Timesheet";
-    if (CurrentUser.HasAccountingAccess.Value == true) { frame = "TimesheetAccounting"; }
-    NavigationService.NavigateTo($"/{frame}/Top");
+    if (CurrentUser.HasAccountingAccess.Value == true) return "SalesBilling";
+    return "SalesStaff";
 }
 
-void GoSalesBtn_OnClick()
+// 承認待ちを持つのは承認者/経理のみ（表示条件と対）。Staff へのフォールバックを持たない専用リゾルバ
+string ResolveApprovalFrame()
 {
-    var frame = "SalesStaff";
-    if (CurrentUser.HasAccountingAccess.Value == true) { frame = "SalesBilling"; }
-    NavigationService.NavigateTo($"/{frame}/Top");
+    if (CurrentUser.HasAccountingAccess.Value == true) return "ExpenseAccounting";
+    return "ExpenseApprover";
 }
 
-void GoAccountingBtn_OnClick()
+string ResolveManagementFrame()
 {
-    NavigationService.NavigateTo("/Accounting/Top");
+    if (CurrentUser.HasAccountingAccess.Value == true) return "ManagementFull";
+    return "ManagementApprover";
 }
 
-void GoPurchasingBtn_OnClick()
+// ---- 遷移（各項目のクリックで該当一覧へ） ----
+
+void MyApprovals_OnClick()
 {
-    NavigationService.NavigateTo("/Purchasing/Top");
+    NavigationService.NavigateTo($"/{ResolveApprovalFrame()}/ApprovalInbox");
 }
 
-void GoManagementBtn_OnClick()
+void MyApplying_OnClick()
 {
-    var frame = "ManagementApprover";
-    if (CurrentUser.HasAccountingAccess.Value == true) { frame = "ManagementFull"; }
-    NavigationService.NavigateTo($"/{frame}/Top");
+    NavigationService.NavigateTo($"/{ResolveExpenseFrame()}/MyApplication");
 }
 
-void GoMasterBusinessBtn_OnClick()
+void AllNotifications_OnClick()
 {
-    NavigationService.NavigateTo("/MasterBusiness/Top");
+    NavigationService.NavigateTo("/Main/Notification");
 }
 
-void GoAdminBtn_OnClick()
+void SettlementQueue_OnClick()
 {
-    NavigationService.NavigateTo("/MasterAdmin/Top");
+    NavigationService.NavigateTo("/ExpenseAccounting/ExpenseSettlementQueue");
+}
+
+void BankPending_OnClick()
+{
+    NavigationService.NavigateTo("/Accounting/BankPosting");
+}
+
+void JournalDrafts_OnClick()
+{
+    NavigationService.NavigateTo("/Accounting/JournalEntryBoard");
+}
+
+void BillingPending_OnClick()
+{
+    NavigationService.NavigateTo("/SalesBilling/RecurringRun");
+}
+
+void PayDue_OnClick()
+{
+    NavigationService.NavigateTo("/Purchasing/PaymentSchedule");
+}
+
+void ReceivableOverdue_OnClick()
+{
+    NavigationService.NavigateTo($"/{ResolveSalesFrame()}/ReceivableBalance");
+}
+
+void CashAlert_OnClick()
+{
+    // 資金繰り予測の画面は経営管理（経理）のみ。承認者にはアラート表示のみで詳細画面が無い
+    if (CurrentUser.HasAccountingAccess.Value == true)
+    {
+        NavigationService.NavigateTo("/ManagementFull/CashFlowForecast");
+        return;
+    }
+    Toaster.Info("資金繰り予測の詳細は経理アクセスを持つユーザーが確認できます");
+}
+
+void BudgetAlert_OnClick()
+{
+    NavigationService.NavigateTo($"/{ResolveManagementFrame()}/BudgetVsActual");
+}
+
+void AdminNote_OnClick()
+{
+    NavigationService.NavigateTo("/MasterAdmin");
 }

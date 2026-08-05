@@ -75,68 +75,6 @@
         }
       },
       {
-        "Title": "トップ",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false,
-        "ModulePageType": "Detail",
-        "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
-        "PageFrame": "",
-        "Module": "ExpenseHome",
-        "Id": "",
-        "Parameters": "",
-        "ListPageDesign": {
-          "SearchLayoutName": "",
-          "UserUrlParameter": true,
-          "PageTitle": "承認待ち",
-          "HeaderTitle": "あなたの承認を待っている申請一覧です。内容を確認し、承認・却下できます。",
-          "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
-          "UseSubmitButton": false,
-          "UseNavigateToCreate": false,
-          "ListFieldDesign": {
-            "LayoutName": "",
-            "CanNavigateToDetail": false,
-            "NavigateModuleUrlSegment": "",
-            "CanCustomizeColumns": false,
-            "ApplyBackgroundToBoxInput": false,
-            "DisplayName": "",
-            "SearchCondition": {
-              "LimitCount": 50,
-              "SelectFields": [],
-              "SortConditions": [],
-              "SortFieldVariable": "",
-              "SortDescending": false,
-              "ModuleName": ""
-            },
-            "PagerPosition": "Bottom",
-            "ReplaceMode": "None",
-            "DeleteTogether": false,
-            "CanCreate": false,
-            "CanUpdate": false,
-            "CanDelete": false,
-            "CanUserSort": true,
-            "CanSelect": false,
-            "UseIndexSort": false,
-            "OnDataChanged": "",
-            "OnSearchDataChanged": "",
-            "OnSelectedIndexChanged": "",
-            "OnSelectedIndexChanging": "",
-            "OnDoubleClickRow": "",
-            "Name": "",
-            "IgnoreModification": false,
-            "OnValidateInput": "",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
-          }
-        },
-        "DetailPageDesign": {
-          "PageTitle": "",
-          "LayoutName": "",
-          "UrlParameter": ""
-        }
-      },
-      {
         "Title": "承認待ち",
         "Icon": "",
         "IconType": "Font",
@@ -205,7 +143,9 @@
         "HideTitle": false,
         "ModulePageType": "List",
         "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
+        "ActiveModuleSegments": [
+          "Start"
+        ],
         "PageFrame": "",
         "Module": "ExpenseSettlementQueue",
         "Id": "",
@@ -673,11 +613,11 @@
     }
   ],
   "TopPageModuleDesign": {
-    "ModulePageType": "Detail",
-    "ModuleUrlSegment": "Top",
+    "ModulePageType": "List",
+    "ModuleUrlSegment": "Start",
     "ActiveModuleSegments": [],
     "PageFrame": "",
-    "Module": "ExpenseHome",
+    "Module": "ExpenseSettlementQueue",
     "Id": "",
     "Parameters": "",
     "ListPageDesign": {
@@ -700,13 +640,41 @@
           "LimitCount": 100,
           "SelectFields": [],
           "SortConditions": [],
-          "SortFieldVariable": "",
+          "SortFieldVariable": "Id.Value",
           "SortDescending": false,
-          "ModuleName": "",
+          "ModuleName": "ExpenseSettlementQueue",
           "Condition": {
             "IsOrMatch": true,
             "IsNot": false,
-            "Children": [],
+            "Children": [
+              {
+                "SearchTargetVariable": "SettlementStatus.Value",
+                "Comparison": "Equal",
+                "Value": {
+                  "Value": "approved",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+                },
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+              },
+              {
+                "SearchTargetVariable": "SettlementStatus.Value",
+                "Comparison": "Equal",
+                "Value": {
+                  "Value": "accounting",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+                },
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+              },
+              {
+                "SearchTargetVariable": "SettlementStatus.Value",
+                "Comparison": "Equal",
+                "Value": {
+                  "Value": "settled",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+                },
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+              }
+            ],
             "Name": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
           }
@@ -739,6 +707,6 @@
   },
   "AutoZoom": "None",
   "TargetDevice": "Any",
-  "TopPageModule": "ExpenseHome",
+  "TopPageModule": "ExpenseSettlementQueue",
   "OtherPages": []
 }

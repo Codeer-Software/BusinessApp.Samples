@@ -3,228 +3,264 @@
   "DataSourceName": "",
   "DbTable": "",
   "CanCreate": false,
-  "CanUpdate": false,
+  "CanUpdate": true,
   "CanDelete": false,
   "Fields": [
     {
       "Text": "こんにちは",
       "Icon": "",
-      "IsHtml": false,
       "Style": "H2",
       "RelativeField": "",
       "OnClick": "",
       "Name": "GreetingLabel",
       "IgnoreModification": false,
-      "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
-      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "",
       "Name": "DateLabel",
       "IgnoreModification": false,
-      "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "利用する業務を選んでください",
+      "Text": "",
       "Icon": "",
-      "IsHtml": false,
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "MyApprovals_OnClick",
+      "Name": "MyApprovalsLink",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "MyApplying_OnClick",
+      "Name": "MyApplyingLink",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "未読の通知",
+      "Icon": "",
       "Style": "H5",
       "RelativeField": "",
       "OnClick": "",
-      "Name": "GuideLabel",
+      "Name": "UnreadLabel",
       "IgnoreModification": false,
-      "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "経費精算",
-      "ImageResourcePath": "",
-      "ImageResourceSet": {
-        "Default": "",
-        "Focus": "",
-        "Active": "",
-        "Hover": "",
-        "Disabled": ""
+      "LayoutName": "HomeUnread",
+      "CanNavigateToDetail": false,
+      "NavigateModuleUrlSegment": "",
+      "CanCustomizeColumns": false,
+      "ApplyBackgroundToBoxInput": false,
+      "DisplayName": "",
+      "SearchCondition": {
+        "LimitCount": 5,
+        "SelectFields": [],
+        "SortConditions": [
+          {
+            "Variable": "Id.Value",
+            "IsDescending": true
+          }
+        ],
+        "SortFieldVariable": "",
+        "SortDescending": false,
+        "ModuleName": "Notification",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [
+            {
+              "SearchTargetVariable": "IsRead.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": false,
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            }
+          ],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
-      "Icon": "",
-      "Variant": "Primary",
-      "OnClick": "GoExpenseBtn_OnClick",
-      "ShowTextInToolTip": false,
-      "IsHtml": false,
-      "Name": "GoExpenseBtn",
+      "PagerPosition": "Top",
+      "ReplaceMode": "None",
+      "DeleteTogether": false,
+      "CanCreate": false,
+      "CanUpdate": false,
+      "CanDelete": false,
+      "CanUserSort": false,
+      "CanSelect": false,
+      "UseIndexSort": false,
+      "OnDataChanged": "",
+      "OnSearchDataChanged": "",
+      "OnSelectedIndexChanged": "",
+      "OnSelectedIndexChanging": "",
+      "OnDoubleClickRow": "",
+      "Name": "UnreadNotifications",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "IsFocusSkip": false,
-      "NextFocusField": "",
-      "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
     },
     {
-      "Text": "工数管理",
-      "ImageResourcePath": "",
-      "ImageResourceSet": {
-        "Default": "",
-        "Focus": "",
-        "Active": "",
-        "Hover": "",
-        "Disabled": ""
-      },
+      "Text": "通知をすべて見る →",
       "Icon": "",
-      "Variant": "Primary",
-      "OnClick": "GoTimesheetBtn_OnClick",
-      "ShowTextInToolTip": false,
-      "IsHtml": false,
-      "Name": "GoTimesheetBtn",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "AllNotifications_OnClick",
+      "Name": "AllNotificationsLink",
       "IgnoreModification": false,
-      "OnValidateInput": "",
-      "IsFocusSkip": false,
-      "NextFocusField": "",
-      "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "営業業務",
-      "ImageResourcePath": "",
-      "ImageResourceSet": {
-        "Default": "",
-        "Focus": "",
-        "Active": "",
-        "Hover": "",
-        "Disabled": ""
-      },
+      "Text": "経理の作業キュー",
       "Icon": "",
-      "Variant": "Primary",
-      "OnClick": "GoSalesBtn_OnClick",
-      "ShowTextInToolTip": false,
-      "IsHtml": false,
-      "Name": "GoSalesBtn",
+      "Style": "H5",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "QueueSectionLabel",
       "IgnoreModification": false,
-      "OnValidateInput": "",
-      "IsFocusSkip": false,
-      "NextFocusField": "",
-      "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "会計",
-      "ImageResourcePath": "",
-      "ImageResourceSet": {
-        "Default": "",
-        "Focus": "",
-        "Active": "",
-        "Hover": "",
-        "Disabled": ""
-      },
+      "Text": "",
       "Icon": "",
-      "Variant": "Primary",
-      "OnClick": "GoAccountingBtn_OnClick",
-      "ShowTextInToolTip": false,
-      "IsHtml": false,
-      "Name": "GoAccountingBtn",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "SettlementQueue_OnClick",
+      "Name": "SettlementQueueLink",
       "IgnoreModification": false,
-      "OnValidateInput": "",
-      "IsFocusSkip": false,
-      "NextFocusField": "",
-      "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "購買・支払",
-      "ImageResourcePath": "",
-      "ImageResourceSet": {
-        "Default": "",
-        "Focus": "",
-        "Active": "",
-        "Hover": "",
-        "Disabled": ""
-      },
+      "Text": "",
       "Icon": "",
-      "Variant": "Primary",
-      "OnClick": "GoPurchasingBtn_OnClick",
-      "ShowTextInToolTip": false,
-      "IsHtml": false,
-      "Name": "GoPurchasingBtn",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "BankPending_OnClick",
+      "Name": "BankPendingLink",
       "IgnoreModification": false,
-      "OnValidateInput": "",
-      "IsFocusSkip": false,
-      "NextFocusField": "",
-      "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "経営管理",
-      "ImageResourcePath": "",
-      "ImageResourceSet": {
-        "Default": "",
-        "Focus": "",
-        "Active": "",
-        "Hover": "",
-        "Disabled": ""
-      },
+      "Text": "",
       "Icon": "",
-      "Variant": "Primary",
-      "OnClick": "GoManagementBtn_OnClick",
-      "ShowTextInToolTip": false,
-      "IsHtml": false,
-      "Name": "GoManagementBtn",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "JournalDrafts_OnClick",
+      "Name": "JournalDraftsLink",
       "IgnoreModification": false,
-      "OnValidateInput": "",
-      "IsFocusSkip": false,
-      "NextFocusField": "",
-      "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "業務マスタ",
-      "ImageResourcePath": "",
-      "ImageResourceSet": {
-        "Default": "",
-        "Focus": "",
-        "Active": "",
-        "Hover": "",
-        "Disabled": ""
-      },
+      "Text": "",
       "Icon": "",
-      "Variant": "Primary",
-      "OnClick": "GoMasterBusinessBtn_OnClick",
-      "ShowTextInToolTip": false,
-      "IsHtml": false,
-      "Name": "GoMasterBusinessBtn",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "BillingPending_OnClick",
+      "Name": "BillingPendingLink",
       "IgnoreModification": false,
-      "OnValidateInput": "",
-      "IsFocusSkip": false,
-      "NextFocusField": "",
-      "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "システム管理",
-      "ImageResourcePath": "",
-      "ImageResourceSet": {
-        "Default": "",
-        "Focus": "",
-        "Active": "",
-        "Hover": "",
-        "Disabled": ""
-      },
+      "Text": "アラート",
       "Icon": "",
-      "Variant": "Primary",
-      "OnClick": "GoAdminBtn_OnClick",
-      "ShowTextInToolTip": false,
-      "IsHtml": false,
-      "Name": "GoAdminBtn",
+      "Style": "H5",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "AlertSectionLabel",
       "IgnoreModification": false,
-      "OnValidateInput": "",
-      "IsFocusSkip": false,
-      "NextFocusField": "",
-      "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "PayDue_OnClick",
+      "Name": "PayDueLink",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "ReceivableOverdue_OnClick",
+      "Name": "ReceivableOverdueLink",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "CashAlert_OnClick",
+      "Name": "CashAlertLink",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "BudgetAlert_OnClick",
+      "Name": "BudgetAlertLink",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "経営ダッシュボード（当月）",
+      "Icon": "",
+      "Style": "H5",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "KpiSectionLabel",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "KpiLine1",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "KpiLine2",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "ユーザー・組織・承認ルートの管理はこちら →",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "AdminNote_OnClick",
+      "Name": "AdminNoteLink",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -249,35 +285,25 @@
       "ClassName": "",
       "Color": "",
       "BackgroundColor": "",
-      "FontFamily": "",
       "Layout": {
         "Name": "",
         "Padding": {
-          "Left": 16,
-          "Top": 16,
-          "Right": 16,
-          "Bottom": 16
+          "Left": 8,
+          "Top": 4,
+          "Right": 8
         },
         "IsBordered": false,
-        "UseBorderedShrinkWrap": false,
-        "IsExpandable": false,
-        "ExpanderLabel": "",
-        "IsExpanderDefaultOpened": false,
         "IsFlowLayout": false,
-        "IsAutoFillWrap": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",
-        "OnKeyDown": "",
+        "BackgroundColor": "",
         "Rows": [
           {
             "IsWrap": false,
-            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -287,8 +313,8 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "Name": "",
                   "BackgroundColor": "",
+                  "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Padding": {},
@@ -300,20 +326,16 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
-                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
-            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -323,11 +345,13 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "Name": "",
                   "BackgroundColor": "",
+                  "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Padding": {},
+                "Padding": {
+                  "Bottom": 8
+                },
                 "BackgroundColor": "",
                 "BorderStyle": {
                   "LeftColor": "",
@@ -336,34 +360,32 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
-                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
-            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "GuideLabel",
+                  "FieldName": "MyApprovalsLink",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "portal-link",
                   "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
+                  "Color": "#0d6efd",
                   "BackgroundColor": "",
+                  "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Padding": {},
+                "Padding": {
+                  "Top": 4
+                },
                 "BackgroundColor": "",
                 "BorderStyle": {
                   "LeftColor": "",
@@ -372,35 +394,32 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
-                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
-            "IsWrap": true,
-            "IsAutoFillWrap": false,
+            "IsWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "GoExpenseBtn",
+                  "FieldName": "MyApplyingLink",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "portal-link",
                   "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
+                  "Color": "#0d6efd",
                   "BackgroundColor": "",
+                  "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 150,
-                "Padding": {},
+                "Padding": {
+                  "Top": 2
+                },
                 "BackgroundColor": "",
                 "BorderStyle": {
                   "LeftColor": "",
@@ -409,22 +428,32 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
-                "AllowOverflow": false,
                 "Border": "None"
-              },
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
               {
                 "Layout": {
-                  "FieldName": "GoTimesheetBtn",
+                  "FieldName": "UnreadLabel",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "Name": "",
                   "BackgroundColor": "",
+                  "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 150,
-                "Padding": {},
+                "Padding": {
+                  "Top": 16
+                },
                 "BackgroundColor": "",
                 "BorderStyle": {
                   "LeftColor": "",
@@ -433,21 +462,29 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
-                "AllowOverflow": false,
                 "Border": "None"
-              },
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
               {
                 "Layout": {
-                  "FieldName": "GoSalesBtn",
+                  "FieldName": "UnreadNotifications",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "Name": "",
                   "BackgroundColor": "",
+                  "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 150,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -457,22 +494,32 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
-                "AllowOverflow": false,
                 "Border": "None"
-              },
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
               {
                 "Layout": {
-                  "FieldName": "GoAccountingBtn",
+                  "FieldName": "AllNotificationsLink",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "portal-link",
                   "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
+                  "Color": "#0d6efd",
                   "BackgroundColor": "",
+                  "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 150,
-                "Padding": {},
+                "Padding": {
+                  "Top": 2
+                },
                 "BackgroundColor": "",
                 "BorderStyle": {
                   "LeftColor": "",
@@ -481,22 +528,32 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
-                "AllowOverflow": false,
                 "Border": "None"
-              },
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
               {
                 "Layout": {
-                  "FieldName": "GoPurchasingBtn",
+                  "FieldName": "QueueSectionLabel",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "Name": "",
                   "BackgroundColor": "",
+                  "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 150,
-                "Padding": {},
+                "Padding": {
+                  "Top": 20
+                },
                 "BackgroundColor": "",
                 "BorderStyle": {
                   "LeftColor": "",
@@ -505,22 +562,32 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
-                "AllowOverflow": false,
                 "Border": "None"
-              },
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
               {
                 "Layout": {
-                  "FieldName": "GoManagementBtn",
+                  "FieldName": "SettlementQueueLink",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "portal-link",
                   "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
+                  "Color": "#0d6efd",
                   "BackgroundColor": "",
+                  "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 150,
-                "Padding": {},
+                "Padding": {
+                  "Top": 2
+                },
                 "BackgroundColor": "",
                 "BorderStyle": {
                   "LeftColor": "",
@@ -529,22 +596,32 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
-                "AllowOverflow": false,
                 "Border": "None"
-              },
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
               {
                 "Layout": {
-                  "FieldName": "GoMasterBusinessBtn",
+                  "FieldName": "BankPendingLink",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "portal-link",
                   "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
+                  "Color": "#0d6efd",
                   "BackgroundColor": "",
+                  "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 150,
-                "Padding": {},
+                "Padding": {
+                  "Top": 2
+                },
                 "BackgroundColor": "",
                 "BorderStyle": {
                   "LeftColor": "",
@@ -553,22 +630,100 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
-                "AllowOverflow": false,
                 "Border": "None"
-              },
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
               {
                 "Layout": {
-                  "FieldName": "GoAdminBtn",
+                  "FieldName": "JournalDraftsLink",
+                  "ContextMenu": "",
+                  "ClassName": "portal-link",
+                  "FontFamily": "",
+                  "Color": "#0d6efd",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {
+                  "Top": 2
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "BillingPendingLink",
+                  "ContextMenu": "",
+                  "ClassName": "portal-link",
+                  "FontFamily": "",
+                  "Color": "#0d6efd",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {
+                  "Top": 2
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "AlertSectionLabel",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "Name": "",
                   "BackgroundColor": "",
+                  "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "Width": 150,
-                "Padding": {},
+                "Padding": {
+                  "Top": 20
+                },
                 "BackgroundColor": "",
                 "BorderStyle": {
                   "LeftColor": "",
@@ -577,11 +732,32 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
-                "AllowOverflow": false,
                 "Border": "None"
-              },
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
               {
-                "Padding": {},
+                "Layout": {
+                  "FieldName": "PayDueLink",
+                  "ContextMenu": "",
+                  "ClassName": "portal-link",
+                  "FontFamily": "",
+                  "Color": "#dc3545",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {
+                  "Top": 2
+                },
                 "BackgroundColor": "",
                 "BorderStyle": {
                   "LeftColor": "",
@@ -590,27 +766,254 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
-                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "ReceivableOverdueLink",
+                  "ContextMenu": "",
+                  "ClassName": "portal-link",
+                  "FontFamily": "",
+                  "Color": "#dc3545",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {
+                  "Top": 2
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "CashAlertLink",
+                  "ContextMenu": "",
+                  "ClassName": "portal-link",
+                  "FontFamily": "",
+                  "Color": "#dc3545",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {
+                  "Top": 2
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "BudgetAlertLink",
+                  "ContextMenu": "",
+                  "ClassName": "portal-link",
+                  "FontFamily": "",
+                  "Color": "#dc3545",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {
+                  "Top": 2
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "KpiSectionLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {
+                  "Top": 20
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "KpiLine1",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {
+                  "Top": 2
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "KpiLine2",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {
+                  "Top": 2
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "AdminNoteLink",
+                  "ContextMenu": "",
+                  "ClassName": "portal-link",
+                  "FontFamily": "",
+                  "Color": "#0d6efd",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {
+                  "Top": 12
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
                 "Border": "None"
               }
             ]
           }
         ],
-        "BackgroundColor": "",
         "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.GridLayoutDesign"
       }
     }
   },
-  "ListLayouts": {
-    "": {
-      "HeaderTitle": "",
-      "DataOnlyFields": [],
-      "OnBeforeInitialization": "",
-      "OnAfterInitialization": "",
-      "OnFieldDataChanged": "",
-      "Elements": []
-    }
-  },
+  "ListLayouts": {},
   "SearchLayouts": {
     "": {
       "OnSearchInitialization": "",
@@ -620,58 +1023,18 @@
         "Name": "",
         "Padding": {},
         "IsBordered": false,
-        "UseBorderedShrinkWrap": false,
-        "IsExpandable": false,
-        "ExpanderLabel": "",
-        "IsExpanderDefaultOpened": false,
         "IsFlowLayout": false,
-        "IsAutoFillWrap": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",
-        "OnKeyDown": "",
-        "Rows": [],
         "BackgroundColor": "",
+        "Rows": [],
         "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SearchGridLayoutDesign"
       }
     }
   },
   "LinkFieldNames": [],
   "UseListPageSubmitButton": false,
-  "ListPageFieldDesign": {
-    "LayoutName": "",
-    "CanNavigateToDetail": false,
-    "NavigateModuleUrlSegment": "",
-    "CanCustomizeColumns": false,
-    "ApplyBackgroundToBoxInput": false,
-    "DisplayName": "",
-    "SearchCondition": {
-      "LimitCount": 50,
-      "SelectFields": [],
-      "SortConditions": [],
-      "SortFieldVariable": "",
-      "SortDescending": false,
-      "ModuleName": ""
-    },
-    "PagerPosition": "Bottom",
-    "ReplaceMode": "None",
-    "DeleteTogether": false,
-    "CanCreate": false,
-    "CanUpdate": false,
-    "CanDelete": false,
-    "CanUserSort": true,
-    "CanSelect": false,
-    "UseIndexSort": false,
-    "OnDataChanged": "",
-    "OnSearchDataChanged": "",
-    "OnSelectedIndexChanged": "",
-    "OnSelectedIndexChanging": "",
-    "OnDoubleClickRow": "",
-    "Name": "",
-    "IgnoreModification": false,
-    "OnValidateInput": "",
-    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
-  },
   "CanBulkDataUpdate": false,
   "CanBulkDataDownload": false,
-  "PageTitle": "ホーム"
+  "PageTitle": "業務ポータル"
 }

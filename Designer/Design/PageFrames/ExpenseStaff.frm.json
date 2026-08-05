@@ -75,79 +75,15 @@
         }
       },
       {
-        "Title": "トップ",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false,
-        "ModulePageType": "Detail",
-        "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
-        "PageFrame": "",
-        "Module": "ExpenseHome",
-        "Id": "",
-        "Parameters": "",
-        "ListPageDesign": {
-          "SearchLayoutName": "",
-          "UserUrlParameter": true,
-          "PageTitle": "申請",
-          "HeaderTitle": "経費を申請できます。金額と費目から承認ルートが自動で決まり、承認後に経理が仕訳・精算します。レシート画像の AI 読み取りも使えます。精算は 下書き→申請中→承認済→経理処理中→精算済→完了 の順に進みます。削除できるのは自分が起案した下書きのみ（詳細画面から）。",
-          "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": true,
-          "UseSubmitButton": false,
-          "UseNavigateToCreate": true,
-          "ListFieldDesign": {
-            "LayoutName": "",
-            "CanNavigateToDetail": true,
-            "NavigateModuleUrlSegment": "",
-            "CanCustomizeColumns": false,
-            "FixedColumnCount": 0,
-            "ApplyBackgroundToBoxInput": false,
-            "DisplayName": "",
-            "SearchCondition": {
-              "LimitCount": 50,
-              "SelectFields": [],
-              "SortConditions": [],
-              "SortFieldVariable": "",
-              "SortDescending": false,
-              "ModuleName": ""
-            },
-            "PagerPosition": "Bottom",
-            "ReplaceMode": "None",
-            "DeleteTogether": false,
-            "CanCreate": false,
-            "CanUpdate": false,
-            "CanDelete": false,
-            "CanUserSort": true,
-            "CanSelect": false,
-            "UseIndexSort": false,
-            "OnDataChanged": "",
-            "OnSearchDataChanged": "",
-            "OnSelectedIndexChanged": "",
-            "OnSelectedIndexChanging": "",
-            "OnDoubleClickRow": "",
-            "Name": "",
-            "IgnoreModification": false,
-            "OnValidateInput": "",
-            "IsFocusSkip": false,
-            "NextFocusField": "",
-            "OnFocusMoving": "",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
-          }
-        },
-        "DetailPageDesign": {
-          "PageTitle": "",
-          "LayoutName": "",
-          "UrlParameter": ""
-        }
-      },
-      {
         "Title": "申請",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
+        "ActiveModuleSegments": [
+          "Start"
+        ],
         "PageFrame": "",
         "Module": "ExpenseRequest",
         "Id": "",
@@ -538,11 +474,11 @@
     }
   ],
   "TopPageModuleDesign": {
-    "ModulePageType": "Detail",
-    "ModuleUrlSegment": "Top",
+    "ModulePageType": "Auto",
+    "ModuleUrlSegment": "Start",
     "ActiveModuleSegments": [],
     "PageFrame": "",
-    "Module": "ExpenseHome",
+    "Module": "ExpenseRequest",
     "Id": "",
     "Parameters": "",
     "ListPageDesign": {
@@ -568,7 +504,7 @@
           "SortConditions": [],
           "SortFieldVariable": "",
           "SortDescending": false,
-          "ModuleName": ""
+          "ModuleName": "ExpenseRequest"
         },
         "PagerPosition": "Bottom",
         "ReplaceMode": "None",
@@ -601,6 +537,6 @@
   },
   "AutoZoom": "None",
   "TargetDevice": "Any",
-  "TopPageModule": "ExpenseHome",
+  "TopPageModule": "ExpenseRequest",
   "OtherPages": []
 }

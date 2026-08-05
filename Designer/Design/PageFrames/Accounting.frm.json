@@ -75,75 +75,15 @@
         }
       },
       {
-        "Title": "トップ",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false,
-        "ModulePageType": "Detail",
-        "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
-        "PageFrame": "",
-        "Module": "AccountingHome",
-        "Id": "",
-        "Parameters": "",
-        "ListPageDesign": {
-          "SearchLayoutName": "",
-          "UserUrlParameter": true,
-          "PageTitle": "振替伝票",
-          "HeaderTitle": "複式簿記の仕訳を起票・管理できます。明細行の税区分から消費税行が自動生成され、確定すると年度内の連番が振られます。",
-          "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
-          "UseSubmitButton": false,
-          "UseNavigateToCreate": true,
-          "ListFieldDesign": {
-            "LayoutName": "",
-            "CanNavigateToDetail": true,
-            "NavigateModuleUrlSegment": "",
-            "CanCustomizeColumns": false,
-            "ApplyBackgroundToBoxInput": false,
-            "DisplayName": "",
-            "SearchCondition": {
-              "LimitCount": 50,
-              "SelectFields": [],
-              "SortConditions": [],
-              "SortFieldVariable": "",
-              "SortDescending": false,
-              "ModuleName": ""
-            },
-            "PagerPosition": "Top",
-            "ReplaceMode": "None",
-            "DeleteTogether": false,
-            "CanCreate": false,
-            "CanUpdate": false,
-            "CanDelete": false,
-            "CanUserSort": true,
-            "CanSelect": false,
-            "UseIndexSort": false,
-            "OnDataChanged": "",
-            "OnSearchDataChanged": "",
-            "OnSelectedIndexChanged": "",
-            "OnSelectedIndexChanging": "",
-            "OnDoubleClickRow": "",
-            "Name": "",
-            "IgnoreModification": false,
-            "OnValidateInput": "",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
-          }
-        },
-        "DetailPageDesign": {
-          "PageTitle": "",
-          "LayoutName": "",
-          "UrlParameter": ""
-        }
-      },
-      {
         "Title": "仕訳/振替伝票",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
         "ModulePageType": "Detail",
         "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
+        "ActiveModuleSegments": [
+          "Start"
+        ],
         "PageFrame": "",
         "Module": "JournalEntryBoard",
         "Id": "",
@@ -1586,10 +1526,10 @@
   ],
   "TopPageModuleDesign": {
     "ModulePageType": "Detail",
-    "ModuleUrlSegment": "Top",
+    "ModuleUrlSegment": "Start",
     "ActiveModuleSegments": [],
     "PageFrame": "",
-    "Module": "AccountingHome",
+    "Module": "JournalEntryBoard",
     "Id": "",
     "Parameters": "",
     "ListPageDesign": {
@@ -1613,7 +1553,7 @@
           "SelectFields": [],
           "SortConditions": [],
           "SortFieldVariable": "",
-          "SortDescending": false,
+          "SortDescending": true,
           "ModuleName": ""
         },
         "PagerPosition": "Top",
@@ -1644,6 +1584,6 @@
   },
   "AutoZoom": "None",
   "TargetDevice": "Any",
-  "TopPageModule": "AccountingHome",
+  "TopPageModule": "JournalEntryBoard",
   "OtherPages": []
 }
