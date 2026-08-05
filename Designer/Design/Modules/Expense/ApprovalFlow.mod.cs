@@ -75,34 +75,56 @@ bool LoadFromTemplate()
     }
 
     var first = true;
+    List<object> prevRoleApprovers = null;  // 直前の役職段の承認者集合（重複段の圧縮用・ADR-0044）
     foreach (var tmplOrder in tmplOrders)
     {
+        var memberSearcher = new ModuleSearcher<ApprovalFlowTemplateMember>();
+        memberSearcher.AddEquals(m => m.TemplateOrderId.Value, tmplOrder.Id.Value);
+        var tmplMembers = memberSearcher.Execute();
+
+        // 役職段（事前パスで「役職は単独段」を保証済み）は先に解決し、繰上げの結果
+        // 直前の役職段と同一メンバー集合になる段は生成しない（同一人物の連続2回承認を防ぐ・ADR-0044）
+        var isRoleOrder = false;
+        List<object> roleApprovers = null;
+        object roleIsRequired = null;
+        if (tmplMembers.Count == 1)
+        {
+            var m0 = tmplMembers[0];
+            var role0 = m0.ApproverRole.Value;
+            if (role0 == "manager" || role0 == "director")
+            {
+                isRoleOrder = true;
+                roleApprovers = ResolveRoleApprovers(dept, role0, applicantId);
+                roleIsRequired = m0.IsRequired.Value;
+            }
+        }
+        if (isRoleOrder && prevRoleApprovers != null && SameIdSet(prevRoleApprovers, roleApprovers))
+        {
+            continue;
+        }
+
         var newOrder = Orders.AddRow();
         newOrder.Status.Value = first ? "Active" : "Waiting";
         first = false;
 
-        var memberSearcher = new ModuleSearcher<ApprovalFlowTemplateMember>();
-        memberSearcher.AddEquals(m => m.TemplateOrderId.Value, tmplOrder.Id.Value);
-        var tmplMembers = memberSearcher.Execute();
-        foreach (var tmplMember in tmplMembers)
+        if (isRoleOrder)
         {
-            var role = tmplMember.ApproverRole.Value;
-            if (role == "manager" || role == "director")
+            // 役職の全員を同一 Order に並列展開。2名以上なら1人の承認で段完了の OR 型（ADR-0016）
+            newOrder.ApprovalType.Value = roleApprovers.Count > 1 ? "any" : "all";
+            foreach (var approver in roleApprovers)
             {
-                // 役職の全員を同一 Order に並列展開。2名以上なら1人の承認で段完了の OR 型（ADR-0016）
-                var approvers = ResolveRoleApprovers(dept, role, applicantId);
-                newOrder.ApprovalType.Value = approvers.Count > 1 ? "any" : "all";
-                foreach (var approver in approvers)
-                {
-                    var newMember = newOrder.Members.AddRow();
-                    newMember.IsRequired.Value = tmplMember.IsRequired.Value;
-                    newMember.ApproverUser.Value = approver;
-                    newMember.Status.Value = "Waiting";
-                    newMember.ParentModuleName.Value = ParentModuleName.Value;
-                    newMember.ParentId.Value = ParentId.Value;
-                }
+                var newMember = newOrder.Members.AddRow();
+                newMember.IsRequired.Value = roleIsRequired;
+                newMember.ApproverUser.Value = approver;
+                newMember.Status.Value = "Waiting";
+                newMember.ParentModuleName.Value = ParentModuleName.Value;
+                newMember.ParentId.Value = ParentId.Value;
             }
-            else
+            prevRoleApprovers = roleApprovers;
+        }
+        else
+        {
+            foreach (var tmplMember in tmplMembers)
             {
                 var newMember = newOrder.Members.AddRow();
                 newMember.IsRequired.Value = tmplMember.IsRequired.Value;
@@ -111,9 +133,22 @@ bool LoadFromTemplate()
                 newMember.ParentModuleName.Value = ParentModuleName.Value;
                 newMember.ParentId.Value = ParentId.Value;
             }
+            prevRoleApprovers = null;
         }
     }
     RecalculateCurrentApproverDisplay();
+    return true;
+}
+
+// 承認者集合の同一判定（順序不問・ADR-0044 の重複段圧縮用）
+bool SameIdSet(List<object> a, List<object> b)
+{
+    if (a == null || b == null) return false;
+    if (a.Count != b.Count) return false;
+    foreach (var x in a)
+    {
+        if (!ContainsId(b, x)) return false;
+    }
     return true;
 }
 
@@ -149,34 +184,59 @@ object ResolveApplicantUserId()
     return CurrentUser.Id.Value;
 }
 
-// 役職承認者の解決＋自己承認禁止の一般化 (decisions/0010, 0016)
-// 部門の該当役職の全員から申請者本人を除外した候補リストを返す。
-// - 役職が1人も設定されていない部門 → 空リスト（マスタ設定不備として呼び出し側で申請ブロック）
-// - 候補全員が申請者本人 → manager は部長へ格上げ、それも無ければ経理代替（1名）
+// 役職承認者の walk-up 解決＋自己承認禁止の一般化 (decisions/0010, 0016, 0044)
+// 申請者の所属ノード（課 or 部）から親方向に辿り、最寄りの該当役職（申請者本人を除く）を返す。
+// - manager（課長決裁）: 自課の課長 → 親の部の課長 → どこにも居なければ director 解決へ自動繰上げ
+//   （課長空席・課長本人の申請＝自己承認回避が、特例ではなく walk-up の帰結として解決される）
+// - director（部長決裁）: 最寄りの部長 → 居なければ経理代替（1名）
+// - それでも決まらなければ空リスト（マスタ設定不備として呼び出し側で申請ブロック）
 List<object> ResolveRoleApprovers(Department dept, string role, object applicantId)
 {
-    var candidates = ResolveDeptRoleAll(dept, role);
-    if (candidates.Count == 0) return new List<object>();
-    var filtered = new List<object>();
-    foreach (var c in candidates)
-    {
-        if (!IsSameId(c, applicantId)) filtered.Add(c);
-    }
-    if (filtered.Count > 0) return filtered;
+    var found = WalkUpRole(dept, role, applicantId);
+    if (found.Count > 0) return found;
     if (role == "manager")
     {
-        var directors = ResolveDeptRoleAll(dept, "director");
-        var directorsFiltered = new List<object>();
-        foreach (var c in directors)
-        {
-            if (!IsSameId(c, applicantId)) directorsFiltered.Add(c);
-        }
-        if (directorsFiltered.Count > 0) return directorsFiltered;
+        found = WalkUpRole(dept, "director", applicantId);
+        if (found.Count > 0) return found;
     }
     var result = new List<object>();
     var fallback = FindFallbackApprover(applicantId);
     if (fallback != null) result.Add(fallback);
     return result;
+}
+
+// 所属ノードから親方向に walk-up し、最初に該当役職（本人除外後）が見つかったノードの全員を返す（ADR-0044）
+// 同一ノードに複数名いれば全員（同格の OR 承認・ADR-0016）。guard は循環参照の保険（階層は2段が正）
+List<object> WalkUpRole(Department dept, string role, object applicantId)
+{
+    var node = dept;
+    var guard = 0;
+    while (node != null && guard < 5)
+    {
+        var candidates = ResolveDeptRoleAll(node, role);
+        var filtered = new List<object>();
+        foreach (var c in candidates)
+        {
+            if (!IsSameId(c, applicantId)) filtered.Add(c);
+        }
+        if (filtered.Count > 0) return filtered;
+        node = FindParentDept(node);
+        guard = guard + 1;
+    }
+    return new List<object>();
+}
+
+// 親ノード（課→部）を取得。部（parent_id なし）なら null
+Department FindParentDept(Department dept)
+{
+    if (dept == null) return null;
+    var pid = dept.ParentRef.Value;
+    if (pid == null) return null;
+    var ds = new ModuleSearcher<Department>();
+    ds.AddEquals(d => d.Id.Value, pid);
+    var rows = ds.Execute();
+    if (rows.Count == 0) return null;
+    return (Department)rows[0];
 }
 
 // 固定指定承認者の自己承認回避 (decisions/0010)。申請者本人・無効ユーザー(退職者)なら経理代替、解決不能なら null

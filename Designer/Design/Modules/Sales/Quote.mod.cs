@@ -12,8 +12,8 @@ void Detail_OnAfterInit()
     if (this.IsNewData)
     {
         Status.Value = "draft";
-        // 部門の初期値: 作成者の所属部門（スナップショット思想。ddl/330・経費申請と同じ）
-        if (DepartmentRef.Value == null) { DepartmentRef.Value = CurrentUser.所属部門.Value; }
+        // 部門の初期値: 作成者の所属部（主所属が課でも伝票部門は部・ADR-0044。スナップショット思想）
+        if (DepartmentRef.Value == null) { DepartmentRef.Value = CurrentUser.所属部.Value; }
         IssueDate.Value = DateOnly.FromDateTime(DateTime.Today);
         QuoteNo.Value = NextQuoteNo();
     }

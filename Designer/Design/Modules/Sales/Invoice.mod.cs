@@ -16,8 +16,8 @@ void Detail_OnAfterInit()
         IssueDate.Value = DateOnly.FromDateTime(DateTime.Today);
         DueDate.Value = EndOfNextMonth();
         InvoiceNo.Value = NextInvoiceNo();
-        // 部門の初期値: 作成者の所属部門（検収・定期・SES からの自動生成は各スクリプトが設定）
-        if (DepartmentRef.Value == null) { DepartmentRef.Value = CurrentUser.所属部門.Value; }
+        // 部門の初期値: 作成者の所属部（主所属が課でも伝票部門は部・ADR-0044。自動生成は各スクリプトが設定）
+        if (DepartmentRef.Value == null) { DepartmentRef.Value = CurrentUser.所属部.Value; }
     }
     RecalcTotal();
     UpdateButtons();

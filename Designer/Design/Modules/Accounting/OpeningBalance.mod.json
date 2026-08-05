@@ -139,6 +139,15 @@
                 "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
               },
               "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            },
+            {
+              "SearchTargetVariable": "NodeType.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": "dept",
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
             }
           ],
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"

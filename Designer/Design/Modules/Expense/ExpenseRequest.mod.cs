@@ -154,11 +154,11 @@ void OnApprovalFlowStatusChanged(string flowStatus)
     if (flowStatus == "Pending")
     {
         SettlementStatus.Value = "applying";
-        // 部門スナップショット: 申請時の申請者所属部門を記録（U2-8: 部門検索用。
-        // 人事異動後も申請時点の部門で検索できる。再申請時は初回の値を保持）
+        // 部門スナップショット: 申請時の申請者の所属部を記録（U2-8: 部門検索用。
+        // 主所属が課でも伝票部門は部・ADR-0044。人事異動後も申請時点の部門で検索できる。再申請時は初回の値を保持）
         if (DepartmentRef.Value == null)
         {
-            DepartmentRef.Value = CurrentUser.所属部門.Value;
+            DepartmentRef.Value = CurrentUser.所属部.Value;
         }
     }
     else if (flowStatus == "Approved")
@@ -362,7 +362,7 @@ void GenerateJournal_OnClick()
         var us = new ModuleSearcher<AppUser>();
         us.AddEquals(u => u.Id.Value, creatorId);
         var creatorUser = us.ExecuteFirstOrDefault();
-        if (creatorUser != null) { creatorDeptId = ((AppUser)creatorUser).所属部門.Value; }
+        if (creatorUser != null) { creatorDeptId = ((AppUser)creatorUser).所属部.Value; }
     }
 
     // 案件（任意）: 申請に案件が選ばれていれば仕訳の全行に引き継ぐ（案件別損益への直課）

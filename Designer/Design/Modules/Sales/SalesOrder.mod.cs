@@ -13,8 +13,8 @@ void Detail_OnAfterInit()
         Status.Value = "open";
         OrderDate.Value = DateOnly.FromDateTime(DateTime.Today);
         OrderNo.Value = NextOrderNo();
-        // 部門の初期値: 作成者の所属部門（見積からの変換時は変換側が上書きする）
-        if (DepartmentRef.Value == null) { DepartmentRef.Value = CurrentUser.所属部門.Value; }
+        // 部門の初期値: 作成者の所属部（主所属が課でも伝票部門は部・ADR-0044。見積からの変換時は変換側が上書き）
+        if (DepartmentRef.Value == null) { DepartmentRef.Value = CurrentUser.所属部.Value; }
     }
     RecalcTotal();
     UpdateButtons();
