@@ -9,51 +9,76 @@
     {
       "Text": "こんにちは",
       "Icon": "",
+      "IsHtml": false,
       "Style": "H2",
       "RelativeField": "",
       "OnClick": "",
       "Name": "GreetingLabel",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "",
       "Name": "DateLabel",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "MyApprovals_OnClick",
       "Name": "MyApprovalsLink",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "MyApplying_OnClick",
       "Name": "MyApplyingLink",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "未読の通知",
       "Icon": "",
+      "IsHtml": false,
       "Style": "H5",
       "RelativeField": "",
       "OnClick": "",
       "Name": "UnreadLabel",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
@@ -61,6 +86,7 @@
       "CanNavigateToDetail": false,
       "NavigateModuleUrlSegment": "",
       "CanCustomizeColumns": false,
+      "FixedColumnCount": 0,
       "ApplyBackgroundToBoxInput": false,
       "DisplayName": "",
       "SearchCondition": {
@@ -110,156 +136,234 @@
       "Name": "UnreadNotifications",
       "IgnoreModification": false,
       "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
     },
     {
       "Text": "通知をすべて見る →",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "AllNotifications_OnClick",
       "Name": "AllNotificationsLink",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "経理の作業キュー",
       "Icon": "",
+      "IsHtml": false,
       "Style": "H5",
       "RelativeField": "",
       "OnClick": "",
       "Name": "QueueSectionLabel",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "SettlementQueue_OnClick",
       "Name": "SettlementQueueLink",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "BankPending_OnClick",
       "Name": "BankPendingLink",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "JournalDrafts_OnClick",
       "Name": "JournalDraftsLink",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "BillingPending_OnClick",
       "Name": "BillingPendingLink",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "アラート",
       "Icon": "",
+      "IsHtml": false,
       "Style": "H5",
       "RelativeField": "",
       "OnClick": "",
       "Name": "AlertSectionLabel",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "PayDue_OnClick",
       "Name": "PayDueLink",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "ReceivableOverdue_OnClick",
       "Name": "ReceivableOverdueLink",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "CashAlert_OnClick",
       "Name": "CashAlertLink",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "BudgetAlert_OnClick",
       "Name": "BudgetAlertLink",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "経営ダッシュボード（当月）",
       "Icon": "",
+      "IsHtml": false,
       "Style": "H5",
       "RelativeField": "",
       "OnClick": "",
       "Name": "KpiSectionLabel",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "",
       "Name": "KpiLine1",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "",
       "Name": "KpiLine2",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "ユーザー・組織・承認ルートの管理はこちら →",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "AdminNote_OnClick",
       "Name": "AdminNoteLink",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
@@ -281,10 +385,14 @@
       "OnAfterInitialization": "Detail_OnAfterInit",
       "OnLocationChanging": "",
       "OnFieldDataChanged": "",
+      "FocusControlMode": "Inherit",
+      "IsFocusWrap": false,
+      "InitialFocusField": "",
       "DataOnlyFields": [],
       "ClassName": "",
       "Color": "",
       "BackgroundColor": "",
+      "FontFamily": "",
       "Layout": {
         "Name": "",
         "Padding": {
@@ -293,17 +401,25 @@
           "Right": 8
         },
         "IsBordered": false,
+        "UseBorderedShrinkWrap": false,
+        "IsExpandable": false,
+        "ExpanderLabel": "",
+        "IsExpanderDefaultOpened": false,
         "IsFlowLayout": false,
+        "IsAutoFillWrap": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",
-        "BackgroundColor": "",
+        "OnKeyDown": "",
         "Rows": [
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -313,10 +429,11 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -326,16 +443,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -345,10 +466,11 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Bottom": 8
                 },
@@ -360,16 +482,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -379,10 +505,11 @@
                   "ClassName": "portal-link",
                   "FontFamily": "",
                   "Color": "#0d6efd",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 4
                 },
@@ -394,16 +521,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -413,10 +544,11 @@
                   "ClassName": "portal-link",
                   "FontFamily": "",
                   "Color": "#0d6efd",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 2
                 },
@@ -428,16 +560,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -447,10 +583,11 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 16
                 },
@@ -462,16 +599,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -481,10 +622,11 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -494,16 +636,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -513,10 +659,11 @@
                   "ClassName": "portal-link",
                   "FontFamily": "",
                   "Color": "#0d6efd",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 2
                 },
@@ -528,16 +675,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -547,10 +698,11 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 20
                 },
@@ -562,16 +714,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -581,10 +737,11 @@
                   "ClassName": "portal-link",
                   "FontFamily": "",
                   "Color": "#0d6efd",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 2
                 },
@@ -596,16 +753,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -615,10 +776,11 @@
                   "ClassName": "portal-link",
                   "FontFamily": "",
                   "Color": "#0d6efd",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 2
                 },
@@ -630,16 +792,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -649,10 +815,11 @@
                   "ClassName": "portal-link",
                   "FontFamily": "",
                   "Color": "#0d6efd",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 2
                 },
@@ -664,16 +831,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -683,10 +854,11 @@
                   "ClassName": "portal-link",
                   "FontFamily": "",
                   "Color": "#0d6efd",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 2
                 },
@@ -698,16 +870,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -717,10 +893,11 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 20
                 },
@@ -732,16 +909,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -751,10 +932,11 @@
                   "ClassName": "portal-link",
                   "FontFamily": "",
                   "Color": "#dc3545",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 2
                 },
@@ -766,16 +948,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -785,10 +971,11 @@
                   "ClassName": "portal-link",
                   "FontFamily": "",
                   "Color": "#dc3545",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 2
                 },
@@ -800,16 +987,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -819,10 +1010,11 @@
                   "ClassName": "portal-link",
                   "FontFamily": "",
                   "Color": "#dc3545",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 2
                 },
@@ -834,16 +1026,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -853,10 +1049,11 @@
                   "ClassName": "portal-link",
                   "FontFamily": "",
                   "Color": "#dc3545",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 2
                 },
@@ -868,16 +1065,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -887,10 +1088,11 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 20
                 },
@@ -902,16 +1104,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -921,10 +1127,11 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 2
                 },
@@ -936,16 +1143,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -955,10 +1166,11 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 2
                 },
@@ -970,16 +1182,20 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           },
           {
             "IsWrap": false,
+            "IsAutoFillWrap": false,
             "Margin": {},
             "GridRowType": "Normal",
             "CanResize": false,
             "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -989,10 +1205,11 @@
                   "ClassName": "portal-link",
                   "FontFamily": "",
                   "Color": "#0d6efd",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Top": 12
                 },
@@ -1004,11 +1221,13 @@
                   "BottomColor": ""
                 },
                 "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None"
               }
             ]
           }
         ],
+        "BackgroundColor": "",
         "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.GridLayoutDesign"
       }
     }
@@ -1018,22 +1237,68 @@
     "": {
       "OnSearchInitialization": "",
       "ShowDefaultSearchButtons": true,
+      "FocusControlMode": "Inherit",
+      "IsFocusWrap": false,
       "Layout": {
         "Operator": "And",
         "Name": "",
         "Padding": {},
         "IsBordered": false,
+        "UseBorderedShrinkWrap": false,
+        "IsExpandable": false,
+        "ExpanderLabel": "",
+        "IsExpanderDefaultOpened": false,
         "IsFlowLayout": false,
+        "IsAutoFillWrap": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",
-        "BackgroundColor": "",
+        "OnKeyDown": "",
         "Rows": [],
+        "BackgroundColor": "",
         "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SearchGridLayoutDesign"
       }
     }
   },
   "LinkFieldNames": [],
   "UseListPageSubmitButton": false,
+  "ListPageFieldDesign": {
+    "LayoutName": "",
+    "CanNavigateToDetail": true,
+    "NavigateModuleUrlSegment": "",
+    "CanCustomizeColumns": false,
+    "FixedColumnCount": 0,
+    "ApplyBackgroundToBoxInput": false,
+    "DisplayName": "",
+    "SearchCondition": {
+      "LimitCount": 50,
+      "SelectFields": [],
+      "SortConditions": [],
+      "SortFieldVariable": "",
+      "SortDescending": false,
+      "ModuleName": ""
+    },
+    "PagerPosition": "Top",
+    "ReplaceMode": "None",
+    "DeleteTogether": false,
+    "CanCreate": false,
+    "CanUpdate": false,
+    "CanDelete": true,
+    "CanUserSort": true,
+    "CanSelect": false,
+    "UseIndexSort": false,
+    "OnDataChanged": "",
+    "OnSearchDataChanged": "",
+    "OnSelectedIndexChanged": "",
+    "OnSelectedIndexChanging": "",
+    "OnDoubleClickRow": "",
+    "Name": "",
+    "IgnoreModification": false,
+    "OnValidateInput": "",
+    "IsFocusSkip": false,
+    "NextFocusField": "",
+    "OnFocusMoving": "",
+    "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+  },
   "CanBulkDataUpdate": false,
   "CanBulkDataDownload": false,
   "PageTitle": "業務ポータル"

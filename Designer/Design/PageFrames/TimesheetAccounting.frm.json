@@ -38,6 +38,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
             "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
@@ -46,7 +47,14 @@
               "SortConditions": [],
               "SortFieldVariable": "",
               "SortDescending": false,
-              "ModuleName": ""
+              "ModuleName": "",
+              "Condition": {
+                "IsOrMatch": false,
+                "IsNot": false,
+                "Children": [],
+                "Name": "",
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+              }
             },
             "PagerPosition": "Top",
             "ReplaceMode": "None",
@@ -65,6 +73,9 @@
             "Name": "",
             "IgnoreModification": false,
             "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -100,15 +111,28 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
             "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
               "LimitCount": 50,
               "SelectFields": [],
-              "SortConditions": [],
-              "SortFieldVariable": "WorkDate.Value",
-              "SortDescending": true,
-              "ModuleName": ""
+              "SortConditions": [
+                {
+                  "Variable": "WorkDate.Value",
+                  "IsDescending": true
+                }
+              ],
+              "SortFieldVariable": "",
+              "SortDescending": false,
+              "ModuleName": "",
+              "Condition": {
+                "IsOrMatch": false,
+                "IsNot": false,
+                "Children": [],
+                "Name": "",
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+              }
             },
             "PagerPosition": "Top",
             "ReplaceMode": "None",
@@ -127,6 +151,9 @@
             "Name": "",
             "IgnoreModification": false,
             "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -164,6 +191,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
             "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
@@ -191,6 +219,9 @@
             "Name": "",
             "IgnoreModification": false,
             "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -206,6 +237,7 @@
     "BackgroundColorStart": "#052767",
     "BackgroundColorEnd": "#3a0647",
     "MobileBehavior": "CollapseToHamburger",
+    "Width": 300,
     "UserName": "",
     "ModuleName": "",
     "Foreground": "#ffffff",
@@ -296,6 +328,7 @@
         "CanNavigateToDetail": true,
         "NavigateModuleUrlSegment": "",
         "CanCustomizeColumns": false,
+        "FixedColumnCount": 0,
         "ApplyBackgroundToBoxInput": false,
         "DisplayName": "",
         "SearchCondition": {
@@ -323,6 +356,9 @@
         "Name": "",
         "IgnoreModification": false,
         "OnValidateInput": "",
+        "IsFocusSkip": false,
+        "NextFocusField": "",
+        "OnFocusMoving": "",
         "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
       }
     },

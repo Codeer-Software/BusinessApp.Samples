@@ -38,6 +38,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
             "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
@@ -65,6 +66,9 @@
             "Name": "",
             "IgnoreModification": false,
             "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -100,6 +104,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
             "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
@@ -127,6 +132,9 @@
             "Name": "",
             "IgnoreModification": false,
             "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -164,6 +172,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
             "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
@@ -226,6 +235,9 @@
             "Name": "",
             "IgnoreModification": false,
             "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -261,6 +273,7 @@
             "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
             "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
@@ -288,6 +301,9 @@
             "Name": "",
             "IgnoreModification": false,
             "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -323,6 +339,7 @@
             "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
             "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
@@ -350,6 +367,9 @@
             "Name": "",
             "IgnoreModification": false,
             "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
           }
         },
@@ -365,6 +385,7 @@
     "BackgroundColorStart": "#052767",
     "BackgroundColorEnd": "#3a0647",
     "MobileBehavior": "CollapseToHamburger",
+    "Width": 300,
     "UserName": "",
     "ModuleName": "",
     "Foreground": "#ffffff",
@@ -455,6 +476,7 @@
           "CanNavigateToDetail": true,
           "NavigateModuleUrlSegment": "",
           "CanCustomizeColumns": false,
+          "FixedColumnCount": 0,
           "ApplyBackgroundToBoxInput": false,
           "DisplayName": "",
           "SearchCondition": {
@@ -482,6 +504,9 @@
           "Name": "",
           "IgnoreModification": false,
           "OnValidateInput": "",
+          "IsFocusSkip": false,
+          "NextFocusField": "",
+          "OnFocusMoving": "",
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
         }
       },
@@ -513,6 +538,7 @@
           "CanNavigateToDetail": true,
           "NavigateModuleUrlSegment": "",
           "CanCustomizeColumns": false,
+          "FixedColumnCount": 0,
           "ApplyBackgroundToBoxInput": false,
           "DisplayName": "",
           "SearchCondition": {
@@ -540,6 +566,9 @@
           "Name": "",
           "IgnoreModification": false,
           "OnValidateInput": "",
+          "IsFocusSkip": false,
+          "NextFocusField": "",
+          "OnFocusMoving": "",
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
         }
       },
@@ -572,6 +601,7 @@
         "CanNavigateToDetail": false,
         "NavigateModuleUrlSegment": "",
         "CanCustomizeColumns": false,
+        "FixedColumnCount": 0,
         "ApplyBackgroundToBoxInput": false,
         "DisplayName": "",
         "SearchCondition": {
@@ -634,6 +664,9 @@
         "Name": "",
         "IgnoreModification": false,
         "OnValidateInput": "",
+        "IsFocusSkip": false,
+        "NextFocusField": "",
+        "OnFocusMoving": "",
         "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
       }
     },

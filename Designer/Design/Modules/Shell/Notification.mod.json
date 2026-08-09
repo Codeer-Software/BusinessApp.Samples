@@ -14,12 +14,17 @@
       "CompositeIdSeparator": "",
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
       "DisplayName": "",
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "Id",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.IdFieldDesign"
     },
     {
@@ -34,6 +39,7 @@
           "IsOrMatch": false,
           "IsNot": false,
           "Children": [],
+          "Name": "",
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
         }
       },
@@ -53,6 +59,9 @@
       "Name": "RecipientUser",
       "IgnoreModification": false,
       "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LinkFieldDesign"
     },
     {
@@ -62,14 +71,20 @@
       "Placeholder": "",
       "TextEditEmptyType": "Null",
       "ShouldTrimAfterEdit": false,
+      "AutoTab": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
       "DisplayName": "タイトル",
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "Title",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
@@ -79,14 +94,20 @@
       "Placeholder": "",
       "TextEditEmptyType": "Null",
       "ShouldTrimAfterEdit": false,
+      "AutoTab": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
       "DisplayName": "内容",
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "Body",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
@@ -96,14 +117,20 @@
       "Placeholder": "",
       "TextEditEmptyType": "Null",
       "ShouldTrimAfterEdit": false,
+      "AutoTab": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
       "DisplayName": "リンク先モジュール",
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "LinkModule",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
@@ -113,14 +140,20 @@
       "Placeholder": "",
       "TextEditEmptyType": "Null",
       "ShouldTrimAfterEdit": false,
+      "AutoTab": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
       "DisplayName": "リンク先ID",
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "LinkId",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
@@ -139,12 +172,15 @@
       "Name": "IsRead",
       "IgnoreModification": false,
       "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.BooleanFieldDesign"
     },
     {
-      "DbColumn": "created_at",
       "SaveAsUtc": false,
       "Format": "",
+      "DbColumn": "created_at",
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
@@ -155,13 +191,13 @@
       "Name": "CreatedAt",
       "IgnoreModification": false,
       "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateTimeFieldDesign"
     },
     {
       "Text": "開く",
-      "Icon": "",
-      "Variant": "Primary",
-      "OnClick": "Open_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {
         "Default": "",
@@ -170,16 +206,21 @@
         "Hover": "",
         "Disabled": ""
       },
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "Open_OnClick",
       "ShowTextInToolTip": false,
+      "IsHtml": false,
       "Name": "OpenButton",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
       "Text": "未読に戻す",
-      "Icon": "",
-      "Variant": "Primary",
-      "OnClick": "MarkUnread_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {
         "Default": "",
@@ -188,19 +229,32 @@
         "Hover": "",
         "Disabled": ""
       },
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "MarkUnread_OnClick",
       "ShowTextInToolTip": false,
+      "IsHtml": false,
       "Name": "MarkUnreadButton",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
       "Text": "既読：",
       "Icon": "",
+      "IsHtml": false,
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "",
       "Name": "SearchLblIsRead",
       "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
@@ -239,6 +293,8 @@
         "LinkModule",
         "LinkId"
       ],
+      "FocusControlMode": "Inherit",
+      "IsFocusWrap": false,
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "",
       "OnFieldDataChanged": "",
@@ -357,6 +413,8 @@
         "LinkId",
         "IsRead"
       ],
+      "FocusControlMode": "Inherit",
+      "IsFocusWrap": false,
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "",
       "OnFieldDataChanged": "",
@@ -436,6 +494,8 @@
     "": {
       "OnSearchInitialization": "Search_OnInit",
       "ShowDefaultSearchButtons": true,
+      "FocusControlMode": "Inherit",
+      "IsFocusWrap": false,
       "Layout": {
         "Operator": "And",
         "Name": "SearchGridLayout",
@@ -446,9 +506,10 @@
         "ExpanderLabel": "検索条件",
         "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
+        "IsAutoFillWrap": false,
         "IsFillAvailable": false,
         "ScrollDirection": "Unset",
-        "BackgroundColor": "",
+        "OnKeyDown": "",
         "Rows": [
           {
             "IsWrap": true,
@@ -458,6 +519,7 @@
             "CanResize": false,
             "BackgroundColor": "",
             "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
               {
@@ -467,16 +529,15 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Width": 66,
+                "IgnoreContentWidth": false,
                 "Padding": {
                   "Left": 8,
-                  "Top": null,
-                  "Right": 4,
-                  "Bottom": null
+                  "Right": 4
                 },
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -485,9 +546,10 @@
                   "RightColor": "",
                   "BottomColor": ""
                 },
+                "VerticalAlignment": "Middle",
                 "CanResize": false,
-                "Border": "None",
-                "VerticalAlignment": "Middle"
+                "AllowOverflow": false,
+                "Border": "None"
               },
               {
                 "Layout": {
@@ -496,11 +558,12 @@
                   "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
-                  "BackgroundColor": "",
                   "Name": "",
+                  "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Width": 150,
+                "IgnoreContentWidth": false,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -514,6 +577,7 @@
                 "Border": "None"
               },
               {
+                "IgnoreContentWidth": false,
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -529,6 +593,7 @@
             ]
           }
         ],
+        "BackgroundColor": "",
         "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SearchGridLayoutDesign"
       }
     }
@@ -540,6 +605,8 @@
     "CanNavigateToDetail": false,
     "NavigateModuleUrlSegment": "",
     "CanCustomizeColumns": false,
+    "FixedColumnCount": 0,
+    "ApplyBackgroundToBoxInput": false,
     "DisplayName": "",
     "SearchCondition": {
       "LimitCount": 50,
@@ -550,13 +617,14 @@
       "ModuleName": ""
     },
     "PagerPosition": "Top",
-    "UseIndexSort": false,
+    "ReplaceMode": "None",
     "DeleteTogether": false,
     "CanCreate": false,
     "CanUpdate": false,
     "CanDelete": true,
     "CanUserSort": true,
     "CanSelect": false,
+    "UseIndexSort": false,
     "OnDataChanged": "",
     "OnSearchDataChanged": "",
     "OnSelectedIndexChanged": "",
@@ -564,6 +632,10 @@
     "OnDoubleClickRow": "",
     "Name": "",
     "IgnoreModification": false,
+    "OnValidateInput": "",
+    "IsFocusSkip": false,
+    "NextFocusField": "",
+    "OnFocusMoving": "",
     "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
   },
   "CanBulkDataUpdate": false,

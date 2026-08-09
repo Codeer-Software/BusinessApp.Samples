@@ -22,6 +22,9 @@
       "Name": "Id",
       "IgnoreModification": false,
       "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.IdFieldDesign"
     },
     {
@@ -40,6 +43,9 @@
       "Name": "QuoteId",
       "IgnoreModification": false,
       "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.IdFieldDesign"
     },
     {
@@ -58,6 +64,9 @@
       "Name": "LineNo",
       "IgnoreModification": false,
       "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
@@ -67,6 +76,7 @@
       "Placeholder": "品目・作業内容",
       "TextEditEmptyType": "Null",
       "ShouldTrimAfterEdit": true,
+      "AutoTab": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
@@ -77,6 +87,9 @@
       "Name": "Description",
       "IgnoreModification": false,
       "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
@@ -95,6 +108,9 @@
       "Name": "Qty",
       "IgnoreModification": false,
       "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
@@ -104,6 +120,7 @@
       "Placeholder": "式・人月 等",
       "TextEditEmptyType": "Null",
       "ShouldTrimAfterEdit": true,
+      "AutoTab": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
@@ -114,6 +131,9 @@
       "Name": "Unit",
       "IgnoreModification": false,
       "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
@@ -132,6 +152,9 @@
       "Name": "UnitPrice",
       "IgnoreModification": false,
       "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
@@ -150,14 +173,23 @@
       "Name": "Amount",
       "IgnoreModification": false,
       "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
+      "EnumName": "",
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
-        "SortFieldVariable": "DisplayOrder.Value",
+        "SortConditions": [
+          {
+            "Variable": "DisplayOrder.Value",
+            "IsDescending": false
+          }
+        ],
+        "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "TaxCategory",
         "Condition": {
@@ -211,6 +243,9 @@
       "Name": "TaxCategoryRef",
       "IgnoreModification": false,
       "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     }
   ],
@@ -285,6 +320,8 @@
       "DataOnlyFields": [
         "LineNo"
       ],
+      "FocusControlMode": "Inherit",
+      "IsFocusWrap": false,
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "",
       "OnFieldDataChanged": "",
@@ -310,9 +347,9 @@
             "FieldName": "Qty",
             "ContextMenu": "",
             "Label": "数量",
+            "Width": 70,
             "ColumnSpan": 1,
             "RowSpan": 1,
-            "Width": 70,
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
@@ -327,9 +364,9 @@
             "FieldName": "Unit",
             "ContextMenu": "",
             "Label": "単位",
+            "Width": 70,
             "ColumnSpan": 1,
             "RowSpan": 1,
-            "Width": 70,
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
@@ -344,9 +381,9 @@
             "FieldName": "UnitPrice",
             "ContextMenu": "",
             "Label": "単価",
+            "Width": 110,
             "ColumnSpan": 1,
             "RowSpan": 1,
-            "Width": 110,
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
@@ -361,9 +398,9 @@
             "FieldName": "Amount",
             "ContextMenu": "",
             "Label": "金額",
+            "Width": 120,
             "ColumnSpan": 1,
             "RowSpan": 1,
-            "Width": 120,
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
@@ -378,9 +415,9 @@
             "FieldName": "TaxCategoryRef",
             "ContextMenu": "",
             "Label": "税区分",
+            "Width": 150,
             "ColumnSpan": 1,
             "RowSpan": 1,
-            "Width": 150,
             "TextWrap": "Unset",
             "CanResize": true,
             "CanUserSort": false,
@@ -399,6 +436,8 @@
     "": {
       "OnSearchInitialization": "",
       "ShowDefaultSearchButtons": true,
+      "FocusControlMode": "Inherit",
+      "IsFocusWrap": false,
       "Layout": {
         "Operator": "And",
         "Name": "SearchGridLayout",
@@ -426,6 +465,7 @@
     "CanNavigateToDetail": false,
     "NavigateModuleUrlSegment": "",
     "CanCustomizeColumns": false,
+    "FixedColumnCount": 0,
     "ApplyBackgroundToBoxInput": false,
     "DisplayName": "",
     "SearchCondition": {
@@ -453,6 +493,9 @@
     "Name": "",
     "IgnoreModification": false,
     "OnValidateInput": "",
+    "IsFocusSkip": false,
+    "NextFocusField": "",
+    "OnFocusMoving": "",
     "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
   },
   "CanBulkDataUpdate": false,
