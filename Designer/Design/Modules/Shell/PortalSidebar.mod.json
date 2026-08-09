@@ -107,8 +107,8 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "ログアウト",
-      "Icon": "bi bi-box-arrow-right",
+      "Text": "Logout",
+      "Icon": "oi oi-account-logout",
       "Style": "Default",
       "RelativeField": "",
       "OnClick": "Logout_OnClick",
@@ -169,7 +169,7 @@
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Padding": {
-                  "Left": 14,
+                  "Left": 16,
                   "Top": 12,
                   "Bottom": 16
                 },
@@ -205,7 +205,7 @@
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Padding": {
-                  "Left": 14,
+                  "Left": 16,
                   "Top": 8,
                   "Bottom": 8
                 },
@@ -241,7 +241,7 @@
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Padding": {
-                  "Left": 14,
+                  "Left": 16,
                   "Top": 8,
                   "Bottom": 8
                 },
@@ -277,7 +277,7 @@
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Padding": {
-                  "Left": 14,
+                  "Left": 16,
                   "Top": 8,
                   "Bottom": 8
                 },
@@ -313,7 +313,7 @@
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Padding": {
-                  "Left": 14,
+                  "Left": 16,
                   "Top": 8,
                   "Bottom": 8
                 },
@@ -349,7 +349,7 @@
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Padding": {
-                  "Left": 14,
+                  "Left": 16,
                   "Top": 8,
                   "Bottom": 8
                 },
@@ -385,7 +385,7 @@
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Padding": {
-                  "Left": 14,
+                  "Left": 16,
                   "Top": 8,
                   "Bottom": 8
                 },
@@ -421,7 +421,7 @@
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Padding": {
-                  "Left": 14,
+                  "Left": 16,
                   "Top": 8,
                   "Bottom": 8
                 },
@@ -457,7 +457,7 @@
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Padding": {
-                  "Left": 14,
+                  "Left": 16,
                   "Top": 8,
                   "Bottom": 8
                 },
@@ -493,7 +493,7 @@
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Padding": {
-                  "Left": 14,
+                  "Left": 16,
                   "Top": 8,
                   "Bottom": 8
                 },
@@ -523,13 +523,14 @@
                   "ContextMenu": "",
                   "ClassName": "portal-link",
                   "FontFamily": "",
+                  "FontSize": 16,
                   "Color": "#ffffff",
                   "BackgroundColor": "",
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Padding": {
-                  "Left": 14,
+                  "Left": 16,
                   "Top": 24,
                   "Bottom": 8
                 },
