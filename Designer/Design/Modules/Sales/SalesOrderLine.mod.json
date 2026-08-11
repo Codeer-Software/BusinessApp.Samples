@@ -238,7 +238,7 @@
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
       "DisplayName": "税区分",
-      "IsRequired": false,
+      "IsRequired": true,
       "OnDataChanged": "",
       "Name": "TaxCategoryRef",
       "IgnoreModification": false,

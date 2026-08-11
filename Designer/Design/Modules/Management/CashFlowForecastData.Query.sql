@@ -27,10 +27,11 @@ cash_now AS (
               WHERE e.status = 'posted' AND a.code IN ('1000', '1010', '1020')
                 AND e.fiscal_year_id IN (SELECT id FROM cur_yr)), 0) AS cash
 ),
+-- 売上の既定税区分（税制マスタで設定: tax_categories.default_for='sales'）に紐づく税率
 sales_rate AS (
   SELECT COALESCE((SELECT tr.rate_percent
                    FROM tax_categories tc JOIN tax_rates tr ON tr.id = tc.tax_rate_id
-                   WHERE tc.code = 'SALES_10'), 0) AS pct
+                   WHERE tc.default_for = 'sales' AND tc.is_active = 1), 0) AS pct
 ),
 inv_in AS (
   SELECT max(date(i.due_date, 'start of month'), (SELECT month_first FROM months WHERE idx = 0)) AS m,

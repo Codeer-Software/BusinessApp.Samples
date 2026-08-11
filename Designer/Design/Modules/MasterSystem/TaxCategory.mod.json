@@ -91,6 +91,35 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
+      "Candidates": [
+        "売上伝票の既定,sales",
+        "仕入・経費の既定,purchase"
+      ],
+      "SearchCondition": {
+        "SelectFields": [],
+        "SortConditions": [],
+        "SortFieldVariable": "",
+        "SortDescending": false,
+        "ModuleName": ""
+      },
+      "ValueVariable": "",
+      "DisplayTextVariable": "",
+      "DbColumn": "default_for",
+      "EmptyCandidateType": "Null",
+      "AllowOrSearch": false,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "既定として使う",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "DefaultFor",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
+    },
+    {
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
@@ -580,6 +609,29 @@
                 "Border": "None"
               },
               {
+                "Layout": {
+                  "FieldName": "DefaultFor",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 260,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              },
+              {
                 "Padding": {},
                 "BackgroundColor": "",
                 "BorderStyle": {
@@ -862,6 +914,23 @@
             "TextWrap": "Unset",
             "CanResize": true,
             "CanUserSort": true,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "DefaultFor",
+            "ContextMenu": "",
+            "Label": "既定として使う",
+            "Width": 180,
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": true,
+            "CanUserSort": false,
             "ClassName": "",
             "FontFamily": "",
             "Color": "",

@@ -113,6 +113,8 @@ void Lines_OnDataChanged()
         no = no + 1;
         l.LineNo.Value = no;
         if (l.Qty.Value == null) l.Qty.Value = 1;
+        // 税区分は必須（ADR-0050）。新しい行には既定として課税売上 10% を入れる
+        if (l.TaxCategoryRef.Value == null) l.TaxCategoryRef.Value = DefaultSalesTaxCategoryId();
         if (l.UnitPrice.Value != null)
         {
             l.Amount.Value = l.Qty.Value * l.UnitPrice.Value;
@@ -134,6 +136,19 @@ void RecalcTotal()
 }
 
 // 受注番号採番: SO-{西暦下2桁}-{連番3桁}。番号の文字列降順の最大から +1 (年が変われば 1 に戻る)
+// 売上伝票の既定税区分を「マスタから」解決する（ADR-0050）。
+// 「ふつうは 10%」はこの時点の制度でしかないので、コードに税区分を直書きしない。
+// 税制マスタ > 税区分 の「既定として使う」で切り替えられる（tax_categories.default_for='sales'）。
+long? DefaultSalesTaxCategoryId()
+{
+    var cs = new ModuleSearcher<TaxCategory>();
+    cs.AddEquals(c => c.DefaultFor.Value, "sales");
+    cs.AddEquals(c => c.IsActive.Value, true);
+    var found = cs.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return ((TaxCategory)found).Id.Value;
+}
+
 string NextOrderNo()
 {
     var prefix = $"SO-{DateTime.Today:yy}-";

@@ -76,6 +76,8 @@ void Lines_OnDataChanged()
         no = no + 1;
         l.LineNo.Value = no;
         if (l.Qty.Value == null) l.Qty.Value = 1;
+        // 税区分は必須（ADR-0050）。新しい行には既定として課税売上 10% を入れる
+        if (l.TaxCategoryRef.Value == null) l.TaxCategoryRef.Value = DefaultSalesTaxCategoryId();
         if (l.UnitPrice.Value != null)
         {
             l.Amount.Value = l.Qty.Value * l.UnitPrice.Value;
@@ -189,8 +191,7 @@ void PrintQuote(bool asPdf)
         var l = (QuoteLine)m;
         if (l.Amount.Value != null) subtotal = subtotal + l.Amount.Value;
     }
-    decimal pct = GetSalesTaxRatePercent();
-    int tax = subtotal * pct / 100;
+    int tax = CalcTaxByLine();
     var total = subtotal + tax;
     var issueStr = "";
     if (IssueDate.Value != null) { issueStr = $"{IssueDate.Value:yyyy年M月d日}"; }
@@ -266,20 +267,78 @@ string SanitizeFileName(string name)
     return s;
 }
 
-// 課税売上 10% (tax_categories.code='SALES_10') の税率をマスタから解決（Invoice と同方式）
-decimal GetSalesTaxRatePercent()
+// 明細の税区分から消費税額を計算する（ADR-0050）。
+// インボイス制度は「一の適格請求書につき、税率ごとに 1 回の端数処理」と定めるため、
+// 税率ごとに本体を合計してから 1 回だけ切り捨てる。課税売上の行のみが対象で、
+// 非課税・免税・不課税は 0。税区分が未設定の行は従来どおり課税売上 10% とみなす。
+int CalcTaxByLine()
 {
+    var ls = new ModuleSearcher<QuoteLine>();
+    ls.AddEquals(e => e.QuoteId.Value, this.Id.Value);
+    ls.OrderBy(e => e.LineNo.Value);
+    var lines = ls.Execute();
+
+    decimal defaultPct = GetSalesTaxRatePercent();
+    var rates = new List<decimal>();
+    var bases = new List<int>();
+
+    foreach (var m in lines)
+    {
+        var l = (QuoteLine)m;
+        if (l.Amount.Value == null) continue;
+        decimal pct = l.TaxCategoryRef.Value == null
+            ? defaultPct
+            : ResolveTaxableSalesRatePercent(l.TaxCategoryRef.Value);
+        if (pct <= 0) continue;
+
+        var idx = rates.IndexOf(pct);
+        if (idx < 0) { rates.Add(pct); bases.Add(l.Amount.Value); }
+        else { bases[idx] = bases[idx] + l.Amount.Value; }
+    }
+
+    var tax = 0;
+    for (var i = 0; i < rates.Count; i++)
+    {
+        tax = tax + (int)(bases[i] * rates[i] / 100);
+    }
+    return tax;
+}
+
+// 税区分 ID → 課税売上ならその税率(%)、それ以外・未設定なら 0
+decimal ResolveTaxableSalesRatePercent(long? taxCategoryId)
+{
+    if (taxCategoryId == null) return 0;
     var cs = new ModuleSearcher<TaxCategory>();
-    cs.AddEquals(c => c.Code.Value, "SALES_10");
+    cs.AddEquals(c => c.Id.Value, taxCategoryId);
     var found = cs.ExecuteFirstOrDefault();
     if (found == null) return 0;
     var tcat = (TaxCategory)found;
+    if (tcat.TaxationType.Value != "taxable_sales") return 0;
     if (tcat.Rate.Value == null) return 0;
     var rs = new ModuleSearcher<TaxRate>();
     rs.AddEquals(r => r.Id.Value, tcat.Rate.Value);
     var foundRate = rs.ExecuteFirstOrDefault();
     if (foundRate == null) return 0;
     return ((TaxRate)foundRate).RatePercent.Value ?? 0;
+}
+
+// 売上伝票の既定税区分を「マスタから」解決する（ADR-0050）。
+// 「ふつうは 10%」はこの時点の制度でしかないので、コードに税区分を直書きしない。
+// 税制マスタ > 税区分 の「既定として使う」で切り替えられる（tax_categories.default_for='sales'）。
+long? DefaultSalesTaxCategoryId()
+{
+    var cs = new ModuleSearcher<TaxCategory>();
+    cs.AddEquals(c => c.DefaultFor.Value, "sales");
+    cs.AddEquals(c => c.IsActive.Value, true);
+    var found = cs.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return ((TaxCategory)found).Id.Value;
+}
+
+// 既定税区分の税率(%)。税区分が未設定の行に対する保険的な既定として使う
+decimal GetSalesTaxRatePercent()
+{
+    return ResolveTaxableSalesRatePercent(DefaultSalesTaxCategoryId());
 }
 
 // 送付済にする: draft → sent

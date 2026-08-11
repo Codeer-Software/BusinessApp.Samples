@@ -56,10 +56,11 @@ void BuildPlan()
     var picked = TargetMonth.Value;
     var monthFirst = new DateOnly(picked.Year, picked.Month, 1);
 
-    // 税率の解決（SALES_10。金額計算に使う）
+    // 税率の解決（売上の既定税区分＝税制マスタで設定。金額計算に使う）
     decimal taxPct = 0;
     var cs = new ModuleSearcher<TaxCategory>();
-    cs.AddEquals(c => c.Code.Value, "SALES_10");
+    cs.AddEquals(c => c.DefaultFor.Value, "sales");
+    cs.AddEquals(c => c.IsActive.Value, true);
     var tcat = cs.ExecuteFirstOrDefault();
     if (tcat != null)
     {
@@ -340,7 +341,7 @@ void Run_OnClick()
     var typedPeriod = (FiscalPeriod)period;
     if (typedPeriod.Status.Value == "closed") { Toaster.Error("対象月の期間は締め済みです"); return; }
 
-    // 科目・税区分の解決 (売掛金1100 / SaaS売上高4020 / 仮受消費税2200 / 前受収益2110 / SALES_10)
+    // 科目・税区分の解決 (売掛金1100 / SaaS売上高4020 / 仮受消費税2200 / 前受収益2110 / 売上の既定税区分)
     var accS = new ModuleSearcher<Account>();
     accS.AddIn(e => e.Code.Value, "1100", "4020", "2200", "2110");
     var accounts = accS.Execute();
@@ -361,9 +362,11 @@ void Run_OnClick()
     if (taxAccountId == null) { Toaster.Error("仮受消費税(2200)の科目がありません"); return; }
     if (deferredAccountId == null) { Toaster.Error("前受収益(2110)の科目がありません"); return; }
 
+    // 売上の既定税区分は税制マスタで設定する（tax_categories.default_for='sales'）
     object salesTaxCatId = null;
     var cs = new ModuleSearcher<TaxCategory>();
-    cs.AddEquals(c => c.Code.Value, "SALES_10");
+    cs.AddEquals(c => c.DefaultFor.Value, "sales");
+    cs.AddEquals(c => c.IsActive.Value, true);
     var tcat = cs.ExecuteFirstOrDefault();
     if (tcat != null) { salesTaxCatId = ((TaxCategory)tcat).Id.Value; }
 

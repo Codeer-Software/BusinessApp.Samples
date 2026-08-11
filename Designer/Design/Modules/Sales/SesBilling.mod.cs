@@ -39,11 +39,12 @@ void RebuildPlan()
     PlanLines.Reload();
 }
 
-// 売上税率（SALES_10）の解決。金額計算に使う
+// 売上税率の解決。売上の既定税区分（税制マスタで設定）に紐づく税率を使う
 decimal SalesTaxPct()
 {
     var cs = new ModuleSearcher<TaxCategory>();
-    cs.AddEquals(c => c.Code.Value, "SALES_10");
+    cs.AddEquals(c => c.DefaultFor.Value, "sales");
+    cs.AddEquals(c => c.IsActive.Value, true);
     var tcat = cs.ExecuteFirstOrDefault();
     if (tcat == null) { return 0; }
     var typedCat = (TaxCategory)tcat;
@@ -233,7 +234,7 @@ void Run_OnClick()
     if (period == null) { Toaster.Error("対象月に対応する月次期間がありません"); return; }
     if (((FiscalPeriod)period).Status.Value == "closed") { Toaster.Error("対象月の期間は締め済みです"); return; }
 
-    // 科目・税区分の解決（売掛金1100 / SES売上高4010 / 仮受消費税2200 / SALES_10）
+    // 科目・税区分の解決（売掛金1100 / SES売上高4010 / 仮受消費税2200 / 売上の既定税区分）
     var accS = new ModuleSearcher<Account>();
     accS.AddIn(e => e.Code.Value, "1100", "4010", "2200");
     var accounts = accS.Execute();
@@ -251,9 +252,11 @@ void Run_OnClick()
     if (sesAccountId == null) { Toaster.Error("SES売上高(4010)の科目がありません"); return; }
     if (taxAccountId == null) { Toaster.Error("仮受消費税(2200)の科目がありません"); return; }
 
+    // 売上の既定税区分は税制マスタで設定する（tax_categories.default_for='sales'）
     object salesTaxCatId = null;
     var cs = new ModuleSearcher<TaxCategory>();
-    cs.AddEquals(c => c.Code.Value, "SALES_10");
+    cs.AddEquals(c => c.DefaultFor.Value, "sales");
+    cs.AddEquals(c => c.IsActive.Value, true);
     var tcat = cs.ExecuteFirstOrDefault();
     if (tcat != null) { salesTaxCatId = ((TaxCategory)tcat).Id.Value; }
 
