@@ -118,45 +118,48 @@ void ApplyLineDefaults()
     }
 }
 
-// 税区分が空の明細を、勘定科目マスタの既定税区分で埋める（ADR-0052）。
+// 税区分が入っていない明細を「対象外」にする（ADR-0052）。
 // **スクリプトから仕訳を生成する経路は je.Submit() の直前に必ずこれを呼ぶこと**（例外なし）。
-// 各経路は売上・費用の行にだけ税区分を積んでおり、相手勘定（売掛金・買掛金・預金・現金・
-// 未払金・前受収益・固定資産等）の行には積んでいない。BS 科目の既定は「対象外」なので、
-// ここで一括して入れれば税区分未設定の行が DB に落ちない。
-// 税行（IsTaxLine=true）は本体行と同じ税区分でなければならず、「対象外」を入れると
-// その税額が消費税集計表から消える（B-5 の再発）ため、ここでは意図的に触らない
-// ——税行の税区分は各経路が本体行と同じ値を明示的にセットしている。
-void FillMissingTaxCategories()
+//
+// 前提: 各経路は「税に意味のある行」——売上・費用の本体行と、それに対応する税行——に
+// 必ず税区分を明示している。ここに残る行は相手勘定（売掛金・買掛金・預金・現金・未払金）か
+// 内部振替の行であり、どちらも消費税の対象外。
+//
+// **当初は勘定科目マスタの既定で埋めたが、それは誤りだった**（2026-08-12 の実測で発見）:
+//   ・減価償却の貸方（工具器具備品）に取得時の既定 PUR_10 が付き、課税仕入の「戻し」に化けて
+//     課税仕入を 114,375 円過少にしていた
+//   ・前受収益の按分振替の貸方（SaaS売上高）に SALES_10 が付き、請求時に計上済みの課税売上を
+//     月次の振替でもう一度計上していた（二重計上）
+// 科目の既定は「その科目の典型的な取引」には正しくても、**内部振替の行には正しくない**。
+// 相手科目そのものが経済的実体になる画面（入出金起票）は、経路側で明示的に既定を入れている。
+//
+// 税行（IsTaxLine=true）は本体行と同じ税区分でなければならず、「対象外」を入れるとその税額が
+// 消費税集計表から消える（B-5 の再発）ため、ここでは意図的に触らない。税区分の無い税行が
+// 残れば DB の NOT NULL で落ちる＝呼び出し側のバグとして早期に表面化する。
+void MarkRemainingLinesOutOfScope()
 {
-    var missingAccountIds = new List<object>();
+    var hasMissing = false;
     foreach (var row in Lines.Rows)
     {
         var l = (JournalLine)row;
         if (l.IsTaxLine.Value == true) continue;
-        if (l.Account.Value == null) continue;
-        if (l.TaxCategory.Value != null) continue;
-        missingAccountIds.Add(l.Account.Value);
+        if (l.TaxCategory.Value == null) { hasMissing = true; break; }
     }
-    if (missingAccountIds.Count == 0) return;
+    if (!hasMissing) return;
 
-    var s = new ModuleSearcher<Account>();
-    s.AddIn(e => e.Id.Value, missingAccountIds);
-    var accounts = s.Execute();
+    // 「対象外」はコードではなく課税種別で引く（コードが変わっても壊れないように）
+    var s = new ModuleSearcher<TaxCategory>();
+    s.AddEquals(e => e.TaxationType.Value, "out_of_scope");
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return;
+    var outOfScopeId = ((TaxCategory)found).Id.Value;
+
     foreach (var row in Lines.Rows)
     {
         var l = (JournalLine)row;
         if (l.IsTaxLine.Value == true) continue;
-        if (l.Account.Value == null) continue;
         if (l.TaxCategory.Value != null) continue;
-        foreach (var am in accounts)
-        {
-            var acc = (Account)am;
-            if (acc.Id.Value == l.Account.Value)
-            {
-                l.TaxCategory.Value = acc.DefaultTaxCategory.Value;
-                break;
-            }
-        }
+        l.TaxCategory.Value = outOfScopeId;
     }
 }
 

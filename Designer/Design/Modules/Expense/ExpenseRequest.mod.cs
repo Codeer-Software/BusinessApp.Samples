@@ -440,7 +440,7 @@ void GenerateJournal_OnClick()
             l.InputAmount.Value = gross;
         }
     }
-    je.FillMissingTaxCategories();
+    je.MarkRemainingLinesOutOfScope();
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("仕訳の生成に失敗しました"); return; }
 
@@ -763,7 +763,7 @@ void Settle_OnClick()
             l.Account.Value = bankAccountId;
         }
     }
-    je.FillMissingTaxCategories();
+    je.MarkRemainingLinesOutOfScope();
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("支払仕訳の生成に失敗しました"); return; }
 

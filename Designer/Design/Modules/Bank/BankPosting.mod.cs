@@ -401,7 +401,7 @@ void PostAll_OnClick()
                 }
             }
         }
-        je.FillMissingTaxCategories();
+        je.MarkRemainingLinesOutOfScope();
         var ok = je.Submit();
         if (ok != true) { failed = failed + 1; continue; }
 

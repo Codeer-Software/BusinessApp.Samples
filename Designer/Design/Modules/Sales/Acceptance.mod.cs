@@ -598,7 +598,7 @@ void Confirm_OnClick()
             l.Description.Value = "消費税（行2）";
         }
     }
-    je.FillMissingTaxCategories();
+    je.MarkRemainingLinesOutOfScope();
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("売上仕訳の生成に失敗しました"); return; }
 

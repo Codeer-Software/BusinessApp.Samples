@@ -108,7 +108,24 @@ void Run_OnClick()
             l.Account.Value = isIn ? CounterAccount.Value : cashAccountId;
         }
     }
-    je.FillMissingTaxCategories();
+    // この画面は相手科目そのものが取引の経済的実体なので、勘定科目マスタの既定税区分を明示的に入れる
+    // （現預金側は対象外のままでよい＝MarkRemainingLinesOutOfScope に任せる）。
+    // ここを既定に任せず全部「対象外」にすると、受取利息のような非課税売上を取りこぼし、
+    // 課税売上割合の分母が狂う（ADR-0052。実測: 受取利息 500 円が非課税売上として拾えている）。
+    var counterS = new ModuleSearcher<Account>();
+    counterS.AddEquals(e => e.Id.Value, CounterAccount.Value);
+    var counterAcc = counterS.ExecuteFirstOrDefault();
+    if (counterAcc != null)
+    {
+        var counterTaxCat = ((Account)counterAcc).DefaultTaxCategory.Value;
+        foreach (var row in je.Lines.Rows)
+        {
+            var l = (JournalLine)row;
+            if ($"{l.Account.Value}" == $"{CounterAccount.Value}") { l.TaxCategory.Value = counterTaxCat; }
+        }
+    }
+
+    je.MarkRemainingLinesOutOfScope();
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("仕訳の起票に失敗しました"); return; }
 
