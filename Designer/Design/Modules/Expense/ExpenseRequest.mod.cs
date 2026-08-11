@@ -112,6 +112,8 @@ bool ValidateForApply()
             return false;
         }
     }
+    // 手入力の「うち消費税」の検算（A-4。明白な誤りだけ止め、乖離は警告で通す）
+    if (!ValidateManualTax(GetJudgeAmount())) return false;
     // 領収書の未添付警告（U2-6: 申請はブロックしない。添付できない実務ケースを許容）
     if (Receipt.FileName == null || Receipt.FileName == "")
     {
@@ -235,6 +237,8 @@ void ConfirmActual_OnClick()
     if (SettlementStatus.Value != "approved" || RequestType.Value != "advance") return;
     var actual = ActualAmountInput.Value ?? 0;
     if (actual <= 0) { Toaster.Error("実費（税込）を入力してください"); return; }
+    // 仕訳になるのは実費の方なので、実費を基準に「うち消費税」を検算する（A-4）
+    if (!ValidateManualTax(actual)) return;
     var estimated = EstimatedAmount.Value ?? 0;
 
     var routeBefore = SelectTemplateName();
@@ -548,23 +552,90 @@ FiscalPeriod ResolvePeriodForDate(var d)
 // 税額の決定: 費目の既定税区分が課税仕入のときのみ。レシート記載の消費税額を優先
 int CalcExpenseTax(ExpenseCategory cat, int gross)
 {
-    if (cat.DefaultTaxCategory.Value == null) return 0;
+    var tcat = FindCategoryTaxCategory(cat);
+    if (tcat == null) return 0;
+    if (tcat.TaxationType.Value != "taxable_purchase") return 0;
+    if (TaxAmount.Value != null && TaxAmount.Value > 0) return TaxAmount.Value;
+    decimal pct = GetTaxRatePercent(tcat);
+    if (pct == 0) return 0;
+    int tax = gross * pct / (100 + pct);
+    return tax;
+}
+
+// 費目に設定された既定税区分（費目未選択・未設定・解決不能なら null）
+TaxCategory FindCategoryTaxCategory(ExpenseCategory cat)
+{
+    if (cat == null) return null;
+    if (cat.DefaultTaxCategory.Value == null) return null;
     var cs = new ModuleSearcher<TaxCategory>();
     cs.AddEquals(c => c.Id.Value, cat.DefaultTaxCategory.Value);
     var found = cs.ExecuteFirstOrDefault();
-    if (found == null) return 0;
-    var tcat = (TaxCategory)found;
-    if (tcat.TaxationType.Value != "taxable_purchase") return 0;
-    if (TaxAmount.Value != null && TaxAmount.Value > 0) return TaxAmount.Value;
+    if (found == null) return null;
+    return (TaxCategory)found;
+}
+
+// 税区分に紐づく税率(%)。未設定・解決不能なら 0
+decimal GetTaxRatePercent(TaxCategory tcat)
+{
+    if (tcat == null) return 0;
     if (tcat.Rate.Value == null) return 0;
     var rs = new ModuleSearcher<TaxRate>();
     rs.AddEquals(r => r.Id.Value, tcat.Rate.Value);
     var foundRate = rs.ExecuteFirstOrDefault();
     if (foundRate == null) return 0;
-    decimal pct = ((TaxRate)foundRate).RatePercent.Value ?? 0;
-    if (pct == 0) return 0;
-    int tax = gross * pct / (100 + pct);
-    return tax;
+    return ((TaxRate)foundRate).RatePercent.Value ?? 0;
+}
+
+// 費目が課税仕入か（＝「うち消費税」の入力が意味を持つか）
+bool IsTaxablePurchaseCategory(ExpenseCategory cat)
+{
+    var tcat = FindCategoryTaxCategory(cat);
+    if (tcat == null) return false;
+    return (tcat.TaxationType.Value == "taxable_purchase");
+}
+
+// 手入力の「うち消費税」を疑う幅（税率からの計算値に対する %）。
+// 桁ミス（10 倍・1/10）は確実に捕まえ、軽減税率や非課税品が混ざったレシートの端数ブレは通す帯。
+// 利用者が調整する類の値ではないためマスタ化せずここに置く（2026-08-12 合意）
+int GetTaxDiffTolerancePercent()
+{
+    return 10;
+}
+
+// 手入力の「うち消費税」の検算（改善候補 A-4）。gross = 判定に使う税込金額。
+// 戻り値 false = 明白な誤り（負値・税込金額以上）につき申請/確定を止める。
+// 税率からの計算値との乖離は警告だけで通す——レシート記載額を尊重する設計を壊さないため
+// （軽減税率・非課税品の混在で数円〜数十円ずれるのは正常）
+bool ValidateManualTax(int gross)
+{
+    var manual = TaxAmount.Value ?? 0;
+    if (manual == 0) return true;          // 未入力は税区分の税率で自動計算する
+    if (manual < 0)
+    {
+        Toaster.Error("「うち消費税」に負の金額は入力できません");
+        return false;
+    }
+    if (gross <= 0) return true;           // 金額が未入力の段階では判定材料が無い
+    if (manual >= gross)
+    {
+        Toaster.Error($"「うち消費税」{manual:#,0} 円が金額（税込）{gross:#,0} 円以上です。税込金額に含まれる消費税額を入力してください");
+        return false;
+    }
+
+    var cat = FindSelectedCategory();
+    var tcat = FindCategoryTaxCategory(cat);
+    if (tcat == null || tcat.TaxationType.Value != "taxable_purchase") return true;
+    decimal pct = GetTaxRatePercent(tcat);
+    if (pct == 0) return true;
+    int theory = gross * pct / (100 + pct);
+    if (theory <= 0) return true;
+    // 少額レシートで理論値が小さいときに 1 円のブレで鳴らないよう最低 1 円は許容する
+    var tolerance = Math.Max(theory * GetTaxDiffTolerancePercent() / 100, 1);
+    if (Math.Abs(manual - theory) > tolerance)
+    {
+        Toaster.Warn($"「うち消費税」{manual:#,0} 円は税率 {pct:0.#}% での計算値 {theory:#,0} 円と離れています。桁の間違いがないか確認してください（軽減税率や非課税品が混ざったレシートなら問題ありません）");
+    }
+    return true;
 }
 
 // 固定資産台帳への自動登録 (償却方法は仮=定額法。耐用年数と方法は経理が台帳で確定する)
@@ -724,12 +795,36 @@ void PayeeType_OnDataChanged()
 
 void ExpenseCategory_OnDataChanged()
 {
-    UpdateFixedAssetSuggestion();
+    ClearTaxAmountIfNotTaxable();
+    UpdateFixedAssetSuggestion();   // 末尾で UpdateVisibility を呼ぶ（欄の出し分けはそこで反映）
+}
+
+// 不課税・非課税の費目に切り替えたら「うち消費税」の入力値を捨てる（改善候補 A-4）。
+// 欄を隠すだけだと、仕訳では無視される値が DB に残り続ける。値の消失を黙って行わないよう通知する
+void ClearTaxAmountIfNotTaxable()
+{
+    var cat = FindSelectedCategory();
+    if (cat == null) return;
+    if (IsTaxablePurchaseCategory(cat)) return;
+    if (TaxAmount.Value == null) return;
+    var cleared = TaxAmount.Value;
+    TaxAmount.Value = null;
+    if (cleared > 0)
+    {
+        Toaster.Info($"「{cat.Name.Value}」は消費税の対象外の費目のため、入力済みの「うち消費税」{cleared:#,0} 円をクリアしました");
+    }
 }
 
 void Amount_OnDataChanged()
 {
+    // 税込金額が変われば理論値も変わる。既に入力済みの「うち消費税」を再検算する
+    ValidateManualTax(Amount.Value ?? 0);
     UpdateFixedAssetSuggestion();
+}
+
+void TaxAmount_OnDataChanged()
+{
+    ValidateManualTax(Amount.Value ?? 0);
 }
 
 void IsFixedAsset_OnDataChanged()
@@ -742,9 +837,12 @@ void IsFixedAsset_OnDataChanged()
 // AI はオプトイン（このコントロールを使ったときだけ実行。通常の領収書アップロードは手入力のまま）
 void AiImport_Completed()
 {
+    ClearTaxAmountIfNotTaxable();
     UpdateFixedAssetSuggestion();
     UpdateVisibility();
     Toaster.Info("AI読み取り結果を反映しました。内容を確認・修正のうえ申請してください");
+    // AI が読み取った消費税額も検算の対象（読み取り誤りをこの場で気づけるように）
+    ValidateManualTax(Amount.Value ?? 0);
 }
 
 // 選択中の費目マスタを取得（未選択なら null）
@@ -785,6 +883,12 @@ void UpdateVisibility()
     EntertainmentPurpose.IsVisible = isEnt;
     // 注: IsRequired はスクリプトから設定不可 (CommonMistakes #5)。
     // 交際費の必須チェックは申請時の検証 (B2-3 の SelectTemplateName 拡張と同時) で行う。
+
+    // うち消費税: 課税仕入の費目でだけ入力できる（不課税・非課税では入力しても黙って無視されるため
+    // 欄ごと隠す・改善候補 A-4）。費目未選択のうちは出したままにして入力順を縛らない
+    var taxInputAvailable = (cat == null) || IsTaxablePurchaseCategory(cat);
+    TaxAmountLabel.IsVisible = taxInputAvailable;
+    TaxAmount.IsVisible = taxInputAvailable;
 
     // 固定資産: 資産性の費目でのみチェックボックスを出す。ON のとき資産管理番号を出す
     var isAssetCandidate = (cat != null) && (cat.IsAssetCandidate.Value == true);
