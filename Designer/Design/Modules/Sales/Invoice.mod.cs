@@ -353,7 +353,12 @@ void Lines_OnDataChanged()
         no = no + 1;
         l.LineNo.Value = no;
         if (l.Qty.Value == null) l.Qty.Value = 1;
-        if (l.UnitPrice.Value != null)
+        // 税区分は必須（ADR-0050）。新しい行には既定として課税売上 10% を入れる
+        if (l.TaxCategoryRef.Value == null) l.TaxCategoryRef.Value = DefaultSalesTaxCategoryId();
+        // 検収明細から写した行の金額は「検収金額」そのもの。数量×単価で再計算してはならない
+        // （分割検収では 検収金額 < 数量×単価 になるため。ADR-0049 / 改善候補 A-1 の真因）。
+        // 手で足した行だけ、入力の手間を省くために 数量×単価 を自動で入れる。
+        if (l.AcceptanceLineRef.Value == null && l.UnitPrice.Value != null)
         {
             l.Amount.Value = l.Qty.Value * l.UnitPrice.Value;
         }
@@ -373,25 +378,122 @@ void RecalcTotal()
     }
     TotalAmount.Value = total;
     Amount.Value = total;
-    decimal pct = GetSalesTaxRatePercent();
-    int tax = total * pct / 100;
-    TaxAmount.Value = tax;
+    TaxAmount.Value = CalcTaxByLine();
+    UpdateOverAcceptanceWarning();
 }
 
-// 課税売上 10% (tax_categories.code='SALES_10') の税率をマスタから解決
-decimal GetSalesTaxRatePercent()
+// 請求明細が、元になった検収明細の金額を超えていないかを行単位で突き合わせ、
+// 超過していれば画面に赤字で即時警告する（発行前に気づけるようにするのが狙い）。
+// 検収に紐づく請求書だけが対象。合算請求書（手動作成）は acceptance_id が NULL なので自然に外れる。
+// ブロックはしない——検収後の増額は「変更契約として新しい受注を起こす」のが本アプリの運用規約
+// （ISSUE-0002）なので、止めるのではなく「それは変更契約の話ですよ」と気づかせる役割。
+void UpdateOverAcceptanceWarning()
 {
+    OverAcceptanceWarning.IsVisible = false;
+    OverAcceptanceWarning.Text = "";
+    if (AcceptanceRef.Value == null) return;
+
+    var overLines = new List<string>();
+    var totalOver = 0;
+
+    foreach (var row in Lines.Rows)
+    {
+        var l = (InvoiceLine)row;
+        if (l.Amount.Value == null) continue;
+        if (l.AcceptanceLineRef.Value == null) continue;   // 手で足した行は突合対象外
+
+        var s = new ModuleSearcher<AcceptanceLine>();
+        s.AddEquals(al => al.Id.Value, l.AcceptanceLineRef.Value);
+        var found = s.ExecuteFirstOrDefault();
+        if (found == null) continue;
+        var accepted = ((AcceptanceLine)found).Amount.Value ?? 0;
+        if (l.Amount.Value <= accepted) continue;
+
+        var over = l.Amount.Value - accepted;
+        totalOver = totalOver + over;
+        var desc = l.Description.Value ?? "";
+        overLines.Add($"{l.LineNo.Value}行目「{desc}」 請求 {l.Amount.Value:#,0} 円 > 検収 {accepted:#,0} 円（+{over:#,0}）");
+    }
+
+    if (overLines.Count == 0) return;
+
+    var head = $"⚠ 検収額を超えている明細が {overLines.Count} 行あります（超過 合計 {totalOver:#,0} 円）。";
+    var body = string.Join(" ／ ", overLines);
+    OverAcceptanceWarning.Text = $"{head} {body} — 増額する場合は変更契約として新しい受注・検収を起こしてください。";
+    OverAcceptanceWarning.IsVisible = true;
+}
+
+// 明細の税区分から消費税額を計算する（ADR-0050）。
+// インボイス制度は「一の適格請求書につき、税率ごとに 1 回の端数処理」と定めるため、
+// 税率ごとに本体を合計してから 1 回だけ切り捨てる（行ごとに切ってから足すのは不可）。
+// 課税売上（taxable_sales）の行のみが対象。非課税・免税・不課税・税区分なしは税額 0。
+int CalcTaxByLine()
+{
+    // 税率(%) ごとの本体合計
+    var rates = new List<decimal>();
+    var bases = new List<int>();
+
+    // 税区分が未設定の行は従来どおり課税売上 10% とみなす（黙って非課税にすると過少計上になるため）
+    decimal defaultPct = GetSalesTaxRatePercent();
+
+    foreach (var row in Lines.Rows)
+    {
+        var l = (InvoiceLine)row;
+        if (l.Amount.Value == null) continue;
+        decimal pct = l.TaxCategoryRef.Value == null
+            ? defaultPct
+            : ResolveTaxableSalesRatePercent(l.TaxCategoryRef.Value);
+        if (pct <= 0) continue;   // 非課税・免税・不課税・対象外、または税率なし
+
+        var idx = rates.IndexOf(pct);
+        if (idx < 0) { rates.Add(pct); bases.Add(l.Amount.Value); }
+        else { bases[idx] = bases[idx] + l.Amount.Value; }
+    }
+
+    var tax = 0;
+    for (var i = 0; i < rates.Count; i++)
+    {
+        tax = tax + (int)(bases[i] * rates[i] / 100);   // 税率ごとに 1 回だけ切り捨て
+    }
+    return tax;
+}
+
+// 税区分 ID → 課税売上ならその税率(%)、それ以外・未設定なら 0
+decimal ResolveTaxableSalesRatePercent(long? taxCategoryId)
+{
+    if (taxCategoryId == null) return 0;
     var cs = new ModuleSearcher<TaxCategory>();
-    cs.AddEquals(c => c.Code.Value, "SALES_10");
+    cs.AddEquals(c => c.Id.Value, taxCategoryId);
     var found = cs.ExecuteFirstOrDefault();
     if (found == null) return 0;
     var tcat = (TaxCategory)found;
+    if (tcat.TaxationType.Value != "taxable_sales") return 0;
     if (tcat.Rate.Value == null) return 0;
     var rs = new ModuleSearcher<TaxRate>();
     rs.AddEquals(r => r.Id.Value, tcat.Rate.Value);
     var foundRate = rs.ExecuteFirstOrDefault();
     if (foundRate == null) return 0;
     return ((TaxRate)foundRate).RatePercent.Value ?? 0;
+}
+
+// 売上伝票の既定税区分を「マスタから」解決する（ADR-0050）。
+// 「ふつうは 10%」はこの時点の制度でしかないので、コードに税区分を直書きしない。
+// 税制マスタ > 税区分 の「既定として使う」で切り替えられる（tax_categories.default_for='sales'）。
+long? DefaultSalesTaxCategoryId()
+{
+    var cs = new ModuleSearcher<TaxCategory>();
+    cs.AddEquals(c => c.DefaultFor.Value, "sales");
+    cs.AddEquals(c => c.IsActive.Value, true);
+    var found = cs.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return ((TaxCategory)found).Id.Value;
+}
+
+// 既定税区分の税率(%)。税区分が未設定の明細（スクリプト経由で書かれた行など）の
+// 保険的な既定として使う。IsRequired は画面入力しか縛れないため。
+decimal GetSalesTaxRatePercent()
+{
+    return ResolveTaxableSalesRatePercent(DefaultSalesTaxCategoryId());
 }
 
 // 請求書番号採番: INV-{西暦下2桁}-{連番3桁}

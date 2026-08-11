@@ -1,7 +1,7 @@
 {
-  "Name": "InvoiceLine",
+  "Name": "AcceptanceLine",
   "DataSourceName": "BusinessAppSQLite",
-  "DbTable": "invoice_lines",
+  "DbTable": "acceptance_lines",
   "CanCreate": true,
   "CanUpdate": true,
   "CanDelete": true,
@@ -28,7 +28,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.IdFieldDesign"
     },
     {
-      "DbColumn": "acceptance_line_id",
+      "DbColumn": "acceptance_id",
       "Placeholder": "",
       "IsManualInput": false,
       "CompositeIdVariables": [],
@@ -40,28 +40,7 @@
       "DisplayName": "",
       "IsRequired": false,
       "OnDataChanged": "",
-      "Name": "AcceptanceLineRef",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "IsFocusSkip": false,
-      "NextFocusField": "",
-      "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.IdFieldDesign"
-    },
-    {
-      "DbColumn": "invoice_id",
-      "Placeholder": "",
-      "IsManualInput": false,
-      "CompositeIdVariables": [],
-      "CompositeIdSeparator": "",
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "InvoiceId",
+      "Name": "AcceptanceId",
       "IgnoreModification": false,
       "OnValidateInput": "",
       "IsFocusSkip": false,
@@ -91,24 +70,45 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
-      "DbColumn": "description",
-      "IsMultiline": false,
-      "IsAutoFitRows": false,
-      "Placeholder": "品目・作業内容",
-      "TextEditEmptyType": "Null",
-      "ShouldTrimAfterEdit": true,
-      "AutoTab": false,
+      "DbColumn": "sales_order_line_id",
+      "Placeholder": "",
+      "IsManualInput": false,
+      "CompositeIdVariables": [],
+      "CompositeIdSeparator": "",
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
+      "DisplayName": "",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "SalesOrderLineId",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.IdFieldDesign"
+    },
+    {
+      "DbColumn": "description",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "Null",
+      "ShouldTrimAfterEdit": true,
+      "AutoTab": false,
+      "IsUpdateProtected": true,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
       "DisplayName": "摘要",
-      "IsRequired": true,
+      "IsRequired": false,
       "OnDataChanged": "",
       "Name": "Description",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "IsFocusSkip": false,
+      "IsFocusSkip": true,
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
@@ -119,7 +119,7 @@
       "Format": "#,0",
       "IsSlider": false,
       "OnInput": "",
-      "IsUpdateProtected": false,
+      "IsUpdateProtected": true,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
@@ -129,7 +129,7 @@
       "Name": "Qty",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "IsFocusSkip": false,
+      "IsFocusSkip": true,
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
@@ -138,11 +138,11 @@
       "DbColumn": "unit",
       "IsMultiline": false,
       "IsAutoFitRows": false,
-      "Placeholder": "式・人月 等",
+      "Placeholder": "",
       "TextEditEmptyType": "Null",
       "ShouldTrimAfterEdit": true,
       "AutoTab": false,
-      "IsUpdateProtected": false,
+      "IsUpdateProtected": true,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
@@ -152,7 +152,7 @@
       "Name": "Unit",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "IsFocusSkip": false,
+      "IsFocusSkip": true,
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
@@ -163,7 +163,7 @@
       "Format": "#,0",
       "IsSlider": false,
       "OnInput": "",
-      "IsUpdateProtected": false,
+      "IsUpdateProtected": true,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
@@ -173,14 +173,35 @@
       "Name": "UnitPrice",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "IsFocusSkip": false,
+      "IsFocusSkip": true,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "DbColumn": "order_amount",
+      "Placeholder": "",
+      "Format": "#,0",
+      "IsSlider": false,
+      "OnInput": "",
+      "IsUpdateProtected": true,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "受注金額",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "OrderAmount",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": true,
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
       "DbColumn": "amount",
-      "Placeholder": "",
+      "Placeholder": "今回検収する金額",
       "Format": "#,0",
       "IsSlider": false,
       "OnInput": "",
@@ -188,8 +209,8 @@
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "金額",
-      "IsRequired": false,
+      "DisplayName": "検収金額",
+      "IsRequired": true,
       "OnDataChanged": "",
       "Name": "Amount",
       "IgnoreModification": false,
@@ -225,24 +246,6 @@
                 "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
               },
               "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
-            },
-            {
-              "SearchTargetVariable": "TaxationType.Value",
-              "Comparison": "NotEqual",
-              "Value": {
-                "Value": "taxable_purchase",
-                "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-              },
-              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-            },
-            {
-              "SearchTargetVariable": "TaxationType.Value",
-              "Comparison": "NotEqual",
-              "Value": {
-                "Value": "exempt_purchase",
-                "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-              },
-              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
             }
           ],
           "Name": "",
@@ -254,17 +257,17 @@
       "DbColumn": "tax_category_id",
       "EmptyCandidateType": "Null",
       "AllowOrSearch": false,
-      "IsUpdateProtected": false,
+      "IsUpdateProtected": true,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
       "DisplayName": "税区分",
-      "IsRequired": true,
+      "IsRequired": false,
       "OnDataChanged": "",
       "Name": "TaxCategoryRef",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "IsFocusSkip": false,
+      "IsFocusSkip": true,
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
@@ -273,9 +276,18 @@
   "UserWriteCondition": {
     "ModuleName": "AppUser",
     "Condition": {
-      "IsOrMatch": false,
+      "IsOrMatch": true,
       "IsNot": false,
       "Children": [
+        {
+          "SearchTargetVariable": "HasSalesAccess.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": true,
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+        },
         {
           "SearchTargetVariable": "HasAccountingAccess.Value",
           "Comparison": "Equal",
@@ -293,9 +305,18 @@
   "UserReadCondition": {
     "ModuleName": "AppUser",
     "Condition": {
-      "IsOrMatch": false,
+      "IsOrMatch": true,
       "IsNot": false,
       "Children": [
+        {
+          "SearchTargetVariable": "HasSalesAccess.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": true,
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+        },
         {
           "SearchTargetVariable": "HasAccountingAccess.Value",
           "Comparison": "Equal",
@@ -322,7 +343,7 @@
       "HeaderTitle": "",
       "DataOnlyFields": [
         "LineNo",
-        "AcceptanceLineRef"
+        "SalesOrderLineId"
       ],
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,
@@ -385,7 +406,24 @@
             "FieldName": "UnitPrice",
             "ContextMenu": "",
             "Label": "単価",
-            "Width": 180,
+            "Width": 160,
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": false,
+            "ClassName": "amount-cell",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "OrderAmount",
+            "ContextMenu": "",
+            "Label": "受注金額",
+            "Width": 160,
             "ColumnSpan": 1,
             "RowSpan": 1,
             "TextWrap": "Unset",
@@ -401,8 +439,8 @@
           {
             "FieldName": "Amount",
             "ContextMenu": "",
-            "Label": "金額",
-            "Width": 180,
+            "Label": "検収金額",
+            "Width": 160,
             "ColumnSpan": 1,
             "RowSpan": 1,
             "TextWrap": "Unset",
@@ -485,7 +523,7 @@
     "DeleteTogether": false,
     "CanCreate": false,
     "CanUpdate": false,
-    "CanDelete": true,
+    "CanDelete": false,
     "CanUserSort": true,
     "CanSelect": false,
     "UseIndexSort": false,

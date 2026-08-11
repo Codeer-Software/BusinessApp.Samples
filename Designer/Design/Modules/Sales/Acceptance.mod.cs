@@ -221,24 +221,148 @@ void DeleteAcceptance_OnClick()
     NavigationService.NavigateTo(NavigationService.GetModuleUrl("Acceptance"));
 }
 
-// 受注選択: 受注の未検収残額（受注額−確定済み検収累計）を検収額に、SALES_10 税率で消費税を自動セット (手修正可)
-// 初回検収では残額＝受注全額。分割検収の2回目以降は残額がセットされ、うっかり全額の再計上を防ぐ（P2）
+// 受注選択: 受注明細を検収明細として取り込む（ADR-0049）。
+// 各行の検収金額には「その受注明細の未検収残額（受注明細額 − 確定済み検収額の累計）」を入れる。
+// 初回検収では残額＝受注明細の全額。分割検収の 2 回目以降は残額が入り、うっかり全額の再計上を防ぐ。
+// 摘要・数量・単位・単価・税区分は受注明細のスナップショット（画面では読み取り専用）。
 void SalesOrderRef_OnDataChanged()
 {
     if (SalesOrderRef.Value == null)
     {
+        Lines.DeleteAllRows();
+        RecalcFromLines();
         UpdateOrderProgress();
         return;
     }
-    var orderTotal = GetOrderTotal(SalesOrderRef.Value);
-    var confirmedTotal = GetConfirmedTotal(SalesOrderRef.Value);
-    var remaining = orderTotal - confirmedTotal;
-    if (remaining < 0) remaining = 0;
-    Amount.Value = remaining;
-    decimal pct = GetSalesTaxRatePercent();
-    int tax = remaining * pct / 100;
-    TaxAmount.Value = tax;
+
+    var ls = new ModuleSearcher<SalesOrderLine>();
+    ls.AddEquals(l => l.SalesOrderId.Value, SalesOrderRef.Value);
+    ls.OrderBy(l => l.LineNo.Value);
+    var srcLines = ls.Execute();
+
+    Lines.DeleteAllRows();
+    if (srcLines.Count > 0)
+    {
+        Lines.AddRows(srcLines.Count);
+        var idx = 0;
+        foreach (var row in Lines.Rows)
+        {
+            var dst = (AcceptanceLine)row;
+            var src = (SalesOrderLine)srcLines[idx];
+            idx = idx + 1;
+            dst.LineNo.Value = src.LineNo.Value;
+            dst.SalesOrderLineId.Value = src.Id.Value;
+            dst.Description.Value = src.Description.Value;
+            dst.Qty.Value = src.Qty.Value;
+            dst.Unit.Value = src.Unit.Value;
+            dst.UnitPrice.Value = src.UnitPrice.Value;
+            dst.OrderAmount.Value = src.Amount.Value;
+            dst.TaxCategoryRef.Value = src.TaxCategoryRef.Value;
+
+            // その受注明細に対する未検収残額
+            var ordered = src.Amount.Value ?? 0;
+            var accepted = GetConfirmedTotalForOrderLine(src.Id.Value);
+            var remaining = ordered - accepted;
+            if (remaining < 0) remaining = 0;
+            dst.Amount.Value = remaining;
+        }
+    }
+
+    RecalcFromLines();
     UpdateOrderProgress();
+}
+
+// 検収明細の変更 → 行番号の振り直しと合計の再計算
+void Lines_OnDataChanged()
+{
+    if (inLinesHandler) return;
+    inLinesHandler = true;
+    var no = 0;
+    foreach (var row in Lines.Rows)
+    {
+        var l = (AcceptanceLine)row;
+        no = no + 1;
+        l.LineNo.Value = no;
+    }
+    RecalcFromLines();
+    inLinesHandler = false;
+}
+
+bool inLinesHandler = false;
+
+// 検収額・消費税額は明細から導出する（手入力しない・ADR-0049）。
+// 消費税は明細の税区分ごとに集計し、税率ごとに 1 回だけ端数処理する（ADR-0050）。
+void RecalcFromLines()
+{
+    var total = 0;
+    foreach (var row in Lines.Rows)
+    {
+        var l = (AcceptanceLine)row;
+        if (l.Amount.Value != null) total = total + l.Amount.Value;
+    }
+    Amount.Value = total;
+
+    decimal defaultPct = GetSalesTaxRatePercent();
+    var rates = new List<decimal>();
+    var bases = new List<int>();
+    foreach (var row in Lines.Rows)
+    {
+        var l = (AcceptanceLine)row;
+        if (l.Amount.Value == null) continue;
+        decimal pct = l.TaxCategoryRef.Value == null
+            ? defaultPct
+            : ResolveTaxableSalesRatePercent(l.TaxCategoryRef.Value);
+        if (pct <= 0) continue;
+        var idx = rates.IndexOf(pct);
+        if (idx < 0) { rates.Add(pct); bases.Add(l.Amount.Value); }
+        else { bases[idx] = bases[idx] + l.Amount.Value; }
+    }
+    var tax = 0;
+    for (var i = 0; i < rates.Count; i++)
+    {
+        tax = tax + (int)(bases[i] * rates[i] / 100);
+    }
+    TaxAmount.Value = tax;
+}
+
+// ある受注明細に対する確定済み検収額の累計（この検収自身は除く）
+int GetConfirmedTotalForOrderLine(long? salesOrderLineId)
+{
+    if (salesOrderLineId == null) return 0;
+    var s = new ModuleSearcher<AcceptanceLine>();
+    s.AddEquals(l => l.SalesOrderLineId.Value, salesOrderLineId);
+    var found = s.Execute();
+    var sum = 0;
+    foreach (var m in found)
+    {
+        var al = (AcceptanceLine)m;
+        if (al.AcceptanceId.Value == this.Id.Value) continue;   // 編集中の自分の行は除く
+        var acc = new ModuleSearcher<Acceptance>();
+        acc.AddEquals(a => a.Id.Value, al.AcceptanceId.Value);
+        var accFound = acc.ExecuteFirstOrDefault();
+        if (accFound == null) continue;
+        if (((Acceptance)accFound).Status.Value != "confirmed") continue;
+        if (al.Amount.Value != null) sum = sum + al.Amount.Value;
+    }
+    return sum;
+}
+
+// 税区分 ID → 課税売上ならその税率(%)、それ以外・未設定なら 0
+decimal ResolveTaxableSalesRatePercent(long? taxCategoryId)
+{
+    if (taxCategoryId == null) return 0;
+    var cs = new ModuleSearcher<TaxCategory>();
+    cs.AddEquals(c => c.Id.Value, taxCategoryId);
+    var found = cs.ExecuteFirstOrDefault();
+    if (found == null) return 0;
+    var tcat = (TaxCategory)found;
+    if (tcat.TaxationType.Value != "taxable_sales") return 0;
+    if (tcat.Rate.Value == null) return 0;
+    var rs = new ModuleSearcher<TaxRate>();
+    rs.AddEquals(r => r.Id.Value, tcat.Rate.Value);
+    var foundRate = rs.ExecuteFirstOrDefault();
+    if (foundRate == null) return 0;
+    return ((TaxRate)foundRate).RatePercent.Value ?? 0;
 }
 
 // この検収の合算先請求書の番号（未設定なら null）
@@ -277,20 +401,16 @@ void BilledInvoiceRef_OnDataChanged()
     }
 }
 
-// 課税売上 10% (tax_categories.code='SALES_10') の税率をマスタから解決
+// 売上伝票の既定税区分の税率(%)。税区分が未設定の明細に対する保険的な既定として使う。
+// 既定の税区分は税制マスタ（tax_categories.default_for='sales'）で設定する（ADR-0050）
 decimal GetSalesTaxRatePercent()
 {
     var cs = new ModuleSearcher<TaxCategory>();
-    cs.AddEquals(c => c.Code.Value, "SALES_10");
+    cs.AddEquals(c => c.DefaultFor.Value, "sales");
+    cs.AddEquals(c => c.IsActive.Value, true);
     var found = cs.ExecuteFirstOrDefault();
     if (found == null) return 0;
-    var tcat = (TaxCategory)found;
-    if (tcat.Rate.Value == null) return 0;
-    var rs = new ModuleSearcher<TaxRate>();
-    rs.AddEquals(r => r.Id.Value, tcat.Rate.Value);
-    var foundRate = rs.ExecuteFirstOrDefault();
-    if (foundRate == null) return 0;
-    return ((TaxRate)foundRate).RatePercent.Value ?? 0;
+    return ResolveTaxableSalesRatePercent(((TaxCategory)found).Id.Value);
 }
 
 // 検収番号採番: A-{西暦下2桁}-{連番3桁}
@@ -550,9 +670,11 @@ void CreateInvoice_OnClick()
     inv.Amount.Value = Amount.Value;
     inv.TaxAmount.Value = TaxAmount.Value;
 
-    // 明細は受注明細をコピー
-    var ls = new ModuleSearcher<SalesOrderLine>();
-    ls.AddEquals(l => l.SalesOrderId.Value, SalesOrderRef.Value);
+    // 明細は「検収明細」をコピーする（ADR-0049）。
+    // 受注明細ではなく検収明細を写すことで、請求書の明細合計＝検収額が構造的に成立し、
+    // 請求書を開き直しても金額が受注全額に戻らない（改善候補 A-1 の根治）。
+    var ls = new ModuleSearcher<AcceptanceLine>();
+    ls.AddEquals(l => l.AcceptanceId.Value, this.Id.Value);
     ls.OrderBy(l => l.LineNo.Value);
     var srcLines = ls.Execute();
     if (srcLines.Count > 0)
@@ -562,14 +684,15 @@ void CreateInvoice_OnClick()
         foreach (var row in inv.Lines.Rows)
         {
             var dst = (InvoiceLine)row;
-            var src = (SalesOrderLine)srcLines[idx];
+            var src = (AcceptanceLine)srcLines[idx];
             idx = idx + 1;
             dst.LineNo.Value = src.LineNo.Value;
+            dst.AcceptanceLineRef.Value = src.Id.Value;   // 行単位の超過判定の根拠
             dst.Description.Value = src.Description.Value;
             dst.Qty.Value = src.Qty.Value;
             dst.Unit.Value = src.Unit.Value;
             dst.UnitPrice.Value = src.UnitPrice.Value;
-            dst.Amount.Value = src.Amount.Value;
+            dst.Amount.Value = src.Amount.Value;          // 受注額ではなく検収額
             dst.TaxCategoryRef.Value = src.TaxCategoryRef.Value;
         }
     }
