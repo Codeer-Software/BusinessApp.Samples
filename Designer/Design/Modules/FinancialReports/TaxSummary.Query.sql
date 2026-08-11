@@ -44,6 +44,9 @@ lines AS (
   JOIN accounts a        ON a.id  = l.account_id
   WHERE e.status = 'posted'
     AND e.fiscal_year_id = (SELECT id FROM fy)
+    -- 期間指定は年度の内側を絞る（中間申告・月次の税額把握用。未指定なら年度まるごと）
+    AND (@date_from IS NULL OR date(e.entry_date) >= date(@date_from))
+    AND (@date_to   IS NULL OR date(e.entry_date) <= date(@date_to))
 ),
 agg AS (
   SELECT
@@ -102,7 +105,7 @@ SELECT * FROM (
   -- 最終行: 課税売上割合と控除方式の判定
   SELECT
     999999 AS sort_key,
-    '課税売上割合' AS tax_category_name,
+    '課税売上割合（表示期間）' AS tax_category_name,
     -- 表示は切り捨て。四捨五入だと 99.995% が「100.0%」になり、非課税売上があるのに
     -- 全額が課税売上に見えてしまう（実測。受取利息 620 円で発生した）
     CASE WHEN (s.taxable + s.tax_exempt) = 0 THEN '売上がありません'
