@@ -1,25 +1,127 @@
-SELECT
-  tc.display_order AS sort_key,
-  tc.name AS tax_category_name,
-  CASE tc.taxation_type
-    WHEN 'taxable_sales' THEN '課税売上'
-    WHEN 'taxable_purchase' THEN '課税仕入'
-    WHEN 'exempt_sales' THEN '非課税売上'
-    WHEN 'exempt_purchase' THEN '非課税仕入'
-    WHEN 'non_taxable' THEN '不課税'
-    WHEN 'export_exempt' THEN '免税売上'
-    ELSE '対象外'
-  END AS taxation_type_name,
-  COALESCE(SUM(CASE WHEN l.is_tax_line = 0 THEN l.amount ELSE 0 END), 0) AS base_amount,
-  COALESCE(SUM(CASE WHEN l.is_tax_line = 1 THEN l.amount ELSE 0 END), 0) AS tax_amount
-FROM journal_lines l
-JOIN journal_entries e ON e.id = l.journal_entry_id
-JOIN tax_categories tc ON tc.id = l.tax_category_id
-WHERE e.status = 'posted'
-  AND l.tax_category_id IS NOT NULL
-  -- 年度未選択（初期表示）は現在日付を含む年度に自動解決（BS/PL と同方式。申告基礎資料に前期分が混入しないように）
-  AND e.fiscal_year_id = COALESCE(@fiscal_year_id,
-    (SELECT id FROM fiscal_years
-     WHERE date(start_date) <= date('now') AND date(end_date) >= date('now')))
-GROUP BY tc.id
-ORDER BY tc.display_order
+-- 消費税集計表（ADR-0052 で全面改訂）
+--
+-- 設計の要点:
+-- 1) 金額は「符号を持たせて差引」で出す。journal_lines.amount は常に正の絶対値で、符号は dc にしか
+--    無い。旧実装は dc を見ずに単純合計していたため、赤伝で打ち消しても両建てで積み上がっていた
+--    （改善候補 B-6）。符号の基準は勘定科目の正残側 accounts.dc_normal —— 税区分から「自然な側」を
+--    決める案もあったが、不課税・対象外の科目に自然な側が定義できないため科目基準にした。
+--    市販ソフトが科目の正残側で符号を決めているのと同じ考え方。
+-- 2) 逆側に立った金額を「戻し」列で見せる。赤黒訂正と売上返品・値引を DB 上で区別する情報が無いため
+--    差引に溶かし込むだけにすると、申告で別掲すべき「対価の返還等」の存在が誰にも見えなくなる。
+--    差引と戻しの両方を出して、別掲の要否は人が判断できるようにする。
+-- 3) インボイス経過措置は取引日で控除割合を解決し、**割合ごとに行を分ける**。
+--    令和8年度税制改正で 80→70→50→30→0% の5段階になり、80%→70% の改定日が 2026-10-01。
+--    第18期（2026-04-01〜2027-03-31）はこの改定日をまたぐので、年度合計に単一の割合を掛けると誤る。
+-- 4) 末尾に課税売上割合と控除方式の判定を出す（合計残高試算表の「合計（貸借検算）」と同じ
+--    UNION ALL + sort_key で最終行にする方式）。判定閾値は system_thresholds（ddl/510）。
+--
+-- 税区分未設定（NULL）の行は存在しない前提（ADR-0052。490 で移行し 500 で NOT NULL 化）。
+WITH fy AS (
+  SELECT COALESCE(@fiscal_year_id,
+                  (SELECT id FROM fiscal_years
+                    WHERE date(start_date) <= date('now') AND date(end_date) >= date('now'))) AS id
+),
+lines AS (
+  SELECT
+    tc.id                          AS tc_id,
+    tc.display_order               AS display_order,
+    tc.name                        AS tc_name,
+    tc.taxation_type               AS taxation_type,
+    l.is_tax_line                  AS is_tax_line,
+    l.amount                       AS amount,
+    -- 科目の正残側に立っていれば +、逆側（赤伝・返品・値引）なら −
+    CASE WHEN l.dc = a.dc_normal THEN 1 ELSE -1 END AS sgn,
+    -- 経過措置の控除割合は取引日で期間解決する。経過措置でない課税仕入は 100%
+    CASE WHEN tc.uses_transition_deduction = 1
+         THEN COALESCE((SELECT r.rate_percent FROM invoice_transition_rates r
+                         WHERE date(e.entry_date) >= date(r.valid_from)
+                           AND date(e.entry_date) <= date(r.valid_to)), 0)
+         ELSE 100
+    END AS deduct_rate
+  FROM journal_lines l
+  JOIN journal_entries e ON e.id  = l.journal_entry_id
+  JOIN tax_categories tc ON tc.id = l.tax_category_id
+  JOIN accounts a        ON a.id  = l.account_id
+  WHERE e.status = 'posted'
+    AND e.fiscal_year_id = (SELECT id FROM fy)
+),
+agg AS (
+  SELECT
+    tc_id, display_order, tc_name, taxation_type, deduct_rate,
+    SUM(CASE WHEN is_tax_line = 0 THEN amount * sgn ELSE 0 END)        AS base_amount,
+    SUM(CASE WHEN is_tax_line = 1 THEN amount * sgn ELSE 0 END)        AS tax_amount,
+    SUM(CASE WHEN is_tax_line = 0 AND sgn = -1 THEN amount ELSE 0 END) AS base_reverse,
+    SUM(CASE WHEN is_tax_line = 1 AND sgn = -1 THEN amount ELSE 0 END) AS tax_reverse
+  FROM lines
+  GROUP BY tc_id, deduct_rate
+),
+sales AS (
+  -- 課税売上割合 = (課税売上 + 免税売上) ÷ (課税売上 + 免税売上 + 非課税売上)
+  -- 不課税・対象外は分母に含めない（国税庁 タックスアンサー No.6405）
+  SELECT
+    COALESCE(SUM(CASE WHEN taxation_type IN ('taxable_sales', 'export_exempt') THEN base_amount ELSE 0 END), 0) AS taxable,
+    COALESCE(SUM(CASE WHEN taxation_type = 'exempt_sales' THEN base_amount ELSE 0 END), 0)                      AS tax_exempt
+  FROM agg
+),
+th AS (
+  SELECT
+    (SELECT amount FROM system_thresholds WHERE code = 'FULL_DEDUCT_RATIO_MIN'
+       AND (valid_from IS NULL OR date(valid_from) <= date('now'))
+       AND (valid_to   IS NULL OR date(valid_to)   >= date('now')) LIMIT 1) AS ratio_min,
+    (SELECT amount FROM system_thresholds WHERE code = 'FULL_DEDUCT_SALES_CAP'
+       AND (valid_from IS NULL OR date(valid_from) <= date('now'))
+       AND (valid_to   IS NULL OR date(valid_to)   >= date('now')) LIMIT 1) AS sales_cap
+)
+SELECT * FROM (
+  SELECT
+    -- 経過措置で行が割れるときは控除割合の大きい順に並べる（80% → 70%）
+    agg.display_order * 10 + (100 - agg.deduct_rate) / 10 AS sort_key,
+    agg.tc_name AS tax_category_name,
+    CASE agg.taxation_type
+      WHEN 'taxable_sales'    THEN '課税売上'
+      WHEN 'taxable_purchase' THEN '課税仕入'
+      WHEN 'exempt_sales'     THEN '非課税売上'
+      WHEN 'exempt_purchase'  THEN '非課税仕入'
+      WHEN 'non_taxable'      THEN '不課税'
+      WHEN 'export_exempt'    THEN '免税売上'
+      ELSE '対象外'
+    END AS taxation_type_name,
+    agg.base_amount + agg.tax_amount AS gross_amount,
+    agg.base_amount                  AS base_amount,
+    agg.tax_amount                   AS tax_amount,
+    agg.base_reverse                 AS base_reverse,
+    agg.tax_reverse                  AS tax_reverse,
+    -- 控除率・控除対象税額は課税仕入だけに出す（売上・非課税仕入・不課税・対象外は空欄）
+    CASE WHEN agg.taxation_type = 'taxable_purchase' THEN agg.deduct_rate || '%' END AS deduct_rate,
+    CASE WHEN agg.taxation_type = 'taxable_purchase'
+         THEN CAST(ROUND(agg.tax_amount * agg.deduct_rate / 100.0) AS INTEGER) END AS deductible_tax
+  FROM agg
+
+  UNION ALL
+
+  -- 最終行: 課税売上割合と控除方式の判定
+  SELECT
+    999999 AS sort_key,
+    '課税売上割合' AS tax_category_name,
+    -- 表示は切り捨て。四捨五入だと 99.995% が「100.0%」になり、非課税売上があるのに
+    -- 全額が課税売上に見えてしまう（実測。受取利息 620 円で発生した）
+    CASE WHEN (s.taxable + s.tax_exempt) = 0 THEN '売上がありません'
+         ELSE printf('%.2f%%', CAST(s.taxable * 10000.0 / (s.taxable + s.tax_exempt) AS INTEGER) / 100.0)
+              || '（'
+              || CASE WHEN s.taxable * 100.0 / (s.taxable + s.tax_exempt) >= th.ratio_min
+                       AND s.taxable <= th.sales_cap
+                      THEN '全額控除できます'
+                      ELSE '個別対応方式または一括比例配分方式が必要です'
+                 END
+              || '）'
+    END AS taxation_type_name,
+    NULL AS gross_amount,
+    NULL AS base_amount,
+    NULL AS tax_amount,
+    NULL AS base_reverse,
+    NULL AS tax_reverse,
+    CAST(NULL AS TEXT) AS deduct_rate,
+    NULL AS deductible_tax
+  FROM sales s CROSS JOIN th
+)
+ORDER BY sort_key
