@@ -3,6 +3,8 @@
 -- 期限超過の売掛 = 売掛残高一覧（ReceivableBalance）の state='期限超過' と同一条件
 -- 資金ショート = 資金繰り予測（CashFlowForecastData）の alert_mark と同一モデル（当月+3ヶ月・期末資金<0 の月数）
 -- 予算警告 = 予実対比（BudgetVsActual）の alert_mark と同一条件の部門数（当年度・BUDGET_ALERT_RATE）
+-- 入金の集計は 3 帳票とも「消込済み（消込仕訳がある）入金」だけを数える。発行時に自動作成される
+-- 未確定の入金予定（ADR-0032）を含めると期限超過が 0 件・入金予定が 0 円になる（改善候補 A-2）
 WITH RECURSIVE months(idx, month_first) AS (
   SELECT 0, date('now', 'start of month')
   UNION ALL
@@ -19,7 +21,11 @@ pay AS (
 recv AS (
   SELECT count(*) AS c
   FROM invoices i
-  LEFT JOIN (SELECT invoice_id, SUM(amount) AS received FROM receipts GROUP BY invoice_id) rc
+  LEFT JOIN (SELECT r.invoice_id AS invoice_id, SUM(r.amount) AS received
+             FROM receipts r
+             WHERE EXISTS (SELECT 1 FROM journal_entries je
+                           WHERE je.source_type = 'receipt' AND je.source_id = r.id)
+             GROUP BY r.invoice_id) rc
     ON rc.invoice_id = i.id
   WHERE i.status <> 'void' AND i.status <> 'draft' AND i.status <> 'paid'
     AND COALESCE(rc.received, 0) < COALESCE(i.amount, 0) + COALESCE(i.tax_amount, 0)
@@ -53,7 +59,11 @@ inv_in AS (
   SELECT max(date(i.due_date, 'start of month'), (SELECT month_first FROM months WHERE idx = 0)) AS m,
          COALESCE(i.amount, 0) + COALESCE(i.tax_amount, 0) - COALESCE(rc.received, 0) AS amt
   FROM invoices i
-  LEFT JOIN (SELECT invoice_id, SUM(amount) AS received FROM receipts GROUP BY invoice_id) rc
+  LEFT JOIN (SELECT r.invoice_id AS invoice_id, SUM(r.amount) AS received
+             FROM receipts r
+             WHERE EXISTS (SELECT 1 FROM journal_entries je
+                           WHERE je.source_type = 'receipt' AND je.source_id = r.id)
+             GROUP BY r.invoice_id) rc
     ON rc.invoice_id = i.id
   WHERE i.status IN ('issued', 'partial') AND i.due_date IS NOT NULL
 ),

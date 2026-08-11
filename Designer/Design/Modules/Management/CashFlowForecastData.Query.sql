@@ -1,6 +1,8 @@
 -- 資金繰り予測（当月含む今後4ヶ月）: 期首資金 / 入金予定 / 出金予定 / 期末資金 / 警告
 -- 「今日」は既存帳票（売掛残高・元帳の既定値）に合わせ date('now') を使用。
 -- 入金: 未回収請求書（期日月、期日超過は当月）＋ 定期請求の未生成将来分（対象月の翌月末入金）
+--       未回収額の控除は消込済みの入金だけ。発行時に自動作成される未確定の入金予定（ADR-0032）を
+--       引くと全請求書が残額 0 になり、入金予定が構造的に 0 円になる（改善候補 A-2）
 -- 出金: 未払金残高（当月）＋ 承認済み未仕訳の経費（当月）＋ 月次人件費（各月）
 --       ＋ 仕入先請求書の未払い分（D-6 連動。支払期限月・期限超過/期限なしは当月。
 --         received/accrued を請求書ベースで拾うため買掛金 GL 残高は加算しない=二重計上回避）
@@ -37,7 +39,11 @@ inv_in AS (
   SELECT max(date(i.due_date, 'start of month'), (SELECT month_first FROM months WHERE idx = 0)) AS m,
          COALESCE(i.amount, 0) + COALESCE(i.tax_amount, 0) - COALESCE(rc.received, 0) AS amt
   FROM invoices i
-  LEFT JOIN (SELECT invoice_id, SUM(amount) AS received FROM receipts GROUP BY invoice_id) rc
+  LEFT JOIN (SELECT r.invoice_id AS invoice_id, SUM(r.amount) AS received
+             FROM receipts r
+             WHERE EXISTS (SELECT 1 FROM journal_entries je
+                           WHERE je.source_type = 'receipt' AND je.source_id = r.id)
+             GROUP BY r.invoice_id) rc
     ON rc.invoice_id = i.id
   WHERE i.status IN ('issued', 'partial') AND i.due_date IS NOT NULL
 ),

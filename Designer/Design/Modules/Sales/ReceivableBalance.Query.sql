@@ -9,10 +9,16 @@
 --   @department_id 部門（NULL=絞り込みなし）
 --   @state_filter 状態（exclude_paid=「入金済を除く」／それ以外は状態ラベルの完全一致）
 --   @due_from / @due_to 支払期限の範囲
+-- 入金累計は「消込済み（消込仕訳がある）入金」だけを数える。請求書の発行時には税込全額の
+-- 未確定入金＝入金予定が自動作成される（ADR-0032）ため、単純合計にすると発行しただけの
+-- 請求書が「入金済・残額 0」に見え、既定フィルタ（入金済を除く）から消える（改善候補 A-2）。
+-- 「確定済み」の表現は journal_entries(source_type='receipt', source_id) の存在（ReceiptList と同じ流儀）
 WITH rc AS (
-  SELECT invoice_id, SUM(amount) AS received
-  FROM receipts
-  GROUP BY invoice_id
+  SELECT r.invoice_id AS invoice_id, SUM(r.amount) AS received
+  FROM receipts r
+  WHERE EXISTS (SELECT 1 FROM journal_entries je
+                WHERE je.source_type = 'receipt' AND je.source_id = r.id)
+  GROUP BY r.invoice_id
 ),
 base AS (
   SELECT
