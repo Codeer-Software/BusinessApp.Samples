@@ -228,7 +228,7 @@
           "SearchLayoutName": "",
           "UserUrlParameter": true,
           "PageTitle": "承認フローテンプレート",
-          "HeaderTitle": "経費承認ルートのテンプレート（課長のみ・部長＋総務 など）を管理します。どの申請にどのテンプレートを使うかは「承認ルート判定」で設定します。",
+          "HeaderTitle": "経費承認ルートのテンプレート（課長まで・部長まで＋総務 など）を管理します。承認段は積み上げ式で、金額が上がると段が増えます。どの申請にどのテンプレートを使うかは「承認ルート判定」で設定します。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,

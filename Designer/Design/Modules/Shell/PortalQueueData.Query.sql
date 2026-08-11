@@ -13,7 +13,7 @@ SELECT
     WHERE rb.is_active = 1 AND rb.status = 'confirmed'
       AND date(rb.start_month) <= date('now', 'start of month')
       AND (rb.end_month IS NULL OR date(rb.end_month) >= date('now', 'start of month'))
-      AND (rb.billing_cycle <> 'annual'
+      AND (rb.billing_cycle <> 'yearly'
            OR ((CAST(strftime('%Y', 'now') AS INTEGER) * 12 + CAST(strftime('%m', 'now') AS INTEGER))
                - (CAST(strftime('%Y', rb.start_month) AS INTEGER) * 12 + CAST(strftime('%m', rb.start_month) AS INTEGER))) % 12 = 0)
       AND NOT EXISTS (SELECT 1 FROM invoices iv
