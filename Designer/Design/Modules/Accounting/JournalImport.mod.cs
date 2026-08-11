@@ -2,6 +2,7 @@
 // 他ソフトからの移行・給与計算ソフトの仕訳データ取込の受け皿。
 // 形式: 伝票グループ,日付,借貸,科目コード,金額,税区分コード,摘要（1行=1明細行）
 // 方針: 行は無加工で取り込む（税の再計算・税行の自動生成はしない。移行の正確性優先）。
+//       ただし税区分だけは空欄を補完する（ADR-0052。未設定の行は作らない）。
 // 検証はグループ（伝票）単位: 1行でも NG のグループは伝票ごとスキップして理由を集計する。
 // 生成は JournalEntry 単位の je.Submit()（表示専用モジュールの this.Submit() は機能しない）。
 // 注: グループエラーの記録は List への追記＋線形探索で行う（インデクサ書き込み・
@@ -151,6 +152,71 @@ void Import_OnClick()
         ResultLabel.Text = $"取込 0 伝票（解析不能行 {badLines} 行）";
         Toaster.Warn("取り込める仕訳がありませんでした");
         return;
+    }
+
+    // ---- 税区分の補完（ADR-0052: 税区分未設定の行を作らない） ----
+    // 空欄は勘定科目マスタの既定で埋める。ただし税行（仮払/仮受消費税）は本体行に対する消費税なので
+    // 本体行と同じ税区分が正しく、科目の既定（＝対象外）を入れると集計表からその税額が消える（B-5 の再発）。
+    // 税行は同一伝票の本体行から継承し、推定できないものは伝票ごとスキップして税区分コードの指定を促す。
+    for (int ri = 0; ri < rGroup.Count; ri++)
+    {
+        if (rTaxCatId[ri] != null) continue;
+        if (rAccountId[ri] == null) continue;   // 科目コード不正は解析時に記録済み
+
+        object resolved = null;
+        var failReason = "";
+
+        if (rIsTaxLine[ri])
+        {
+            object found = null;
+            var conflict = false;
+            for (int rj = 0; rj < rGroup.Count; rj++)
+            {
+                if (rGroup[rj] != rGroup[ri]) continue;
+                if (rIsTaxLine[rj]) continue;
+                if (rTaxCatId[rj] == null) continue;
+                if (found == null) { found = rTaxCatId[rj]; }
+                else if ($"{found}" != $"{rTaxCatId[rj]}") { conflict = true; break; }
+            }
+            if (conflict)
+            {
+                failReason = "税行の税区分を推定できません（本体行の税区分が複数あります）。税区分コードを指定してください";
+            }
+            else if (found == null)
+            {
+                failReason = "税行の税区分を推定できません（本体行に税区分がありません）。税区分コードを指定してください";
+            }
+            else
+            {
+                resolved = found;
+            }
+        }
+        else
+        {
+            foreach (var am in accounts)
+            {
+                var a = (Account)am;
+                if ($"{a.Id.Value}" == $"{rAccountId[ri]}") { resolved = a.DefaultTaxCategory.Value; break; }
+            }
+            if (resolved == null)
+            {
+                failReason = "科目に既定税区分がありません。税区分コードを指定してください";
+            }
+        }
+
+        if (resolved != null)
+        {
+            rTaxCatId[ri] = resolved;
+            continue;
+        }
+
+        var errGroup = rGroup[ri];
+        var errSeen = false;
+        for (int i = 0; i < errGi.Count; i++)
+        {
+            if (errGi[i] == errGroup) { errSeen = true; break; }
+        }
+        if (!errSeen) { errGi.Add(errGroup); errMsg.Add(failReason); }
     }
 
     // ---- グループ単位の検証（貸借一致・期間 open） ----

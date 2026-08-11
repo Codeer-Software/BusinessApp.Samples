@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     account_type TEXT NOT NULL,          -- asset / liability / equity / revenue / expense
     category_id INTEGER NOT NULL REFERENCES account_categories(id),
     dc_normal TEXT NOT NULL,             -- D / C（正残の側。貸倒引当金等の評価勘定は逆側）
-    default_tax_category_id INTEGER REFERENCES tax_categories(id),  -- NULL = 税対象外
+    default_tax_category_id INTEGER REFERENCES tax_categories(id),  -- 仕訳入力時の既定税区分（下記 seed の NULL は 490 で OUT_OF_SCOPE に埋める。ADR-0052 以降 NULL は使わない）
     display_order INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1
 );
