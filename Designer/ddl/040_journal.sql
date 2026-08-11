@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS journal_lines (
     department_id INTEGER REFERENCES departments(id),
     project_id INTEGER REFERENCES projects(id),
     amount INTEGER NOT NULL,              -- 円（税抜経理の本体額。税は別行）
-    tax_category_id INTEGER REFERENCES tax_categories(id),
+    tax_category_id INTEGER NOT NULL REFERENCES tax_categories(id),  -- ADR-0052: 未設定は作らない（税と無関係な行は「対象外」を明示する。既存 DB は 500 で移行）
     tax_input_mode TEXT,                  -- inclusive(内税) / exclusive(外税) / none
     input_amount INTEGER,                 -- ユーザー入力額（内税なら税込）。監査・再計算用
     is_tax_line INTEGER NOT NULL DEFAULT 0,  -- 1=システム生成の消費税行
