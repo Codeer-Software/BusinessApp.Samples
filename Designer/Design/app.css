@@ -1,4 +1,4 @@
-/* 帳合(Chōai) カスタムCSS
+/* よろず(Yorozu) カスタムCSS
    参照: ClaudeCodeForDesigner/Docs/AppCss.md（ListElement.ClassName は一覧の td/th に付与される） */
 
 /* 一覧の金額・数値列: 右詰め＋等幅数字（ListElement.ClassName = "amount-cell"） */
@@ -17,7 +17,7 @@
   text-align: right;
 }
 
-/* 一覧ページの HeaderTitle は「画面の説明文」として使う（帳合の規約）。
+/* 一覧ページの HeaderTitle は「画面の説明文」として使う（よろずの規約）。
    DOM: <h4 class="row"><div class="col">説明文</div></h4>（実測）。
    見出しの太字・大文字のままだと説明文が重いので、通常ウェイトの補足テキストに落とす */
 h4.row > .col {
