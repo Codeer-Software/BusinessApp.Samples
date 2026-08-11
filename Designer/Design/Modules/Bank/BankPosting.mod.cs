@@ -401,6 +401,7 @@ void PostAll_OnClick()
                 }
             }
         }
+        je.FillMissingTaxCategories();
         var ok = je.Submit();
         if (ok != true) { failed = failed + 1; continue; }
 

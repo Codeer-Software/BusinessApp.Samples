@@ -522,6 +522,7 @@ void Confirm_OnClick()
             l.InputAmount.Value = creditAmount;
         }
     }
+    je.FillMissingTaxCategories();
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("消込仕訳の生成に失敗しました"); return; }
 

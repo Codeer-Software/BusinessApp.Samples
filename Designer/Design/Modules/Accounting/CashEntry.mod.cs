@@ -108,6 +108,7 @@ void Run_OnClick()
             l.Account.Value = isIn ? CounterAccount.Value : cashAccountId;
         }
     }
+    je.FillMissingTaxCategories();
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("仕訳の起票に失敗しました"); return; }
 

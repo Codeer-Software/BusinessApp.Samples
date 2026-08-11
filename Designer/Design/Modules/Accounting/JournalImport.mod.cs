@@ -376,6 +376,7 @@ void Import_OnClick()
             l.Description.Value = rDesc[ri];
         }
 
+        je.FillMissingTaxCategories();   // 上の補完で全行埋まっているはずだが、経路共通の保険として通す
         var ok = je.Submit();
         if (ok != true)
         {

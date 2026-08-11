@@ -62,6 +62,7 @@ void CreateEntry_OnClick()
         l.TaxInputMode.Value = t.TaxInputMode.Value;
         l.Description.Value = t.Description.Value;
     }
+    je.FillMissingTaxCategories();
     var ret = je.Submit();
     if (ret != true)
     {

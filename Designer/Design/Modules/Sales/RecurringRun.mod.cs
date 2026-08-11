@@ -505,6 +505,7 @@ void Run_OnClick()
                     l.Description.Value = "消費税（行2）";
                 }
             }
+            je.FillMissingTaxCategories();
             var retJe = je.Submit();
             if (retJe != true)
             {
@@ -633,6 +634,7 @@ void Run_OnClick()
                     l.Description.Value = "消費税（行2）";
                 }
             }
+            je.FillMissingTaxCategories();
             var retJe = je.Submit();
             if (retJe != true)
             {
@@ -763,6 +765,7 @@ int CreateDeferJournal(object fiscalYearId, object billing, object annualInvId, 
             l.InputAmount.Value = portion;
         }
     }
+    dje.FillMissingTaxCategories();
     var retDje = dje.Submit();
     if (retDje != true)
     {

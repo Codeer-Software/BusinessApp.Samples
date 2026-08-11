@@ -391,6 +391,7 @@ void Run_OnClick()
                 l.Description.Value = "消費税（行2）";
             }
         }
+        je.FillMissingTaxCategories();
         var retJe = je.Submit();
         if (retJe != true)
         {

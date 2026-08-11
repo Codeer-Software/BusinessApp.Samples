@@ -118,6 +118,48 @@ void ApplyLineDefaults()
     }
 }
 
+// 税区分が空の明細を、勘定科目マスタの既定税区分で埋める（ADR-0052）。
+// **スクリプトから仕訳を生成する経路は je.Submit() の直前に必ずこれを呼ぶこと**（例外なし）。
+// 各経路は売上・費用の行にだけ税区分を積んでおり、相手勘定（売掛金・買掛金・預金・現金・
+// 未払金・前受収益・固定資産等）の行には積んでいない。BS 科目の既定は「対象外」なので、
+// ここで一括して入れれば税区分未設定の行が DB に落ちない。
+// 税行（IsTaxLine=true）は本体行と同じ税区分でなければならず、「対象外」を入れると
+// その税額が消費税集計表から消える（B-5 の再発）ため、ここでは意図的に触らない
+// ——税行の税区分は各経路が本体行と同じ値を明示的にセットしている。
+void FillMissingTaxCategories()
+{
+    var missingAccountIds = new List<object>();
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.IsTaxLine.Value == true) continue;
+        if (l.Account.Value == null) continue;
+        if (l.TaxCategory.Value != null) continue;
+        missingAccountIds.Add(l.Account.Value);
+    }
+    if (missingAccountIds.Count == 0) return;
+
+    var s = new ModuleSearcher<Account>();
+    s.AddIn(e => e.Id.Value, missingAccountIds);
+    var accounts = s.Execute();
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.IsTaxLine.Value == true) continue;
+        if (l.Account.Value == null) continue;
+        if (l.TaxCategory.Value != null) continue;
+        foreach (var am in accounts)
+        {
+            var acc = (Account)am;
+            if (acc.Id.Value == l.Account.Value)
+            {
+                l.TaxCategory.Value = acc.DefaultTaxCategory.Value;
+                break;
+            }
+        }
+    }
+}
+
 void UpdateTotals()
 {
     var d = 0;

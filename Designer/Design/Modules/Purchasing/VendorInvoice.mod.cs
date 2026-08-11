@@ -372,6 +372,7 @@ void Accrue_OnClick()
             l.InputAmount.Value = gross;
         }
     }
+    je.FillMissingTaxCategories();
     var ok = je.Submit();
     if (ok != true) { Toaster.Error("未払計上仕訳の生成に失敗しました"); return; }
 
@@ -481,6 +482,7 @@ void Pay_OnClick()
             l.InputAmount.Value = gross;
         }
     }
+    je.FillMissingTaxCategories();
     var ok = je.Submit();
     if (ok != true) { Toaster.Error("支払仕訳の生成に失敗しました"); return; }
 

@@ -282,6 +282,7 @@ void GenerateDep_OnClick()
             l.Account.Value = AssetAccount.Value;
         }
     }
+    je.FillMissingTaxCategories();
     var ret = je.Submit();
     if (ret == false)
     {
