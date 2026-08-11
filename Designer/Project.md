@@ -10,7 +10,7 @@
   - 種別: SQLite / 接続先: `<リポジトリ>\LocalData\db\business-app_v1.db`（2026-07-09 に C:\Codeer.LowCode.Blazor.Local から移設 → `docs/decisions/0017`・`LocalData/README.md`）
   - `AllowCliSqlAccess: true`（ローカル専用 DB。本番を指さない）
   - 認証テーブル（app_users）・一時ファイル（temporary_files）も同居
-- 旧 `SampleSQLite`（sqlite_sample_auth.db）はフェーズ A-0 で撤去予定。**会計テーブルを置かないこと**
+- 旧 `SampleSQLite`（sqlite_sample_auth.db）は**フェーズ A-0（2026-07-05）で撤去済み**。BusinessAppSQLite 以外に会計テーブルを置かないこと
 - サーバ側: `BusinessApp.Server/appsettings(.Development).json` にも同名データソースの定義が必要（変更時はサーバ再起動）
 
 ## 命名規約
@@ -19,6 +19,18 @@
 - モジュール・フィールド: PascalCase 英語（例 `JournalEntry` / `EntryDate`）。画面表示名（DisplayName）は日本語
 - 主要テーブル名は `docs/04_会計ドメイン設計.md` の定義が正
 - CLB システムフィールドは予約名（`Id` / `CreatedAt` / `Creator` / `UpdatedAt` / `Updater`）を使用
+
+## レイアウト規約（画面の見た目）
+
+- **参照フィールドの幅**（2026-08-09 ユーザー指示・全画面共通）:
+  - **取引先**（Partner 参照）が入るカラムは **440px**
+  - **案件 / プロジェクト**（Project 参照）が入るカラムは **640px**
+  - 理由: どちらも将来どんな長さの文字列が入るか読めないため、既定幅では収まらない。
+    **これらのフィールドを新しい画面に追加するときは、常にこの幅に合わせる**
+- Main の左サイドバーは幅 300px、ブランド文字は FontSize 15
+- 金額列は右詰め・3桁カンマ区切り（`#,0`）。フォーム入力欄は左詰めのまま
+- ボタンの色は 2 色規約（ADR-0027）: 通常操作は Primary（青）、破壊的・不可逆な操作は Danger（赤）
+- 検索条件のラベル幅は 18px/字 で見積もる（ADR-0020〜0022 の UI レビュー規約）
 
 ## 業務ルール（会計の不変条件）
 
@@ -30,7 +42,7 @@
 
 ## 既存資産
 
-- `Modules/AppUser.mod.json`（Cookie 認証・admin/admin）・`Home.mod.json`・`PageFrames/Main.frm.json` — 認証テンプレート由来。AppUser はフェーズ A-0 で BusinessAppSQLite へ切替
+- `Modules/MasterSystem/AppUser.mod.json`（Cookie 認証・admin/admin）・`PageFrames/Main.frm.json` — 認証テンプレート由来。AppUser はフェーズ A-0 で BusinessAppSQLite へ切替。テンプレート由来の旧 `Home.mod.json` は Shell/PortalHome・PortalSidebar（業務ポータル＝ADR-0042/0045）へ発展し、旧 Home／ExpenseHome／SalesHome／AccountingHome／AdminHome は全廃。Main は PortalHome 着地＋Left をモジュール型サイドバー（PortalSidebar）で置換
 - 承認フロー・経費申請の正典: `ClaudeCodeForDesigner/Samples/PatternShowcaseAuth/` と `../references/SampleProject_AuthPatterns/`（後者はベンダー提供サンプルのローカル参照コピー。再配布権未確認のため Git 追跡外＝ADR-0038。リポジトリを clone した環境には存在しない）
 
 ## デプロイ手順（zip packing — 2026-07-05 実測確立済み）
@@ -96,12 +108,13 @@
 - 2026-07-26: **`ListLayouts[""].OnAfterInitialization` は「詳細ページ埋め込みの ListField」の行でも発火する**（7/23 の ListPage 文脈に続き実測。RecurringRun 詳細内の PlanLines＝RecurringRunPlan の生成予定行ハイライトで確認）。ただし埋め込み一覧のルート div に `list-module` 属性は付かないため、**CSS のスコープは親詳細ページの `data-module`（例: `[data-module="RecurringRun"] table tbody tr:has(.row-planned)`）で取る**
 - 2026-07-26: **モジュールスクリプト定義のメソッドは「別モジュールのスクリプト」からインスタンス経由で呼べる**（実測: FbExport が `partner.AccountValidationError()`＝PartnerBank.mod.cs のメソッドを呼ぶ。designcheck も型チェックを通し、ランタイム 1.3.4 で動作）。`new PartnerBank()` で作った素のインスタンスのメソッド（`IsDigitsLen`/`KanaError`）も呼べる。**検証ロジック等の共通化は「データを所有するモジュールに正典メソッドを置き、他モジュールから呼ぶ」で C# 拡張なしに実現できる**（取引先口座の全銀検証で確立）
 - 2026-07-26: **ブラウザ自動操作の form_input（JS 合成イベント）で複数フィールドを連続設定すると「.Value は更新されるが変更フラグが立たない」フィールドが生じ、Submit が部分 UPDATE になる**（実測: 5欄設定→登録で検証は通過（=Value は見えている）したのに DB は 3 欄のみ保存・2 欄 NULL）。実キーボード入力なら全欄正しく保存される＝アプリの不具合ではない。**自動テストでフォーム保存を検証するときは実クリック＋実タイピングを使い、保存結果は DB で確認する**（FB-005/トースト不可視と同族の automation 罠）
-- 2026-08-02: **部品アーキテクチャ体制（ADR-0040/0041）が現行の正**。フレームは部品×対象者の14枚・権限は部門メンバーシップ×sysadminフラグ（`docs/10_部品アーキテクチャ.md` が正典）。実装規約: ①新モジュールは部品フォルダに置き下方向以外の参照を作らない ②部品にメニューを足すときは全変種フレームへ反映（docs/10 §5 マトリクス） ③権限判定はキャッシュ列（HasSalesAccess/HasAccountingAccess/IsApprover/IsSysAdmin）のみ ④部品跨ぎ遷移は `/{Frame}/Top`
-- 2026-08-02: **フレームの UserReadCondition は AppUser の列しか参照できない**（関連テーブル不可 = FB-034）。権限の導出値は AppUser のキャッシュ列に DB トリガーで転記する（ddl/380。全再計算は ddl/385）。**メンバー行・部門種別を SQL 直叩きで変えてもトリガーが追随する**（デモ掃除 SQL 安全）
+- 2026-08-02（**→ 2026-08-05 の項で更新済み。権限・遷移規約は現行そちらが正**）: **部品アーキテクチャ体制（ADR-0040/0041）が現行の正**。フレームは部品×対象者の14枚・権限は部門メンバーシップ×sysadminフラグ（`docs/10_部品アーキテクチャ.md` が正典）。実装規約: ①新モジュールは部品フォルダに置き下方向以外の参照を作らない ②部品にメニューを足すときは全変種フレームへ反映（docs/10 §5 マトリクス） ③権限判定はキャッシュ列（HasSalesAccess/HasAccountingAccess/IsApprover/IsSysAdmin）のみ ④部品跨ぎ遷移は `/{Frame}/Top`
+- 2026-08-02（**→ 2026-08-05 の ADR-0043 で更新**: 導出キャッシュは is_approver（ddl/400）と is_director（ddl/450）の2本のみ。sales/accounting/expense/timesheet は直接フラグでトリガー無し・部門種別 dept_type は廃止列）: **フレームの UserReadCondition は AppUser の列しか参照できない**（関連テーブル不可 = FB-034）。権限の導出値は AppUser のキャッシュ列に DB トリガーで転記する（ddl/380。全再計算は ddl/385）。**メンバー行・部門種別を SQL 直叩きで変えてもトリガーが追随する**（デモ掃除 SQL 安全）
 - 2026-08-02: **表示専用モジュール（ホーム類）を指すフレームリンク／TopPage は、複製元由来の `SortFieldVariable`（Id.Value 等）を空にする**こと（残すと designcheck が「変数がモジュールに存在しません」— 実測）。また **git 復元をともなう検証（削除可能性テスト等）は必ず先にコミットしてから**（未コミット編集が checkout で消える事故を実際に起こした）
-- 2026-08-02 夜: **ログイン導線は業務ポータル（ADR-0042）が現行の正**。全員 Main/PortalHome に着地しタイルで部品を選ぶ。フレーム追加時は ①PortalHome にタイル追加 ②新フレーム先頭に「ホーム」リンク。実測知見3件: ①**表示専用モジュールの Detail はビュー専用扱いになりボタンが pointer-events:none でクリック不能**（エラーなし）— `Detail_OnAfterInit` 冒頭で `IsViewOnly = false;`（FB-035。FB-030 の同族） ②**rename-module はレガシー `TopPageModule` プロパティを追従しない**（TopPageModuleDesign.Module は追従・designcheck も沈黙）— rename 後に旧名 grep（FB-036） ③**IsVisible=false のフィールドは Width 指定カラムが空のまま残り歯抜けになる** — app.css で `[data-module="X"] .grid-column:not(:has(.field-layout)){display:none}`（FB-037）
+- 2026-08-02 夜（**→ 2026-08-05 の ADR-0045 で更新**: タイルは全廃。業務導線は Main 左サイドバー（PortalSidebar）に一本化。フレーム追加時は ①PortalSidebar にリンク（表示条件＋変種解決） ②必要ならポータル表示項目（docs/13 §3・Portal*Data） ③新フレーム先頭に「ホーム」）: **ログイン導線は業務ポータル（ADR-0042）が現行の正**。全員 Main/PortalHome に着地しタイルで部品を選ぶ。フレーム追加時は ①PortalHome にタイル追加 ②新フレーム先頭に「ホーム」リンク。実測知見3件: ①**表示専用モジュールの Detail はビュー専用扱いになりボタンが pointer-events:none でクリック不能**（エラーなし）— `Detail_OnAfterInit` 冒頭で `IsViewOnly = false;`（FB-035。FB-030 の同族） ②**rename-module はレガシー `TopPageModule` プロパティを追従しない**（TopPageModuleDesign.Module は追従・designcheck も沈黙）— rename 後に旧名 grep（FB-036） ③**IsVisible=false のフィールドは Width 指定カラムが空のまま残り歯抜けになる** — app.css で `[data-module="X"] .grid-column:not(:has(.field-layout)){display:none}`（FB-037）
 - 2026-08-03: **検索フォームの行は `IsWrap: true` を全モジュール標準とする**（幅が足りない時だけ折り返す・広い画面では無変化。1344〜1514px で請求書等の検索欄が右に見切れて横スクロールになる実測不具合への恒久対応。全 48 モジュールへ一括適用済み——新モジュールでも必ず `IsWrap: true` で作る）。あわせて**ラベル・ボタンの固定幅列は「テキスト実測幅＋余裕」を確保**（折返し実測: ExpenseRequest の添付ラベル 140→160/240、通知の未読に戻す列 110→130、H2 センタータイトルは 3 分割 auto 列だと約 1/3 幅しか取れず狭幅で折れる→タイトル列に Width 明示。検出は「rect.height >= lineHeight×1.85」の JS スイープが有効）
 - 2026-08-02 夜: **サーバ手動起動は BusinessApp.Server プロジェクトディレクトリを CWD にする**（Content root = 起動時 CWD。リポジトリ直下で exe を直叩きすると appsettings が読めず、デザイン未ロード＝全ログインが 500 `GetConnection: not found in ()` になる — 実測）。`dotnet run --project` 方式（上記デプロイ手順）ならこの罠は無い
 - 2026-08-05: **3軸分離・部課階層・ポータル本格化（ADR-0043/0044/0045）が現行の正**（docs/10 改訂版・docs/13 が正典）。8/2 記載の読み替え: ①権限判定は直接フラグ（HasSalesAccess/HasAccountingAccess/CanUseExpense/CanUseTimesheet）＋導出キャッシュは IsApprover のみ（トリガーは ddl/400・再計算は ddl/385。部門種別 dept_type は廃止） ②部品跨ぎ遷移は `/{Frame}` 素URL（/Top 全廃。着地=TopPageModuleDesign・セグメント Start） ③フレーム追加時は PortalSidebar にリンク＋PortalHome/Portal*Data に表示項目 ④departments は部課2階層（parent_id。伝票部門は NodeType='dept' のみ・既定値 CurrentUser.所属部） ⑤承認の役職解決は walk-up（自課の課長→部長繰上げ→経理代替） ⑥通知は基盤 Shell/Notification.Send() に一元化
 - 2026-08-05: **サイドバーのモジュール置換（SideBarDesign.ModuleName）の実測知見**: ①描画は ModuleRenderer 経由で `data-module` 属性が付かない。CSS はデスクトップ `.sidebar`／モバイル複製 `.sidebar-nav` × `.field-layout` でスコープする ②標準の Home/Links/Logout は消える（ログアウトは `NavigationService.Logout()` を **LabelField の OnClick** で自前実装。**AnchorTag は OnClick 指定でも href=/Main/ を持ち、サーバ往復を伴う OnClick が href ナビゲーションとのレースで負けて無反応になることがある**＝実測。スクリプト遷移するサイドバー項目は Label+OnClick 方式に統一） ③権限で IsVisible=false にしたリンクの空行は `.grid-row:not(:has(.field-layout)){display:none}` で畳む（PortalHome の非表示項目も同じ）
 - 2026-08-05: **check_navigation.py は新遷移規約対応版**（リテラル/補間 NavigateTo の フレーム×セグメント検査・`Resolve〇〇()` リゾルバ関数の戻り値解析）。スクリプトで変種フレームを解決するときは `frame = "X"` 代入か `string Resolve〇〇Frame()`（return "X" 形式）で書くと静的検査が効く
+- 2026-08-06: **レビュー第9弾（ADR-0046）の実装知見**: ①案件（Project）の書込は UserWriteCondition「経理∨部長」——「部長である」事実は is_director キャッシュ（ddl/450・department_members の director 行から導出。is_approver=ddl/400 と同型）。ProjectView は廃止し Project 本体に一本化（SES 精算条件は非経理に IsViewOnly） ②年度表示は fiscal_years.label（「第18期（2026年度）」形式・トリガー保守=ddl/430）を年度参照 SelectField 14箇所で参照——年度の表示を変えるときはこの1列 ③経費の「申請中」一覧は my_application_view（ddl/440・approval_flow に expense_request を JOIN）で件名・金額列を実現し、表示は進行中＋却下のみ（承認済・キャンセルは出さない） ④**CurrentUser の SelectField の DisplayText は候補未ロードだと空**（実測バグ）——スクリプトで表示名が要るときは該当マスタを ModuleSearcher で取り直す
