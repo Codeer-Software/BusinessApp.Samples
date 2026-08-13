@@ -55,6 +55,11 @@
 
 ## 作業中に得た知見（追記していく）
 
+- 2026-08-14: **範囲検索（Date/Number 等）は NULL 行を必ず落とす。`AllowEmptySearch` は救いにならない**（実測・ADR-0057）。`SearchMin` を入れると `>= SearchMin` が発行され、その列が NULL の行は除外される。共通プロパティ `AllowEmptySearch: true` を立てても挙動は変わらない（範囲検索フィールドでは観測可能な効果が無い。空欄検索でも全件出るので「空欄のとき IS NULL」でもない）。検索レイアウトの `Operator: "Or"` も OR で繋ぐ相手（IS NULL 条件）を作れないため無意味。**「未設定＝上限なし／継続中」を意味する列で「進行中だけ」の既定フィルタを作りたいときは、状態列を別に持たせるか一覧を Query モジュール化するしかない**（→ FB-043）
+- 2026-08-14: **SelectField の OR 検索（`AllowOrSearch: true`）は複数選択のチェックボックス群として描画され、既定値はスクリプトの `Status.SearchValues = リスト` で入る**（実測・ADR-0057）。`SearchValue`（単数）ではなく `SearchValues`。条件がチェックボックスとして見えるので「既定で隠している」ことが利用者に伝わる
+- 2026-08-14: **検索行に条件を詰めすぎると `IsWrap` でラベルと入力欄が泣き別れる**（実測）。ラベル列は `VerticalAlignment: Middle`・入力列は上端なので、行が折り返したり行の高さが伸びたりすると縦位置がずれて別々の行に見える。**1 行は 3 組（ラベル＋入力）まで**を目安にし、**OR 検索の SelectField のような縦長のコントロールは単独行**に置く（`Quote` の実績値: 日付 84+340・件名 66+640・状態 66+210・取引先 84+440・案件 66+640・部門 66+280）
+- 2026-08-14: **`OnSearchInitialization` を設定すると、サイドバーのリンクに `?initialize_search=true` が自動で付く**（実測）。設定前は付かない。逆に言えば、スクリプトから `NavigationService.GetModuleUrl(...)` で一覧へ戻すと**パラメータが付かないので既定条件は効かない**（削除後の一覧遷移など。見積・受注も同じ挙動）
+
 - 2026-07-23: **`LoadingService.StartLoading()` を `MessageBox.Show()` の前に開始しない**（実測）。ローディングオーバーレイが確認ダイアログの上に重なり、ボタンが押せなくなる。順序は「ガード検索 → ダイアログ → using loading → 本処理」。
 
 - 2026-07-22: **一覧の行単位の条件付きハイライトは「ListLayout の行イベント＋app.css の `:has()`」で実現できる**（実測）。`ListLayouts[""].OnAfterInitialization` は一覧の**行モジュールごと**に発火するので、そこで条件判定してフィールドに `ClassName` を付け、CSS 側で `[list-module="モジュール名"] table tbody tr:has(.クラス) > * { --bs-table-bg: 色; --bs-table-striped-bg: 色; }` と行（tr）全体に効かせる（背景は Bootstrap の CSS 変数経由。フィールドの `BackgroundColor` 直接設定はセル内要素しか塗れない）。実装例: BankStatementLine の未起票行の黄色ハイライト
