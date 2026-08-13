@@ -282,7 +282,9 @@ void GenerateDep_OnClick()
             l.Account.Value = AssetAccount.Value;
         }
     }
-    je.MarkRemainingLinesOutOfScope();
+    // 減価償却は内部振替なので全明細を「対象外」に上書きする（ADR-0053）。
+    // 科目の既定に任せると、貸方の固定資産科目に取得時の「課税仕入 10%」が入り消費税集計表が狂う。
+    je.MarkAllLinesOutOfScope();
     var ret = je.Submit();
     if (ret == false)
     {

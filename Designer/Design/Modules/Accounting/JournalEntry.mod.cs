@@ -118,24 +118,53 @@ void ApplyLineDefaults()
     }
 }
 
-// 税区分が入っていない明細を「対象外」にする（ADR-0052）。
-// **スクリプトから仕訳を生成する経路は je.Submit() の直前に必ずこれを呼ぶこと**（例外なし）。
+// 税区分が入っていない明細を「対象外」にする（ADR-0052）。**保険**として全経路が Submit() の
+// 直前に呼ぶ。税区分は NOT NULL なので、万一 NULL のまま来ると DB エラーで落ちるのを防ぐ。
 //
-// 前提: 各経路は「税に意味のある行」——売上・費用の本体行と、それに対応する税行——に
-// 必ず税区分を明示している。ここに残る行は相手勘定（売掛金・買掛金・預金・現金・未払金）か
-// 内部振替の行であり、どちらも消費税の対象外。
-//
-// **当初は勘定科目マスタの既定で埋めたが、それは誤りだった**（2026-08-12 の実測で発見）:
-//   ・減価償却の貸方（工具器具備品）に取得時の既定 PUR_10 が付き、課税仕入の「戻し」に化けて
-//     課税仕入を 114,375 円過少にしていた
-//   ・前受収益の按分振替の貸方（SaaS売上高）に SALES_10 が付き、請求時に計上済みの課税売上を
-//     月次の振替でもう一度計上していた（二重計上）
-// 科目の既定は「その科目の典型的な取引」には正しくても、**内部振替の行には正しくない**。
-// 相手科目そのものが経済的実体になる画面（入出金起票）は、経路側で明示的に既定を入れている。
+// **通常はここに来る行は無い。** `Lines_OnDataChanged` → `ApplyLineDefaults()` が
+// スクリプトで作った伝票にも発火し、勘定科目マスタの既定税区分を先に入れてしまうため
+// （2026-08-13 に実データで確認。ADR-0053 の「原因の訂正」を参照）。
+// したがって **「税区分をセットしない＝対象外になる」わけではない**。内部振替のように
+// 科目の既定が誤りになる伝票は `MarkAllLinesOutOfScope()` で明示的に上書きすること。
 //
 // 税行（IsTaxLine=true）は本体行と同じ税区分でなければならず、「対象外」を入れるとその税額が
 // 消費税集計表から消える（B-5 の再発）ため、ここでは意図的に触らない。税区分の無い税行が
 // 残れば DB の NOT NULL で落ちる＝呼び出し側のバグとして早期に表面化する。
+// 内部振替の仕訳（減価償却・前受収益の按分振替など）の全明細を「対象外」に**上書きする**（ADR-0053）。
+// **「税区分をセットしない」だけでは対象外にならない**のが要点。`Lines_OnDataChanged` →
+// `ApplyLineDefaults()` は**スクリプトで作った伝票にも発火し**、勘定科目マスタの既定税区分を
+// 自動で入れてしまう。実例: 減価償却の貸方（工具器具備品）に取得時の既定「課税仕入 10%」が入り、
+// 消費税集計表の課税仕入を 114,375 円ぶん狂わせていた（デモ DB に実在した）。
+// 内部振替は消費税が元の取引の時点で確定しているので、常に対象外が正しい。
+void MarkAllLinesOutOfScope()
+{
+    var s = new ModuleSearcher<TaxCategory>();
+    s.AddEquals(e => e.TaxationType.Value, "out_of_scope");
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return;
+    var outOfScopeId = ((TaxCategory)found).Id.Value;
+
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.IsTaxLine.Value == true) continue;
+        l.TaxCategory.Value = outOfScopeId;
+        l.TaxInputMode.Value = "none";
+    }
+}
+
+// スクリプトから作った伝票に消費税行を生成する（下書きを経ずに確定まで進む経路用・ADR-0053）。
+// **入力額（税込）のまま 1 回だけ呼ぶこと。** 税抜化済みの行に再度かけると二重に税抜化される
+// ——`SaveEntry` が「税行の生成は確定時のみ」にしているのと同じ理由（下書き保存→確定、
+// 確定失敗→再確定 の順路で必ず踏む罠だった）。
+// `inLinesHandler` は `Lines_OnDataChanged` の再入ガードで、SaveEntry と同じ使い方をしている。
+void GenerateTaxLinesOnce()
+{
+    inLinesHandler = true;
+    RegenerateTaxLines();
+    inLinesHandler = false;
+}
+
 void MarkRemainingLinesOutOfScope()
 {
     var hasMissing = false;

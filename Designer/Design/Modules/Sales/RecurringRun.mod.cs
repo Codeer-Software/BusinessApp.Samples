@@ -765,7 +765,9 @@ int CreateDeferJournal(object fiscalYearId, object billing, object annualInvId, 
             l.InputAmount.Value = portion;
         }
     }
-    dje.MarkRemainingLinesOutOfScope();
+    // 前受収益の按分振替は内部振替なので全明細を「対象外」に上書きする（ADR-0053）。
+    // 課税売上は年額請求の時点で計上済みで、科目の既定に任せると月次の振替で二重計上になる。
+    dje.MarkAllLinesOutOfScope();
     var retDje = dje.Submit();
     if (retDje != true)
     {
