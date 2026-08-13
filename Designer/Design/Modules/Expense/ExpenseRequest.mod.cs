@@ -117,7 +117,7 @@ bool ValidateForApply()
     // 領収書の未添付警告（U2-6: 申請はブロックしない。添付できない実務ケースを許容）
     if (Receipt.FileName == null || Receipt.FileName == "")
     {
-        Toaster.Warn("領収書が添付されていません。後から添付するか、紙の原本を保管してください");
+        Toaster.Warn("領収書が添付されていません。紙の原本を保管してください（申請後は添付できません）");
     }
     return true;
 }
@@ -313,7 +313,7 @@ void GenerateJournal_OnClick()
 
     // 借方科目: 通常=費目の既定科目 / 固定資産計上=工具器具備品(1520)
     var debitAccountId = cat.DefaultAccount.Value;
-    var debitName = cat.Name.Value;
+    var categoryName = $"{cat.Name.Value}";
     if (IsFixedAsset.Value == true)
     {
         var accS = new ModuleSearcher<Account>();
@@ -321,9 +321,18 @@ void GenerateJournal_OnClick()
         var assetAcc = accS.ExecuteFirstOrDefault();
         if (assetAcc == null) { Toaster.Error("工具器具備品(1520)の科目がありません"); return; }
         debitAccountId = ((Account)assetAcc).Id.Value;
-        debitName = "工具器具備品";
     }
     if (debitAccountId == null) { Toaster.Error("費目に既定勘定科目が設定されていません"); return; }
+
+    // トーストには費目名ではなく**実際に記帳される勘定科目名**を出す（改善候補 B-2）。
+    // 費目「印刷製本費」→ 勘定科目「消耗品費」のように名前が違い、利用者が
+    // 「違うものが記帳された」と感じるため。名前が異なるときだけ費目名も併記する。
+    var debitAccS = new ModuleSearcher<Account>();
+    debitAccS.AddEquals(e => e.Id.Value, debitAccountId);
+    var debitAccM = debitAccS.ExecuteFirstOrDefault();
+    var debitName = categoryName;
+    if (debitAccM != null) { debitName = $"{((Account)debitAccM).Name.Value}"; }
+    if (debitName != categoryName) { debitName = $"{debitName}（費目: {categoryName}）"; }
 
     // 貸方科目: 未払金(2020) / 税行科目: 仮払消費税(1900)
     var apS = new ModuleSearcher<Account>();

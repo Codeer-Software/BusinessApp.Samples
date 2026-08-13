@@ -52,7 +52,7 @@ void Run_OnClick()
     var period = ps.ExecuteFirstOrDefault();
     if (period == null) { Toaster.Error("日付に対応する月次期間がありません"); return; }
     var typedPeriod = (FiscalPeriod)period;
-    if (typedPeriod.Status.Value == "closed") { Toaster.Error("対象の期間は締め済みです"); return; }
+    if (typedPeriod.Status.Value == "closed") { Toaster.Error("日付の期間は締め済みです"); return; }
 
     // 現預金科目をコードから解決
     var accS = new ModuleSearcher<Account>();

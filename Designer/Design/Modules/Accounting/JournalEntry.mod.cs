@@ -206,6 +206,75 @@ void UpdateTotals()
     DebitTotal.Value = d;
     CreditTotal.Value = c;
     BalanceDiff.Value = d - c;
+    UpdateTaxHint();
+}
+
+// 外税の行があると、税額は確定時に税行として初めて追加されるため、入力中は差額が
+// 税額分だけ残り続ける。内税に慣れた利用者には「差額が 0 にならないのに確定は通る」が
+// 大きな驚きなので、追加される見込み額を差額欄の横に出す（改善候補 B-3）。
+// マスタ検索は外税の行があるときだけ行う（Lines_OnDataChanged から毎回呼ばれるため）。
+void UpdateTaxHint()
+{
+    var hasExclusive = false;
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.IsTaxLine.Value == true) continue;
+        if (l.TaxInputMode.Value != "exclusive") continue;
+        if (l.TaxCategory.Value == null || l.Amount.Value == null) continue;
+        hasExclusive = true;
+        break;
+    }
+    if (!hasExclusive) { TaxHintLabel.Text = ""; return; }
+
+    var catSearch = new ModuleSearcher<TaxCategory>();
+    var rateSearch = new ModuleSearcher<TaxRate>();
+    var batch = BatchSearcher.Execute(catSearch, rateSearch);
+    var cats = batch.GetAt(0);
+    var rates = batch.GetAt(1);
+
+    // 経過措置の控除割合（税行に載るのは控除できる分だけ。RegenerateTaxLines と同じ解決）
+    decimal transitionRate = 0;
+    if (EntryDate.Value != null)
+    {
+        var trFirstDay = new DateTime(EntryDate.Value.Year, EntryDate.Value.Month, 1);
+        var trSearch = new ModuleSearcher<InvoiceTransitionRate>();
+        trSearch.AddLessThanOrEqual(e => e.ValidFrom.Value, trFirstDay);
+        trSearch.AddGreaterThanOrEqual(e => e.ValidTo.Value, trFirstDay);
+        var tr = trSearch.ExecuteFirstOrDefault();
+        if (tr != null) { transitionRate = ((InvoiceTransitionRate)tr).RatePercent.Value ?? 0; }
+    }
+
+    var hint = 0;
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.IsTaxLine.Value == true) continue;
+        if (l.TaxInputMode.Value != "exclusive") continue;
+        if (l.TaxCategory.Value == null || l.Amount.Value == null) continue;
+        foreach (var cItem in cats)
+        {
+            var cat = (TaxCategory)cItem;
+            if (cat.Id.Value != l.TaxCategory.Value) continue;
+            var taxType = cat.TaxationType.Value;
+            if (taxType != "taxable_sales" && taxType != "taxable_purchase") break;
+            if (cat.Rate.Value == null) break;
+            foreach (var rItem in rates)
+            {
+                var rate = (TaxRate)rItem;
+                if (rate.Id.Value != cat.Rate.Value) continue;
+                decimal ratePercent = rate.RatePercent.Value ?? 0;
+                int input = l.Amount.Value;
+                int fullTax = input * ratePercent / 100;
+                if (cat.UsesTransitionDeduction.Value == true) { fullTax = fullTax * transitionRate / 100; }
+                hint = hint + fullTax;
+                break;
+            }
+            break;
+        }
+    }
+    if (hint > 0) { TaxHintLabel.Text = $"（確定時に消費税 {hint:#,0} 円が追加されます）"; }
+    else { TaxHintLabel.Text = ""; }
 }
 
 void SaveDraft_OnClick()
@@ -254,7 +323,7 @@ void SaveEntry(bool post)
     var typedPeriod = (FiscalPeriod)period;
     if (typedPeriod.Status.Value == "closed")
     {
-        EntryDate.SetError("締め済みの期間には起票できません");
+        EntryDate.SetError("取引日の期間は締め済みです");
         return;
     }
 

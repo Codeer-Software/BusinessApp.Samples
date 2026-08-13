@@ -190,7 +190,7 @@ void GenerateDep_OnClick()
     var typedFy = (FiscalYear)fy;
     if (typedFy.Status.Value == "closed")
     {
-        Toaster.Error("締め済みの年度には生成できません");
+        Toaster.Error("対象年度は締め済みです");
         return;
     }
 
@@ -203,7 +203,7 @@ void GenerateDep_OnClick()
     var period = ps.ExecuteFirstOrDefault();
     if (period != null && ((FiscalPeriod)period).Status.Value == "closed")
     {
-        Toaster.Error("期末月の期間が締め済みです。期間を再オープンしてから生成してください");
+        Toaster.Error("期末月の期間は締め済みです。期間を再オープンしてから生成してください");
         return;
     }
 

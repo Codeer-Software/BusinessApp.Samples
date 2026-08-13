@@ -277,7 +277,7 @@ void Accrue_OnClick()
     ps.AddGreaterThanOrEqual(e => e.EndDate.Value, firstDay);
     var period = ps.ExecuteFirstOrDefault();
     if (period == null) { Toaster.Error("請求日に対応する月次期間がありません"); return; }
-    if (((FiscalPeriod)period).Status.Value == "closed") { Toaster.Error("請求日の期間は締め済みです。手動で起票してください"); return; }
+    if (((FiscalPeriod)period).Status.Value == "closed") { Toaster.Error("請求日の期間は締め済みです。仕訳は手動で起票してください"); return; }
 
     // 科目の解決（買掛金2000・仮払消費税1900）
     var accS = new ModuleSearcher<Account>();
@@ -420,7 +420,7 @@ void Pay_OnClick()
     ps.AddGreaterThanOrEqual(e => e.EndDate.Value, firstDay);
     var period = ps.ExecuteFirstOrDefault();
     if (period == null) { Toaster.Error("本日に対応する月次期間がありません"); return; }
-    if (((FiscalPeriod)period).Status.Value == "closed") { Toaster.Error("当月は締め済みです"); return; }
+    if (((FiscalPeriod)period).Status.Value == "closed") { Toaster.Error("本日の期間は締め済みです"); return; }
 
     // 支払口座の帳簿科目（未選択なら普通預金1020）
     object ledgerId = null;
