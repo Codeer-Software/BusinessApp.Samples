@@ -2,6 +2,29 @@
 // 「この定型から伝票を起票」: テンプレート明細から draft の振替伝票を生成し、
 // 伝票画面へ遷移する（金額を確認・修正して確定する運用）。
 // 税行はここでは作らない（伝票確定時の RegenerateTaxLines が自動生成する）。
+//
+// ShowInList（旧 IsActive）は「一覧に出すかどうか」だけを表すフラグ（ADR-0054）。
+// 使えなくするフラグではないので、起票はガードしない——非表示の定型でも、直接開けば起票できる。
+// 定型仕訳を指す参照フィールドはどこにも無く、入口は一覧だけなので「候補から外す」効き方が存在しない。
+// もう使わせたくない定型は削除する、が正しい運用。
+
+void Detail_OnAfterInit()
+{
+    // 新規は「一覧に表示する」を既定 ON（既定 OFF だと作った直後に一覧から消える）
+    if (this.IsNewData) { ShowInList.Value = true; }
+    UpdateHiddenNote();
+}
+
+// 非表示の定型を開いたときだけ、その理由と「起票はできる」ことを案内する
+void UpdateHiddenNote()
+{
+    HiddenNote.IsVisible = !this.IsNewData && ShowInList.Value != true;
+}
+
+void ShowInList_OnDataChanged()
+{
+    UpdateHiddenNote();
+}
 
 void CreateEntry_OnClick()
 {
@@ -85,4 +108,11 @@ void CreateEntry_OnClick()
     var typedCreated = (JournalEntry)created;
     Toaster.Success($"下書き伝票を作成しました。金額を確認して確定してください");
     NavigationService.NavigateTo(NavigationService.GetModuleDataUrl("JournalEntry", $"{typedCreated.Id.Value}"));
+}
+
+// 一覧の既定は「表示中の定型のみ」。非表示のものも見たいときは条件をクリアして検索する
+// （Notification の未読既定と同じ方式）。
+void Search_OnInit()
+{
+    ShowInList.SearchValue = true;
 }

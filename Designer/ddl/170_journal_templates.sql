@@ -8,7 +8,9 @@ CREATE TABLE IF NOT EXISTS journal_templates (
     code TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     memo TEXT,
-    is_active INTEGER NOT NULL DEFAULT 1
+    -- 一覧に出すかどうかだけを表すフラグ（ADR-0054）。旧名 is_active から改名。
+    -- 「使えなくする」フラグではない: 0 の定型でも直接開けば起票できる（＝廃止したいなら削除する）
+    show_in_list INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS journal_template_lines (
