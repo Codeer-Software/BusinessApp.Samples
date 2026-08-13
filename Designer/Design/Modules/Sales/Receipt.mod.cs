@@ -523,6 +523,7 @@ void Confirm_OnClick()
         }
     }
     je.MarkRemainingLinesOutOfScope();
+    je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("消込仕訳の生成に失敗しました"); return; }
 

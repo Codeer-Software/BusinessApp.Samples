@@ -269,6 +269,24 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.BooleanFieldDesign"
     },
     {
+      "Text": "現預金科目",
+      "DbColumn": "is_cash_equivalent",
+      "UIType": "CheckBox",
+      "TrueText": "○",
+      "FalseText": "—",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "現預金科目",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "IsCashEquivalent",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.BooleanFieldDesign"
+    },
+    {
       "LayoutName": "",
       "CanNavigateToDetail": false,
       "NavigateModuleUrlSegment": "",
@@ -1249,6 +1267,31 @@
               {
                 "Layout": {
                   "FieldName": "IsActive",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 120,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "VerticalAlignment": "Middle",
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "IsCashEquivalent",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",

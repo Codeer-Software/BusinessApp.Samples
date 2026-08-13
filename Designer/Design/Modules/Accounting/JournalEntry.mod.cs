@@ -351,6 +351,10 @@ void SaveEntry(bool post)
         return;
     }
 
+    // 損益科目の行には部門が要る（ADR-0056）。**確定のときだけ**止める——下書きは
+    // 書きかけを保存できることに意味があるので、税行の生成と同じく確定時に初めて検証する
+    if (post && !ValidateDepartments()) { return; }
+
     // 行番号は保存経路によらず必ず振る（line_no は NOT NULL）
     var lineNo = 0;
     foreach (var row in Lines.Rows)
@@ -397,6 +401,10 @@ void SaveEntry(bool post)
         Status.Value = "posted";
     }
 
+    // 部門は NOT NULL。空の行を全社共通で埋める（税行は親行から継ぐ）。
+    // 税行生成のあとに呼ぶ必要があるのでここに置く（ADR-0056）
+    FillMissingDepartments();
+
     var ret = this.Submit();
     if (ret == false)
     {
@@ -426,6 +434,95 @@ void SaveEntry(bool post)
     {
         Toaster.Success("下書きを保存しました");
     }
+}
+
+// 部門が入っていない明細を埋める（ADR-0056）。**保険**として全経路が Submit() の直前に呼ぶ。
+// `department_id` は NOT NULL なので、万一 NULL のまま来ると DB エラーで落ちるのを防ぐ。
+//
+// 埋め方は 2 段。① 税行（IsTaxLine）は**親行（ParentLineNo）の部門を継ぐ**——税行は本体行の
+// 付随物なので、部門も本体に従うのが正しい。② それでも空の行は「**全社共通**」にする。
+//
+// **ここは「入力を促す」役目を持たない。** 損益科目の行に正しい部門を入れさせるのは各画面の責任で、
+// 人が画面にいる経路（振替伝票・入出金起票・仕入先請求書・銀行の一括起票）はエラーで止める。
+// この関数は壊れたデータを DB に入れないための最後の砦であって、入力の正確さは UI が担う。
+void FillMissingDepartments()
+{
+    var hasMissing = false;
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.Department.Value == null) { hasMissing = true; break; }
+    }
+    if (!hasMissing) return;
+
+    // ① 税行は親行から継ぐ
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.IsTaxLine.Value != true) continue;
+        if (l.Department.Value != null) continue;
+        if (l.ParentLineNo.Value == null) continue;
+        foreach (var parentRow in Lines.Rows)
+        {
+            var p = (JournalLine)parentRow;
+            if (p.IsTaxLine.Value == true) continue;
+            if (p.LineNo.Value != l.ParentLineNo.Value) continue;
+            l.Department.Value = p.Department.Value;
+            break;
+        }
+    }
+
+    // ② 残りは全社共通（部門マスタの IsCommon フラグで解決する。コード直書きはしない）
+    var s = new ModuleSearcher<Department>();
+    s.AddEquals(e => e.IsCommon.Value, true);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return;
+    var commonId = ((Department)found).Id.Value;
+
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.Department.Value == null) { l.Department.Value = commonId; }
+    }
+}
+
+// 損益科目（費用・収益）の明細に部門が入っているかを検証する（ADR-0056）。
+// 人が画面にいる経路だけがこれを呼び、空ならエラーで止める。BS 科目は対象外（任意）。
+bool ValidateDepartments()
+{
+    var accountIds = new List<object>();
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.IsTaxLine.Value == true) continue;
+        if (l.Account.Value == null) continue;
+        if (!accountIds.Contains(l.Account.Value)) { accountIds.Add(l.Account.Value); }
+    }
+    if (accountIds.Count == 0) return true;
+
+    var s = new ModuleSearcher<Account>();
+    s.AddIn(e => e.Id.Value, accountIds);
+    var accounts = s.Execute();
+
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.IsTaxLine.Value == true) continue;
+        if (l.Department.Value != null) continue;
+        foreach (var a in accounts)
+        {
+            var acc = (Account)a;
+            if (acc.Id.Value != l.Account.Value) continue;
+            var t = acc.AccountType.Value;
+            if (t == "expense" || t == "revenue")
+            {
+                Toaster.Error($"明細 {l.LineNo.Value} 行目（{acc.Name.Value}）の部門を選択してください（損益科目の行には部門が必要です）");
+                return false;
+            }
+            break;
+        }
+    }
+    return true;
 }
 
 // 税行を取り除き、本体行の金額をユーザー入力額（InputAmount）に戻す。

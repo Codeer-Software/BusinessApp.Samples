@@ -89,6 +89,9 @@ void ApplyRules_OnClick()
             if (dir == "out" && outAmt <= 0) continue;
             if (!desc.Contains(kw)) continue;
             t.SuggestedAccount.Value = rule.Account.Value;
+            // ルールが部門を持っていれば一緒に入れる（ADR-0056）。
+            // 「AWS 利用料 → 通信費・開発1部」のように、部門まで機械的に決まる取引を手入力から外す
+            if (rule.DepartmentRef.Value != null) { t.DepartmentRef.Value = rule.DepartmentRef.Value; }
             t.SuggestionSource.Value = "rule";
             applied = applied + 1;
             break;
@@ -216,6 +219,7 @@ void PostAll_OnClick()
 
     var posted = 0;
     var skippedClosed = 0;
+    var skippedNoDept = 0;
     var failed = 0;
     var postedNos = new List<string>();
     foreach (var t in targets)
@@ -268,6 +272,15 @@ void PostAll_OnClick()
             if ($"{a.Id.Value}" == $"{t.SuggestedAccount.Value}") { counter = a; break; }
         }
         if (counter == null) { failed = failed + 1; continue; }
+
+        // 損益科目の行には部門が要る（ADR-0056）。人が明細を見て起票する経路なので、
+        // 全社共通で黙って埋めずに**その明細だけスキップ**して部門を選ばせる
+        var counterType = counter.AccountType.Value;
+        if ((counterType == "expense" || counterType == "revenue") && t.DepartmentRef.Value == null)
+        {
+            skippedNoDept = skippedNoDept + 1;
+            continue;
+        }
 
         var isOut = (t.AmountOut.Value ?? 0) > 0;
         var gross = isOut ? (t.AmountOut.Value ?? 0) : (t.AmountIn.Value ?? 0);
@@ -336,6 +349,9 @@ void PostAll_OnClick()
             idx = idx + 1;
             l.LineNo.Value = idx;
             l.Description.Value = t.Description.Value;
+            // 明細で選んだ部門を仕訳に持ち込む（ADR-0056）。空なら FillMissingDepartments が
+            // 全社共通で埋める。相手科目が損益科目のときに部門を促すのは一括起票前のチェック
+            if (t.DepartmentRef.Value != null) { l.Department.Value = t.DepartmentRef.Value; }
             if (isOut)
             {
                 if (idx == 1)
@@ -402,6 +418,7 @@ void PostAll_OnClick()
             }
         }
         je.MarkRemainingLinesOutOfScope();
+        je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
         var ok = je.Submit();
         if (ok != true) { failed = failed + 1; continue; }
 
@@ -421,7 +438,10 @@ void PostAll_OnClick()
     UpdateSummary();
     var nosText = "";
     if (postedNos.Count > 0) { nosText = $"（伝票 No.{string.Join(", ", postedNos)}）"; }
-    ResultLabel.Text = $"一括起票: {posted} 件起票{nosText} / 締め済み等スキップ {skippedClosed} 件 / 失敗 {failed} 件";
+    var deptText = "";
+    if (skippedNoDept > 0) { deptText = $" / 部門未選択でスキップ {skippedNoDept} 件"; }
+    ResultLabel.Text = $"一括起票: {posted} 件起票{nosText} / 締め済み等スキップ {skippedClosed} 件{deptText} / 失敗 {failed} 件";
     if (posted > 0) Toaster.Success($"{posted} 件を仕訳として起票しました{nosText}");
     else Toaster.Warn("起票できた明細がありませんでした");
+    if (skippedNoDept > 0) { Toaster.Warn($"{skippedNoDept} 件は部門が未選択のため起票していません（損益科目の行には部門が要ります）"); }
 }

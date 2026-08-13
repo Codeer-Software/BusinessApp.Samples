@@ -285,6 +285,7 @@ void GenerateDep_OnClick()
     // 減価償却は内部振替なので全明細を「対象外」に上書きする（ADR-0053）。
     // 科目の既定に任せると、貸方の固定資産科目に取得時の「課税仕入 10%」が入り消費税集計表が狂う。
     je.MarkAllLinesOutOfScope();
+    je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
     var ret = je.Submit();
     if (ret == false)
     {

@@ -506,6 +506,7 @@ void Run_OnClick()
                 }
             }
             je.MarkRemainingLinesOutOfScope();
+            je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
             var retJe = je.Submit();
             if (retJe != true)
             {
@@ -635,6 +636,7 @@ void Run_OnClick()
                 }
             }
             je.MarkRemainingLinesOutOfScope();
+            je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
             var retJe = je.Submit();
             if (retJe != true)
             {
@@ -768,6 +770,7 @@ int CreateDeferJournal(object fiscalYearId, object billing, object annualInvId, 
     // 前受収益の按分振替は内部振替なので全明細を「対象外」に上書きする（ADR-0053）。
     // 課税売上は年額請求の時点で計上済みで、科目の既定に任せると月次の振替で二重計上になる。
     dje.MarkAllLinesOutOfScope();
+    dje.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
     var retDje = dje.Submit();
     if (retDje != true)
     {

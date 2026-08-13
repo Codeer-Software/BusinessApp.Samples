@@ -377,6 +377,7 @@ void Import_OnClick()
         }
 
         je.MarkRemainingLinesOutOfScope();   // 上の補完で全行埋まっているはずだが、経路共通の保険として通す
+        je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
         var ok = je.Submit();
         if (ok != true)
         {

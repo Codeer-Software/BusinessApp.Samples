@@ -94,6 +94,18 @@ JournalEntry FindSourceJournal(string sourceType)
     return (JournalEntry)found;
 }
 
+// 損益科目（費用・収益）かどうか。部門必須の判定に使う（ADR-0056）
+bool IsProfitLossAccount(object accountId)
+{
+    if (accountId == null) { return false; }
+    var s = new ModuleSearcher<Account>();
+    s.AddEquals(e => e.Id.Value, accountId);
+    var acc = s.ExecuteFirstOrDefault();
+    if (acc == null) { return false; }
+    var t = ((Account)acc).AccountType.Value;
+    return t == "expense" || t == "revenue";
+}
+
 // 仕訳の日付が締め済み期間に落ちていないか（true=削除可能）
 bool IsJournalPeriodOpen(JournalEntry je)
 {
@@ -279,6 +291,14 @@ void Accrue_OnClick()
     if (period == null) { Toaster.Error("請求日に対応する月次期間がありません"); return; }
     if (((FiscalPeriod)period).Status.Value == "closed") { Toaster.Error("請求日の期間は締め済みです。仕訳は手動で起票してください"); return; }
 
+    // 損益科目の行には部門が要る（ADR-0056）。経理が画面を見て押す操作なので、
+    // 全社共通で黙って埋めずにここで止めて選ばせる
+    if (DepartmentRef.Value == null && IsProfitLossAccount(ExpenseAccount.Value))
+    {
+        Toaster.Error("部門を選択してください（損益科目の仕訳には部門が必要です）");
+        return;
+    }
+
     // 科目の解決（買掛金2000・仮払消費税1900）
     var accS = new ModuleSearcher<Account>();
     accS.AddIn(e => e.Code.Value, "2000", "1900");
@@ -342,6 +362,8 @@ void Accrue_OnClick()
         idx = idx + 1;
         l.LineNo.Value = idx;
         l.Description.Value = Description.Value;
+        // 伝票ヘッダの部門を仕訳に伝搬する（販売伝票 ADR-0029 と同じ考え方・ADR-0056）
+        if (DepartmentRef.Value != null) { l.Department.Value = DepartmentRef.Value; }
         if (idx == 1)
         {
             l.Dc.Value = "D";
@@ -373,6 +395,7 @@ void Accrue_OnClick()
         }
     }
     je.MarkRemainingLinesOutOfScope();
+    je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
     var ok = je.Submit();
     if (ok != true) { Toaster.Error("未払計上仕訳の生成に失敗しました"); return; }
 
@@ -483,6 +506,7 @@ void Pay_OnClick()
         }
     }
     je.MarkRemainingLinesOutOfScope();
+    je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
     var ok = je.Submit();
     if (ok != true) { Toaster.Error("支払仕訳の生成に失敗しました"); return; }
 

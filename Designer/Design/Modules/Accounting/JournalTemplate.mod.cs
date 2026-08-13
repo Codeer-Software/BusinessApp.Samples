@@ -84,8 +84,12 @@ void CreateEntry_OnClick()
         l.TaxCategory.Value = t.TaxCategoryRef.Value;
         l.TaxInputMode.Value = t.TaxInputMode.Value;
         l.Description.Value = t.Description.Value;
+        // 定型の明細が部門を持っていれば下書きに引き継ぐ（ADR-0056）。
+        // 家賃→全社共通のように毎月同じ部門になる仕訳を、起票のたびに選び直さずに済む
+        l.Department.Value = t.DepartmentRef.Value;
     }
     je.MarkRemainingLinesOutOfScope();
+    je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
     var ret = je.Submit();
     if (ret != true)
     {

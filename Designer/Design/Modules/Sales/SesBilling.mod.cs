@@ -364,6 +364,9 @@ void Run_OnClick()
             l.Description.Value = invTitle;
             l.TaxInputMode.Value = "none";
             l.ProjectRef.Value = p.Id.Value;
+            // 請求書と同じ部門を仕訳にも刻む（ADR-0056。旧実装は請求書にだけ入れていて
+            // 仕訳の売上行が部門なしになり、部門別 P/L の売上側が欠けていた）
+            l.Department.Value = inv.DepartmentRef.Value;
             if (idx == 1)
             {
                 l.Dc.Value = "D";
@@ -392,6 +395,7 @@ void Run_OnClick()
             }
         }
         je.MarkRemainingLinesOutOfScope();
+        je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
         var retJe = je.Submit();
         if (retJe != true)
         {
@@ -428,11 +432,12 @@ void Run_OnClick()
     }
 }
 
-// 「全社共通」(code=00) の部門 Id。SES 精算は案件・契約に部門ソースが無いため既定部門として使う
+// 「全社共通」の部門 Id。SES 精算は案件・契約に部門ソースが無いため既定部門として使う。
+// 解決はコード直書きではなく部門マスタの IsCommon フラグで行う（ADR-0056）
 object CommonDepartmentId()
 {
     var s = new ModuleSearcher<Department>();
-    s.AddEquals(d => d.Code.Value, "00");
+    s.AddEquals(d => d.IsCommon.Value, true);
     var found = s.ExecuteFirstOrDefault();
     if (found == null) { return null; }
     return ((Department)found).Id.Value;

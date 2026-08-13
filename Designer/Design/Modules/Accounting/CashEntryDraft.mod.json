@@ -1,7 +1,7 @@
 {
-  "Name": "JournalTemplateLine",
+  "Name": "CashEntryDraft",
   "DataSourceName": "BusinessAppSQLite",
-  "DbTable": "journal_template_lines",
+  "DbTable": "cash_entry_drafts",
   "CanCreate": true,
   "CanUpdate": true,
   "CanDelete": true,
@@ -23,43 +23,78 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.IdFieldDesign"
     },
     {
-      "DbColumn": "template_id",
-      "Placeholder": "",
-      "IsManualInput": false,
-      "CompositeIdVariables": [],
-      "CompositeIdSeparator": "",
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "TemplateId",
-      "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.IdFieldDesign"
-    },
-    {
-      "DbColumn": "line_no",
-      "Placeholder": "",
+      "DbColumn": "entry_date",
       "Format": "",
-      "IsSlider": false,
-      "OnInput": "",
+      "IsYearMonthOnly": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "行",
-      "IsRequired": false,
+      "DisplayName": "取引日",
+      "IsRequired": true,
       "OnDataChanged": "",
-      "Name": "LineNo",
+      "Name": "EntryDate",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateFieldDesign"
+    },
+    {
+      "Candidates": [],
+      "SearchCondition": {
+        "LimitCount": 100,
+        "SelectFields": [],
+        "SortConditions": [],
+        "SortFieldVariable": "Code.Value",
+        "SortDescending": false,
+        "ModuleName": "Account",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [
+            {
+              "SearchTargetVariable": "IsActive.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": true,
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            },
+            {
+              "SearchTargetVariable": "IsCashEquivalent.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": true,
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            }
+          ],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
+      },
+      "ValueVariable": "Id.Value",
+      "DisplayTextVariable": "Name.Value",
+      "DbColumn": "cash_account_id",
+      "EmptyCandidateType": "Null",
+      "AllowOrSearch": false,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "現預金科目",
+      "IsRequired": true,
+      "OnDataChanged": "",
+      "Name": "CashAccount",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
       "Candidates": [
-        "借方,D",
-        "貸方,C"
+        "入金,in",
+        "出金,out"
       ],
       "SearchCondition": {
         "SelectFields": [],
@@ -70,17 +105,17 @@
       },
       "ValueVariable": "",
       "DisplayTextVariable": "",
-      "DbColumn": "dc",
+      "DbColumn": "direction",
       "EmptyCandidateType": "Null",
       "AllowOrSearch": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "貸借",
+      "DisplayName": "入出金",
       "IsRequired": true,
       "OnDataChanged": "",
-      "Name": "Dc",
+      "Name": "Direction",
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
@@ -108,22 +143,23 @@
               "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
             }
           ],
+          "Name": "",
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
         }
       },
       "ValueVariable": "Id.Value",
       "DisplayTextVariable": "Name.Value",
-      "DbColumn": "account_id",
+      "DbColumn": "counter_account_id",
       "EmptyCandidateType": "Null",
       "AllowOrSearch": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "勘定科目",
+      "DisplayName": "相手科目",
       "IsRequired": true,
       "OnDataChanged": "",
-      "Name": "Account",
+      "Name": "CounterAccount",
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
@@ -191,7 +227,7 @@
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
       "DisplayName": "金額（税込）",
-      "IsRequired": false,
+      "IsRequired": true,
       "OnDataChanged": "",
       "Name": "Amount",
       "IgnoreModification": false,
@@ -199,82 +235,10 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
-      "Candidates": [],
-      "SearchCondition": {
-        "SelectFields": [],
-        "SortConditions": [],
-        "SortFieldVariable": "DisplayOrder.Value",
-        "SortDescending": false,
-        "ModuleName": "TaxCategory",
-        "Condition": {
-          "IsOrMatch": false,
-          "IsNot": false,
-          "Children": [
-            {
-              "SearchTargetVariable": "IsActive.Value",
-              "Comparison": "Equal",
-              "Value": {
-                "Value": true,
-                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
-              },
-              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
-            }
-          ],
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
-        }
-      },
-      "ValueVariable": "Id.Value",
-      "DisplayTextVariable": "Name.Value",
-      "DbColumn": "tax_category_id",
-      "EmptyCandidateType": "Null",
-      "AllowOrSearch": false,
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "税区分",
-      "IsRequired": true,
-      "OnDataChanged": "",
-      "Name": "TaxCategoryRef",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
-    },
-    {
-      "Candidates": [
-        "内税,inclusive",
-        "外税,exclusive",
-        "税計算なし,none"
-      ],
-      "SearchCondition": {
-        "SelectFields": [],
-        "SortConditions": [],
-        "SortFieldVariable": "",
-        "SortDescending": false,
-        "ModuleName": ""
-      },
-      "ValueVariable": "",
-      "DisplayTextVariable": "",
-      "DbColumn": "tax_input_mode",
-      "EmptyCandidateType": "Null",
-      "AllowOrSearch": false,
-      "IsUpdateProtected": false,
-      "IsSimpleSearchParameter": false,
-      "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
-      "DisplayName": "税入力",
-      "IsRequired": false,
-      "OnDataChanged": "",
-      "Name": "TaxInputMode",
-      "IgnoreModification": false,
-      "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
-    },
-    {
       "DbColumn": "description",
       "IsMultiline": false,
       "IsAutoFitRows": false,
-      "Placeholder": "仕訳行の摘要",
+      "Placeholder": "摘要",
       "TextEditEmptyType": "Null",
       "ShouldTrimAfterEdit": true,
       "IsUpdateProtected": false,
@@ -286,6 +250,106 @@
       "Name": "Description",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "SearchCondition": {
+        "LimitCount": 50,
+        "SelectFields": [],
+        "SortConditions": [],
+        "SortFieldVariable": "",
+        "SortDescending": false,
+        "ModuleName": "AppUser",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
+      },
+      "ValueVariable": "Id.Value",
+      "DisplayTextVariable": "表示名.Value",
+      "DbColumn": "creator",
+      "ListLayoutName": "",
+      "SearchLayoutName": "",
+      "OnSearchButtonClicked": "",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "入力者",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "Creator",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LinkFieldDesign"
+    },
+    {
+      "SaveAsUtc": false,
+      "Format": "",
+      "DbColumn": "created_at",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "入力日時",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "CreatedAt",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateTimeFieldDesign"
+    },
+    {
+      "SearchCondition": {
+        "LimitCount": 50,
+        "SelectFields": [],
+        "SortConditions": [],
+        "SortFieldVariable": "",
+        "SortDescending": false,
+        "ModuleName": "AppUser",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
+      },
+      "ValueVariable": "Id.Value",
+      "DisplayTextVariable": "表示名.Value",
+      "DbColumn": "updater",
+      "ListLayoutName": "",
+      "SearchLayoutName": "",
+      "OnSearchButtonClicked": "",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "更新者",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "Updater",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LinkFieldDesign"
+    },
+    {
+      "SaveAsUtc": false,
+      "Format": "",
+      "DbColumn": "updated_at",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "更新日時",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "UpdatedAt",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateTimeFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -338,18 +402,24 @@
   "ListLayouts": {
     "": {
       "HeaderTitle": "",
-      "DataOnlyFields": [],
+      "DataOnlyFields": [
+        "Creator",
+        "CreatedAt",
+        "Updater",
+        "UpdatedAt"
+      ],
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "",
       "OnFieldDataChanged": "",
       "Elements": [
         [
           {
-            "FieldName": "LineNo",
+            "FieldName": "EntryDate",
             "ContextMenu": "",
-            "Label": "行",
+            "Label": "取引日",
             "ColumnSpan": 1,
             "RowSpan": 1,
+            "Width": 150,
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
@@ -361,11 +431,12 @@
             "ListElementComponent": ""
           },
           {
-            "FieldName": "Dc",
+            "FieldName": "CashAccount",
             "ContextMenu": "",
-            "Label": "貸借",
+            "Label": "現預金科目",
             "ColumnSpan": 1,
             "RowSpan": 1,
+            "Width": 150,
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
@@ -377,11 +448,29 @@
             "ListElementComponent": ""
           },
           {
-            "FieldName": "Account",
+            "FieldName": "Direction",
             "ContextMenu": "",
-            "Label": "勘定科目",
+            "Label": "入出金",
             "ColumnSpan": 1,
             "RowSpan": 1,
+            "Width": 110,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": false,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "CounterAccount",
+            "ContextMenu": "",
+            "Label": "相手科目",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "Width": 180,
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
@@ -398,7 +487,7 @@
             "Label": "部門",
             "ColumnSpan": 1,
             "RowSpan": 1,
-            "Width": 150,
+            "Width": 160,
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
@@ -415,42 +504,11 @@
             "Label": "金額（税込）",
             "ColumnSpan": 1,
             "RowSpan": 1,
+            "Width": 130,
             "TextWrap": "Unset",
             "CanResize": false,
             "CanUserSort": false,
             "ClassName": "amount-cell",
-            "FontFamily": "",
-            "Color": "",
-            "BackgroundColor": "",
-            "DetailLayoutName": "",
-            "ListElementComponent": ""
-          },
-          {
-            "FieldName": "TaxCategoryRef",
-            "ContextMenu": "",
-            "Label": "税区分",
-            "ColumnSpan": 1,
-            "RowSpan": 1,
-            "TextWrap": "Unset",
-            "CanResize": false,
-            "CanUserSort": false,
-            "ClassName": "",
-            "FontFamily": "",
-            "Color": "",
-            "BackgroundColor": "",
-            "DetailLayoutName": "",
-            "ListElementComponent": ""
-          },
-          {
-            "FieldName": "TaxInputMode",
-            "ContextMenu": "",
-            "Label": "税入力",
-            "ColumnSpan": 1,
-            "RowSpan": 1,
-            "TextWrap": "Unset",
-            "CanResize": false,
-            "CanUserSort": false,
-            "ClassName": "",
             "FontFamily": "",
             "Color": "",
             "BackgroundColor": "",
@@ -534,5 +592,5 @@
   },
   "CanBulkDataUpdate": false,
   "CanBulkDataDownload": false,
-  "PageTitle": "定型仕訳明細"
+  "PageTitle": "入出金の下書き"
 }

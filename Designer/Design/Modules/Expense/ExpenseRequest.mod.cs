@@ -450,6 +450,7 @@ void GenerateJournal_OnClick()
         }
     }
     je.MarkRemainingLinesOutOfScope();
+    je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("仕訳の生成に失敗しました"); return; }
 
@@ -773,6 +774,7 @@ void Settle_OnClick()
         }
     }
     je.MarkRemainingLinesOutOfScope();
+    je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("支払仕訳の生成に失敗しました"); return; }
 
