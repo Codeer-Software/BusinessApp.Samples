@@ -98,7 +98,16 @@ void BuildPlan()
             var pd = (RecurringRunPlan)NewPlanRow(monthFirst, b);
             pd.PlanKind.Value = "none";
             pd.Status.Value = "excluded";
-            pd.Detail.Value = "契約が下書き（経理確認前）のため対象外";
+            // 終了した契約は通常なら終了月の判定で上の continue に落ちるが、
+            // 終了月より前の月を対象に実行するとここへ来る（ADR-0057）
+            if (b.Status.Value == "ended")
+            {
+                pd.Detail.Value = "契約が終了しているため対象外";
+            }
+            else
+            {
+                pd.Detail.Value = "契約が下書き（経理確認前）のため対象外";
+            }
             pd.Submit();
             continue;
         }

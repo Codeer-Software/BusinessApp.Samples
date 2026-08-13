@@ -3,7 +3,7 @@
 //        「受注にする」= SalesOrder を生成して明細コピー (docs/08 B4-1) /
 //        状態遷移はボタン一元化 (ADR-0026): draft →(送付済にする)→ sent →(受注にする)→ accepted
 //        draft/sent →(失注にする)→ rejected ／ sent/rejected/accepted →(下書きに戻す)→ draft
-//        （accepted からは受注が存在しない場合のみ戻せる）。削除は draft のみ・詳細画面から
+//        （下流＝受注・定期請求契約が無い場合のみ戻せる・ADR-0057）。削除は draft のみ・詳細画面から
 
 bool inLinesHandler = false;
 
@@ -341,6 +341,25 @@ decimal GetSalesTaxRatePercent()
     return ResolveTaxableSalesRatePercent(DefaultSalesTaxCategoryId());
 }
 
+// 見積から派生した下流（受注 / 定期請求契約）の表示名。無ければ null。
+// 「1 つの見積の下流は 1 つだけ」を不変条件とし、変換系・巻き戻し系のすべてがこれで判定する
+// （ADR-0057・改善候補 C-1）。受注だけを見ていた片側ガードでは、契約を作った見積を
+// 下書きに戻してから受注も作る、という二重変換が通ってしまっていた
+string FindDownstreamLabel()
+{
+    var so = new ModuleSearcher<SalesOrder>();
+    so.AddEquals(e => e.QuoteRef.Value, this.Id.Value);
+    var foundSo = so.ExecuteFirstOrDefault();
+    if (foundSo != null) { return $"受注 {((SalesOrder)foundSo).OrderNo.Value}"; }
+
+    var rb = new ModuleSearcher<RecurringBilling>();
+    rb.AddEquals(e => e.QuoteRef.Value, this.Id.Value);
+    var foundRb = rb.ExecuteFirstOrDefault();
+    if (foundRb != null) { return $"定期請求契約「{((RecurringBilling)foundRb).Title.Value}」"; }
+
+    return null;
+}
+
 // 送付済にする: draft → sent
 void MarkSent_OnClick()
 {
@@ -365,20 +384,16 @@ void MarkRejected_OnClick()
     Toaster.Success("見積を失注にしました（「下書きに戻す」で復活できます）");
 }
 
-// 下書きに戻す: sent/rejected → draft。accepted は受注が存在しない場合のみ（誤操作の巻き戻し）
+// 下書きに戻す: sent/rejected → draft。下流（受注・定期請求契約）が無い場合のみ（誤操作の巻き戻し）。
+// 状態は見ない——下流ができれば必ず accepted になるが、過去に片側ガードをすり抜けて
+// draft のまま下流を持つ見積が存在しうるため（ADR-0057）
 void RevertToDraft_OnClick()
 {
-    if (Status.Value == "accepted")
+    var downstream = FindDownstreamLabel();
+    if (downstream != null)
     {
-        var check = new ModuleSearcher<SalesOrder>();
-        check.AddEquals(e => e.QuoteRef.Value, this.Id.Value);
-        var found = check.ExecuteFirstOrDefault();
-        if (found != null)
-        {
-            var orderNo = ((SalesOrder)found).OrderNo.Value;
-            Toaster.Error($"受注 {orderNo} が存在するため下書きに戻せません（先に受注側を削除してください）");
-            return;
-        }
+        Toaster.Error($"{downstream}が存在するため下書きに戻せません（先にそちらを削除してください）");
+        return;
     }
     Status.Value = "draft";
     this.IsViewOnly = false;
@@ -418,12 +433,11 @@ void ConvertToOrder_OnClick()
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 
-    // 既受注ガード
-    var check = new ModuleSearcher<SalesOrder>();
-    check.AddEquals(e => e.QuoteRef.Value, this.Id.Value);
-    if (check.Execute().Count > 0)
+    // 既変換ガード（受注・契約の両方を確認・ADR-0057）
+    var downstream = FindDownstreamLabel();
+    if (downstream != null)
     {
-        Toaster.Error("この見積は既に受注済みです");
+        Toaster.Error($"この見積からは既に{downstream}が作成されています");
         return;
     }
 
@@ -503,19 +517,11 @@ void ConvertToRecurring_OnClick()
         return;
     }
 
-    // 既変換ガード（受注・契約の両方を確認）
-    var checkRb = new ModuleSearcher<RecurringBilling>();
-    checkRb.AddEquals(e => e.QuoteRef.Value, this.Id.Value);
-    if (checkRb.Execute().Count > 0)
+    // 既変換ガード（受注・契約の両方を確認・ADR-0057）
+    var downstream = FindDownstreamLabel();
+    if (downstream != null)
     {
-        Toaster.Error("この見積からは既に定期請求契約が作成されています");
-        return;
-    }
-    var checkSo = new ModuleSearcher<SalesOrder>();
-    checkSo.AddEquals(e => e.QuoteRef.Value, this.Id.Value);
-    if (checkSo.Execute().Count > 0)
-    {
-        Toaster.Error("この見積は既に受注済みです");
+        Toaster.Error($"この見積からは既に{downstream}が作成されています");
         return;
     }
 

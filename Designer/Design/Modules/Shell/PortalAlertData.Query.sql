@@ -71,7 +71,8 @@ rec_in AS (
   SELECT date(mm.month_first, '+1 month') AS m,
          rb.monthly_amount * (100 + (SELECT pct FROM sales_rate)) / 100 AS amt
   FROM months mm
-  JOIN recurring_billings rb ON rb.is_active = 1
+  -- 確定済のみ（ADR-0057）。下書き・終了は「定期請求の実行」の対象外なので入金見込みにも載せない
+  JOIN recurring_billings rb ON rb.is_active = 1 AND rb.status = 'confirmed'
     AND date(rb.start_month) <= mm.month_first
     AND (rb.end_month IS NULL OR date(rb.end_month) >= mm.month_first)
   WHERE NOT EXISTS (SELECT 1 FROM invoices iv
