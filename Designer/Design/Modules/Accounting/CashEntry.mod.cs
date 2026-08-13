@@ -1,5 +1,6 @@
 // CashEntry.mod.cs — 入出金起票（表示専用モジュール・経理専用）
-// 責務: 現預金の入出金を 2 行仕訳で起票する（税行なし。課税取引は振替伝票から）
+// 責務: 現預金の入出金を仕訳で起票する。相手科目が課税区分なら金額を税込として扱い、
+//        消費税行まで生成する（ADR-0053。それ以外は 2 行仕訳）
 // 入金: D 現預金 / C 相手科目、出金: D 相手科目 / C 現預金
 // source_type='cashbook' で出所を記録（source_id は無し）
 
@@ -108,29 +109,61 @@ void Run_OnClick()
             l.Account.Value = isIn ? CounterAccount.Value : cashAccountId;
         }
     }
-    // この画面は相手科目そのものが取引の経済的実体なので、勘定科目マスタの既定税区分を明示的に入れる
-    // （現預金側は対象外のままでよい＝MarkRemainingLinesOutOfScope に任せる）。
-    // ここを既定に任せず全部「対象外」にすると、受取利息のような非課税売上を取りこぼし、
-    // 課税売上割合の分母が狂う（ADR-0052。実測: 受取利息 500 円が非課税売上として拾えている）。
+    // 相手科目そのものが取引の経済的実体なので、勘定科目マスタの既定税区分を明示的に入れる
+    // （現預金側は対象外のまま）。一律に対象外へ倒すと受取利息のような非課税売上を取りこぼし、
+    // 課税売上割合の分母が狂う（ADR-0052）。
+    // 相手科目が課税区分なら**内税**として扱い、確定前に消費税行を生成する（ADR-0053・改善候補 B-7）。
+    // 金額は税込で入力される前提。外税は使わない——外税だと本体行が税込のまま税行が増えて貸借が崩れる。
     var counterS = new ModuleSearcher<Account>();
     counterS.AddEquals(e => e.Id.Value, CounterAccount.Value);
     var counterAcc = counterS.ExecuteFirstOrDefault();
+    var isTaxable = false;
     if (counterAcc != null)
     {
         var counterTaxCat = ((Account)counterAcc).DefaultTaxCategory.Value;
+        if (counterTaxCat != null)
+        {
+            var tcS = new ModuleSearcher<TaxCategory>();
+            tcS.AddEquals(e => e.Id.Value, counterTaxCat);
+            var tcm = tcS.ExecuteFirstOrDefault();
+            if (tcm != null)
+            {
+                var taxType = ((TaxCategory)tcm).TaxationType.Value;
+                if (taxType == "taxable_sales" || taxType == "taxable_purchase") { isTaxable = true; }
+            }
+        }
         foreach (var row in je.Lines.Rows)
         {
             var l = (JournalLine)row;
-            if ($"{l.Account.Value}" == $"{CounterAccount.Value}") { l.TaxCategory.Value = counterTaxCat; }
+            if ($"{l.Account.Value}" != $"{CounterAccount.Value}") continue;
+            l.TaxCategory.Value = counterTaxCat;
+            if (isTaxable) { l.TaxInputMode.Value = "inclusive"; }
         }
     }
 
     je.MarkRemainingLinesOutOfScope();
+
+    // 税行の生成は入力額（税込）のまま 1 回だけ。この画面は下書きを経ずに確定するので順路は 1 本。
+    // 税額は Submit の前に素の int に取り出しておく（保存後に動的値へ書式指定を掛けると空になる）。
+    var taxAmount = 0;
+    if (isTaxable)
+    {
+        je.GenerateTaxLinesOnce();
+        foreach (var row in je.Lines.Rows)
+        {
+            var l = (JournalLine)row;
+            if (l.IsTaxLine.Value == true) { taxAmount = l.Amount.Value ?? 0; }
+        }
+    }
+
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("仕訳の起票に失敗しました"); return; }
 
-    ResultLabel.Text = $"仕訳 No.{nextNo} を起票しました（{desc} {amount:#,0} 円）";
+    // 税を分けたときは結果に明示する（費用の金額が入力額より減るのは利用者にとって驚きになるため）
+    var taxNote = "";
+    if (taxAmount > 0) { taxNote = $"／うち消費税 {taxAmount:#,0} 円"; }
+    ResultLabel.Text = $"仕訳 No.{nextNo} を起票しました（{desc} {amount:#,0} 円{taxNote}）";
     Amount.Value = null;
     Description.Value = null;
-    Toaster.Success($"仕訳 No.{nextNo} を起票しました");
+    Toaster.Success($"仕訳 No.{nextNo} を起票しました{taxNote}");
 }

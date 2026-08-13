@@ -160,7 +160,7 @@
     },
     {
       "DbColumn": "",
-      "Placeholder": "税込・税なしの金額",
+      "Placeholder": "実際に動いた金額（税込）",
       "Format": "#,0",
       "IsSlider": false,
       "OnInput": "",
@@ -256,7 +256,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "現預金の入出金を 2 行仕訳で起票します。消費税が絡む取引は振替伝票から起票してください（ここでは税行を生成しません）。",
+      "Text": "現預金の入出金を仕訳で起票します。金額は実際に動いた額（税込）を入れてください。相手科目が課税区分なら消費税を自動で分けて起票します。複数行にわたる仕訳は振替伝票から。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
