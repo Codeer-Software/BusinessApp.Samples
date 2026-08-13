@@ -1,79 +1,92 @@
-// JournalLineDepartment.mod.cs — 仕訳の部門・案件を直す（表示専用モジュール・経理専用）
-// 責務: **確定済みの伝票でも部門と案件だけは後から直せるようにする**（ADR-0056 決定 4）。
+// JournalLineDepartment.mod.cs — 部門・プロジェクトの修正（振替伝票のサブ画面・経理専用）
+// 責務: **確定済みの伝票でも部門とプロジェクトだけは後から直せるようにする**（ADR-0056 決定 4）。
 //
-// なぜ許されるか: 部門と案件は仕訳の構成要素ではなく分析の軸で、変えても BS・PL・試算表・
-// 消費税集計表は 1 円も動かない。動くのは部門別 P/L・案件損益・予実対比だけ。
+// なぜ許されるか: 部門とプロジェクトは仕訳の構成要素ではなく集計のための分類で、変えても
+// BS・PL・試算表・消費税集計表は 1 円も動かない。動くのは部門別 P/L・案件損益・予実対比だけ。
 // 逆に摘要は法定帳簿の記載事項なので、ここでは触らせない（訂正は赤黒で）。
 //
-// なぜ専用画面か: 確定済み伝票は `this.IsViewOnly = true` で丸ごとロックしており、
+// なぜ別モジュールなのか: 確定済み伝票は `this.IsViewOnly = true` で丸ごとロックしており、
 // 明細グリッドの「部門の列だけ編集可」は**レイアウト（設計時）でしか指定できない**ため、
 // 同じグリッドで「下書きは全項目編集／確定済みは部門だけ」を切り替えられない（実測 2026-08-14）。
-// 部門だけを編集可にした専用のリストレイアウト（JournalLine の "DeptEdit"）を別画面で使う。
+//
+// ただし**利用者から見て別画面に飛んだ感じにはしない**（2026-08-14 ユーザー指示）。
+//   ・入口は振替伝票詳細の「部門・プロジェクトを修正する」ボタンだけ（サイドメニューには出さない）
+//   ・見た目は振替伝票の詳細とほぼ同じ（ヘッダの並び・明細の列順を合わせ、直せない列は編集不可で見せる）
+//   ・保存すると元の伝票詳細へ戻る
+// 対象の伝票はクエリパラメータ `?entry={伝票Id}` で受け取る。
 
 void Detail_OnAfterInit()
 {
-    EntryInfoLabel.Text = "";
     ResultLabel.Text = "";
-    TargetEntryId.Value = null;
-    SaveButton.IsVisible = false;
+    ClosedNote.Text = "";
     LineList.IsVisible = false;
-}
+    SaveButton.IsVisible = false;
 
-// ============ 伝票番号 → 明細を出す ============
-
-void Show_OnClick()
-{
-    if (!IsAccounting()) { return; }
-    if (JournalNoInput.Value == null)
+    // 入口は振替伝票のボタンだけ。URL を直に叩かれた場合はここで止まる
+    var entryId = QueryEntryId();
+    if (entryId == null)
     {
-        Toaster.Error("伝票番号を入力してください");
+        DescNoteLabel.Text = "対象の伝票が指定されていません。振替伝票を開いて「部門・プロジェクトを修正する」から入ってください。";
+        CancelButton.Text = "振替伝票へ";
         return;
     }
 
-    using var loading = LoadingService.StartLoading(0);
-
+    TargetEntryId.Value = entryId;
     var je = FindEntry();
     if (je == null)
     {
-        EntryInfoLabel.Text = "";
-        LineList.IsVisible = false;
-        SaveButton.IsVisible = false;
-        TargetEntryId.Value = null;
-        Toaster.Error($"伝票 No.{JournalNoInput.Value} が見つかりません（当年度の伝票番号を入れてください）");
+        DescNoteLabel.Text = "対象の伝票が見つかりません。振替伝票の一覧から開き直してください。";
+        CancelButton.Text = "振替伝票へ";
         return;
     }
 
-    TargetEntryId.Value = je.Id.Value;
+    ShowEntry(je);
+}
+
+// 伝票ヘッダを振替伝票と同じ並びで見せ、明細を読み込む
+void ShowEntry(JournalEntry je)
+{
+    JournalNoValue.Text = $"{je.JournalNo.Value}";
+    EntryDateValue.Text = $"{je.EntryDate.Value:yyyy/MM/dd}";
+    EntryTypeValue.Text = EntryTypeName(je.EntryType.Value);
+    DescriptionValue.Text = $"{je.Description.Value}";
+
     LineList.Reload();
     LineList.IsVisible = true;
 
-    var statusText = (je.Status.Value == "posted") ? "確定" : "下書き";
-    var closedNote = "";
+    var debit = 0;
+    var credit = 0;
+    foreach (var row in LineList.Rows)
+    {
+        var l = (JournalLine)row;
+        var amount = l.Amount.Value ?? 0;
+        if (l.Dc.Value == "D") { debit = debit + amount; } else { credit = credit + amount; }
+    }
+    DebitTotalValue.Text = $"{debit:#,0}";
+    CreditTotalValue.Text = $"{credit:#,0}";
+
+    // 締め済み期間はロックする。月次締めは「部門別 P/L を確定して配った」という意味を持つので、
+    // 締めたあとに部門が変わると配布済みの報告と食い違う（他の統制と同じ規律）
     if (IsPeriodClosed(je))
     {
-        closedNote = " ／ この伝票の期間は締め済みです（部門・案件も直せません。直すなら期間を再オープンしてください）";
+        ClosedNote.Text = "この伝票の期間は締め済みです。部門・プロジェクトも直せません（直すなら会計年度の設定で期間を再オープンしてください）。";
         SaveButton.IsVisible = false;
     }
     else
     {
         SaveButton.IsVisible = true;
     }
-    EntryInfoLabel.Text = $"伝票 No.{je.JournalNo.Value} ／ {je.EntryDate.Value:yyyy/MM/dd} ／ {je.Description.Value} ／ 状態 {statusText}{closedNote}";
-    ResultLabel.Text = "";
 }
 
-// ============ 保存 ============
+// ============ 保存して伝票に戻る ============
 
 void Save_OnClick()
 {
     if (!IsAccounting()) { return; }
-    if (TargetEntryId.Value == null) { Toaster.Error("先に伝票を表示してください"); return; }
+    if (TargetEntryId.Value == null) { Toaster.Error("対象の伝票がありません"); return; }
 
     var je = FindEntry();
-    if (je == null) { Toaster.Error("伝票が見つかりません"); return; }
-
-    // 締め済み期間はロックする。月次締めは「部門別 P/L を確定して配った」という意味を持つので、
-    // 締めたあとに部門が変わると配布済みの報告と食い違う（他の統制と同じ規律）
+    if (je == null) { Toaster.Error("対象の伝票が見つかりません"); return; }
     if (IsPeriodClosed(je))
     {
         Toaster.Error("この伝票の期間は締め済みです。直すなら期間を再オープンしてください");
@@ -97,9 +110,24 @@ void Save_OnClick()
     je.Updater.Value = CurrentUser.Id.Value;
     je.Submit();
 
-    LineList.Reload();
-    ResultLabel.Text = $"伝票 No.{je.JournalNo.Value} の明細 {saved} 行を保存しました（{DateTime.Now:yyyy/MM/dd HH:mm}）";
-    Toaster.Success($"部門・案件を保存しました（{saved} 行）");
+    Toaster.Success($"部門・プロジェクトを保存しました（{saved} 行）");
+    BackToEntry();
+}
+
+void Cancel_OnClick()
+{
+    BackToEntry();
+}
+
+// 元の伝票詳細へ戻る（対象が分からないときは振替伝票の一覧へ）
+void BackToEntry()
+{
+    if (TargetEntryId.Value == null)
+    {
+        NavigationService.NavigateTo(NavigationService.GetModuleUrl("JournalEntryBoard"));
+        return;
+    }
+    NavigationService.NavigateTo(NavigationService.GetModuleDataUrl("JournalEntry", $"{TargetEntryId.Value}"));
 }
 
 // ============ 補助 ============
@@ -111,23 +139,38 @@ bool IsAccounting()
     return false;
 }
 
-// 当年度の伝票番号で伝票を引く（伝票番号は年度内連番なので、年度で絞らないと重複しうる）
+// クエリパラメータ ?entry={伝票Id} を読む（表示専用モジュールなので URL から受け取る）
+object QueryEntryId()
+{
+    var q = NavigationService.GetUniqueQueryParameters();
+    if (q == null) { return null; }
+    if (!q.ContainsKey("entry")) { return null; }
+    var raw = q["entry"];
+    if (raw == null || raw == "") { return null; }
+    var id = 0;
+    if (!int.TryParse(raw, out id)) { return null; }
+    if (id <= 0) { return null; }
+    return id;
+}
+
 JournalEntry FindEntry()
 {
-    var today = DateOnly.FromDateTime(DateTime.Today);
-    var monthFirst = new DateOnly(today.Year, today.Month, 1);
-    var ys = new ModuleSearcher<FiscalYear>();
-    ys.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
-    ys.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);
-    var fy = ys.ExecuteFirstOrDefault();
-    if (fy == null) { return null; }
-
     var s = new ModuleSearcher<JournalEntry>();
-    s.AddEquals(e => e.FiscalYearRef.Value, ((FiscalYear)fy).Id.Value);
-    s.AddEquals(e => e.JournalNo.Value, JournalNoInput.Value);
+    s.AddEquals(e => e.Id.Value, TargetEntryId.Value);
     var found = s.ExecuteFirstOrDefault();
     if (found == null) { return null; }
     return (JournalEntry)found;
+}
+
+string EntryTypeName(string code)
+{
+    if (code == "transfer") { return "振替"; }
+    if (code == "auto") { return "自動"; }
+    if (code == "adjust") { return "決算整理"; }
+    if (code == "receipt") { return "入金"; }
+    if (code == "payment") { return "支払"; }
+    if (code == "expense") { return "経費"; }
+    return $"{code}";
 }
 
 bool IsPeriodClosed(JournalEntry je)

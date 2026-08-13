@@ -17,13 +17,22 @@ void Detail_OnAfterInit()
     }
     // 確定済みの案内（編集不可の理由と赤黒訂正への誘導。驚き最小: 2026-08-03 UXレビュー）
     PostedNote.IsVisible = !this.IsNewData && Status.Value == "posted";
-    if (!this.IsNewData && Status.Value == "posted")
+    var isPosted = !this.IsNewData && Status.Value == "posted";
+    if (isPosted)
     {
-        // 確定済み伝票は閲覧専用（訂正は赤黒訂正で行う）
-        this.IsViewOnly = true;
+        // 確定済み伝票は閲覧専用（訂正は赤黒訂正で行う）。
+        // **`this.IsViewOnly = true`（モジュール全体）は使わない**——ボタンまで
+        // `pointer-events: none` になって押せなくなり、「部門・プロジェクトを修正する」への
+        // 入口が死ぬため（2026-08-14 実測。FB-035 と同じ現象）。画面に出る項目を個別にロックする。
+        LockPostedFields();
         SaveDraftButton.IsVisible = false;
         PostButton.IsVisible = false;
     }
+    // 部門・プロジェクトだけは確定後も直せる（ADR-0056）。入口はこのボタンだけで、
+    // 修正はサブ画面（JournalLineDepartment）が担う——この明細グリッドは
+    // 「下書きは全項目編集／確定済みは部門だけ編集」を切り替えられないため（レイアウトは設計時固定）
+    DeptEditButton.IsVisible = isPosted;
+    ShowLastUpdate();
     // 削除は「保存済みの下書き」だけ（確定済み伝票は削除不可＝赤黒訂正で消し込む。ADR-0026）
     DeleteDraftButton.IsVisible = !this.IsNewData && (Status.Value == "draft");
     if (!this.IsNewData && Status.Value == "draft" && SourceType.Value != "import")
@@ -36,6 +45,43 @@ void Detail_OnAfterInit()
         inLinesHandler = false;
     }
     UpdateTotals();
+}
+
+// 「最終更新」を見せる（ADR-0056 決定 4 の監査証跡）。作成と同時刻なら出さない——
+// 自動起票の伝票は一度も更新されないので、出ていること自体が「人が手で介入した印」になる。
+// 更新者の表示名は AppUser を引き直す（LinkField の表示テキストは候補未ロードだと空になる）
+void ShowLastUpdate()
+{
+    LastUpdateNote.Text = "";
+    LastUpdateNote.IsVisible = false;
+    if (this.IsNewData) { return; }
+    if (UpdatedAt.Value == null || CreatedAt.Value == null) { return; }
+    if (UpdatedAt.Value == CreatedAt.Value) { return; }
+
+    var who = "";
+    if (Updater.Value != null)
+    {
+        var s = new ModuleSearcher<AppUser>();
+        s.AddEquals(u => u.Id.Value, Updater.Value);
+        var found = s.ExecuteFirstOrDefault();
+        if (found != null) { who = $" {((AppUser)found).表示名.Value}"; }
+    }
+    LastUpdateNote.Text = $"最終更新: {UpdatedAt.Value:yyyy/MM/dd HH:mm}{who}";
+    LastUpdateNote.IsVisible = true;
+}
+
+// 確定済み伝票を閲覧専用にする。**画面に出る入力項目を漏れなく列挙すること**——
+// モジュール全体の `IsViewOnly` を使えばこの列挙は要らないが、それだとボタンも死ぬ（上記）。
+// 詳細レイアウトに載っている入力項目は 伝票番号・取引日・会計年度・伝票種別・摘要・明細 の 6 つ。
+// 項目をレイアウトに足したらここにも足す（足し忘れると確定済み伝票が編集できてしまう）。
+void LockPostedFields()
+{
+    JournalNo.IsViewOnly = true;
+    EntryDate.IsViewOnly = true;
+    FiscalYearRef.IsViewOnly = true;
+    EntryType.IsViewOnly = true;
+    Description.IsViewOnly = true;
+    Lines.IsViewOnly = true;
 }
 
 void EntryDate_OnDataChanged()
@@ -285,6 +331,19 @@ void SaveDraft_OnClick()
 void Post_OnClick()
 {
     SaveEntry(true);
+}
+
+// 部門・プロジェクトの修正サブ画面へ（対象の伝票をクエリパラメータで渡す。ADR-0056）
+void DeptEdit_OnClick()
+{
+    if (CurrentUser.HasAccountingAccess.Value != true)
+    {
+        Toaster.Error("仕訳の修正は経理のみ実行できます");
+        return;
+    }
+    if (this.Id.Value == null) { return; }
+    var url = NavigationService.GetModuleUrl("JournalLineDepartment");
+    NavigationService.NavigateTo($"{url}?entry={this.Id.Value}");
 }
 
 void SaveEntry(bool post)
