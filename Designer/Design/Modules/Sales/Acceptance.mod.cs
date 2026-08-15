@@ -99,12 +99,17 @@ void UpdateButtons()
     InvoiceDoneLabel.IsVisible = (invoiceNo != null || billedNo != null);
     if (invoiceNo != null)
     {
-        InvoiceDoneLabel.Text = $"請求書 {invoiceNo} 作成済み（販売管理＞請求書から確認できます）";
+        InvoiceDoneLabel.Text = $"請求書 {invoiceNo} 作成済み";
     }
     else if (billedNo != null)
     {
-        InvoiceDoneLabel.Text = $"請求書 {billedNo} に合算済み（販売管理＞請求書から確認できます）";
+        InvoiceDoneLabel.Text = $"請求書 {billedNo} に合算済み";
     }
+    // 「作成済み」と番号を見せている以上、そこへ飛べるようにする（メニューを辿らせない）。
+    // 遷移先 Invoice は経理専用モジュールなので、ボタンも経理のときだけ出す
+    OpenInvoiceButton.IsVisible = isAccountingRole && (invoiceNo != null || billedNo != null);
+    // 確定済みはモジュール全体が閲覧専用＝ボタンの OnClick が発火しないので個別に解除する（FB-030）
+    OpenInvoiceButton.IsViewOnly = false;
 
     // 合算先請求書の選択欄: 経理のみ・確定済み・直接請求書が無いときだけ出す
     var showBilled = isAccountingRole && !this.IsNewData && (st == "confirmed") && (invoiceNo == null);
@@ -273,6 +278,10 @@ void SalesOrderRef_OnDataChanged()
 }
 
 // 検収明細の変更 → 行番号の振り直しと合計の再計算
+// 再入ガードで囲むのは「明細に書き戻す処理（行番号の振り直し）」だけにする。
+// RecalcFromLines はヘッダ（検収額・消費税額）しか触らず Lines を書き換えないので再入しない。
+// CLB スクリプトは try/finally を使えないため、ガードの内側に DB 検索（＝例外を出しうる処理）を
+// 置くとフラグが true のまま固着し、以後この画面で合計が二度と再計算されなくなる。
 void Lines_OnDataChanged()
 {
     if (inLinesHandler) return;
@@ -284,8 +293,8 @@ void Lines_OnDataChanged()
         no = no + 1;
         l.LineNo.Value = no;
     }
-    RecalcFromLines();
     inLinesHandler = false;
+    RecalcFromLines();
 }
 
 bool inLinesHandler = false;
@@ -374,6 +383,30 @@ string FindBilledInvoiceNo()
     var found = s.ExecuteFirstOrDefault();
     if (found == null) return null;
     return ((Invoice)found).InvoiceNo.Value;
+}
+
+// 「請求書 INV-xx-xxx 作成済み」から、その請求書の詳細へ飛ぶ（直接請求 → 合算先の順に解決）。
+// 遷移はフレーム非依存の GetModuleDataUrl で組む（固定パスはフレーム改名で静かに 404 になる）
+void OpenInvoice_OnClick()
+{
+    if (CurrentUser.HasAccountingAccess.Value != true)
+    {
+        Toaster.Error("請求書の参照は経理のみ実行できます");
+        return;
+    }
+    object invoiceId = null;
+    var s = new ModuleSearcher<Invoice>();
+    s.AddEquals(e => e.AcceptanceRef.Value, this.Id.Value);
+    var found = s.ExecuteFirstOrDefault();
+    if (found != null) { invoiceId = ((Invoice)found).Id.Value; }
+    else if (BilledInvoiceRef.Value != null) { invoiceId = BilledInvoiceRef.Value; }
+
+    if (invoiceId == null)
+    {
+        Toaster.Warn("この検収に対応する請求書が見つかりません");
+        return;
+    }
+    NavigationService.NavigateTo(NavigationService.GetModuleDataUrl("Invoice", $"{invoiceId}"));
 }
 
 // 合算先請求書の選択・解除は即保存する（確定済み検収は閲覧専用で保存ボタンが無いため）
