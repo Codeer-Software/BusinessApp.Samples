@@ -13,6 +13,8 @@
 //   ・入口は振替伝票詳細の「部門・プロジェクトを修正する」ボタンだけ（サイドメニューには出さない）
 //   ・見た目は振替伝票の詳細とほぼ同じ（ヘッダの並び・明細の列順を合わせ、直せない列は編集不可で見せる）
 //   ・保存すると元の伝票詳細へ戻る
+//   ・戻るは**左上の矢印**（振替伝票と同じ BackAnchor）。「保存せずに戻る」ボタンは置かない——
+//     何も壊さない操作に赤（Danger）を使うと、本当に危ない赤が効かなくなる（ADR-0027）
 // 対象の伝票はクエリパラメータ `?entry={伝票Id}` で受け取る。
 
 void Detail_OnAfterInit()
@@ -26,8 +28,7 @@ void Detail_OnAfterInit()
     var entryId = QueryEntryId();
     if (entryId == null)
     {
-        DescNoteLabel.Text = "対象の伝票が指定されていません。振替伝票を開いて「部門・プロジェクトを修正する」から入ってください。";
-        CancelButton.Text = "振替伝票へ";
+        DescNoteLabel.Text = "対象の伝票が指定されていません。振替伝票を開いて「部門・プロジェクトを修正する」から入ってください（左上の矢印で戻れます）。";
         return;
     }
 
@@ -35,8 +36,7 @@ void Detail_OnAfterInit()
     var je = FindEntry();
     if (je == null)
     {
-        DescNoteLabel.Text = "対象の伝票が見つかりません。振替伝票の一覧から開き直してください。";
-        CancelButton.Text = "振替伝票へ";
+        DescNoteLabel.Text = "対象の伝票が見つかりません。振替伝票の一覧から開き直してください（左上の矢印で戻れます）。";
         return;
     }
 
@@ -111,11 +111,6 @@ void Save_OnClick()
     je.Submit();
 
     Toaster.Success($"部門・プロジェクトを保存しました（{saved} 行）");
-    BackToEntry();
-}
-
-void Cancel_OnClick()
-{
     BackToEntry();
 }
 

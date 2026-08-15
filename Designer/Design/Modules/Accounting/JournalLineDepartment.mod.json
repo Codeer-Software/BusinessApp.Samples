@@ -7,6 +7,29 @@
   "CanDelete": false,
   "Fields": [
     {
+      "Style": "Text",
+      "Target": "HistoryBack",
+      "ShouldOpenInNewTab": false,
+      "Icon": "bi bi-arrow-left-circle-fill",
+      "TitleText": "",
+      "TitleVariable": "",
+      "ImageResourcePath": "",
+      "PageFrame": "",
+      "Module": "",
+      "ModuleVariable": "",
+      "IdVariable": "",
+      "Url": "",
+      "OnClick": "",
+      "IsHtml": false,
+      "Name": "BackAnchor",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
+    },
+    {
       "DbColumn": "",
       "Placeholder": "",
       "Format": "",
@@ -97,29 +120,6 @@
       "ShowTextInToolTip": false,
       "IsHtml": false,
       "Name": "SaveButton",
-      "IgnoreModification": true,
-      "OnValidateInput": "",
-      "IsFocusSkip": false,
-      "NextFocusField": "",
-      "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
-    },
-    {
-      "Text": "保存せずに戻る",
-      "ImageResourcePath": "",
-      "ImageResourceSet": {
-        "Default": "",
-        "Focus": "",
-        "Active": "",
-        "Hover": "",
-        "Disabled": ""
-      },
-      "Icon": "",
-      "Variant": "Danger",
-      "OnClick": "Cancel_OnClick",
-      "ShowTextInToolTip": false,
-      "IsHtml": false,
-      "Name": "CancelButton",
       "IgnoreModification": true,
       "OnValidateInput": "",
       "IsFocusSkip": false,
@@ -442,6 +442,44 @@
         "ScrollDirection": "Unset",
         "OnKeyDown": "",
         "Rows": [
+          {
+            "IsWrap": true,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "BackAnchor",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "FontSize": 30,
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          },
           {
             "IsWrap": true,
             "IsAutoFillWrap": false,
@@ -1023,32 +1061,6 @@
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "Width": 200,
-                "IgnoreContentWidth": false,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "VerticalAlignment": "Middle",
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              },
-              {
-                "Layout": {
-                  "FieldName": "CancelButton",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "Width": 180,
                 "IgnoreContentWidth": false,
                 "Padding": {},
                 "BackgroundColor": "",
