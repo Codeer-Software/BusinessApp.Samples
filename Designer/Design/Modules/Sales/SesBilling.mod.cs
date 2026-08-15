@@ -234,6 +234,22 @@ void Run_OnClick()
         return;
     }
 
+    // 一括操作なので確認する（ADR-0062）
+    var plannedCount = 0;
+    var ps0 = new ModuleSearcher<SesRunPlan>();
+    ps0.AddEquals(e => e.Status.Value, "planned");
+    plannedCount = ps0.Execute().Count;
+    if (plannedCount == 0)
+    {
+        Toaster.Info("生成対象はありませんでした");
+        return;
+    }
+    var picked0 = TargetMonth.Value;
+    var answer = MessageBox.Show(
+        $"{picked0:yyyy年M月}分として、一覧の「生成予定」{plannedCount} 件から請求書と売上仕訳を作成します。よろしいですか？",
+        "実行する", "キャンセル");
+    if (answer != "実行する") return;
+
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 

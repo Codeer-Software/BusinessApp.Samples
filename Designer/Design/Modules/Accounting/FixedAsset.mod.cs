@@ -176,6 +176,13 @@ void GenerateDep_OnClick()
         return;
     }
 
+    // 償却仕訳を取り消す導線がこの画面に無い＝不可逆なので確認する（ADR-0062）
+    var answer = MessageBox.Show(
+        "この年度の減価償却仕訳を生成します。生成した仕訳を取り消す導線はこの画面にありません"
+        + "（誤りは振替伝票側で訂正してください）。よろしいですか？",
+        "生成する", "キャンセル");
+    if (answer != "生成する") return;
+
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 

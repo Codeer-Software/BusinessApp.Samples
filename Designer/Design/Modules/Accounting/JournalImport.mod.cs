@@ -18,6 +18,13 @@ void Import_OnClick()
     var raw = CsvText.Value;
     if (raw == null || raw.Trim() == "") { Toaster.Error("仕訳CSVを貼り付けてください"); return; }
 
+    // 一括で確定仕訳を作る操作なので確認する（ADR-0062）
+    var answer = MessageBox.Show(
+        "貼り付けた CSV から仕訳を一括で取り込みます。取り込んだ仕訳は確定として帳簿に載り、"
+        + "まとめて取り消す導線はありません（誤りは伝票ごとに訂正が必要です）。よろしいですか？",
+        "取り込む", "キャンセル");
+    if (answer != "取り込む") return;
+
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 

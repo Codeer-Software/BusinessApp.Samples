@@ -202,6 +202,12 @@ void SavePreviewEdits()
 
 void ConfirmImport_OnClick()
 {
+    // プレビューを本テーブルへ確定する一括操作。確定後はプレビューの破棄では戻せない（ADR-0062）
+    var answer = MessageBox.Show(
+        "プレビュー中の明細をまとめて銀行明細に登録します。登録後は「取込をやめる」では戻せません。よろしいですか？",
+        "登録する", "キャンセル");
+    if (answer != "登録する") return;
+
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 

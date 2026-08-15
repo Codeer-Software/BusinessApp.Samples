@@ -762,8 +762,14 @@ void NotifyCreator(ApprovalFlow flow, string title, string body)
 // ============================================================
 // 承認ボタン
 // ============================================================
+// 承認・却下・キャンセルは取り消す導線が無い（＝不可逆）ので確認する（ADR-0062）。
+// LoadingService はダイアログより後に開始する（オーバーレイがダイアログを覆う既知の罠）
 void Approve_OnClick()
 {
+    var answer = MessageBox.Show("この申請を承認します。承認を取り消すことはできません。よろしいですか？",
+        "承認する", "キャンセル");
+    if (answer != "承認する") return;
+
     using var suspend = GetParentModule().SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 
@@ -921,6 +927,10 @@ void AdvanceToNextOrder()
 // ============================================================
 void Reject_OnClick()
 {
+    var answer = MessageBox.Show("この申請を却下します。却下を取り消すことはできません（申請者は作り直しになります）。よろしいですか？",
+        "却下する", "キャンセル");
+    if (answer != "却下する") return;
+
     using var suspend = GetParentModule().SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 
@@ -1040,6 +1050,10 @@ void ReapproveForOverrun(string reason)
 // ============================================================
 void Cancel_OnClick()
 {
+    var answer = MessageBox.Show("この申請を取り下げます。取り下げると元には戻せません。よろしいですか？",
+        "取り下げる", "キャンセル");
+    if (answer != "取り下げる") return;
+
     using var suspend = GetParentModule().SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 

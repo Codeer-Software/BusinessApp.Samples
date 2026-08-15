@@ -324,6 +324,22 @@ void Run_OnClick()
         return;
     }
 
+    // 一括操作なので確認する（ADR-0062）。押した本数が一度に会計データになる
+    var picked0 = TargetMonth.Value;
+    var plannedCount = 0;
+    var cs0 = new ModuleSearcher<RecurringRunPlan>();
+    cs0.AddEquals(e => e.Status.Value, "planned");
+    plannedCount = cs0.Execute().Count;
+    if (plannedCount == 0)
+    {
+        Toaster.Info("生成対象はありませんでした");
+        return;
+    }
+    var answer = MessageBox.Show(
+        $"{picked0:yyyy年M月}分として、一覧の「生成予定」{plannedCount} 件から請求書と仕訳を作成します。よろしいですか？",
+        "実行する", "キャンセル");
+    if (answer != "実行する") return;
+
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 

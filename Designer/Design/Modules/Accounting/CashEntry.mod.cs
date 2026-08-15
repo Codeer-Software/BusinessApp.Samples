@@ -181,6 +181,16 @@ void PostAll_OnClick()
 {
     if (!IsAccounting()) { return; }
 
+    // 一括で確定仕訳を作る操作なので確認する（ADR-0062）
+    var cs0 = new ModuleSearcher<CashEntryDraft>();
+    cs0.AddEquals(e => e.Creator.Value, CurrentUser.Id.Value);
+    var draftCount = cs0.Execute().Count;
+    if (draftCount == 0) { Toaster.Info("起票する下書きがありません"); return; }
+    var answer = MessageBox.Show(
+        $"下書き {draftCount} 件を一括で起票します（確定仕訳として帳簿に載ります）。よろしいですか？",
+        "起票する", "キャンセル");
+    if (answer != "起票する") return;
+
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 

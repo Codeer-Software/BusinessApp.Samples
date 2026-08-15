@@ -273,6 +273,13 @@ void GenerateJournal_OnClick()
     var cat = FindSelectedCategory();
     if (cat == null) { Toaster.Error("費目が選択されていません"); return; }
 
+    // 確定仕訳を作る操作で、この画面に取り消す導線が無い＝不可逆なので確認する（ADR-0062）
+    var answer = MessageBox.Show(
+        "この申請から未払計上の仕訳を生成します。生成した仕訳を取り消す導線はこの画面にありません"
+        + "（誤りは振替伝票側で訂正してください）。よろしいですか？",
+        "生成する", "キャンセル");
+    if (answer != "生成する") return;
+
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 
@@ -684,6 +691,13 @@ void Settle_OnClick()
     }
     if (SettlementStatus.Value != "accounting") return;
     if (Amount.Value == null || Amount.Value <= 0) { Toaster.Error("金額が入力されていません"); return; }
+
+    // 支払仕訳を作る操作で、この画面に取り消す導線が無い＝不可逆なので確認する（ADR-0062）
+    var answer = MessageBox.Show(
+        "この申請を精算済みにし、支払仕訳を生成します。取り消す導線はこの画面にありません"
+        + "（誤りは振替伝票側で訂正してください）。よろしいですか？",
+        "精算する", "キャンセル");
+    if (answer != "精算する") return;
 
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
