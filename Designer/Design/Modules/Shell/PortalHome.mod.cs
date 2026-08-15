@@ -61,6 +61,7 @@ void Detail_OnAfterInit()
     JournalDraftsLink.IsVisible = false;
     BillingPendingLink.IsVisible = false;
     SesPendingLink.IsVisible = false;
+    SesNoTimesheetLink.IsVisible = false;
     if (hasAccounting)
     {
         var qs = new ModuleSearcher<PortalQueueData>();
@@ -75,6 +76,7 @@ void Detail_OnAfterInit()
             // 件数も導線も分ける。合算すると「3 件と言われた画面に 2 件しかない」ことが起きる（ADR-0060）
             var recurring = (int)(q.RecurringPending.Value ?? 0);
             var ses = (int)(q.SesPending.Value ?? 0);
+            var sesNoTime = (int)(q.SesNoTimesheet.Value ?? 0);
             if (settlement > 0)
             {
                 SettlementQueueLink.IsVisible = true;
@@ -100,7 +102,15 @@ void Detail_OnAfterInit()
                 SesPendingLink.IsVisible = true;
                 SesPendingLink.Text = $"▶ SES 請求の当月未生成: {ses} 件";
             }
-            QueueSectionLabel.IsVisible = settlement > 0 || bank > 0 || drafts > 0 || recurring > 0 || ses > 0;
+            // 実績 0h の月を請求対象から外した以上（ADR-0060）、「請求が出てこない理由」を
+            // ここで見せないと黙って落ちる。請求とは別の作業なので行も遷移先も分ける
+            if (sesNoTime > 0)
+            {
+                SesNoTimesheetLink.IsVisible = true;
+                SesNoTimesheetLink.Text = $"▶ SES の当月工数が未入力: {sesNoTime} 件（入力されるまで請求を作れません）";
+            }
+            QueueSectionLabel.IsVisible = settlement > 0 || bank > 0 || drafts > 0
+                || recurring > 0 || ses > 0 || sesNoTime > 0;
         }
     }
 
@@ -273,6 +283,13 @@ void BillingPending_OnClick()
 }
 
 void SesPending_OnClick()
+{
+    NavigationService.NavigateTo("/SalesBilling/SesBilling");
+}
+
+// 未入力の実体は工数側だが、まず「どの案件が止まっているか」を理由つきで見せたいので
+// SES 精算・請求のプラン一覧へ送る（対象外の行に理由が出ている）
+void SesNoTimesheet_OnClick()
 {
     NavigationService.NavigateTo("/SalesBilling/SesBilling");
 }

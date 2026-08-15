@@ -44,6 +44,12 @@
             "Name": "ses_pending",
             "DbType": "integer",
             "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "ses_no_timesheet",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
           }
         ]
       },
@@ -159,6 +165,27 @@
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "DbColumn": "ses_no_timesheet",
+      "Placeholder": "",
+      "Format": "",
+      "IsSlider": false,
+      "OnInput": "",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "SESの当月工数未入力",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "SesNoTimesheet",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -254,6 +281,22 @@
             "FieldName": "RecurringPending",
             "ContextMenu": "",
             "Label": "定期請求の当月未生成",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": false,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "SesNoTimesheet",
+            "ContextMenu": "",
+            "Label": "SESの当月工数未入力",
             "ColumnSpan": 1,
             "RowSpan": 1,
             "TextWrap": "Unset",

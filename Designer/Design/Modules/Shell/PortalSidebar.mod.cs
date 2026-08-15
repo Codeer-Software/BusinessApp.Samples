@@ -105,6 +105,12 @@ void Notifications_OnClick()
     NavigationService.NavigateTo("/Main/Notification?initialize_search=true");
 }
 
+// 自分のパスワードは自分で変える（ADR-0059）。全員に出す＝管理者に依頼する運用をやめる
+void GoPasswordChange_OnClick()
+{
+    NavigationService.NavigateTo("/Main/PasswordChange");
+}
+
 void Logout_OnClick()
 {
     NavigationService.Logout();

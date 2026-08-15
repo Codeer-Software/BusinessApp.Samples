@@ -57,4 +57,18 @@ SELECT
           - CASE WHEN s.lo IS NOT NULL AND s.hi IS NOT NULL AND (s.mins / 60) < s.lo
                  THEN (s.lo - (s.mins / 60)) * s.deduct ELSE 0 END
           + CASE WHEN s.lo IS NOT NULL AND s.hi IS NOT NULL AND (s.mins / 60) > s.hi
-                 THEN ((s.mins / 60) - s.hi) * s.excess ELSE 0 END) > 0) AS ses_pending
+                 THEN ((s.mins / 60) - s.hi) * s.excess ELSE 0 END) > 0) AS ses_pending,
+  -- SES で当月の工数実績が 1 分も無い案件（ADR-0060）。
+  -- 実績 0h の月を請求対象から外した副作用で「請求が出てこない理由」が画面から消えるため、
+  -- 「工数を入れてください」という別の作業として明示的に数える（黙って何も出ないのが一番まずい）
+  (SELECT count(*) FROM projects p
+    WHERE p.project_type = 'ses' AND p.status = 'active' AND p.is_active = 1
+      AND p.ses_monthly_rate IS NOT NULL AND p.ses_monthly_rate > 0
+      AND NOT EXISTS (SELECT 1 FROM invoices iv
+                      WHERE iv.invoice_source = 'ses' AND iv.project_id = p.id
+                        AND date(iv.billing_month) = date('now', 'localtime', 'start of month'))
+      AND COALESCE((SELECT sum(t.minutes) FROM time_entries t
+                     WHERE t.project_id = p.id
+                       AND date(t.work_date) >= date('now', 'localtime', 'start of month')
+                       AND date(t.work_date) <  date('now', 'localtime', 'start of month', '+1 month')), 0) = 0
+   ) AS ses_no_timesheet

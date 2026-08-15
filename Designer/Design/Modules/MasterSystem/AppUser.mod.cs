@@ -4,6 +4,8 @@
 
 void Detail_OnAfterInit()
 {
+    ShowPasswordPolicy();
+
     // 新規作成時は有効で始める（無効な新規ユーザーを作る業務はない）
     if (IsNewData && IsActive.Value != true)
     {
@@ -18,6 +20,63 @@ void Detail_OnAfterInit()
     {
         CanUseTimesheet.Value = true;
     }
+}
+
+// パスワードの条件を欄の下に出す（ADR-0059）。文言はサーバの GuidanceText() が唯一の出どころで、
+// ポリシーを変えると画面の説明文も自動で追随する（マスタの値と説明がズレない）
+string passwordGuidance = "";
+
+void ShowPasswordPolicy()
+{
+    passwordGuidance = "";
+    PasswordHintLabel.Text = "";
+    PasswordHintLabel.IsVisible = false;
+    var result = WebApiService.Get("/api/password/policy");
+    if (result.StatusCode != 200) return;
+    var guidance = $"{result.JsonObject.guidance}";
+    if (guidance == "") return;
+    passwordGuidance = guidance;
+    ShowPasswordGuidance();
+}
+
+void ShowPasswordGuidance()
+{
+    PasswordHintLabel.Color = "";
+    PasswordHintLabel.Text = $"条件: {passwordGuidance}（空欄のままにするとパスワードは変更されません）";
+    PasswordHintLabel.IsVisible = true;
+}
+
+// 入力の都度（フォーカスが外れたとき）に条件を確かめて、その場で赤く知らせる。
+// 判定はサーバの PasswordPolicyService が唯一の実装で、ここはその呼び出し。
+// **これは通知であって関門ではない**——保存を止めるのは CustomizedModuleDataIO（サーバ）の仕事。
+// 当初はフィールドの OnValidateInput に置いたが、保存が無言で止まる（エラー表示も通信も起きない）
+// 挙動を実測したため、この repo で挙動が確立している OnDataChanged に替えた。
+// 空欄＝「パスワードは変更しない」なので検証しない（ハッシュ化側も同じ扱い）。
+void Password_OnDataChanged()
+{
+    var pw = パスワード.Value;
+    if (string.IsNullOrEmpty(pw))
+    {
+        ShowPasswordGuidance();
+        return;
+    }
+
+    var body = new JsonObject();
+    body.Password = pw;
+    body.UserName = ユーザー識別名.Value;
+    var result = WebApiService.Post("/api/password/validate", body);
+    if (result.StatusCode != 200) return;
+
+    var data = result.JsonObject;
+    var ok = $"{data.ok}";
+    if (ok == "True" || ok == "true")
+    {
+        ShowPasswordGuidance();
+        return;
+    }
+    PasswordHintLabel.Color = "#dc3545";
+    PasswordHintLabel.Text = $"{data.message}";
+    PasswordHintLabel.IsVisible = true;
 }
 
 // 自分自身のシステム管理者権限は外せない（唯一の管理者が自分を降格するとロックアウトするため）

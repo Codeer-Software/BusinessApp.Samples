@@ -1,6 +1,17 @@
 /* よろず(Yorozu) カスタムCSS
    参照: ClaudeCodeForDesigner/Docs/AppCss.md（ListElement.ClassName は一覧の td/th に付与される） */
 
+/* パスワード変更画面（ADR-0059）
+   CLB の PasswordField は 1 フィールドにつき「入力欄＋確認欄（.password-confirm）」の
+   2 つを必ず描画する（無効化するプロパティは無い・実測）。この画面は
+   「現在 / 新しい / 新しい（確認）」の 3 欄を自前で並べていて、各欄にさらに確認欄が付くと
+   6 欄になってしまうため、フレームワーク側の確認欄を隠す。
+   一致チェックはスクリプト（Change_OnClick）で行う。
+   ※ ユーザー管理（AppUser）側は SubmitButton の検証で確認欄が機能するので隠さない。 */
+[data-module="PasswordChange"] .password-confirm {
+  display: none;
+}
+
 /* 一覧の金額・数値列: 右詰め＋等幅数字（ListElement.ClassName = "amount-cell"） */
 .amount-cell {
   text-align: right;
