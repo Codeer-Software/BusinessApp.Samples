@@ -328,8 +328,16 @@ void SaveDraft_OnClick()
     SaveEntry(false);
 }
 
+// 確定は不可逆（下書きへ戻す導線を持たない＝訂正は反対仕訳で行う）。
+// 不可逆操作の確認ダイアログ規約（ADR-0059）に従い、押した瞬間に走らせない。
+// LoadingService は MessageBox より後に開始する（オーバーレイがダイアログを覆う・実測）
 void Post_OnClick()
 {
+    var answer = MessageBox.Show(
+        "この伝票を確定します。確定すると下書きには戻せません。"
+        + "訂正が必要になった場合は、反対仕訳を起票してください。",
+        "確定する", "キャンセル");
+    if (answer != "確定する") return;
     SaveEntry(true);
 }
 
