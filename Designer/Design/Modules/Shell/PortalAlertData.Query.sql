@@ -6,7 +6,7 @@
 -- 入金の集計は 3 帳票とも「消込済み（消込仕訳がある）入金」だけを数える。発行時に自動作成される
 -- 未確定の入金予定（ADR-0032）を含めると期限超過が 0 件・入金予定が 0 円になる（改善候補 A-2）
 WITH RECURSIVE months(idx, month_first) AS (
-  SELECT 0, date('now', 'start of month')
+  SELECT 0, date('now', 'localtime', 'start of month')
   UNION ALL
   SELECT idx + 1, date(month_first, '+1 month') FROM months WHERE idx < 3
 ),
@@ -14,7 +14,7 @@ threshold AS (
   SELECT COALESCE((SELECT amount FROM system_thresholds WHERE code = 'PAY_DUE_SOON_DAYS' LIMIT 1), 7) AS days
 ),
 pay AS (
-  SELECT CAST(julianday(date(v.due_date)) - julianday(date('now')) AS INTEGER) AS days_left
+  SELECT CAST(julianday(date(v.due_date)) - julianday(date('now', 'localtime')) AS INTEGER) AS days_left
   FROM vendor_invoices v
   WHERE v.status IN ('received', 'accrued')
 ),
@@ -29,11 +29,11 @@ recv AS (
     ON rc.invoice_id = i.id
   WHERE i.status <> 'void' AND i.status <> 'draft' AND i.status <> 'paid'
     AND COALESCE(rc.received, 0) < COALESCE(i.amount, 0) + COALESCE(i.tax_amount, 0)
-    AND i.due_date IS NOT NULL AND date(i.due_date) < date('now')
+    AND i.due_date IS NOT NULL AND date(i.due_date) < date('now', 'localtime')
 ),
 cur_yr AS (
   SELECT id FROM fiscal_years
-  WHERE date(start_date) <= date('now') AND date(end_date) >= date('now')
+  WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime')
 ),
 cash_now AS (
   SELECT

@@ -95,6 +95,17 @@ void BuildPlan()
             plan.Submit();
             continue;
         }
+        // 完了・中断した案件は請求しない（ADR-0060）。
+        // 以前は is_active しか見ておらず、「完了」にした SES 案件が毎月の生成予定に残り続けていた
+        if (p.Status.Value != "active")
+        {
+            plan.Status.Value = "excluded";
+            plan.Detail.Value = p.Status.Value == "completed"
+                ? "案件が完了しているため対象外"
+                : "案件が中断しているため対象外";
+            plan.Submit();
+            continue;
+        }
         if (p.SesMonthlyRate.Value == null || p.SesMonthlyRate.Value <= 0)
         {
             plan.Status.Value = "excluded";
@@ -180,6 +191,17 @@ void BuildPlan()
             continue;
         }
 
+        // 実績が 1 分も入っていない月は請求しない（ADR-0060）。
+        // 精算幅つきの契約は「実績 0h → 下限まるごと控除」となり、機械的には金額が出てしまうが、
+        // 実務でこれが起きる原因はほぼ常に「工数の入力漏れ」で、そのまま請求すると誤請求になる。
+        // 生成済み判定より後に置く（既に請求済みの月を「未入力」と言わないため）
+        if (minutes <= 0)
+        {
+            plan.Status.Value = "excluded";
+            plan.Detail.Value = "対象月の工数実績が未入力のため対象外（工数を入力してから実行してください）";
+            plan.Submit();
+            continue;
+        }
         if (amount <= 0)
         {
             plan.Status.Value = "excluded";

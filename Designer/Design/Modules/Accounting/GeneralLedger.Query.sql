@@ -5,8 +5,8 @@
 --              「期中発生分のみの累計」を表示する（date_from より前の期中発生分は繰越に含む）。
 WITH yr AS (
   SELECT id, start_date FROM fiscal_years
-  WHERE date(start_date) <= date(COALESCE(@date_from, @date_to, date('now')))
-    AND date(end_date) >= date(COALESCE(@date_from, @date_to, date('now')))
+  WHERE date(start_date) <= date(COALESCE(@date_from, @date_to, date('now', 'localtime')))
+    AND date(end_date) >= date(COALESCE(@date_from, @date_to, date('now', 'localtime')))
 ),
 base AS (
   SELECT

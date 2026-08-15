@@ -15,7 +15,7 @@ WITH yr AS (
   SELECT id FROM fiscal_years
   WHERE id = COALESCE(@fiscal_year_id,
     (SELECT id FROM fiscal_years
-     WHERE date(start_date) <= date('now') AND date(end_date) >= date('now')))
+     WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime')))
 ),
 mv AS (
   SELECT l.account_id,

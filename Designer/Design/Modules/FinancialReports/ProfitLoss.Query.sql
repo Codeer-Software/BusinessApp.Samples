@@ -16,7 +16,7 @@ WITH bal AS (
     -- 年度未選択（初期表示）は現在日付を含む年度に自動解決（BS/EquityChange と同方式）
     AND e.fiscal_year_id = COALESCE(@fiscal_year_id,
       (SELECT id FROM fiscal_years
-       WHERE date(start_date) <= date('now') AND date(end_date) >= date('now')))
+       WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime')))
   GROUP BY a.id
 ),
 amt AS (

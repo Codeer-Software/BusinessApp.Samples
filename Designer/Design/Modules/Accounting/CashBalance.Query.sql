@@ -10,7 +10,7 @@
 -- 見せるものなので、画面側が自分の下書き行から計算して book_balance に足す（CashEntry.mod.cs）。
 WITH yr AS (
   SELECT id FROM fiscal_years
-  WHERE date(start_date) <= date('now') AND date(end_date) >= date('now')
+  WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime')
 )
 SELECT
   a.id   AS account_id,

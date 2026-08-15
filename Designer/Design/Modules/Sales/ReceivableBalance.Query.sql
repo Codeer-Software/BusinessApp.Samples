@@ -38,7 +38,7 @@ base AS (
     CASE
       WHEN i.status = 'paid' THEN '入金済'
       WHEN COALESCE(rc.received, 0) >= COALESCE(i.amount, 0) + COALESCE(i.tax_amount, 0) THEN '入金済'
-      WHEN i.due_date IS NOT NULL AND date(i.due_date) < date('now') THEN '期限超過'
+      WHEN i.due_date IS NOT NULL AND date(i.due_date) < date('now', 'localtime') THEN '期限超過'
       WHEN COALESCE(rc.received, 0) > 0 THEN '一部入金'
       ELSE '未入金'
     END AS state

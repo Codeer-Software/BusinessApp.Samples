@@ -6,7 +6,7 @@ WITH yr AS (
   SELECT id, start_date, end_date FROM fiscal_years
   WHERE id = COALESCE(@fiscal_year_id,
     (SELECT id FROM fiscal_years
-     WHERE date(start_date) <= date('now') AND date(end_date) >= date('now')))
+     WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime')))
 ),
 eq AS (
   SELECT a.id, a.code, a.name FROM accounts a WHERE a.account_type = 'equity'

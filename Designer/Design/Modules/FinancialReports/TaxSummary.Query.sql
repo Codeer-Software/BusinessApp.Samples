@@ -19,7 +19,7 @@
 WITH fy AS (
   SELECT COALESCE(@fiscal_year_id,
                   (SELECT id FROM fiscal_years
-                    WHERE date(start_date) <= date('now') AND date(end_date) >= date('now'))) AS id
+                    WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime'))) AS id
 ),
 lines AS (
   SELECT
@@ -69,11 +69,11 @@ sales AS (
 th AS (
   SELECT
     (SELECT amount FROM system_thresholds WHERE code = 'FULL_DEDUCT_RATIO_MIN'
-       AND (valid_from IS NULL OR date(valid_from) <= date('now'))
-       AND (valid_to   IS NULL OR date(valid_to)   >= date('now')) LIMIT 1) AS ratio_min,
+       AND (valid_from IS NULL OR date(valid_from) <= date('now', 'localtime'))
+       AND (valid_to   IS NULL OR date(valid_to)   >= date('now', 'localtime')) LIMIT 1) AS ratio_min,
     (SELECT amount FROM system_thresholds WHERE code = 'FULL_DEDUCT_SALES_CAP'
-       AND (valid_from IS NULL OR date(valid_from) <= date('now'))
-       AND (valid_to   IS NULL OR date(valid_to)   >= date('now')) LIMIT 1) AS sales_cap
+       AND (valid_from IS NULL OR date(valid_from) <= date('now', 'localtime'))
+       AND (valid_to   IS NULL OR date(valid_to)   >= date('now', 'localtime')) LIMIT 1) AS sales_cap
 )
 SELECT * FROM (
   SELECT

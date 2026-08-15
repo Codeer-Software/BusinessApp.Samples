@@ -11,7 +11,7 @@ pend AS (
     v.invoice_no,
     v.amount,
     CASE v.status WHEN 'received' THEN '受領' WHEN 'accrued' THEN '未払計上済' ELSE v.status END AS status_disp,
-    CAST(julianday(date(v.due_date)) - julianday(date('now')) AS INTEGER) AS days_left
+    CAST(julianday(date(v.due_date)) - julianday(date('now', 'localtime')) AS INTEGER) AS days_left
   FROM vendor_invoices v
   LEFT JOIN partners p ON p.id = v.partner_id
   WHERE v.status IN ('received', 'accrued')

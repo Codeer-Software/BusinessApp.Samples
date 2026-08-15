@@ -6,8 +6,8 @@ WITH acct AS (
 ),
 yr AS (
   SELECT id, start_date FROM fiscal_years
-  WHERE date(start_date) <= date(COALESCE(@date_from, @date_to, date('now')))
-    AND date(end_date) >= date(COALESCE(@date_from, @date_to, date('now')))
+  WHERE date(start_date) <= date(COALESCE(@date_from, @date_to, date('now', 'localtime')))
+    AND date(end_date) >= date(COALESCE(@date_from, @date_to, date('now', 'localtime')))
 ),
 base AS (
   SELECT

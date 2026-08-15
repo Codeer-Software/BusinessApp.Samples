@@ -1,14 +1,14 @@
 -- ホーム KPI（経理向け・1行）: 現預金 / 売掛金 / 買掛金 / 当月売上高 / 当月費用 / 当月利益
 -- Home.mod.cs から ModuleSearcher で読み取り、ラベルに整形表示する（画面への直接埋め込みはしない）。
--- 「当月」= date('now') を含む月次期間（既存帳票と同じ規約。date() 同士の比較なので境界日の罠は無い）
+-- 「当月」= date('now', 'localtime') を含む月次期間（既存帳票と同じ規約。date() 同士の比較なので境界日の罠は無い）
 WITH cur AS (
   SELECT id FROM fiscal_years
-  WHERE date(start_date) <= date('now') AND date(end_date) >= date('now')
+  WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime')
 ),
 per AS (
   SELECT start_date, end_date FROM fiscal_periods
   WHERE fiscal_year_id IN (SELECT id FROM cur)
-    AND date(start_date) <= date('now') AND date(end_date) >= date('now')
+    AND date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime')
 ),
 bs AS (
   SELECT a.code,

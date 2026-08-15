@@ -60,6 +60,7 @@ void Detail_OnAfterInit()
     BankPendingLink.IsVisible = false;
     JournalDraftsLink.IsVisible = false;
     BillingPendingLink.IsVisible = false;
+    SesPendingLink.IsVisible = false;
     if (hasAccounting)
     {
         var qs = new ModuleSearcher<PortalQueueData>();
@@ -70,7 +71,10 @@ void Detail_OnAfterInit()
             var settlement = (int)(q.SettlementQueue.Value ?? 0);
             var bank = (int)(q.BankPending.Value ?? 0);
             var drafts = (int)(q.JournalDrafts.Value ?? 0);
-            var billing = (int)((q.RecurringPending.Value ?? 0) + (q.SesPending.Value ?? 0));
+            // 定期請求と SES は実行するモジュールが別（RecurringRun / SesBilling）なので、
+            // 件数も導線も分ける。合算すると「3 件と言われた画面に 2 件しかない」ことが起きる（ADR-0060）
+            var recurring = (int)(q.RecurringPending.Value ?? 0);
+            var ses = (int)(q.SesPending.Value ?? 0);
             if (settlement > 0)
             {
                 SettlementQueueLink.IsVisible = true;
@@ -86,12 +90,17 @@ void Detail_OnAfterInit()
                 JournalDraftsLink.IsVisible = true;
                 JournalDraftsLink.Text = $"▶ 下書きのままの伝票: {drafts} 件";
             }
-            if (billing > 0)
+            if (recurring > 0)
             {
                 BillingPendingLink.IsVisible = true;
-                BillingPendingLink.Text = $"▶ 定期請求・SES の当月未生成: {billing} 件";
+                BillingPendingLink.Text = $"▶ 定期請求の当月未生成: {recurring} 件";
             }
-            QueueSectionLabel.IsVisible = settlement > 0 || bank > 0 || drafts > 0 || billing > 0;
+            if (ses > 0)
+            {
+                SesPendingLink.IsVisible = true;
+                SesPendingLink.Text = $"▶ SES 請求の当月未生成: {ses} 件";
+            }
+            QueueSectionLabel.IsVisible = settlement > 0 || bank > 0 || drafts > 0 || recurring > 0 || ses > 0;
         }
     }
 
@@ -261,6 +270,11 @@ void JournalDrafts_OnClick()
 void BillingPending_OnClick()
 {
     NavigationService.NavigateTo("/SalesBilling/RecurringRun");
+}
+
+void SesPending_OnClick()
+{
+    NavigationService.NavigateTo("/SalesBilling/SesBilling");
 }
 
 void PayDue_OnClick()

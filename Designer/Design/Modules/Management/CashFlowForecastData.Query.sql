@@ -1,5 +1,5 @@
 -- 資金繰り予測（当月含む今後4ヶ月）: 期首資金 / 入金予定 / 出金予定 / 期末資金 / 警告
--- 「今日」は既存帳票（売掛残高・元帳の既定値）に合わせ date('now') を使用。
+-- 「今日」は既存帳票（売掛残高・元帳の既定値）に合わせ date('now', 'localtime') を使用。
 -- 入金: 未回収請求書（期日月、期日超過は当月）＋ 定期請求の未生成将来分（対象月の翌月末入金）
 --       未回収額の控除は消込済みの入金だけ。発行時に自動作成される未確定の入金予定（ADR-0032）を
 --       引くと全請求書が残額 0 になり、入金予定が構造的に 0 円になる（改善候補 A-2）
@@ -7,13 +7,13 @@
 --       ＋ 仕入先請求書の未払い分（D-6 連動。支払期限月・期限超過/期限なしは当月。
 --         received/accrued を請求書ベースで拾うため買掛金 GL 残高は加算しない=二重計上回避）
 WITH RECURSIVE months(idx, month_first) AS (
-  SELECT 0, date('now', 'start of month')
+  SELECT 0, date('now', 'localtime', 'start of month')
   UNION ALL
   SELECT idx + 1, date(month_first, '+1 month') FROM months WHERE idx < 3
 ),
 cur_yr AS (
   SELECT id FROM fiscal_years
-  WHERE date(start_date) <= date('now') AND date(end_date) >= date('now')
+  WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime')
 ),
 cash_now AS (
   SELECT
