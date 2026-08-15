@@ -26,4 +26,11 @@ builder.Services.AddScoped(sp =>
     return httpClient;
 });
 
+// The antiforgery token cookie is issued by GET /api/account/antiforgery.
+// Fetch it before the app starts so the HttpClient factory above can read it from the cookie.
+using (var boot = new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) })
+{
+    try { await boot.GetAsync("api/account/antiforgery"); } catch { }
+}
+
 await builder.Build().RunAsync();

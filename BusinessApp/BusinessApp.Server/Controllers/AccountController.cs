@@ -27,6 +27,15 @@ namespace BusinessApp.Server.Controllers
         public StringWrapper GetCurrentUser()
             => new(DataService.GetCurrentUserId(HttpContext));
 
+        //Sole issuer of the antiforgery token cookie. login.html fetches this before
+        //every login attempt, and the WASM client fetches it at startup.
+        [HttpGet("antiforgery")]
+        public IActionResult Antiforgery()
+        {
+            CookieAuthentication.AppendAntiforgeryTokenCookie(HttpContext);
+            return NoContent();
+        }
+
         [HttpPost("login")]
         public async Task<IActionResult> Login(LoginInfo? loginInfo)
         {

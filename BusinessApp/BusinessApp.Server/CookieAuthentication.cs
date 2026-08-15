@@ -39,29 +39,23 @@ namespace BusinessApp.Server
             app.UseAuthentication();
             app.UseAuthorization();
             app.UseAntiforgery();
-            app.Use(async (ctx, next) =>
-            {
-                if (HttpMethods.IsGet(ctx.Request.Method))
-                {
-                    if (ctx.Request.Headers.Accept.Any(a => a?.Contains("text/html") == true))
-                    {
-                        var anti = ctx.RequestServices.GetRequiredService<IAntiforgery>();
-                        var tokens = anti.GetAndStoreTokens(ctx);
-                        ctx.Response.Cookies.Append(
-                            "X-ANTIFORGERY-TOKEN",
-                            tokens.RequestToken ?? string.Empty,
-                            new CookieOptions
-                            {
-                                HttpOnly = false,
-                                Secure = true,
-                                SameSite = SameSiteMode.Lax
-                            });
-                    }
-                }
-                await next();
-            });
 
             _ = CreateInitialUserAsync(app);
+        }
+
+        public static void AppendAntiforgeryTokenCookie(HttpContext ctx)
+        {
+            var anti = ctx.RequestServices.GetRequiredService<IAntiforgery>();
+            var tokens = anti.GetAndStoreTokens(ctx);
+            ctx.Response.Cookies.Append(
+                "X-ANTIFORGERY-TOKEN",
+                tokens.RequestToken ?? string.Empty,
+                new CookieOptions
+                {
+                    HttpOnly = false,
+                    Secure = true,
+                    SameSite = SameSiteMode.Lax
+                });
         }
 
         static string GetDataSourceName()

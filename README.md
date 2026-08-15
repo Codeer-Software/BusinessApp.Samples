@@ -13,7 +13,7 @@ ASP.NET Core + [Codeer.LowCode.Blazor](https://github.com/Codeer-Software/Codeer
 
 | 項目       | 内容                                                                          |
 | ---------- | ----------------------------------------------------------------------------- |
-| ランタイム | .NET 8 / ASP.NET Core + Blazor（CLB 1.3.16、Extras 0.4.0、ApexCharts 0.25.3） |
+| ランタイム | .NET 8 / ASP.NET Core + Blazor（CLB 1.3.18、Extras 0.5.0、ApexCharts 0.25.3） |
 | DB         | SQLite（`LocalData/db/business-app_v1.db`・Git 追跡外）                         |
 | 認証       | Cookie 認証                                                                   |
 | AI 連携    | プロバイダ切替式（Mock／Claude／AzureOpenAI）。既定は Mock でキー不要         |
@@ -34,7 +34,7 @@ CLAUDE.md                   Claude Code 向けミッションブリーフ（自�
 
 ## セットアップ（新環境）
 
-前提: Windows / .NET 8 SDK。デザイン編集まで行う場合は CLB デザイナ 1.3.16 も必要。
+前提: Windows / .NET 8 SDK。デザイン編集まで行う場合は CLB デザイナ 1.3.18 も必要。
 
 1. **環境固有設定の生成** — 以下の `*.sample` を同名（`.sample` 抜き）でコピーし、中の `<REPO_ROOT>` を実パスに置換（経緯: `docs/decisions/0025`）
    - `BusinessApp/BusinessApp.Server/appsettings.Development.json.sample`

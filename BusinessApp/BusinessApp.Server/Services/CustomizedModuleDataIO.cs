@@ -9,6 +9,10 @@ namespace BusinessApp.Server.Services
 {
     public class CustomizedModuleDataIO : ModuleDataIO
     {
+        //一括INSERT (multi-row INSERT) の有効化。純Addのみの大量Submit (一括取込) がこの行数以上のとき束ねて挿入される。
+        //-1 (コア既定) で無効
+        static CustomizedModuleDataIO() => BulkAddThreshold = 100;
+
         readonly DesignData _designData;
 
         public CustomizedModuleDataIO(DesignData designData, IAuthenticationContext authenticationContext, IDbAccessor dbAccess, ITemporaryFileManager temporaryFileManager)
@@ -24,6 +28,16 @@ namespace BusinessApp.Server.Services
 
             PasswordHashHelper.ApplyPasswordHash(moduleDesign, data);
             return await base.AddAsync(transactionId, moduleSubmitId, data);
+        }
+
+        //一括INSERT (大量取込) は行ごとの AddAsync を通らないため、同じ加工をこちらでも行う
+        protected override async Task BulkAddAsync(Guid transactionId, List<ModuleData> datas)
+        {
+            var moduleDesign = _designData.Modules.Find(datas.FirstOrDefault()?.Name ?? string.Empty);
+            if (moduleDesign == null) throw LowCodeException.Create("invalid design");
+
+            foreach (var data in datas) PasswordHashHelper.ApplyPasswordHash(moduleDesign, data);
+            await base.BulkAddAsync(transactionId, datas);
         }
 
         protected async override Task UpdateAsync(Guid transactionId, Guid moduleSubmitId, ModuleData data)

@@ -45,7 +45,6 @@
   <script>
     const params = new URLSearchParams(location.search);
     const redirect = sanitizeReturnUrl(params.get("returnUrl"));
-    const token = getCookie("X-ANTIFORGERY-TOKEN");
 
     (async () => {
       if (window.__blazorStarted) location.reload();
@@ -68,6 +67,7 @@
       err.style.display = "none";
 
       try {
+        const token = await getAntiforgeryToken();
         const res = await fetch("/api/account/login", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-ANTIFORGERY-TOKEN":token },
@@ -97,6 +97,12 @@
         btn.disabled = false;
       }
     });
+    async function getAntiforgeryToken() {
+      try {
+        await fetch("/api/account/antiforgery", { credentials: "include", cache: "no-store" });
+      } catch { }
+      return getCookie("X-ANTIFORGERY-TOKEN");
+    }
     function getCookie(name) {
       return document.cookie
         .split("; ")
