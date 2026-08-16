@@ -3,30 +3,224 @@
 // parentId は親の @temporary:guid をそのまま入れて良い。
 // 親 ↔ ApprovalFlow の双方向参照は CLB の TemporaryIdResolver がサイクル解決する。
 // ============================================================
-void Initialize(string parentModuleName, string parentId, string templateName)
+void Initialize(string parentModuleName, string parentId)
 {
     Status.Value = "Pending";
     AttemptNo.Value = 1;
     ParentModuleName.Value = parentModuleName;
     ParentId.Value = parentId;
-
-    var s = new ModuleSearcher<ApprovalFlowTemplate>();
-    s.AddEquals(t => t.Name.Value, templateName);
-    var tmpls = s.Execute();
-    if (tmpls.Count > 0) TemplateId.Value = tmpls[0].Id.Value;
+    // テンプレートは申請時に親（明細）から解決するのでここでは決めない（ADR-0066）
 }
 
-// 申請ボタン押下時に Orders/Members をテンプレから生成する。
+// ============================================================
+// 承認段の合成（ADR-0066）
+// 親が「行ごとに解決したテンプレート」を複数返してくるので、その段を 1 本の段列に重ね合わせる。
+//
+// 手続き:
+//   1. 各テンプレートの段を「承認者キー」でまとめる
+//      （役職段は role:manager / role:director、個人指名段は user:{承認者IDの昇順連結}）
+//   2. 同じキーの段は 1 つに畳む
+//   3. 並び順は「そのキーが登場したテンプレート内の order_no の最大値」の昇順。
+//      同値なら manager → director → 個人指名 の順
+//
+// この手続きは「行ごとに必要な段を求めて重ねる」と「最も強いルールを採る」を同時に満たす。
+// テンプレートに強さを表す列を足す必要が無く、明細が 1 行のときは従来と同一の段列に帰着する。
+// ============================================================
+List<ApprovalFlowTemplateMember> MembersOf(object templateOrderId)
+{
+    var result = new List<ApprovalFlowTemplateMember>();
+    var s = new ModuleSearcher<ApprovalFlowTemplateMember>();
+    s.AddEquals(m => m.TemplateOrderId.Value, templateOrderId);
+    s.OrderBy(m => m.Id.Value);
+    foreach (var m in s.Execute())
+    {
+        result.Add((ApprovalFlowTemplateMember)m);
+    }
+    return result;
+}
+
+// 段の同一性キー（役職段は役職、個人指名段は承認者の集合）
+string StageKeyOf(List<ApprovalFlowTemplateMember> ms)
+{
+    if (ms.Count == 1)
+    {
+        var role = ms[0].ApproverRole.Value;
+        if (role == "manager" || role == "director") return $"role:{role}";
+    }
+    var ids = new List<string>();
+    foreach (var m in ms) { ids.Add($"{m.ApproverUser.Value}"); }
+    ids.Sort();
+    return "user:" + string.Join(",", ids);
+}
+
+// 並び順の第 2 キー（同じ order_no のときの優先度）: 課長 → 部長 → 個人指名
+int StageRankOf(List<ApprovalFlowTemplateMember> ms)
+{
+    if (ms.Count == 1)
+    {
+        var role = ms[0].ApproverRole.Value;
+        if (role == "manager") return 0;
+        if (role == "director") return 1;
+    }
+    return 2;
+}
+
+// 複数テンプレートの段を合成して並べた段の一覧を返す（空なら合成できなかった）
+List<ApprovalFlowTemplateOrder> BuildMergedOrders(List<object> templateIds)
+{
+    var keys = new List<string>();
+    var orders = new List<ApprovalFlowTemplateOrder>();
+    var seqs = new List<int>();
+    var ranks = new List<int>();
+    var owners = new List<string>();
+
+    foreach (var tid in templateIds)
+    {
+        var os = new ModuleSearcher<ApprovalFlowTemplateOrder>();
+        os.AddEquals(o => o.TemplateId.Value, tid);
+        os.OrderBy(o => o.OrderNo.Value);
+        foreach (var row in os.Execute())
+        {
+            var o = (ApprovalFlowTemplateOrder)row;
+            var ms = MembersOf(o.Id.Value);
+            if (ms.Count == 0) continue;
+            var key = StageKeyOf(ms);
+            var no = (int)(o.OrderNo.Value ?? 0);
+            var idx = keys.IndexOf(key);
+            if (idx < 0)
+            {
+                keys.Add(key);
+                orders.Add(o);
+                seqs.Add(no);
+                ranks.Add(StageRankOf(ms));
+                owners.Add($"{tid}");
+            }
+            else if (no > seqs[idx])
+            {
+                seqs[idx] = no;
+            }
+        }
+    }
+
+    // 選択ソート（seq → rank → key）。件数は多くても数段なので単純な実装で十分
+    for (var i = 0; i < keys.Count; i++)
+    {
+        var best = i;
+        for (var j = i + 1; j < keys.Count; j++)
+        {
+            var better = false;
+            if (seqs[j] < seqs[best]) better = true;
+            else if (seqs[j] == seqs[best])
+            {
+                if (ranks[j] < ranks[best]) better = true;
+                else if (ranks[j] == ranks[best] && string.Compare(keys[j], keys[best]) < 0) better = true;
+            }
+            if (better) best = j;
+        }
+        if (best != i)
+        {
+            var tk = keys[i]; keys[i] = keys[best]; keys[best] = tk;
+            var to = orders[i]; orders[i] = orders[best]; orders[best] = to;
+            var ts = seqs[i]; seqs[i] = seqs[best]; seqs[best] = ts;
+            var tr = ranks[i]; ranks[i] = ranks[best]; ranks[best] = tr;
+            var tw = owners[i]; owners[i] = owners[best]; owners[best] = tw;
+        }
+    }
+
+    // 代表テンプレート（記録用）: 合成にいちばん多くの段を寄与したもの
+    var bestOwner = "";
+    var bestCount = 0;
+    foreach (var tid in templateIds)
+    {
+        var c = 0;
+        foreach (var w in owners) { if (w == $"{tid}") c = c + 1; }
+        if (c > bestCount) { bestCount = c; bestOwner = $"{tid}"; }
+    }
+    foreach (var tid in templateIds)
+    {
+        if ($"{tid}" == bestOwner) { TemplateId.Value = tid; }
+    }
+
+    return orders;
+}
+
+// 合成した段の承認者集合を文字列化する（ルートが変わったかの比較に使う）
+string BuildRequiredRouteKey(List<object> templateIds)
+{
+    var applicantId = ResolveApplicantUserId();
+    var dept = FindUserDepartment(applicantId);
+    var parts = new List<string>();
+    List<object> prevRoleApprovers = null;
+    foreach (var o in BuildMergedOrders(templateIds))
+    {
+        var ms = MembersOf(o.Id.Value);
+        var isRole = false;
+        List<object> approvers = new List<object>();
+        if (ms.Count == 1)
+        {
+            var role0 = ms[0].ApproverRole.Value;
+            if (role0 == "manager" || role0 == "director")
+            {
+                isRole = true;
+                approvers = ResolveRoleApprovers(dept, role0, applicantId);
+            }
+        }
+        if (!isRole)
+        {
+            foreach (var m in ms) { approvers.Add(ResolveFixedApproverAvoidingSelf(m.ApproverUser.Value, applicantId)); }
+        }
+        if (isRole && prevRoleApprovers != null && SameIdSet(prevRoleApprovers, approvers)) continue;
+        if (isRole) prevRoleApprovers = approvers;
+        else prevRoleApprovers = null;
+        parts.Add(JoinApproverIds(approvers));
+    }
+    return string.Join("|", parts);
+}
+
+// 実際に生成済みの段（Orders/Members）の承認者集合を文字列化する
+string BuildCurrentRouteKey()
+{
+    var parts = new List<string>();
+    if (this.IsNewData) return "";
+    var os = new ModuleSearcher<ApprovalFlowOrder>();
+    os.AddEquals(o => o.ApprovalFlowId.Value, this.Id.Value);
+    os.OrderBy(o => o.OrderNo.Value);
+    foreach (var oRow in os.Execute())
+    {
+        var o = (ApprovalFlowOrder)oRow;
+        var ms = new ModuleSearcher<ApprovalFlowMember>();
+        ms.AddEquals(m => m.ApprovalFlowOrderId.Value, o.Id.Value);
+        ms.OrderBy(m => m.Id.Value);
+        var ids = new List<object>();
+        foreach (var mRow in ms.Execute()) { ids.Add(((ApprovalFlowMember)mRow).ApproverUser.Value); }
+        if (ids.Count == 0) continue;
+        parts.Add(JoinApproverIds(ids));
+    }
+    return string.Join("|", parts);
+}
+
+string JoinApproverIds(List<object> ids)
+{
+    var s = new List<string>();
+    foreach (var x in ids) { s.Add($"{x}"); }
+    s.Sort();
+    return string.Join(",", s);
+}
+
+// いま必要な承認ルートが、実際に承認された段構成と違うか（実費確定の再承認判定・ADR-0066）
+bool IsRouteChanged(List<object> templateIds)
+{
+    return BuildRequiredRouteKey(templateIds) != BuildCurrentRouteKey();
+}
+
+// 申請ボタン押下時に Orders/Members を合成した段から生成する。
 // UseIndexSort=true なので OrderNo は Submit 時に 0,1,... で自動採番される。
 // テンプレメンバーの approver_role (manager/director) は申請者の所属部門の課長/部長へ動的解決。
 // 失敗時 (テンプレ未設定・役職が解決できない) は行を作らず false を返す（中途半端な Orders を残さない）。
-bool LoadFromTemplate()
+bool LoadFromTemplates(List<object> templateIds)
 {
-    if (TemplateId.Value == null) { Toaster.Error("承認テンプレートが未設定です"); return false; }
-    var tmplSearcher = new ModuleSearcher<ApprovalFlowTemplateOrder>();
-    tmplSearcher.AddEquals(o => o.TemplateId.Value, TemplateId.Value);
-    tmplSearcher.OrderBy(o => o.OrderNo.Value);
-    var tmplOrders = tmplSearcher.Execute();
+    if (templateIds == null || templateIds.Count == 0) { Toaster.Error("承認テンプレートが未設定です"); return false; }
+    var tmplOrders = BuildMergedOrders(templateIds);
     if (tmplOrders.Count == 0) { Toaster.Error("承認テンプレートに承認段階がありません"); return false; }
 
     var applicantId = ResolveApplicantUserId();
@@ -620,17 +814,12 @@ void SubmitButton_OnClick()
             if (ParentId.Value == null || ParentId.Value == "") { ParentId.Value = $"{parent.Id.Value}"; }
         }
 
-        // 申請時点の入力値でテンプレートを再解決する
-        // (Initialize 時は金額・費目が未入力のため、その時点の TemplateId は仮値)
-        var tmplName = parent.SelectTemplateName();
-        var ts = new ModuleSearcher<ApprovalFlowTemplate>();
-        ts.AddEquals(t => t.Name.Value, tmplName);
-        var tmpls = ts.Execute();
-        if (tmpls.Count == 0) { Toaster.Error($"承認テンプレート '{tmplName}' が見つかりません"); return; }
-        TemplateId.Value = tmpls[0].Id.Value;
+        // 申請時点の明細でテンプレートを解決する（行ごとに解決した結果が複数返る・ADR-0066）
+        var tmplIds = parent.SelectTemplateIds();
+        if (tmplIds.Count == 0) return;   // 解決できない理由は親側でトースト済み
 
-        if (!LoadFromTemplate()) return;
-        AddHistory("Submit", "");
+        if (!LoadFromTemplates(tmplIds)) return;
+        AddHistory("Submit", BuildTemplateNote(tmplIds));
         NotifyParentStatusChanged();
     }
 
@@ -1008,13 +1197,26 @@ bool RebuildOrdersFromTemplate()
     foreach (var o in Orders.Rows) rowsToDelete.Add(o);
     foreach (var o in rowsToDelete) Orders.DeleteRow(o);
 
-    var tmplName = parent.SelectTemplateName();
-    var ts = new ModuleSearcher<ApprovalFlowTemplate>();
-    ts.AddEquals(t => t.Name.Value, tmplName);
-    var tmpls = ts.Execute();
-    if (tmpls.Count == 0) { Toaster.Error($"承認テンプレート '{tmplName}' が見つかりません"); return false; }
-    TemplateId.Value = tmpls[0].Id.Value;
-    return LoadFromTemplate();
+    var tmplIds = parent.SelectTemplateIds();
+    if (tmplIds.Count == 0) return false;   // 解決できない理由は親側でトースト済み
+    return LoadFromTemplates(tmplIds);
+}
+
+// 監査用: 合成に使ったテンプレートを履歴コメントに残す
+// （承認フローの template_id には代表 1 件しか入らないため、実際の根拠をここで保全する）
+string BuildTemplateNote(List<object> templateIds)
+{
+    var names = new List<string>();
+    foreach (var tid in templateIds)
+    {
+        var s = new ModuleSearcher<ApprovalFlowTemplate>();
+        s.AddEquals(t => t.Id.Value, tid);
+        var found = s.ExecuteFirstOrDefault();
+        if (found != null) names.Add($"{((ApprovalFlowTemplate)found).Name.Value}");
+    }
+    if (names.Count == 0) return "";
+    if (names.Count == 1) return $"承認ルート: {names[0]}";
+    return $"承認ルート（合成）: {string.Join(" ＋ ", names)}";
 }
 
 // 実費超過の再承認 (親モジュールの実費確定処理から呼ばれる)
