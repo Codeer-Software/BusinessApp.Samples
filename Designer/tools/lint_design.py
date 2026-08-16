@@ -73,6 +73,20 @@ NOT_IMPLEMENTED = {
     # 例: "CLB-0xx": "理由",
 }
 
+# 意図的に検出条件を絞ったルール（誤検知を出さないための判断。NOT_IMPLEMENTED ではない）
+NARROWED = {
+    "CLB-006": "呼び出し先がスクリプト内で定義された関数（＝バレ名の呼び出し／定義シグネチャ）のときだけ違反にする。"
+               "`int.TryParse(s, out x)` 等の .NET 組み込みは _specs/Scripts.md『out / ref パラメータ』でサポート構文として"
+               "明記されているため除外（FB-039 の実測対象はユーザー定義関数 `int PostOne(Draft d, ref int tax)`）。",
+    "CLB-009": "AnchorTagField（戻るリンク等）は除外。可視性をスクリプトで制御しているボタン（IsVisible への代入がある＝"
+               "式で隠している場合を含む）も除外し、『常に表示されるのに押せない』ボタンだけを報告する。",
+    "CLB-010": "FB-035 の実測条件どおり DbTable 空 かつ CanCreate/CanUpdate/CanDelete が全て false のときだけ違反にする。"
+               "CanUpdate:true の表示専用モジュール（JournalLineDepartment 等）は同型でも発火しないことが"
+               "ADR-0056 の実機検証で確認されているため対象外。",
+    "CLB-022": "new と同じメソッド内に Submit( が無いもの（読み取り用インスタンス化）は除外する。",
+    "CLB-025": "this.Delete()（自モジュール削除・UI 経路）は除外する。検索インスタンスの Delete() だけを見る。",
+}
+
 # 部分的にしか機械検査していないルール（実行時に注記として表示する）
 PARTIAL = {
     "CLB-013": "検査 D（GetModuleUrl の全フレーム解決）は誤検知しうるため warn 止まり。",
@@ -683,14 +697,14 @@ def rule_002(idx, add):
             expect_name, expect_set = DATE_TYPE_EXPECT[st]
             if is_view or not known_table:
                 add("CLB-002", SEV_WARN, mod["path"], loc,
-                    "{}.{}（{}）: DbTable '{}' は{}のため列型を確認できない".format(
+                    "[確認不能] {}.{}（{}）: DbTable '{}' は{}のため列型を追えない（違反ではない）".format(
                         mod["name"], f.get("Name"), st, table,
                         "ビュー" if is_view else "DDL に無い"))
                 continue
             decl = idx.column_decl(table, col)
             if decl is None:
                 add("CLB-002", SEV_WARN, mod["path"], loc,
-                    "{}.{}: 列 {}.{} が DDL に見つからず型を確認できない".format(
+                    "[確認不能] {}.{}: 列 {}.{} が DDL に見つからない（違反ではない）".format(
                         mod["name"], f.get("Name"), table, col))
                 continue
             bt = base_type(decl)
@@ -813,15 +827,63 @@ def rule_005(idx, add):
 
 
 REFOUT_RE = re.compile(r"[(,]\s*(?:ref|out)\s+\w")
+# CLB スクリプトの関数定義（列 0 から「戻り型 名前(」で始まる）
+SCRIPT_FUNC_DEF = re.compile(r"(?m)^(?:[\w<>\[\],\.\?]+\s+)+(\w+)\s*\(")
+
+
+def script_function_names(idx):
+    if getattr(idx, "_script_funcs", None) is None:
+        names = set()
+        for mod in idx.modules.values():
+            if mod["cs"]:
+                names.update(m.group(1) for m in SCRIPT_FUNC_DEF.finditer(mod["cs"]))
+        idx._script_funcs = names
+    return idx._script_funcs
+
+
+def callee_before(text, pos):
+    """pos を含む引数リストの直前の呼び出し名を (名前, レシーバ付きか) で返す。"""
+    depth = 0
+    i = pos - 1
+    while i >= 0:
+        ch = text[i]
+        if ch == ")":
+            depth += 1
+        elif ch == "(":
+            if depth == 0:
+                break
+            depth -= 1
+        i -= 1
+    if i < 0:
+        return None, False
+    j = i
+    while j > 0 and text[j - 1] in " \t\r\n":
+        j -= 1
+    k = j
+    while k > 0 and (text[k - 1].isalnum() or text[k - 1] == "_"):
+        k -= 1
+    name = text[k:j]
+    if not name:
+        return None, False
+    qualified = k > 0 and text[k - 1] == "."
+    return name, qualified
 
 
 def rule_006(idx, add):
+    """ref/out の書き戻しが伝わらないのは『スクリプト内で定義された関数』の場合。
+
+    .NET 組み込み（int.TryParse など）は _specs/Scripts.md がサポート構文として明記しているため除外する。
+    """
+    funcs = script_function_names(idx)
     for mod in idx.modules.values():
         if not mod["cs"]:
             continue
         for m in REFOUT_RE.finditer(mod["cs"]):
+            name, qualified = callee_before(mod["cs"], m.start())
+            if not name or qualified or name not in funcs:
+                continue   # レシーバ付き呼び出し／未知の名前＝.NET 組み込みとみなす
             add("CLB-006", SEV_ERROR, mod["cs_path"], line_of(mod["cs"], m.start()),
-                "ref/out 引数は CLB スクリプトで書き戻されない（値が静かに落ちる）")
+                "スクリプト定義関数 {}(...) の ref/out は書き戻されない（値が静かに落ちる・FB-039）".format(name))
 
 
 TRY_RE = re.compile(r"\b(try|catch|finally)\s*[({]")
@@ -865,11 +927,14 @@ def rule_009(idx, add):
         if not m:
             continue
         placed = detail_layout_fields(mod)
+        # AnchorTagField（戻るリンク等）は除外＝NARROWED
         buttons = [f.get("Name") for f in mod["fields"]
-                   if short_type(f) in (BUTTON_TYPES | {"AnchorTagFieldDesign"})
-                   and f.get("Name") in placed]
+                   if short_type(f) in BUTTON_TYPES and f.get("Name") in placed]
+        # 閲覧専用解除があるもの、および可視性をスクリプトで制御しているもの（式で隠している場合を含む）は除外。
+        # 残るのは「常に表示されるのに押せない」ボタンだけ。
         dead = [b for b in buttons
-                if not re.search(r"\b" + re.escape(b) + r"\.IsViewOnly\s*=\s*false", mod["cs"])]
+                if not re.search(r"\b" + re.escape(b) + r"\.IsViewOnly\s*=\s*false", mod["cs"])
+                and not re.search(r"\b" + re.escape(b) + r"\.IsVisible\s*=", mod["cs"])]
         if dead:
             add("CLB-009", SEV_ERROR, mod["cs_path"], line_of(mod["cs"], m.start()),
                 "this.IsViewOnly=true でボタンが pointer-events:none になる。明示解除の無いボタン: {}".format(
@@ -884,6 +949,11 @@ def is_display_only(mod):
 def rule_010(idx, add):
     for mod in idx.modules.values():
         if not is_display_only(mod):
+            continue
+        # FB-035 の実測条件は「DbTable 空 かつ CanCreate/CanUpdate/CanDelete が全て false」。
+        # CanUpdate:true の表示専用モジュールは同型でも発火しないことが実機検証済み（ADR-0056）＝NARROWED
+        j = mod["json"]
+        if j.get("CanCreate") or j.get("CanUpdate") or j.get("CanDelete"):
             continue
         placed = detail_layout_fields(mod)
         buttons = [f.get("Name") for f in mod["fields"]
@@ -1229,6 +1299,19 @@ def rule_021(idx, add):
                     "{}.{}: 未使用パラメータ {}".format(mod["name"], name, sorted(unused)))
 
 
+def method_bounds(src):
+    """CLB スクリプトをメソッド単位に粗く分割した境界（"\\n    }" を区切りに使う）。"""
+    return [0] + [m.end() for m in re.finditer(r"\n    \}", src)] + [len(src)]
+
+
+def enclosing_block(src, pos):
+    bounds = method_bounds(src)
+    for a, b in zip(bounds, bounds[1:]):
+        if a <= pos < b:
+            return a, b
+    return 0, len(src)
+
+
 def rule_022(idx, add):
     no_create = {m["name"] for m in idx.modules.values() if m["json"].get("CanCreate") is False}
     if not no_create:
@@ -1238,11 +1321,13 @@ def rule_022(idx, add):
         if not mod["cs"]:
             continue
         for m in pattern.finditer(mod["cs"]):
-            tail = mod["cs"][m.end():m.end() + 4000]
-            submits = "Submit(" in tail
+            # new と同じメソッド内に Submit( が無ければ読み取り用インスタンス化＝対象外（NARROWED）
+            _s, end = enclosing_block(mod["cs"], m.start())
+            if "Submit(" not in mod["cs"][m.end():end]:
+                continue
             add("CLB-022", SEV_WARN, mod["cs_path"], line_of(mod["cs"], m.start()),
-                "CanCreate:false の {} を new している{}。CanCreate は UI とスクリプトの両方を塞ぐ".format(
-                    m.group(1), "（後段に Submit あり＝サーバが拒否する）" if submits else "（Submit は未検出）"))
+                "CanCreate:false の {} を new して同じメソッド内で Submit している。CanCreate は UI とスクリプトの両方を塞ぐ".format(
+                    m.group(1)))
 
 
 def rule_023(idx, add):
@@ -1314,12 +1399,11 @@ def rule_025(idx, add):
             continue
         for m in BARE_DELETE_RE.finditer(mod["cs"]):
             recv = m.group(1)
-            note = ""
-            if recv.startswith("this"):
-                note = "（this.Delete() は UI 経路なので許容されることが多い）"
+            if recv == "this" or recv.startswith("this."):
+                continue   # 自モジュール削除は UI 経路で成功前提に書ける＝NARROWED
             add("CLB-025", SEV_WARN, mod["cs_path"], line_of(mod["cs"], m.start()),
-                "{}.Delete() の戻り値を捨てている。子の FK 制約で false を返すと『成功トースト・DB 残存』になる{}".format(
-                    recv, note))
+                "{}.Delete() の戻り値を捨てている。検索インスタンスの削除は子の FK 制約で false を返し『成功トースト・DB 残存』になる".format(
+                    recv))
 
 
 def rule_026(idx, add):
@@ -1485,8 +1569,7 @@ def rule_035(idx, add):
         if not mod["cs"]:
             continue
         src = mod["cs"]
-        # メソッド単位に粗く分割する（仕様書のとおり "\n    }" を区切りに使う）
-        bounds = [0] + [m.end() for m in re.finditer(r"\n    \}", src)] + [len(src)]
+        bounds = method_bounds(src)   # 仕様書のとおり "\n    }" を区切りにした粗い分割
         for a, b in zip(bounds, bounds[1:]):
             block = src[a:b]
             i_load = block.find("StartLoading")
@@ -1644,6 +1727,7 @@ def main(argv=None):
                 "byRule": dict(sorted(by_rule.items())),
                 "byGroup": dict(sorted(by_group.items())),
                 "notImplemented": NOT_IMPLEMENTED,
+                "narrowed": NARROWED,
                 "partial": PARTIAL,
                 "loadErrors": idx.load_errors,
             },
@@ -1672,6 +1756,10 @@ def main(argv=None):
         lines.append("未実装: {}件".format(len(NOT_IMPLEMENTED)))
         for rule_id, reason in sorted(NOT_IMPLEMENTED.items()):
             lines.append("  {} {} — {}".format(rule_id, RULES.get(rule_id, ("", ""))[1], reason))
+        if NARROWED:
+            lines.append("意図的に検出条件を絞ったルール: {}件".format(len(NARROWED)))
+            for rule_id, reason in sorted(NARROWED.items()):
+                lines.append("  {} {}".format(rule_id, reason))
         if PARTIAL:
             lines.append("部分実装の注記: {}件".format(len(PARTIAL)))
             for rule_id, note in sorted(PARTIAL.items()):
