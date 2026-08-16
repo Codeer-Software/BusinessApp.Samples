@@ -327,6 +327,13 @@ void GenerateJournal_OnClick()
         accS.AddEquals(e => e.Code.Value, "1520");
         var assetAcc = accS.ExecuteFirstOrDefault();
         if (assetAcc == null) { Toaster.Error("工具器具備品(1520)の科目がありません"); return; }
+        // この科目はそのまま固定資産台帳の計上科目になる。固定資産科目でないと台帳に載せても
+        // 償却仕訳を生成できない（ADR-0063 の関門で止まる）ので、先にここで気づかせる
+        if (((Account)assetAcc).IsFixedAssetAccount.Value != true)
+        {
+            Toaster.Error("工具器具備品(1520)が「固定資産科目」になっていません。科目マスタを確認してください");
+            return;
+        }
         debitAccountId = ((Account)assetAcc).Id.Value;
     }
     if (debitAccountId == null) { Toaster.Error("費目に既定勘定科目が設定されていません"); return; }

@@ -163,6 +163,17 @@ int MonthsFromAcqToYearEnd(var acq)
     return 4 - m;
 }
 
+// 科目マスタの「固定資産科目」フラグ（ADR-0063）。未設定・見つからないときは false（安全側）
+bool IsFixedAssetAccount(object accountId)
+{
+    if (accountId == null) return false;
+    var s = new ModuleSearcher<Account>();
+    s.AddEquals(a => a.Id.Value, accountId);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return false;
+    return ((Account)found).IsFixedAssetAccount.Value == true;
+}
+
 void GenerateDep_OnClick()
 {
     if (this.IsNewData)
@@ -173,6 +184,18 @@ void GenerateDep_OnClick()
     if (TargetYear.Value == null)
     {
         Toaster.Error("対象年度を選択してください");
+        return;
+    }
+
+    // 資産計上科目の関門（ADR-0063）。この科目は償却仕訳の**貸方**になるので、
+    // 固定資産科目でないものが入っていると「借 減価償却費 / 貸 現金」のような仕訳を作ってしまう。
+    // 候補の絞り込み（AssetAccount の SearchCondition）は選ばせない工夫であって関門ではない——
+    // 旧データや、資産が参照したままフラグを外されたマスタはここでしか止められない。
+    // 黙って壊すより、はっきり止めて直させる（静かな失敗を作らない）
+    if (!IsFixedAssetAccount(AssetAccount.Value))
+    {
+        Toaster.Error("資産計上科目が「固定資産科目」ではありません。"
+            + "科目マスタで固定資産科目にするか、この資産の計上科目を選び直してください");
         return;
     }
 

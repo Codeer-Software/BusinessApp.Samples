@@ -78,6 +78,15 @@
               "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
             },
             {
+              "SearchTargetVariable": "IsFixedAssetAccount.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": true,
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            },
+            {
               "SearchTargetVariable": "IsActive.Value",
               "Comparison": "Equal",
               "Value": {

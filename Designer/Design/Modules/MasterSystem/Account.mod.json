@@ -287,6 +287,24 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.BooleanFieldDesign"
     },
     {
+      "Text": "固定資産科目",
+      "DbColumn": "is_fixed_asset_account",
+      "UIType": "CheckBox",
+      "TrueText": "○",
+      "FalseText": "—",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "固定資産科目",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "IsFixedAssetAccount",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.BooleanFieldDesign"
+    },
+    {
       "LayoutName": "",
       "CanNavigateToDetail": false,
       "NavigateModuleUrlSegment": "",
@@ -1292,6 +1310,31 @@
               {
                 "Layout": {
                   "FieldName": "IsCashEquivalent",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 160,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "VerticalAlignment": "Middle",
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "IsFixedAssetAccount",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
