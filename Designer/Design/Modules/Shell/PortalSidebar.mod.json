@@ -117,12 +117,12 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "パスワードの変更",
-      "Icon": "bi bi-key",
+      "Text": "設定",
+      "Icon": "bi bi-sliders",
       "Style": "Default",
       "RelativeField": "",
-      "OnClick": "GoPasswordChange_OnClick",
-      "Name": "GoPasswordChangeLink",
+      "OnClick": "GoSettings_OnClick",
+      "Name": "GoSettingsLink",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
@@ -576,7 +576,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "GoPasswordChangeLink",
+                  "FieldName": "GoSettingsLink",
                   "ContextMenu": "",
                   "ClassName": "portal-link",
                   "FontFamily": "",

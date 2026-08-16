@@ -105,10 +105,12 @@ void Notifications_OnClick()
     NavigationService.NavigateTo("/Main/Notification?initialize_search=true");
 }
 
-// 自分のパスワードは自分で変える（ADR-0059）。全員に出す＝管理者に依頼する運用をやめる
-void GoPasswordChange_OnClick()
+// 利用者自身の設定（ADR-0059）。全員に出す＝パスワード変更を管理者に依頼する運用をやめる。
+// サイドバーには「パスワードの変更」を直接出さず「設定」フレームを 1 枚かませる
+// （業務メニューと同じ高さに破壊的な操作を並べない・2026-08-16 ユーザー指示）
+void GoSettings_OnClick()
 {
-    NavigationService.NavigateTo("/Main/PasswordChange");
+    NavigationService.NavigateTo("/Settings");
 }
 
 void Logout_OnClick()

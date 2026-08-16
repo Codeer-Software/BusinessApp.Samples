@@ -130,68 +130,6 @@
         "LayoutName": "",
         "UrlParameter": ""
       }
-    },
-    {
-      "ModulePageType": "Detail",
-      "ModuleUrlSegment": "PasswordChange",
-      "ActiveModuleSegments": [],
-      "PageFrame": "",
-      "Module": "PasswordChange",
-      "Id": "",
-      "Parameters": "",
-      "ListPageDesign": {
-        "SearchLayoutName": "",
-        "UserUrlParameter": true,
-        "PageTitle": "",
-        "HeaderTitle": "",
-        "CanBulkDataUpdate": false,
-        "CanBulkDataDownload": false,
-        "UseSubmitButton": false,
-        "UseNavigateToCreate": false,
-        "ListFieldDesign": {
-          "LayoutName": "",
-          "CanNavigateToDetail": false,
-          "NavigateModuleUrlSegment": "",
-          "CanCustomizeColumns": false,
-          "FixedColumnCount": 0,
-          "ApplyBackgroundToBoxInput": false,
-          "DisplayName": "",
-          "SearchCondition": {
-            "LimitCount": 50,
-            "SelectFields": [],
-            "SortConditions": [],
-            "SortFieldVariable": "",
-            "SortDescending": false,
-            "ModuleName": ""
-          },
-          "PagerPosition": "Top",
-          "ReplaceMode": "None",
-          "DeleteTogether": false,
-          "CanCreate": false,
-          "CanUpdate": false,
-          "CanDelete": false,
-          "CanUserSort": false,
-          "CanSelect": false,
-          "UseIndexSort": false,
-          "OnDataChanged": "",
-          "OnSearchDataChanged": "",
-          "OnSelectedIndexChanged": "",
-          "OnSelectedIndexChanging": "",
-          "OnDoubleClickRow": "",
-          "Name": "",
-          "IgnoreModification": false,
-          "OnValidateInput": "",
-          "IsFocusSkip": false,
-          "NextFocusField": "",
-          "OnFocusMoving": "",
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
-        }
-      },
-      "DetailPageDesign": {
-        "PageTitle": "パスワードの変更",
-        "LayoutName": "",
-        "UrlParameter": ""
-      }
     }
   ],
   "TopPageModuleDesign": {
