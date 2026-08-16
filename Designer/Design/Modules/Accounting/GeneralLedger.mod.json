@@ -53,6 +53,12 @@
           },
           {
             "IsParameter": false,
+            "Name": "entry_id",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
             "Name": "entry_date",
             "DbType": "DATE",
             "DbParameterDirection": "Input"
@@ -371,6 +377,44 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
+      "DbColumn": "entry_id",
+      "Placeholder": "",
+      "Format": "",
+      "IsSlider": false,
+      "OnInput": "",
+      "IsUpdateProtected": true,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "伝票ID",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "EntryIdRaw",
+      "IgnoreModification": true,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "Style": "Text",
+      "Target": "Url",
+      "ShouldOpenInNewTab": false,
+      "Icon": "",
+      "TitleText": "開く",
+      "TitleVariable": "",
+      "ImageResourcePath": "",
+      "PageFrame": "",
+      "Module": "JournalEntry",
+      "ModuleVariable": "",
+      "IdVariable": "EntryIdRaw.Value",
+      "Url": "",
+      "OnClick": "",
+      "IsHtml": false,
+      "Name": "OpenAnchor",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
+    },
+    {
       "DbColumn": "entry_date",
       "Format": "",
       "IsYearMonthOnly": false,
@@ -665,7 +709,8 @@
     "": {
       "HeaderTitle": "",
       "DataOnlyFields": [
-        "LineNo"
+        "LineNo",
+        "EntryIdRaw"
       ],
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,
@@ -780,6 +825,23 @@
             "CanResize": false,
             "CanUserSort": false,
             "ClassName": "amount-cell",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "OpenAnchor",
+            "ContextMenu": "",
+            "Label": " ",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "Width": 70,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": false,
+            "ClassName": "",
             "FontFamily": "",
             "Color": "",
             "BackgroundColor": "",

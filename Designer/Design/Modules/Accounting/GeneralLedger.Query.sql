@@ -28,6 +28,7 @@ base AS (
                 AND date(e.entry_date) < date(@date_from)), 0) AS dmc
 )
 SELECT
+  e.id AS entry_id,   -- 伝票へのドリルダウン用（ADR-0065）。表示はせず OpenAnchor の IdVariable が読む
   e.entry_date,
   e.journal_no,
   l.line_no,

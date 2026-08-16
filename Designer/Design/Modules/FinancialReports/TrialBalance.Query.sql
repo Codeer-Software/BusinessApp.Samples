@@ -50,6 +50,8 @@ merged AS (
 )
 SELECT * FROM (
   SELECT
+    m.id AS account_id_raw,   -- 元帳へのドリルダウン用（ADR-0065）。表示せず DrillButton の遷移先解決に使う
+    '元帳' AS drill_label,    -- リンク文字。合計行は空にしてリンクを消す（IsVisible はリスト内のアンカーに効かない）
     m.code AS account_code,
     m.name AS account_name,
     CASE WHEN m.dc_normal = 'D' THEN m.open_dmc ELSE -m.open_dmc END AS opening_balance,
@@ -60,6 +62,8 @@ SELECT * FROM (
   FROM merged m
   UNION ALL
   SELECT
+    NULL AS account_id_raw,
+    '' AS drill_label,
     '' AS account_code,
     '合計（貸借検算）' AS account_name,
     NULL AS opening_balance,
