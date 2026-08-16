@@ -3,9 +3,12 @@
 // parentId は親の @temporary:guid をそのまま入れて良い。
 // 親 ↔ ApprovalFlow の双方向参照は CLB の TemporaryIdResolver がサイクル解決する。
 // ============================================================
+// 状態は "Draft"。明細を 1 件足した時点で申請が下書きとして保存されるようになったため（ADR-0066 の UI 改訂）、
+// 初期化の時点で "Pending" にすると「申請していないのに進行中」の行が DB に残り、申請ボタンが消える。
+// "Draft" → 申請ボタン押下で "Pending"（SubmitButton_OnClick）。複製ドラフトと同じ扱いになる
 void Initialize(string parentModuleName, string parentId)
 {
-    Status.Value = "Pending";
+    Status.Value = "Draft";
     AttemptNo.Value = 1;
     ParentModuleName.Value = parentModuleName;
     ParentId.Value = parentId;
@@ -801,8 +804,7 @@ void SubmitButton_OnClick()
 
     if (wasNew)
     {
-        // 複製ドラフト（Status "Draft" の既存行）: 申請に向けて Pending 化する
-        // （通常の新規は親の OnAfterInitialization の Initialize が Pending 設定済み）
+        // 下書き（新規・複製とも Status "Draft"）: 申請に向けて Pending 化する
         if (Status.Value == null || Status.Value == "" || Status.Value == "Draft")
         {
             Status.Value = "Pending";

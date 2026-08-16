@@ -8,24 +8,26 @@ void Search_OnInit()
 
 // ============================================================
 // 明細（ADR-0066）
-// 申請は「レシート 1 枚 = 明細 1 行」を持つ。費目・金額・利用日・案件・税区分は行が持ち、
-// ヘッダの合計金額・うち消費税は明細から導出する（画面では読み取り専用・ADR-0062）。
+// 画面は 4 ブロック構成:
+//   1. この申請について（件名・目的・計上日・支払先など）
+//   2. **明細 1 件分の入力フォーム** ＝ EditingLine（ModuleField で埋め込んだ明細行そのもの）
+//   3. 追加した明細のリスト（line_no を採番済みの行）
+//   4. 承認
+//
+// 「2」が明細行の実体であることが要点。AI 読み取りと領収書の添付を最初からその行が持つので、
+// 「フォームで読ませた領収書をもう一度リストに添付し直す」という二度手間が起きない。
+//
+// 入力中の行は expense_request_id・line_no のどちらも空。リスト（親 FK で絞る）にも
+// 合計・仕訳・検証（GetLines）にも出てこない。「追加」で初めて両方が入り、明細になる。
 // ============================================================
 
-// 明細の取得。画面のグリッドを正とし、空なら DB から取り直す（保存済みを経理が開いた場合など）
+// 確定済みの明細（この申請にひもづいた行）。入力中の行はまだ親を持たないので出てこない
 List<ExpenseRequestLine> GetLines()
 {
-    var result = new List<ExpenseRequestLine>();
-    foreach (var row in Lines.Rows)
-    {
-        result.Add((ExpenseRequestLine)row);
-    }
-    if (result.Count > 0) return result;
-    if (this.IsNewData) return result;
     return GetLinesFromDb();
 }
 
-// 明細を DB から取得（仕訳生成のように「保存済みの内容が正」の場面で使う）
+// 明細を DB から取得（保存済みの内容が正）
 List<ExpenseRequestLine> GetLinesFromDb()
 {
     var result = new List<ExpenseRequestLine>();
@@ -35,93 +37,317 @@ List<ExpenseRequestLine> GetLinesFromDb()
     s.OrderBy(l => l.LineNo.Value);
     foreach (var m in s.Execute())
     {
-        result.Add((ExpenseRequestLine)m);
+        var l = (ExpenseRequestLine)m;
+        if (l.LineNo.Value == null) continue;   // 保険: 行番号が無い行は明細として扱わない
+        result.Add(l);
     }
     return result;
 }
 
-bool inLinesHandler = false;
+// ============================================================
+// ブロック 2（明細 1 件分の入力フォーム）の操作
+//
+// 入力中の行は expense_request_id が空のまま作られ、親からは editing_line_id だけで指される。
+// そのため**確定するまで明細リストにも合計にも出てこない**。
+// 「追加」で初めて親と行番号がひもづき、リストに現れる。
+// ============================================================
 
-// 明細の変更 → 行番号の振り直し・税区分の既定補完・少額資産の自動判定・合計の再計算。
-// 注意: CLB スクリプトは try/finally を使えない。再入ガードの内側で DB 検索（例外を出しうる）を
-//       すると、例外時にフラグが true のまま固着して以後この画面で合計が再計算されなくなる。
-//       そのため DB を引く処理は**ガードに入る前に**すべて済ませ、内側では代入だけを行う。
-void Lines_OnDataChanged()
+// 「この内容で明細に追加」: 入力中の行を確定してリストへ送り、入力欄を空に戻す
+void AddLine_OnClick()
 {
-    if (inLinesHandler) return;
-
-    // --- ガードの外: DB 参照をまとめて済ませる ---
-    var cats = new List<ExpenseCategory>();
-    var defaultTaxCats = new List<object>();
-    var isTaxable = new List<bool>();
-    var assetLimits = new List<int>();
-    foreach (var row in Lines.Rows)
-    {
-        var l = (ExpenseRequestLine)row;
-        var cat = FindCategory(l.ExpenseCategoryRef.Value);
-        cats.Add(cat);
-        defaultTaxCats.Add(cat == null ? null : cat.DefaultTaxCategory.Value);
-        isTaxable.Add(IsTaxablePurchaseTaxCategory(ResolveLineTaxCategory(l, cat)));
-        assetLimits.Add(GetThresholdAmountAt("SMALL_ASSET_EXPENSE", l.UsedDate.Value));
-    }
-
-    // --- ガードの内: 代入のみ ---
-    inLinesHandler = true;
-    var idx = -1;
-    var clearedTax = 0;
-    var assetOn = 0;
-    foreach (var row in Lines.Rows)
-    {
-        var l = (ExpenseRequestLine)row;
-        idx = idx + 1;
-        l.LineNo.Value = idx + 1;
-
-        // 税区分は費目の既定で補完する（未設定のまま保存させない・ADR-0052 の精神）
-        if (l.TaxCategoryRef.Value == null && defaultTaxCats[idx] != null)
-        {
-            l.TaxCategoryRef.Value = defaultTaxCats[idx];
-        }
-
-        // 不課税・非課税の行に残った「うち消費税」は捨てる（黙って無視される値を残さない・ADR-0051）
-        if (!isTaxable[idx] && l.TaxAmount.Value != null && l.TaxAmount.Value > 0)
-        {
-            l.TaxAmount.Value = null;
-            clearedTax = clearedTax + 1;
-        }
-
-        // 少額資産の自動判定は行ごと（1 申請に資産行と経費行が混在しうる）
-        var cat2 = cats[idx];
-        var isCandidate = (cat2 != null) && (cat2.IsAssetCandidate.Value == true);
-        if (!isCandidate)
-        {
-            if (l.IsFixedAsset.Value == true) l.IsFixedAsset.Value = false;
-        }
-        else
-        {
-            var limit = assetLimits[idx];
-            var amt = l.Amount.Value ?? 0;
-            if (limit > 0 && amt >= limit && l.IsFixedAsset.Value != true)
-            {
-                l.IsFixedAsset.Value = true;
-                assetOn = assetOn + 1;
-            }
-        }
-    }
-    inLinesHandler = false;
-
-    if (clearedTax > 0)
-    {
-        Toaster.Info($"消費税の対象外の費目の行があったため、「うち消費税」を {clearedTax} 行分クリアしました");
-    }
-    if (assetOn > 0)
-    {
-        Toaster.Info($"少額基準以上の資産性支出が {assetOn} 行あったため固定資産計上対象にしました（承認後に固定資産台帳へ登録されます）");
-    }
-
-    RecalcFromLines();
+    CommitEntry();
 }
 
-// 合計金額・うち消費税は明細から導出する（手入力しない・ADR-0066）。
+// 「この明細を更新」: リストから読み込んだ行を上書き保存する
+void UpdateLine_OnClick()
+{
+    CommitEntry();
+}
+
+// 「入力内容をクリア」/「編集をやめる」: 入力中の内容を捨てて空の入力欄に戻す（確定済みの行には触らない）
+void CancelEdit_OnClick()
+{
+    var line = EditingLine.ChildModule;
+    if (line == null) return;
+
+    // 新規入力の書きかけ: 行はまだどこにも属していないので、その場で項目を空に戻すだけでよい。
+    // （申請そのものが未保存のときは Reload/Submit ができない——Id が @temporary: のため）
+    if (line.LineNo.Value == null)
+    {
+        ClearEntryFields(line);
+        Toaster.Info("入力欄を空に戻しました");
+        return;
+    }
+
+    // 既存の明細を読み込んで編集していた場合: 変更を捨てて、入力欄を新しい空の行に戻す。
+    // 確定済みの明細そのものには触らない（リストにはそのまま残る）
+    using var loading = LoadingService.StartLoading(0);
+    this.Reload();                       // 入力欄の変更を先に捨てる（次の Submit で保存させない）
+    EditingLineIdRaw.Value = null;
+    var ret = this.Submit();
+    if (ret == false) { Toaster.Error("入力欄を戻せませんでした"); return; }
+    this.Reload();
+    Toaster.Info("編集をやめました（明細はそのままです）");
+}
+
+// 入力欄の項目をすべて空に戻す（行そのものは残す＝ModuleField が抱えている実体なので消せない）
+void ClearEntryFields(ExpenseRequestLine line)
+{
+    using var suspend = this.SuspendNotifyStateChanged();
+    line.UsedDate.Value = null;
+    line.ExpenseCategoryRef.Value = null;
+    line.TaxCategoryRef.Value = null;
+    line.Amount.Value = null;
+    line.TaxAmount.Value = null;
+    line.ProjectRef.Value = null;
+    line.UsedAt.Value = null;
+    line.Description.Value = null;
+    line.IsFixedAsset.Value = false;
+    line.AssetNo.Value = null;
+    line.EntertainmentGuest.Value = null;
+    line.EntertainmentCount.Value = null;
+    line.EntertainmentPurpose.Value = null;
+    line.Receipt.ClearFile();
+}
+
+// 入力中の行を確定する。新規なら行番号を採番し、編集中なら既存の行番号を保つ
+void CommitEntry()
+{
+    var line = EditingLine.ChildModule;
+    if (line == null) { Toaster.Error("入力欄が用意されていません"); return; }
+    if (!ValidateEntry(line)) return;
+
+    var isUpdate = (line.LineNo.Value != null);
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    if (!isUpdate) { line.LineNo.Value = NextLineNo(); }
+    line.ExpenseRequestId.Value = this.Id.Value;
+
+    // 1 回目: 入力中の行を親にひもづけて保存する（ここで初めて明細になる）
+    var ret = this.Submit();
+    if (ret == false) { Toaster.Error("明細の保存に失敗しました"); return; }
+
+    // 2 回目: 入力欄を空に戻し（FK を外す）、確定した明細から合計を取り直す
+    EditingLineIdRaw.Value = null;
+    RecalcFromLines();
+    var ret2 = this.Submit();
+    if (ret2 == false) { Toaster.Error("合計の保存に失敗しました"); return; }
+
+    // 読み直して、空の入力欄と最新の明細リストにする
+    this.Reload();
+    if (isUpdate) { Toaster.Success($"{line.LineNo.Value} 件目の明細を更新しました"); }
+    else { Toaster.Success($"明細に追加しました（{line.LineNo.Value} 件目）"); }
+}
+
+// 入力中の行の検証（メッセージは行番号を出さない——見えているのはこの 1 件だけなので）
+bool ValidateEntry(ExpenseRequestLine line)
+{
+    if (line.Amount.Value == null || line.Amount.Value <= 0)
+    {
+        Toaster.Error("金額（税込）を入力してください");
+        return false;
+    }
+    if (line.UsedDate.Value == null)
+    {
+        Toaster.Error("利用日を入力してください");
+        return false;
+    }
+    var cat = FindCategory(line.ExpenseCategoryRef.Value);
+    if (cat == null)
+    {
+        Toaster.Error("費目を選択してください");
+        return false;
+    }
+    if (line.TaxCategoryRef.Value == null)
+    {
+        line.TaxCategoryRef.Value = cat.DefaultTaxCategory.Value;
+    }
+    if (cat.IsEntertainment.Value == true)
+    {
+        var guestOk = !string.IsNullOrEmpty(line.EntertainmentGuest.Value);
+        var countOk = (line.EntertainmentCount.Value ?? 0) > 0;
+        var purposeOk = !string.IsNullOrEmpty(line.EntertainmentPurpose.Value);
+        if (!guestOk || !countOk || !purposeOk)
+        {
+            Toaster.Error("交際費は相手先・参加人数・目的の入力が必須です（「交際費の記録」を開いてください）");
+            return false;
+        }
+    }
+    if (!ValidateLineTax(line, cat, 0)) return false;
+    if (line.Receipt.FileName == null || line.Receipt.FileName == "")
+    {
+        Toaster.Warn("領収書が添付されていません。紙の原本を保管してください（申請後は添付できません）");
+    }
+    return true;
+}
+
+// 次の行番号（確定済みの最大 + 1）
+int NextLineNo()
+{
+    var max = 0;
+    foreach (var l in GetLinesFromDb())
+    {
+        var n = l.LineNo.Value ?? 0;
+        if (n > max) max = n;
+    }
+    return max + 1;
+}
+
+// リストの行を選ぶとその明細が入力欄に載る（編集の入口はここ 1 つだけ）。
+//
+// 実測（2026-08-17）: 画面に出ている ModuleField は、保存のたびに自分が抱えている子の Id を
+// DB 列（editing_line_id）へ書き戻す。同じ列を指す EditingLineIdRaw に別の行の Id を入れても
+// 上書きされてしまうので、**画面の外**（DB から取り直した別インスタンス）で張り替えてから
+// ページを開き直す。開き直した時点の列の値で ModuleField が子を読むので、狙った行が載る。
+void Lines_OnSelectedIndexChanged()
+{
+    if (!CanEditLines()) return;
+    var idx = Lines.SelectedIndex;
+    if (idx < 0) return;
+    var l = (ExpenseRequestLine)Lines.Rows[idx];
+    if (l == null || l.Id.Value == null) return;
+    if (IsSameId(EditingLineIdRaw.Value, l.Id.Value)) return;   // 既に載っている行なら何もしない
+    if (HasPendingEntry())
+    {
+        Toaster.Error("入力欄に書きかけの内容があります。先に「この内容で明細に追加」か「入力内容をクリア」を押してください");
+        return;
+    }
+
+    using var loading = LoadingService.StartLoading(0);
+
+    // 件名などヘッダの編集を落とさないよう、先に保存する
+    var ret = this.Submit();
+    if (ret == false) { Toaster.Error("保存に失敗したため明細を開けませんでした"); return; }
+    if (!PointEditingLineTo(l.Id.Value)) { Toaster.Error("明細を開けませんでした"); return; }
+
+    // DB 側の editing_line_id を張り替えたので、読み直せば ModuleField がその行を載せる
+    this.Reload();
+    UpdateLineButtons();
+    Toaster.Info($"{l.LineNo.Value} 件目を上の入力欄に読み込みました。直して「この明細を更新」を押してください");
+}
+
+// 親の editing_line_id を指定の明細へ張り替える（画面の ModuleField を経由しない）
+bool PointEditingLineTo(object lineId)
+{
+    var s = new ModuleSearcher<ExpenseRequest>();
+    s.AddEquals(e => e.Id.Value, this.Id.Value);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return false;
+    var other = (ExpenseRequest)found;
+    var oldId = other.EditingLineIdRaw.Value;
+    if (IsSameId(oldId, lineId)) return true;
+    other.EditingLineIdRaw.Value = lineId;
+    if (other.Submit() == false) return false;
+    DeleteOrphanEntryLine(oldId);
+    return true;
+}
+
+// 誰からも参照されなくなった空の入力欄の行を片付ける（親も行番号も持たない行だけ消す）
+void DeleteOrphanEntryLine(object lineId)
+{
+    if (lineId == null) return;
+    var s = new ModuleSearcher<ExpenseRequestLine>();
+    s.AddEquals(l => l.Id.Value, lineId);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return;
+    var line = (ExpenseRequestLine)found;
+    if (line.ExpenseRequestId.Value != null) return;
+    if (line.LineNo.Value != null) return;
+    var ret = line.Delete();
+    // 消せなくても業務影響は無い（どこからも参照されない空行が 1 件残るだけ）。黙って握らず記録だけする
+    if (ret != true) { Logger.Warn($"使い終わった入力欄の行（id={lineId}）を片付けられませんでした"); }
+}
+
+// 明細を編集できる状態か（下書きのあいだと、事前申請の実費確定待ちのあいだ）
+bool CanEditLines()
+{
+    if (IsNewData) return true;
+    var st = SettlementStatus.Value;
+    if (st == null || st == "" || st == "draft") return true;
+    var isAdvance = (RequestType.Value == "advance");
+    return (st == "approved") && isAdvance && (ActualConfirmed.Value != true);
+}
+
+// 入力欄が「書きかけ」か（追加も更新もされていない内容が残っているか）
+bool HasPendingEntry()
+{
+    var line = EditingLine.ChildModule;
+    if (line == null) return false;
+    if (line.LineNo.Value != null) return true;                 // 既存行を読み込んで編集中
+    if ((line.Amount.Value ?? 0) > 0) return true;
+    if (line.ExpenseCategoryRef.Value != null) return true;
+    if (line.UsedDate.Value != null) return true;
+    if (!string.IsNullOrEmpty(line.UsedAt.Value)) return true;
+    if (!string.IsNullOrEmpty(line.Description.Value)) return true;
+    if (!string.IsNullOrEmpty(line.Receipt.FileName)) return true;
+    return false;
+}
+
+// ブロック 2・3 の出し分け（新規入力なのか、既存行の編集なのかでボタンを変える）
+void UpdateLineButtons()
+{
+    var canEdit = CanEditLines();
+    var line = EditingLine.ChildModule;
+    var isExisting = (line != null) && (line.LineNo.Value != null);
+
+    EntryLabel.IsVisible = canEdit;
+    EntryHint.IsVisible = canEdit;
+    EditingLine.IsVisible = canEdit;
+    AddLineButton.IsVisible = canEdit && !isExisting;
+    UpdateLineButton.IsVisible = canEdit && isExisting;
+    CancelEditButton.IsVisible = canEdit;
+
+    if (isExisting)
+    {
+        EntryLabel.Text = "2. 明細を編集する";
+        EntryHint.Text = "下のリストから読み込んだ明細です。直して「この明細を更新」を押してください";
+        CancelEditButton.Text = "編集をやめる";
+    }
+    else
+    {
+        EntryLabel.Text = "2. 明細を入力する";
+        EntryHint.Text = "レシート 1 枚ぶんを入力して「この内容で明細に追加」を押すと、下のリストに積まれます。領収書を選ぶと AI 読み取りが使えます";
+        CancelEditButton.Text = "入力内容をクリア";
+    }
+    LinesHint.IsVisible = canEdit;
+}
+
+// 明細リストの変更（行の削除）→ 削除を確定してから採番を詰め、合計を取り直す。
+// 税区分の補完・少額資産の判定は入力フォーム側（ExpenseRequestLine）が受け持つので、ここは持たない。
+void Lines_OnDataChanged()
+{
+    if (IsNewData) return;
+    if (!CanEditLines()) return;
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    // 先に削除を DB へ反映する（反映前に集計すると消したはずの行が合計に残る）
+    var ret = this.Submit();
+    if (ret == false) { Toaster.Error("明細の削除に失敗しました"); return; }
+
+    RenumberLines();
+    RecalcFromLines();
+    this.Submit();
+    UpdateLineButtons();
+}
+
+// 明細の行番号を 1 から振り直す（削除で空いた番号を詰める）
+void RenumberLines()
+{
+    var n = 0;
+    foreach (var l in GetLinesFromDb())
+    {
+        n = n + 1;
+        if (l.LineNo.Value == n) continue;
+        l.LineNo.Value = n;
+        l.Submit();
+    }
+}
+
+// 合計金額・うち消費税は確定済みの明細から導出する（手入力しない・ADR-0066）。
 // 経費は「レシート記載の税額が正」なので、税額は**行ごとに**確定させて単純合計する
 // （税率ごとに 1 回だけ端数処理する ADR-0050 は自社が発行する請求書側の規約であり、ここには当てはまらない）。
 void RecalcFromLines()
@@ -130,9 +356,8 @@ void RecalcFromLines()
     var tax = 0;
     var lastUsed = ExpenseDate.Value;
     var hasUsed = false;
-    foreach (var row in Lines.Rows)
+    foreach (var l in GetLinesFromDb())
     {
-        var l = (ExpenseRequestLine)row;
         if (l.Amount.Value != null) total = total + l.Amount.Value;
         tax = tax + CalcLineTax(l);
         if (l.UsedDate.Value != null)
@@ -149,7 +374,7 @@ void RecalcFromLines()
 
     // 計上日の既定は「明細でいちばん遅い利用日」。下書きのうちだけ追随させる
     // （申請後に日付が動くと承認済みの内容が変わってしまうため）
-    if (hasUsed && SettlementStatus.Value == "draft")
+    if (hasUsed && (SettlementStatus.Value == null || SettlementStatus.Value == "draft"))
     {
         ExpenseDate.Value = lastUsed;
     }
@@ -295,10 +520,17 @@ bool ValidateForApply()
         return false;
     }
 
+    // 入力欄に書きかけが残っていたら、追加し忘れとして止める（黙って捨てない）
+    if (HasPendingEntry())
+    {
+        Toaster.Error("入力欄に、明細に追加していない内容が残っています。「この内容で明細に追加」（または「この明細を更新」）を押すか、「入力内容をクリア」（編集中なら「編集をやめる」）で消してください");
+        return false;
+    }
+
     var lines = GetLines();
     if (lines.Count == 0)
     {
-        Toaster.Error("明細を 1 行以上入力してください（レシート 1 枚が 1 行です）");
+        Toaster.Error("明細を 1 件以上追加してください（レシート 1 枚が 1 件です）");
         return false;
     }
 
@@ -419,6 +651,7 @@ void OnAfterInitialization()
         DuplicateButton.IsVisible = false;
         UpdateVisibility();
         UpdateAccountingButtons();
+        UpdateLineButtons();
         return;
     }
 
@@ -427,6 +660,7 @@ void OnAfterInitialization()
     EditableGrid.IsEnabled = (SettlementStatus.Value == "draft");
     UpdateVisibility();
     UpdateAccountingButtons();
+    UpdateLineButtons();
 }
 
 // ============================================================
@@ -482,8 +716,8 @@ void UpdateAccountingButtons()
     ActualAmountLabel.IsVisible = needsActual;
     ConfirmActualButton.IsVisible = needsActual;
 
-    // 明細の編集可否: 下書きのあいだと、事前申請の実費確定待ちのあいだ
-    Lines.IsEnabled = IsNewData || (st == "draft") || needsActual;
+    // 明細リストの操作（削除）は編集できる状態のあいだだけ
+    Lines.IsEnabled = CanEditLines();
 
     GenerateJournalButton.IsVisible = isAccounting && !IsNewData && (st == "approved") && !needsActual;
     SettleButton.IsVisible = isAccounting && !IsNewData && (st == "accounting");
@@ -503,6 +737,23 @@ void DeleteDraft_OnClick()
 
     using var loading = LoadingService.StartLoading(0);
 
+    // 入力欄の行は親を持たない（expense_request_id が空）ので DeleteTogether では消えない。
+    // 親を消す前に自分で片付ける
+    var entryId = EditingLineIdRaw.Value;
+    if (entryId != null)
+    {
+        var es = new ModuleSearcher<ExpenseRequestLine>();
+        es.AddEquals(l => l.Id.Value, entryId);
+        var entry = es.ExecuteFirstOrDefault();
+        if (entry != null)
+        {
+            EditingLineIdRaw.Value = null;
+            this.Submit();
+            var retEntry = ((ExpenseRequestLine)entry).Delete();
+            if (retEntry != true) { Logger.Warn($"入力欄の行（id={entryId}）を片付けられませんでした"); }
+        }
+    }
+
     // 既知の限界: 承認フロー（子）の行はスクリプトから物理削除できず孤児として残る
     // （実測 2026-07-16）。明細は ListField の DeleteTogether で親と一緒に消える
     this.Delete();
@@ -517,6 +768,12 @@ void ConfirmActual_OnClick()
 {
     if (SettlementStatus.Value != "approved" || RequestType.Value != "advance") return;
     if (ActualConfirmed.Value == true) return;
+
+    if (HasPendingEntry())
+    {
+        Toaster.Error("入力欄に、明細に追加していない内容が残っています。「この内容で明細に追加」（または「この明細を更新」）を押すか、「入力内容をクリア」（編集中なら「編集をやめる」）で消してください");
+        return;
+    }
 
     var lines = GetLines();
     if (lines.Count == 0) { Toaster.Error("実費の明細を入力してください"); return; }
@@ -1133,53 +1390,6 @@ void RequestType_OnDataChanged()
 void PayeeType_OnDataChanged()
 {
     UpdateVisibility();
-}
-
-// AI 読み取り（AiReceiptReader）完了時: 読み取った内容で**明細を 1 行足す**（ADR-0066）。
-// AI はヘッダの受け皿（staging）に値を書くので、それを行へ移してから受け皿を空にする。
-// プログラム的なフィールド更新では OnDataChanged が発火しないため、合計の再計算も明示的に行う。
-//
-// 添付ファイルだけは行へ移せない: CLB のスクリプトから触れる FileField のメンバーは FileName だけで、
-// 実体を指す FileGuid・FileSize は読み書きできない（2026-08-17 に designcheck で実測。docs/12 に記録）。
-// そのため AI に読ませた 1 枚はヘッダの「AI に読ませた領収書」欄に残る。
-// 行ごとの領収書は明細グリッドの領収書欄に添付する。
-void AiImport_Completed()
-{
-    // **受け皿の値は AddRow() より先に退避する。**
-    // Lines.AddRow() はその場で Lines_OnDataChanged を発火させ、まだ空の行で
-    // RecalcFromLines が走ってヘッダの合計金額・うち消費税を 0 に書き戻す。
-    // 先に読んでおかないと、AI が入れた金額を自分で消してから写すことになる
-    //（ADR-0053「OnDataChanged はスクリプトからの生成にも発火する」の実例。2026-08-17 に実機で踏んだ）
-    var stagedAmount = Amount.Value;
-    var stagedTax = TaxAmount.Value;
-    var stagedCategory = ExpenseCategoryRef.Value;
-    var stagedUsedAt = UsedAt.Value;
-    var stagedGuest = EntertainmentGuest.Value;
-    var stagedCount = EntertainmentCount.Value;
-    var stagedPurpose = EntertainmentPurpose.Value;
-    var stagedDate = ExpenseDate.Value;
-    if (stagedDate == null) stagedDate = DateOnly.FromDateTime(DateTime.Today);
-
-    var row = Lines.AddRow();
-    row.UsedDate.Value = stagedDate;
-    row.ExpenseCategoryRef.Value = stagedCategory;
-    row.Amount.Value = stagedAmount;
-    row.TaxAmount.Value = stagedTax;
-    row.UsedAt.Value = stagedUsedAt;
-    row.EntertainmentGuest.Value = stagedGuest;
-    row.EntertainmentCount.Value = stagedCount;
-    row.EntertainmentPurpose.Value = stagedPurpose;
-    row.Description.Value = "AI読み取り";
-
-    // 受け皿を空に戻す（次の 1 枚を読めるように。ヘッダ側に業務値を残さない）
-    ExpenseCategoryRef.Value = null;
-    UsedAt.Value = null;
-    EntertainmentGuest.Value = null;
-    EntertainmentCount.Value = null;
-    EntertainmentPurpose.Value = null;
-
-    Lines_OnDataChanged();
-    Toaster.Info("AI読み取り結果を明細に 1 行追加しました。内容を確認・修正のうえ申請してください（領収書は明細の領収書欄に添付してください）");
 }
 
 // 申請区分・支払先区分に応じた項目の出し分け（費目まわりの出し分けは明細側へ移った）
