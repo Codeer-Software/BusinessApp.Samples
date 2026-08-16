@@ -39,7 +39,9 @@ listed AS (
                        - COALESCE(s.received, 0) END) AS bal
   FROM invoices i
   LEFT JOIN settled s ON s.inv = i.id
-  WHERE i.status <> 'void' AND i.status <> 'draft'
+  -- invoices.status は NOT NULL 制約が無い。素の <> だと status が NULL の請求書が
+  -- 黙って集計から落ちて差額の原因が見えなくなるため COALESCE で拾う。
+  WHERE COALESCE(i.status, '') NOT IN ('void', 'draft')
 ),
 cmp AS (
   SELECT (SELECT bal FROM ledger) AS 売掛金元帳残高,

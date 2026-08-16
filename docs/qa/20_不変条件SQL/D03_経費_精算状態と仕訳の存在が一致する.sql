@@ -7,8 +7,16 @@
 -- 違反時の意味: 未払金（従業員立替）の残高が実態と合わない。二重精算・精算漏れ。
 -- 出典: Modules/Expense/ExpenseRequest.mod.cs（SettlementStatus の遷移と起票箇所）
 -- 注意: この不変条件は「経費申請の明細行化」改修で最も壊れやすい。改修前後で必ず比較すること。
-SELECT '計上仕訳が無い' AS 違反, er.id AS 申請id, er.title AS 件名,
+-- 精算状態が NULL の申請はどの IN 句にも入らず、以下のチェックを丸ごとすり抜けてしまう。
+-- 状態を持たない申請は状態遷移の外にいる＝それ自体が異常なので、最初に落とす。
+SELECT '精算状態が未設定' AS 違反, er.id AS 申請id, er.title AS 件名,
        er.settlement_status AS 精算状態, er.amount AS 金額, er.expense_date AS 申請日
+FROM expense_request er
+WHERE er.settlement_status IS NULL OR er.settlement_status = ''
+
+UNION ALL
+SELECT '計上仕訳が無い', er.id, er.title,
+       er.settlement_status, er.amount, er.expense_date
 FROM expense_request er
 WHERE er.settlement_status IN ('accounting', 'settled', 'completed')
   AND NOT EXISTS (SELECT 1 FROM journal_entries je

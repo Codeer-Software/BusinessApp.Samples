@@ -20,7 +20,7 @@ SELECT
       - (COALESCE(ac.amount, 0) + COALESCE(ac.tax_amount, 0)) AS 超過額
 FROM invoices i
 JOIN acceptances ac ON ac.id = i.acceptance_id
-WHERE i.status <> 'void'
+WHERE COALESCE(i.status, '') <> 'void'   -- status は NOT NULL 制約が無いので COALESCE で拾う
   AND (COALESCE(i.amount, 0) + COALESCE(i.tax_amount, 0))
       > (COALESCE(ac.amount, 0) + COALESCE(ac.tax_amount, 0))
 ORDER BY i.id

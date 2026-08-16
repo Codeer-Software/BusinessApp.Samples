@@ -17,7 +17,7 @@ FROM journal_entries je
 JOIN fiscal_periods fp ON date(je.entry_date) >= date(fp.start_date)
                       AND date(je.entry_date) <= date(fp.end_date)
 JOIN fiscal_years fy ON fy.id = fp.fiscal_year_id
-WHERE je.status <> 'posted'
+WHERE COALESCE(je.status, '') <> 'posted'   -- status が NULL の伝票も「未確定」として拾う
   AND fp.status = 'closed'
 
 UNION ALL
@@ -26,5 +26,5 @@ SELECT
     je.id, je.entry_date, fy.name, NULL, je.description, je.source_type
 FROM journal_entries je
 JOIN fiscal_years fy ON fy.id = je.fiscal_year_id
-WHERE je.status <> 'posted'
+WHERE COALESCE(je.status, '') <> 'posted'   -- status が NULL の伝票も「未確定」として拾う
   AND fy.status = 'closed'

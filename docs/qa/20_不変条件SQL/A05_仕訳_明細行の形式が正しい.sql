@@ -3,6 +3,8 @@
 --   (b) 借方だけ／貸方だけの片肺伝票が無い
 --   (c) amount は必ず正の整数（0 円行・マイナス行を作らない）
 --   (d) dc は 'D' / 'C' のいずれか
+--   (e) line_no が伝票内で一意（消費税行の親子解決 parent_line_no → line_no がこれに依存する。
+--       重複すると A09 の突合が多重になり、税行がどの行に紐づくか決まらなくなる）
 -- 違反時の意味: 貸借一致（A01）が偶然成立していても、行の意味が壊れている。
 --               マイナス金額は「貸借どちらに立てるか」の情報を二重に持つため禁止（1行1側＋正数が本アプリの決定）。
 -- 出典: docs/04_会計ドメイン設計.md §3.1（1行1側・正の整数 amount・全行 amount > 0）
@@ -35,3 +37,12 @@ FROM journal_lines jl
 JOIN journal_entries je ON je.id = jl.journal_entry_id
 WHERE je.status = 'posted'
   AND (jl.dc IS NULL OR jl.dc NOT IN ('D', 'C'))
+
+UNION ALL
+SELECT '行番号が伝票内で重複', je.id, NULL, je.entry_date, je.description,
+       'line_no=' || COALESCE(CAST(jl.line_no AS TEXT), '(NULL)') || ' ×' || CAST(COUNT(*) AS TEXT)
+FROM journal_lines jl
+JOIN journal_entries je ON je.id = jl.journal_entry_id
+WHERE je.status = 'posted'
+GROUP BY jl.journal_entry_id, jl.line_no
+HAVING COUNT(*) > 1
