@@ -72,7 +72,6 @@ List<ApprovalFlowTemplateOrder> BuildMergedOrders(List<object> templateIds)
     var orders = new List<ApprovalFlowTemplateOrder>();
     var seqs = new List<int>();
     var ranks = new List<int>();
-    var owners = new List<string>();
 
     foreach (var tid in templateIds)
     {
@@ -93,7 +92,6 @@ List<ApprovalFlowTemplateOrder> BuildMergedOrders(List<object> templateIds)
                 orders.Add(o);
                 seqs.Add(no);
                 ranks.Add(StageRankOf(ms));
-                owners.Add($"{tid}");
             }
             else if (no > seqs[idx])
             {
@@ -123,23 +121,22 @@ List<ApprovalFlowTemplateOrder> BuildMergedOrders(List<object> templateIds)
             var to = orders[i]; orders[i] = orders[best]; orders[best] = to;
             var ts = seqs[i]; seqs[i] = seqs[best]; seqs[best] = ts;
             var tr = ranks[i]; ranks[i] = ranks[best]; ranks[best] = tr;
-            var tw = owners[i]; owners[i] = owners[best]; owners[best] = tw;
         }
     }
 
-    // 代表テンプレート（記録用）: 合成にいちばん多くの段を寄与したもの
-    var bestOwner = "";
-    var bestCount = 0;
+    // 代表テンプレート（記録用）: 段数がいちばん多いもの＝合成結果にいちばん近い 1 件。
+    // 合成に使った全テンプレートは申請履歴のコメントに残す（BuildTemplateNote）ので、
+    // ここは「1 列にどれを書くか」だけの話であり、判定には使わない
+    object bestId = null;
+    var bestCount = -1;
     foreach (var tid in templateIds)
     {
-        var c = 0;
-        foreach (var w in owners) { if (w == $"{tid}") c = c + 1; }
-        if (c > bestCount) { bestCount = c; bestOwner = $"{tid}"; }
+        var cs = new ModuleSearcher<ApprovalFlowTemplateOrder>();
+        cs.AddEquals(o => o.TemplateId.Value, tid);
+        var c = cs.Execute().Count;
+        if (c > bestCount) { bestCount = c; bestId = tid; }
     }
-    foreach (var tid in templateIds)
-    {
-        if ($"{tid}" == bestOwner) { TemplateId.Value = tid; }
-    }
+    if (bestId != null) { TemplateId.Value = bestId; }
 
     return orders;
 }
