@@ -1145,17 +1145,30 @@ void PayeeType_OnDataChanged()
 // 行ごとの領収書は明細グリッドの領収書欄に添付する。
 void AiImport_Completed()
 {
+    // **受け皿の値は AddRow() より先に退避する。**
+    // Lines.AddRow() はその場で Lines_OnDataChanged を発火させ、まだ空の行で
+    // RecalcFromLines が走ってヘッダの合計金額・うち消費税を 0 に書き戻す。
+    // 先に読んでおかないと、AI が入れた金額を自分で消してから写すことになる
+    //（ADR-0053「OnDataChanged はスクリプトからの生成にも発火する」の実例。2026-08-17 に実機で踏んだ）
+    var stagedAmount = Amount.Value;
+    var stagedTax = TaxAmount.Value;
+    var stagedCategory = ExpenseCategoryRef.Value;
+    var stagedUsedAt = UsedAt.Value;
+    var stagedGuest = EntertainmentGuest.Value;
+    var stagedCount = EntertainmentCount.Value;
+    var stagedPurpose = EntertainmentPurpose.Value;
+    var stagedDate = ExpenseDate.Value;
+    if (stagedDate == null) stagedDate = DateOnly.FromDateTime(DateTime.Today);
+
     var row = Lines.AddRow();
-    var used = ExpenseDate.Value;
-    if (used == null) used = DateOnly.FromDateTime(DateTime.Today);
-    row.UsedDate.Value = used;
-    row.ExpenseCategoryRef.Value = ExpenseCategoryRef.Value;
-    row.Amount.Value = Amount.Value;
-    row.TaxAmount.Value = TaxAmount.Value;
-    row.UsedAt.Value = UsedAt.Value;
-    row.EntertainmentGuest.Value = EntertainmentGuest.Value;
-    row.EntertainmentCount.Value = EntertainmentCount.Value;
-    row.EntertainmentPurpose.Value = EntertainmentPurpose.Value;
+    row.UsedDate.Value = stagedDate;
+    row.ExpenseCategoryRef.Value = stagedCategory;
+    row.Amount.Value = stagedAmount;
+    row.TaxAmount.Value = stagedTax;
+    row.UsedAt.Value = stagedUsedAt;
+    row.EntertainmentGuest.Value = stagedGuest;
+    row.EntertainmentCount.Value = stagedCount;
+    row.EntertainmentPurpose.Value = stagedPurpose;
     row.Description.Value = "AI読み取り";
 
     // 受け皿を空に戻す（次の 1 枚を読めるように。ヘッダ側に業務値を残さない）
