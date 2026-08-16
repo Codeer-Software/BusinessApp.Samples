@@ -12,6 +12,16 @@
   display: none;
 }
 
+/* 一覧の ○/— フラグ列: 中央寄せ（ListElement.ClassName = "flag-cell"）。
+   見出しは「現預金科目」等で幅があるのに中身は 1 文字なので、左詰めだと列との対応が読み取りにくい。
+   セル内ラッパーが display:flex なのは amount-cell と同じ事情（justify-content で寄せる） */
+.flag-cell {
+  text-align: center;
+}
+.flag-cell > div {
+  justify-content: center;
+}
+
 /* 一覧の金額・数値列: 右詰め＋等幅数字（ListElement.ClassName = "amount-cell"） */
 .amount-cell {
   text-align: right;
