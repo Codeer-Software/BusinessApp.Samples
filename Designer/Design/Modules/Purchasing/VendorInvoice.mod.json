@@ -263,6 +263,54 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
+      "Candidates": [],
+      "SearchCondition": {
+        "SelectFields": [],
+        "SortConditions": [
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
+        "SortFieldVariable": "",
+        "SortDescending": false,
+        "ModuleName": "Project",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [
+            {
+              "SearchTargetVariable": "IsActive.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": true,
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            }
+          ],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
+      },
+      "ValueVariable": "Id.Value",
+      "DisplayTextVariable": "Name.Value",
+      "DbColumn": "project_id",
+      "EmptyCandidateType": "Null",
+      "AllowOrSearch": false,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "案件（任意）",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "ProjectRef",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
+    },
+    {
       "DbColumn": "amount",
       "Placeholder": "",
       "Format": "#,0",
@@ -611,6 +659,26 @@
       "RelativeField": "TaxCategoryRef",
       "OnClick": "",
       "Name": "TaxCategoryRefLabel",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "案件（任意）",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "ProjectRef",
+      "OnClick": "",
+      "Name": "ProjectRefLabel",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "案件を選ぶと、未払計上・支払の仕訳に引き継がれ、案件別損益の直課費用に乗ります",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "ProjectHintLabel",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
@@ -1468,6 +1536,91 @@
             "Columns": [
               {
                 "Layout": {
+                  "FieldName": "ProjectRefLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 154,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "VerticalAlignment": "Middle",
+                "CanResize": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "ProjectRef",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 640,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "ProjectHintLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {
+                  "Left": 8,
+                  "Top": null,
+                  "Right": null,
+                  "Bottom": null
+                },
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "VerticalAlignment": "Middle",
+                "CanResize": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
                   "FieldName": "AmountLabel",
                   "ContextMenu": "",
                   "ClassName": "",
@@ -1949,6 +2102,24 @@
             "ColumnSpan": 1,
             "RowSpan": 1,
             "Width": 140,
+            "IsViewOnly": true,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": false,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "ProjectRef",
+            "ContextMenu": "",
+            "Label": "案件",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "Width": 260,
             "IsViewOnly": true,
             "TextWrap": "Unset",
             "CanResize": false,

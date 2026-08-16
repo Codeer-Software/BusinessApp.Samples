@@ -3,6 +3,11 @@
 // 未払計上: D 費用科目(本体) [+ D 仮払消費税1900(税)] / C 買掛金2000(税込)（EntryDate=請求日）
 // 支払登録: D 買掛金2000(税込) / C 支払口座の帳簿科目（既定 普通預金1020。EntryDate=本日）
 // 仕訳の型は ExpenseRequest.GenerateJournal / BankImport.PostAll と同じ規律。
+//
+// 案件（ProjectRef・ADR-0064）: 選択されていれば**両方の仕訳の全明細**へ引き継ぐ。
+// これが無いと外注費・SES 仕入が案件別損益（ProjectProfit の直課費用）に一切乗らない。
+// 引き継ぎ方は ExpenseRequest.GenerateJournal と同じ（レイアウト状態によって .Value が
+// 未ロードのことがあるため、null なら DB から取り直す）。
 
 void Detail_OnAfterInit()
 {
@@ -15,7 +20,7 @@ void Detail_OnAfterInit()
 }
 
 // この請求書を複製: 反復的な仕入（家賃・外注の月次請求・保守料など）を過去請求書から新規作成する。
-// コピーする: 取引先・費用科目・税区分・税込金額・摘要・支払口座
+// コピーする: 取引先・費用科目・部門・案件・税区分・税込金額・摘要・支払口座
 // コピーしない: 請求書番号・請求日・支払期限（今回の請求書の実物から入力）・仕訳リンク・支払日。状態=受領
 void Duplicate_OnClick()
 {
@@ -27,6 +32,8 @@ void Duplicate_OnClick()
     var copy = new VendorInvoice();
     copy.Partner.Value = Partner.Value;
     copy.ExpenseAccount.Value = ExpenseAccount.Value;
+    copy.DepartmentRef.Value = DepartmentRef.Value;
+    copy.ProjectRef.Value = ProjectRef.Value;
     copy.TaxCategoryRef.Value = TaxCategoryRef.Value;
     copy.Amount.Value = Amount.Value;
     copy.Description.Value = Description.Value;
@@ -92,6 +99,20 @@ JournalEntry FindSourceJournal(string sourceType)
     var found = s.ExecuteFirstOrDefault();
     if (found == null) return null;
     return (JournalEntry)found;
+}
+
+// 案件（任意）の解決。レイアウト状態によっては .Value が未ロードのことがあるため、
+// null のときは DB から取り直す（ExpenseRequest.GenerateJournal と同じ流儀）
+object ResolveProjectId()
+{
+    var projectId = ProjectRef.Value;
+    if (projectId != null) { return projectId; }
+    if (this.IsNewData) { return null; }
+    var s = new ModuleSearcher<VendorInvoice>();
+    s.AddEquals(e => e.Id.Value, this.Id.Value);
+    var self = s.ExecuteFirstOrDefault();
+    if (self == null) { return null; }
+    return ((VendorInvoice)self).ProjectRef.Value;
 }
 
 // 損益科目（費用・収益）かどうか。部門必須の判定に使う（ADR-0056）
@@ -343,6 +364,9 @@ void Accrue_OnClick()
     // 採番
     var nextNo = NextJournalNo(typedFy.Id.Value);
 
+    // 案件（任意）: 選ばれていれば仕訳の全行に引き継ぐ（案件別損益への直課・ADR-0064）
+    var projectId = ResolveProjectId();
+
     // 仕訳生成
     var lineCount = (tax > 0) ? 3 : 2;
     var je = new JournalEntry();
@@ -364,6 +388,7 @@ void Accrue_OnClick()
         l.Description.Value = Description.Value;
         // 伝票ヘッダの部門を仕訳に伝搬する（販売伝票 ADR-0029 と同じ考え方・ADR-0056）
         if (DepartmentRef.Value != null) { l.Department.Value = DepartmentRef.Value; }
+        if (projectId != null) { l.ProjectRef.Value = projectId; }
         if (idx == 1)
         {
             l.Dc.Value = "D";
@@ -471,6 +496,10 @@ void Pay_OnClick()
     int gross = Amount.Value;
     var nextNo = NextJournalNo(typedFy.Id.Value);
 
+    // 案件（任意）: 支払仕訳にも引き継ぐ。買掛金・預金はどちらも損益科目ではないので
+    // 案件別損益の数字は動かないが、案件で元帳を絞ったときに入出金まで追える（ADR-0064）
+    var projectId = ResolveProjectId();
+
     var je = new JournalEntry();
     je.EntryDate.Value = today;
     je.EntryType.Value = "auto";
@@ -488,6 +517,7 @@ void Pay_OnClick()
         idx = idx + 1;
         l.LineNo.Value = idx;
         l.Description.Value = Description.Value;
+        if (projectId != null) { l.ProjectRef.Value = projectId; }
         if (idx == 1)
         {
             l.Dc.Value = "D";
