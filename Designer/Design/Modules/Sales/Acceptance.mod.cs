@@ -580,8 +580,80 @@ void Confirm_OnClick()
         if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
     }
 
+    // 明細の税区分ごとに「売上行（＋消費税行）」を作る（ADR-0050）。
+    // 一律 SALES_10 で作ってはいけない——税額そのものは RecalcFromLines が
+    // 税率別に正しく出しているが、仕訳行に付ける税区分が実態と違うと
+    // 消費税集計表（journal_lines.tax_category_id で集計）が壊れる。
+    // 非課税が混ざれば課税売上割合が 100% に化け、8% が混ざれば税率別内訳が出せない。
+    var catKeys = new List<string>();
+    var catIds = new List<object>();
+    var catNets = new List<int>();
+    var catRates = new List<decimal>();
+    decimal defaultPct = GetSalesTaxRatePercent();
+    foreach (var row in Lines.Rows)
+    {
+        var l = (AcceptanceLine)row;
+        if (l.Amount.Value == null) continue;
+        var cid = l.TaxCategoryRef.Value;
+        decimal pct = defaultPct;
+        if (cid == null)
+        {
+            // 明細に税区分が無い行のフォールバック先が無いまま進むと、税区分 null の売上行が
+            // MarkRemainingLinesOutOfScope() で黙って「対象外」に落ち、課税売上が消費税集計から丸ごと消える。
+            // 静かに壊すより止める（SALES_10 を改名・無効化したときにここで気づける）
+            if (salesTaxCatId == null)
+            {
+                Toaster.Error("税区分が設定されていない明細があり、既定の課税売上(SALES_10)も見つかりません。"
+                    + "明細の税区分を指定するか、税区分マスタを確認してください");
+                return;
+            }
+            cid = salesTaxCatId;
+        }
+        else { pct = ResolveTaxableSalesRatePercent(l.TaxCategoryRef.Value); }
+        var key = $"{cid}";
+        var ci = catKeys.IndexOf(key);
+        if (ci < 0)
+        {
+            catKeys.Add(key);
+            catIds.Add(cid);
+            catNets.Add(l.Amount.Value);
+            catRates.Add(pct);
+        }
+        else { catNets[ci] = catNets[ci] + l.Amount.Value; }
+    }
+    if (catKeys.Count == 0) { Toaster.Error("検収明細がありません"); return; }
+
+    // 税区分ごとの税額。**合計はヘッダの消費税額と 1 円もずれてはいけない**
+    // （借方の売掛金を amount + tax で作るので、ずれると貸借が合わなくなる）。
+    // ヘッダ側は税率ごとに 1 回端数処理しているので、同率の税区分が複数あると
+    // 区分ごとの端数処理と最大 1 円ずれる。差は最後の課税区分で吸収する
+    var catTaxes = new List<int>();
+    var lastTaxable = -1;
+    var taxSum = 0;
+    for (var i = 0; i < catKeys.Count; i++)
+    {
+        var t = 0;
+        if (catRates[i] > 0)
+        {
+            t = (int)(catNets[i] * catRates[i] / 100);
+            lastTaxable = i;
+        }
+        catTaxes.Add(t);
+        taxSum = taxSum + t;
+    }
+    if (lastTaxable >= 0 && taxSum != tax)
+    {
+        catTaxes[lastTaxable] = catTaxes[lastTaxable] + (tax - taxSum);
+    }
+
+    var taxLineCount = 0;
+    for (var i = 0; i < catTaxes.Count; i++)
+    {
+        if (catTaxes[i] != 0) { taxLineCount = taxLineCount + 1; }
+    }
+
     // 売上仕訳 (docs/04 の税行方式: 借方 売掛金 / 貸方 売上 + is_tax_line 行)
-    var lineCount = (tax > 0) ? 3 : 2;
+    var lineCount = 1 + catKeys.Count + taxLineCount;
     var je = new JournalEntry();
     je.EntryDate.Value = AcceptanceDate.Value;
     je.EntryType.Value = "auto";
@@ -592,44 +664,54 @@ void Confirm_OnClick()
     je.SourceType.Value = "acceptance";
     je.SourceId.Value = this.Id.Value;
     je.Lines.AddRows(lineCount);
-    var idx = 0;
-    foreach (var row in je.Lines.Rows)
+    var rows = je.Lines.Rows;
+    var pos = 0;
+
+    // 1 行目: 借方 売掛金（税込総額）
+    var dr = (JournalLine)rows[pos];
+    dr.LineNo.Value = 1;
+    dr.Description.Value = typedSo.Title.Value;
+    if (typedSo.ProjectRef.Value != null) { dr.ProjectRef.Value = typedSo.ProjectRef.Value; }
+    if (typedSo.DepartmentRef.Value != null) { dr.Department.Value = typedSo.DepartmentRef.Value; }
+    dr.Dc.Value = "D";
+    dr.Account.Value = arAccountId;
+    dr.TaxInputMode.Value = "none";
+    dr.Amount.Value = gross;
+    dr.InputAmount.Value = gross;
+    pos = pos + 1;
+
+    // 税区分ごとに 貸方 売上 → その消費税行、の順に積む
+    for (var i = 0; i < catKeys.Count; i++)
     {
-        var l = (JournalLine)row;
-        idx = idx + 1;
-        l.LineNo.Value = idx;
-        l.Description.Value = typedSo.Title.Value;
-        if (typedSo.ProjectRef.Value != null) { l.ProjectRef.Value = typedSo.ProjectRef.Value; }
-        if (typedSo.DepartmentRef.Value != null) { l.Department.Value = typedSo.DepartmentRef.Value; }
-        if (idx == 1)
-        {
-            l.Dc.Value = "D";
-            l.Account.Value = arAccountId;
-            l.TaxInputMode.Value = "none";
-            l.Amount.Value = gross;
-            l.InputAmount.Value = gross;
-        }
-        else if (idx == 2)
-        {
-            l.Dc.Value = "C";
-            l.Account.Value = salesAccountId;
-            l.TaxCategory.Value = salesTaxCatId;
-            l.TaxInputMode.Value = "none";
-            l.Amount.Value = amount;
-            l.InputAmount.Value = amount;
-        }
-        else
-        {
-            l.Dc.Value = "C";
-            l.Account.Value = taxAccountId;
-            l.TaxCategory.Value = salesTaxCatId;
-            l.TaxInputMode.Value = "none";
-            l.IsTaxLine.Value = true;
-            l.ParentLineNo.Value = 2;
-            l.Amount.Value = tax;
-            l.InputAmount.Value = tax;
-            l.Description.Value = "消費税（行2）";
-        }
+        var salesLineNo = pos + 1;
+        var sl = (JournalLine)rows[pos];
+        sl.LineNo.Value = salesLineNo;
+        sl.Description.Value = typedSo.Title.Value;
+        if (typedSo.ProjectRef.Value != null) { sl.ProjectRef.Value = typedSo.ProjectRef.Value; }
+        if (typedSo.DepartmentRef.Value != null) { sl.Department.Value = typedSo.DepartmentRef.Value; }
+        sl.Dc.Value = "C";
+        sl.Account.Value = salesAccountId;
+        sl.TaxCategory.Value = catIds[i];
+        sl.TaxInputMode.Value = "none";
+        sl.Amount.Value = catNets[i];
+        sl.InputAmount.Value = catNets[i];
+        pos = pos + 1;
+
+        if (catTaxes[i] == 0) continue;
+        var tl = (JournalLine)rows[pos];
+        tl.LineNo.Value = pos + 1;
+        tl.Description.Value = $"消費税（行{salesLineNo}）";
+        if (typedSo.ProjectRef.Value != null) { tl.ProjectRef.Value = typedSo.ProjectRef.Value; }
+        if (typedSo.DepartmentRef.Value != null) { tl.Department.Value = typedSo.DepartmentRef.Value; }
+        tl.Dc.Value = "C";
+        tl.Account.Value = taxAccountId;
+        tl.TaxCategory.Value = catIds[i];
+        tl.TaxInputMode.Value = "none";
+        tl.IsTaxLine.Value = true;
+        tl.ParentLineNo.Value = salesLineNo;
+        tl.Amount.Value = catTaxes[i];
+        tl.InputAmount.Value = catTaxes[i];
+        pos = pos + 1;
     }
     je.MarkRemainingLinesOutOfScope();
     je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）

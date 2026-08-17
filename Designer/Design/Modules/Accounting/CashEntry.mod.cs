@@ -119,13 +119,34 @@ void Save_OnClick()
     var removed = SaveListEdits();
     DraftList.Reload();
     RefreshSummary();
+    if (removed < 0)
+    {
+        Toaster.Warn($"編集内容は保存しましたが、行の削除は反映していません。"
+            + $"下書きが {DraftPageLimit()} 件を超えていて画面に全部載っていないため、"
+            + "表示していないページの下書きまで消してしまう恐れがあります。"
+            + "起票または破棄で件数を減らしてから削除してください");
+        return;
+    }
     if (removed > 0) { Toaster.Success($"変更を保存しました（{removed} 行を削除）"); }
     else { Toaster.Success("変更を保存しました"); }
 }
 
+// DraftList が 1 ページに載せる件数。**DraftList.SearchCondition.LimitCount と対で保守する。**
+// この値を超えると ListField はページを割り、`Rows` は「現在のページの行」しか返さなくなる。
+int DraftPageLimit()
+{
+    return 200;
+}
+
 // 画面の下書き行を DB に書き戻す。**画面から消えた行は DB からも消す**
 // （ListField の行削除はメモリ上の操作なので、ここで確定させないと再読込で復活する）。
-// 戻り値は削除した行数。
+//
+// ただし `DraftList.Rows` が返すのは**現在のページの行だけ**である（CLB 仕様）。
+// 下書きが 1 ページに収まらないと、表示していないページの行まで「画面から消えた行」に見え、
+// 未起票の下書きが無言で全滅する（下書きに履歴は無く復旧できない）。
+// **ロードしていない行は消さない。** 収まらないときは削除を行わず -1 を返す（呼び元が知らせる）。
+//
+// 戻り値: 削除した行数。-1 = ページが割れているため削除を見送った。
 int SaveListEdits()
 {
     var aliveIds = new List<string>();
@@ -139,6 +160,8 @@ int SaveListEdits()
     var s = new ModuleSearcher<CashEntryDraft>();
     s.AddEquals(e => e.Creator.Value, CurrentUser.Id.Value);
     var all = s.Execute();
+    if (all.Count > DraftPageLimit()) { return -1; }
+
     var removed = 0;
     foreach (var row in all)
     {
@@ -186,8 +209,17 @@ void PostAll_OnClick()
     cs0.AddEquals(e => e.Creator.Value, CurrentUser.Id.Value);
     var draftCount = cs0.Execute().Count;
     if (draftCount == 0) { Toaster.Info("起票する下書きがありません"); return; }
+
+    // 1 ページに収まらないときは、画面で消した行の削除を確定できない（SaveListEdits 参照）。
+    // 「消したはずの行が起票された」を後から取り消すのは高くつくので、先に伝えて選ばせる
+    var caution = "";
+    if (draftCount > DraftPageLimit())
+    {
+        caution = $"\n\n※ 下書きが {DraftPageLimit()} 件を超えていて画面に全部載っていません。"
+            + "この画面で削除した行があっても、その削除は反映されず起票されます。";
+    }
     var answer = MessageBox.Show(
-        $"下書き {draftCount} 件を一括で起票します（確定仕訳として帳簿に載ります）。よろしいですか？",
+        $"下書き {draftCount} 件を一括で起票します（確定仕訳として帳簿に載ります）。よろしいですか？{caution}",
         "起票する", "キャンセル");
     if (answer != "起票する") return;
 

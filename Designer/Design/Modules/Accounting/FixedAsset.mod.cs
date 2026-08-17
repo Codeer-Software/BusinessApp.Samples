@@ -103,7 +103,7 @@ int CalcDepreciationForYear(var yearStart, var yearEnd)
         var k = YearIndex(acq, yearStart, yearEnd);
         if (k < 1) return 0;
         // 取得年度は月割（取得月〜年度末の月数 / 12）
-        int firstYearAmount = annual * MonthsFromAcqToYearEnd(acq) / 12;
+        int firstYearAmount = annual * MonthsFromAcqToYearEnd(acq, yearStart) / 12;
         // 累計（対象年度の前まで）
         int accumulated = 0;
         if (k > 1)
@@ -132,7 +132,7 @@ int CalcDepreciationForYear(var yearStart, var yearEnd)
             amount2 = book * rate;
             if (i == 1)
             {
-                amount2 = amount2 * MonthsFromAcqToYearEnd(acq) / 12;
+                amount2 = amount2 * MonthsFromAcqToYearEnd(acq, yearStart) / 12;
             }
             if (amount2 > book - 1) { amount2 = book - 1; }
             if (i < k2) { book = book - amount2; }
@@ -144,23 +144,31 @@ int CalcDepreciationForYear(var yearStart, var yearEnd)
     return 0;
 }
 
-// 取得日が対象年度の何年目にあたるか（取得年度=1。対象年度開始日基準の近似）
+// 取得日が対象年度の何年目にあたるか（取得年度=1。対象外は 0）
+//
+// 年度の開始月日は対象年度（yearStart）から取る。暦年の差で近似してはいけない——
+// 年度開始月より前に取得した資産（4/1 開始なら 1〜3 月取得）で 1 年ずれ、
+// 2 年目が 0 円・3 年目が再び「取得年度」と判定されて初年度の月割を二重計上する。
+// 理論値スケジュールがそのまま仕訳金額になる（GenerateDep_OnClick）ので、
+// ずれは取得価額を超える償却として現れる（残存簿価がマイナスになる）。
 int YearIndex(var acq, var yearStart, var yearEnd)
 {
-    if (acq >= yearStart && acq <= yearEnd) return 1;
     if (acq > yearEnd) return 0;
-    // 取得年度の期首を推定するのは複雑なため、開始日の年差で近似（3月決算の年次運用で成立）
-    var years = yearStart.Year - acq.Year;
-    if (acq.Month >= yearStart.Month) { years = years; } else { years = years - 1; }
-    return years + 1;
+    if (acq >= yearStart) return 1;
+    // 取得日が属する年度の開始年（年度の開始月日は yearStart と同じとみなす）
+    var acqFyStartYear = acq.Year;
+    if (acq.Month < yearStart.Month) { acqFyStartYear = acq.Year - 1; }
+    if (acq.Month == yearStart.Month && acq.Day < yearStart.Day) { acqFyStartYear = acq.Year - 1; }
+    return yearStart.Year - acqFyStartYear + 1;
 }
 
-int MonthsFromAcqToYearEnd(var acq)
+// 取得月から年度末までの月数（取得月を 1 か月目として数える。取得年度の月割に使う）
+// 年度の開始月も yearStart から取る（4 月起点を決め打ちしない）
+int MonthsFromAcqToYearEnd(var acq, var yearStart)
 {
-    // 取得月から年度末までの月数（3月決算前提の近似: 4月起点）
-    var m = acq.Month;
-    if (m >= 4) { return 12 - (m - 4); }
-    return 4 - m;
+    var elapsed = acq.Month - yearStart.Month;
+    if (elapsed < 0) { elapsed = elapsed + 12; }
+    return 12 - elapsed;
 }
 
 // 科目マスタの「固定資産科目」フラグ（ADR-0063）。未設定・見つからないときは false（安全側）
