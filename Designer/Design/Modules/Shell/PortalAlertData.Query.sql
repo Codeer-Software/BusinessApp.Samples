@@ -51,9 +51,17 @@ cash_now AS (
 ),
 -- 売上の既定税区分（税制マスタで設定: tax_categories.default_for='sales'）に紐づく税率
 sales_rate AS (
-  SELECT COALESCE((SELECT tr.rate_percent
-                   FROM tax_categories tc JOIN tax_rates tr ON tr.id = tc.tax_rate_id
-                   WHERE tc.default_for = 'sales' AND tc.is_active = 1), 0) AS pct
+  -- 既定用途='売上' の税区分が無い／無効のとき、0% にフォールバックしてはいけない。
+  -- 入金見込みが税抜のまま（約 10% 過小）になり、警告も出ないので気づけない。
+  -- 税率は直書きせず（CLAUDE.md §3）、**有効な課税売上区分の最高税率**を代わりに使う
+  SELECT COALESCE(
+           (SELECT tr.rate_percent
+            FROM tax_categories tc JOIN tax_rates tr ON tr.id = tc.tax_rate_id
+            WHERE tc.default_for = 'sales' AND tc.is_active = 1),
+           (SELECT MAX(tr2.rate_percent)
+            FROM tax_categories tc2 JOIN tax_rates tr2 ON tr2.id = tc2.tax_rate_id
+            WHERE tc2.taxation_type = 'taxable_sales' AND tc2.is_active = 1),
+           0) AS pct
 ),
 inv_in AS (
   SELECT max(date(i.due_date, 'start of month'), (SELECT month_first FROM months WHERE idx = 0)) AS m,
@@ -128,7 +136,11 @@ cash_final AS (
   FROM flows
 ),
 alert_rate AS (
-  SELECT amount AS rate FROM system_thresholds WHERE code = 'BUDGET_ALERT_RATE' LIMIT 1
+  -- 既定値のフォールバックが要る。マスタの行が消えると rate が NULL になり、
+  -- 下の比較が NULL → budget_alert が 0 行 → ポータルの予算警告が行ごと消える。
+  -- 「警告が無い＝健全」に見えるので気づけない。同ファイルの PAY_DUE_SOON_DAYS は
+  -- 既に COALESCE を持っており、作法が割れていた（既定 80% は投入値と同じ）
+  SELECT COALESCE((SELECT amount FROM system_thresholds WHERE code = 'BUDGET_ALERT_RATE' LIMIT 1), 80) AS rate
 ),
 budget_alert AS (
   SELECT b.department_id AS department_id
