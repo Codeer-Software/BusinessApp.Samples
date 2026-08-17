@@ -139,15 +139,23 @@ bool DeleteJournalEntryWithLines(JournalEntry je)
     return true;
 }
 
-// この検収から作成済みの請求書番号（無ければ null）
+// この検収から作成済みの請求書番号（無ければ null）。
+// **取消済み（void）の請求書は数えない。** void は請求の実体を失っており、
+// これを「作成済み」と扱っていたため、一度 void にした請求書が検収を永久にロックしていた
+// ——再請求ボタンが出ず、確定取消も通らず、下書きに戻せないので削除もできない（BUG-0130）。
 string FindExistingInvoiceNo()
 {
     if (this.IsNewData) return null;
     var s = new ModuleSearcher<Invoice>();
     s.AddEquals(e => e.AcceptanceRef.Value, this.Id.Value);
-    var found = s.ExecuteFirstOrDefault();
-    if (found == null) return null;
-    return ((Invoice)found).InvoiceNo.Value;
+    var found = s.Execute();
+    foreach (var row in found)
+    {
+        var inv = (Invoice)row;
+        if (inv.Status.Value == "void") continue;
+        return inv.InvoiceNo.Value;
+    }
+    return null;
 }
 
 // 確定の取り消し (confirmed → draft): 売上仕訳を削除して下書きに戻す（経理専用）
@@ -160,10 +168,20 @@ void CancelConfirm_OnClick()
         return;
     }
     if (Status.Value != "confirmed") { Toaster.Error("確定済みの検収のみ取り消せます"); return; }
+    // 直接請求だけでなく**合算請求も見る**。合算先を見ていなかったため、
+    // 合算請求書に載せた検収でも取消が通り、請求書は残ったまま売上仕訳だけが消えていた
+    // ——請求額の裏付けとなる売上計上が無い請求書ができる（BUG-0128）
     var invoiceNo = FindExistingInvoiceNo();
     if (invoiceNo != null)
     {
         Toaster.Error($"請求書 {invoiceNo} が作成済みのため取り消せません（先に請求書側を削除してください）");
+        return;
+    }
+    var billedNo = FindBilledInvoiceNo();
+    if (billedNo != null)
+    {
+        Toaster.Error($"請求書 {billedNo} に合算済みのため取り消せません"
+            + "（先に請求書からこの検収を外すか、請求書側を削除してください）");
         return;
     }
 
@@ -374,7 +392,8 @@ decimal ResolveTaxableSalesRatePercent(long? taxCategoryId)
     return ((TaxRate)foundRate).RatePercent.Value ?? 0;
 }
 
-// この検収の合算先請求書の番号（未設定なら null）
+// この検収の合算先請求書の番号（未設定なら null）。
+// FindExistingInvoiceNo と同じく**取消済み（void）は数えない**（BUG-0130）
 string FindBilledInvoiceNo()
 {
     if (BilledInvoiceRef.Value == null) return null;
@@ -382,7 +401,9 @@ string FindBilledInvoiceNo()
     s.AddEquals(e => e.Id.Value, BilledInvoiceRef.Value);
     var found = s.ExecuteFirstOrDefault();
     if (found == null) return null;
-    return ((Invoice)found).InvoiceNo.Value;
+    var billed = (Invoice)found;
+    if (billed.Status.Value == "void") return null;
+    return billed.InvoiceNo.Value;
 }
 
 // 「請求書 INV-xx-xxx 作成済み」から、その請求書の詳細へ飛ぶ（直接請求 → 合算先の順に解決）。
