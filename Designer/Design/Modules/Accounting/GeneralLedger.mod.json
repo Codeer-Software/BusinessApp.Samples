@@ -53,8 +53,20 @@
           },
           {
             "IsParameter": false,
+            "Name": "sort_seq",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
             "Name": "entry_id",
             "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "open_label",
+            "DbType": "text",
             "DbParameterDirection": "Input"
           },
           {
@@ -377,6 +389,24 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
+      "DbColumn": "sort_seq",
+      "Placeholder": "",
+      "Format": "",
+      "IsSlider": false,
+      "OnInput": "",
+      "IsUpdateProtected": true,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "整列",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "SortSeq",
+      "IgnoreModification": true,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
       "DbColumn": "entry_id",
       "Placeholder": "",
       "Format": "",
@@ -395,12 +425,35 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
+      "DbColumn": "open_label",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "StringEmpty",
+      "ShouldTrimAfterEdit": false,
+      "AutoTab": false,
+      "IsUpdateProtected": true,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "リンク文言",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "OpenLabel",
+      "IgnoreModification": true,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
       "Style": "Text",
       "Target": "Url",
       "ShouldOpenInNewTab": false,
       "Icon": "",
-      "TitleText": "開く",
-      "TitleVariable": "",
+      "TitleText": "",
+      "TitleVariable": "OpenLabel.Value",
       "ImageResourcePath": "",
       "PageFrame": "",
       "Module": "JournalEntry",
@@ -710,7 +763,9 @@
       "HeaderTitle": "",
       "DataOnlyFields": [
         "LineNo",
-        "EntryIdRaw"
+        "SortSeq",
+        "EntryIdRaw",
+        "OpenLabel"
       ],
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,

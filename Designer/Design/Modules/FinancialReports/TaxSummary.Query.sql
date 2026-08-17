@@ -16,10 +16,29 @@
 --    UNION ALL + sort_key で最終行にする方式）。判定閾値は system_thresholds（ddl/510）。
 --
 -- 税区分未設定（NULL）の行は存在しない前提（ADR-0052。490 で移行し 500 で NOT NULL 化）。
+--
+-- 【期間の解決】(BUG-0284) 集計範囲は **必ず日付で閉じる**。旧実装は期間が空のとき日付条件を
+--   一切付けず、journal_entries.fiscal_year_id（非正規化列）だけを頼りにしていた。この列が
+--   entry_date とずれた伝票が 1 件でもあると、その期の納付税額の顔をした複数年度の合算が出る。
+--   税額はそのまま申告の数字になるので、日付で閉じる方を正とする
+--   （TrialBalance / GeneralLedger / CashBook と同じ「SQL 側で当年度へフォールバックする」流儀）。
+-- 対象年度は @fiscal_year_id（明示選択）→ 入っている方の日付 → 今日、の順で解決する。
+-- 期間（自）（至）は年度の内側にクランプする（ヘッダの「期間指定は年度の内側を絞る」を厳密化。
+--   年度だけ選んで（至）に翌年度の日付を入れても年度をはみ出さない）。
+-- 年度が 1 件も見つからないときは全期間へ縮退する（TrialBalance と同じ。空表より全件の方が異常に気づける）。
 WITH fy AS (
-  SELECT COALESCE(@fiscal_year_id,
-                  (SELECT id FROM fiscal_years
-                    WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime'))) AS id
+  SELECT start_date, end_date FROM fiscal_years
+  WHERE (@fiscal_year_id IS NOT NULL AND id = @fiscal_year_id)
+     OR (@fiscal_year_id IS NULL
+         AND date(start_date) <= date(COALESCE(@date_from, @date_to, date('now', 'localtime')))
+         AND date(end_date)   >= date(COALESCE(@date_from, @date_to, date('now', 'localtime'))))
+),
+rng AS (
+  SELECT
+    MAX(COALESCE(date(@date_from), '0001-01-01'),
+        COALESCE((SELECT date(start_date) FROM fy), '0001-01-01')) AS d_from,
+    MIN(COALESCE(date(@date_to),   '9999-12-31'),
+        COALESCE((SELECT date(end_date)   FROM fy), '9999-12-31')) AS d_to
 ),
 lines AS (
   SELECT
@@ -43,10 +62,9 @@ lines AS (
   JOIN tax_categories tc ON tc.id = l.tax_category_id
   JOIN accounts a        ON a.id  = l.account_id
   WHERE e.status = 'posted'
-    AND e.fiscal_year_id = (SELECT id FROM fy)
-    -- 期間指定は年度の内側を絞る（中間申告・月次の税額把握用。未指定なら年度まるごと）
-    AND (@date_from IS NULL OR date(e.entry_date) >= date(@date_from))
-    AND (@date_to   IS NULL OR date(e.entry_date) <= date(@date_to))
+    -- 期間指定は年度の内側を絞る（中間申告・月次の税額把握用。未指定なら年度まるごと＝rng が解決済み）
+    AND date(e.entry_date) >= (SELECT d_from FROM rng)
+    AND date(e.entry_date) <= (SELECT d_to   FROM rng)
 ),
 agg AS (
   SELECT

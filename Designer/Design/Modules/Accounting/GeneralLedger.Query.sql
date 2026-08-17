@@ -1,12 +1,26 @@
 -- 総勘定元帳（＋補助元帳: 補助科目・部門・案件の任意絞り込み）
 -- @sub_account_id / @department_id / @project_id はいずれも NULL=絞り込みなし（従来の総勘定元帳）。
--- 【残高の意味】絞り込みなし: 期首残高＋期中累計（従来どおり）。
---              絞り込みあり: opening_balances は科目単位でしか持たないため期首残高を含めず、
---              「期中発生分のみの累計」を表示する（date_from より前の期中発生分は繰越に含む）。
+--
+-- 【1 行目 = 繰越行】必ず 1 行出す（BUG-0275）。残高列は累計なので、起点が印字されていないと
+--   元帳単体で検算できず、税理士・監査法人への提出物として成立しない（市販ソフトはいずれも印字する）。
+--   繰越行の残高＝明細行の累計の起点（下の base.dmc）と同じ値なので、両者は必ず一致する。
+--   借方残の科目は借方欄に、貸方残の科目は貸方欄に出す（accounts.dc_normal）。
+--
+-- 【残高の意味】絞り込みなし: 期首残高＋期中累計。繰越行の摘要は「前期繰越」
+--              （@date_from が期首より後なら期中の途中からの繰越なので「繰越」）。
+--              絞り込みあり: opening_balances は科目単位でしか持たない（補助科目・部門別の期首が
+--              DB に無い＝BUG-0092）ため期首残高を含めず「期中発生分のみの累計」を表示する。
+--              このとき繰越行の摘要を「繰越（期首残高を含まず）」とし、0 起算であることを帳簿上で明示する
+--              （行を消すと起点が消えて元の不具合に戻り、0 と書くと期首が 0 だという嘘になる）。
 WITH yr AS (
   SELECT id, start_date FROM fiscal_years
   WHERE date(start_date) <= date(COALESCE(@date_from, @date_to, date('now', 'localtime')))
     AND date(end_date) >= date(COALESCE(@date_from, @date_to, date('now', 'localtime')))
+),
+acct AS (
+  -- 元帳は単一科目が前提（@account_id 必須）なので、表示符号はここで 1 回だけ決める
+  SELECT CASE WHEN dc_normal = 'D' THEN 1 ELSE -1 END AS dc_sign
+  FROM accounts WHERE id = @account_id
 ),
 base AS (
   SELECT
@@ -26,9 +40,43 @@ base AS (
                 AND date(e.entry_date) >= (SELECT date(start_date) FROM yr)
                 AND @date_from IS NOT NULL
                 AND date(e.entry_date) < date(@date_from)), 0) AS dmc
+),
+carry AS (
+  SELECT
+    -- 明細行の entry_date と同じ形（yyyy-MM-dd HH:mm:ss）に揃える。並び順も自然に先頭になる
+    datetime(COALESCE(@date_from, (SELECT start_date FROM yr))) AS carry_date,
+    (SELECT dc_sign FROM acct) * (SELECT dmc FROM base) AS carry_balance
 )
+
+-- 繰越行（必ず 1 行目）
 SELECT
+  0 AS sort_seq,
+  NULL AS entry_id,
+  '' AS open_label,      -- 伝票が無い行なので「開く」リンクを出さない（AnchorTag は TitleVariable が空だと消える）
+  c.carry_date AS entry_date,
+  NULL AS journal_no,
+  NULL AS line_no,
+  '' AS counter_account_name,
+  CASE
+    WHEN @sub_account_id IS NOT NULL OR @department_id IS NOT NULL OR @project_id IS NOT NULL
+      THEN '繰越（期首残高を含まず）'
+    WHEN date(c.carry_date) <= (SELECT date(start_date) FROM yr) THEN '前期繰越'
+    ELSE '繰越'
+  END AS line_description,
+  CASE WHEN (SELECT dc_sign FROM acct) = 1 THEN c.carry_balance END AS debit_amount,
+  CASE WHEN (SELECT dc_sign FROM acct) = -1 THEN c.carry_balance END AS credit_amount,
+  c.carry_balance AS balance
+FROM carry c
+WHERE @account_id IS NOT NULL
+  AND c.carry_date IS NOT NULL
+
+UNION ALL
+
+-- 明細行
+SELECT
+  1 AS sort_seq,
   e.id AS entry_id,   -- 伝票へのドリルダウン用（ADR-0065）。表示はせず OpenAnchor の IdVariable が読む
+  '開く' AS open_label,
   e.entry_date,
   e.journal_no,
   l.line_no,
@@ -41,14 +89,13 @@ SELECT
   COALESCE(l.description, e.description, '') AS line_description,
   CASE WHEN l.dc = 'D' THEN l.amount END AS debit_amount,
   CASE WHEN l.dc = 'C' THEN l.amount END AS credit_amount,
-  (SELECT dmc FROM base) * (CASE WHEN a.dc_normal = 'D' THEN 1 ELSE -1 END)
-  + SUM((CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END)
-        * (CASE WHEN a.dc_normal = 'D' THEN 1 ELSE -1 END))
-      OVER (ORDER BY date(e.entry_date), e.journal_no, l.line_no
-            ROWS UNBOUNDED PRECEDING) AS balance
+  (SELECT dc_sign FROM acct)
+  * ((SELECT dmc FROM base)
+     + SUM(CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END)
+         OVER (ORDER BY date(e.entry_date), e.journal_no, l.line_no
+               ROWS UNBOUNDED PRECEDING)) AS balance
 FROM journal_lines l
 JOIN journal_entries e ON e.id = l.journal_entry_id
-JOIN accounts a ON a.id = l.account_id
 WHERE e.status = 'posted'
   AND l.account_id = @account_id
   AND (@sub_account_id IS NULL OR l.sub_account_id = @sub_account_id)
@@ -56,4 +103,6 @@ WHERE e.status = 'posted'
   AND (@project_id IS NULL OR l.project_id = @project_id)
   AND date(e.entry_date) >= COALESCE(date(@date_from), (SELECT date(start_date) FROM yr))
   AND (@date_to IS NULL OR date(e.entry_date) <= date(@date_to))
-ORDER BY date(e.entry_date), e.journal_no, l.line_no
+
+-- 複合 SELECT の ORDER BY は先頭 SELECT の出力列名で指定する（式は使えない。ProfitLoss.Query.sql と同じ流儀）
+ORDER BY sort_seq, entry_date, journal_no, line_no

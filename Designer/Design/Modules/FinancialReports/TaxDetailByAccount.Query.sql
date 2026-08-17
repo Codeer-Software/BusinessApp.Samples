@@ -11,10 +11,25 @@
 -- 並びは科目コード順 → 税区分順。**1 つの科目に複数の税区分が縦に並ぶ**ので、
 -- 「この科目には本来どの税区分が付くはずか」を目で追える向きにしている。
 -- 金額の考え方（符号は accounts.dc_normal 基準の差引・逆側は「戻し」列）は消費税集計表と同じ。
+--
+-- 【期間の解決】(BUG-0284) 消費税集計表（TaxSummary.Query.sql）と同一。集計範囲は必ず日付で閉じる。
+--   旧実装は期間が空のとき日付条件を付けず、非正規化列 journal_entries.fiscal_year_id だけを頼りに
+--   していたため、この列が entry_date とずれた伝票があると複数年度が合算された。
+--   対象年度は @fiscal_year_id → 入っている方の日付 → 今日 の順で解決し、期間は年度の内側へクランプ、
+--   年度が見つからないときは全期間へ縮退する（TrialBalance と同じ流儀）。
 WITH fy AS (
-  SELECT COALESCE(@fiscal_year_id,
-                  (SELECT id FROM fiscal_years
-                    WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime'))) AS id
+  SELECT start_date, end_date FROM fiscal_years
+  WHERE (@fiscal_year_id IS NOT NULL AND id = @fiscal_year_id)
+     OR (@fiscal_year_id IS NULL
+         AND date(start_date) <= date(COALESCE(@date_from, @date_to, date('now', 'localtime')))
+         AND date(end_date)   >= date(COALESCE(@date_from, @date_to, date('now', 'localtime'))))
+),
+rng AS (
+  SELECT
+    MAX(COALESCE(date(@date_from), '0001-01-01'),
+        COALESCE((SELECT date(start_date) FROM fy), '0001-01-01')) AS d_from,
+    MIN(COALESCE(date(@date_to),   '9999-12-31'),
+        COALESCE((SELECT date(end_date)   FROM fy), '9999-12-31')) AS d_to
 ),
 lines AS (
   SELECT
@@ -33,9 +48,8 @@ lines AS (
   JOIN tax_categories tc ON tc.id = l.tax_category_id
   JOIN accounts a        ON a.id  = l.account_id
   WHERE e.status = 'posted'
-    AND e.fiscal_year_id = (SELECT id FROM fy)
-    AND (@date_from       IS NULL OR date(e.entry_date) >= date(@date_from))
-    AND (@date_to         IS NULL OR date(e.entry_date) <= date(@date_to))
+    AND date(e.entry_date) >= (SELECT d_from FROM rng)
+    AND date(e.entry_date) <= (SELECT d_to   FROM rng)
     AND (@tax_category_id IS NULL OR tc.id = @tax_category_id)
     AND (@account_id      IS NULL OR a.id  = @account_id)
 )
