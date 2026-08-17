@@ -464,7 +464,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FileFieldDesign"
     },
     {
-      "Text": "レシートを読む",
+      "Text": "AI で読み取る",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -684,6 +684,36 @@
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Extras.Designs.AITextAnalyzerFieldDesign"
+    },
+    {
+      "Text": "レシートの画像を選ぶと、領収書として添付したうえで下の項目を自動で埋めます",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "HintAi",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "AI を使わないときは、下の「領収書」から直接添付します（添付は 1 明細につき 1 つ）",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "HintReceipt",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -764,7 +794,7 @@
                 "CanResize": false,
                 "AllowOverflow": false,
                 "Border": "None",
-                "Width": 130,
+                "Width": 150,
                 "HorizontalAlignment": "End"
               },
               {
@@ -794,8 +824,50 @@
                 "Width": 260
               },
               {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": true,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None",
+                "Width": 150
+              },
+              {
                 "Layout": {
-                  "FieldName": "LblReceipt",
+                  "FieldName": "HintAi",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
@@ -816,8 +888,127 @@
                 "VerticalAlignment": "Middle",
                 "CanResize": false,
                 "AllowOverflow": false,
+                "Border": "None"
+              },
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": true,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
                 "Border": "None",
-                "Width": 110,
+                "Width": 150
+              },
+              {
+                "Layout": {
+                  "FieldName": "HintReceipt",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "VerticalAlignment": "Middle",
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              },
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": true,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "LblReceipt",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "VerticalAlignment": "Top",
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None",
+                "Width": 150,
                 "HorizontalAlignment": "End"
               },
               {
@@ -840,11 +1031,11 @@
                   "RightColor": "",
                   "BottomColor": ""
                 },
-                "VerticalAlignment": "Middle",
+                "VerticalAlignment": "Top",
                 "CanResize": false,
                 "AllowOverflow": false,
                 "Border": "None",
-                "Width": 260
+                "Width": 320
               },
               {
                 "IgnoreContentWidth": false,
@@ -897,7 +1088,7 @@
                 "CanResize": false,
                 "AllowOverflow": false,
                 "Border": "None",
-                "Width": 130,
+                "Width": 150,
                 "HorizontalAlignment": "End"
               },
               {
@@ -1030,7 +1221,7 @@
                 "CanResize": false,
                 "AllowOverflow": false,
                 "Border": "None",
-                "Width": 130,
+                "Width": 150,
                 "HorizontalAlignment": "End"
               },
               {
@@ -1163,7 +1354,7 @@
                 "CanResize": false,
                 "AllowOverflow": false,
                 "Border": "None",
-                "Width": 130,
+                "Width": 150,
                 "HorizontalAlignment": "End"
               },
               {
@@ -1296,7 +1487,7 @@
                 "CanResize": false,
                 "AllowOverflow": false,
                 "Border": "None",
-                "Width": 130,
+                "Width": 150,
                 "HorizontalAlignment": "End"
               },
               {
@@ -1376,7 +1567,7 @@
                 "CanResize": false,
                 "AllowOverflow": false,
                 "Border": "None",
-                "Width": 130,
+                "Width": 150,
                 "HorizontalAlignment": "End"
               },
               {
@@ -1482,7 +1673,7 @@
                           "CanResize": false,
                           "AllowOverflow": false,
                           "Border": "None",
-                          "Width": 130,
+                          "Width": 150,
                           "HorizontalAlignment": "End"
                         },
                         {
@@ -1562,7 +1753,7 @@
                           "CanResize": false,
                           "AllowOverflow": false,
                           "Border": "None",
-                          "Width": 130,
+                          "Width": 150,
                           "HorizontalAlignment": "End"
                         },
                         {
@@ -1642,7 +1833,7 @@
                           "CanResize": false,
                           "AllowOverflow": false,
                           "Border": "None",
-                          "Width": 130,
+                          "Width": 150,
                           "HorizontalAlignment": "End"
                         },
                         {
@@ -1820,7 +2011,7 @@
                           "CanResize": false,
                           "AllowOverflow": false,
                           "Border": "None",
-                          "Width": 130,
+                          "Width": 150,
                           "HorizontalAlignment": "End"
                         },
                         {

@@ -301,14 +301,14 @@ void UpdateLineButtons()
 
     if (isExisting)
     {
-        EntryLabel.Text = "2. 明細を編集する";
-        EntryHint.Text = "下のリストから読み込んだ明細です。直して「この明細を更新」を押してください";
+        EntryLabel.Text = "この明細を編集";
+        EntryHint.Text = "下の一覧から読み込んだ明細です。直して「この明細を更新」を押してください";
         CancelEditButton.Text = "編集をやめる";
     }
     else
     {
-        EntryLabel.Text = "2. 明細を入力する";
-        EntryHint.Text = "レシート 1 枚ぶんを入力して「この内容で明細に追加」を押すと、下のリストに積まれます。領収書を選ぶと AI 読み取りが使えます";
+        EntryLabel.Text = "レシート 1 枚ぶんを入力";
+        EntryHint.Text = "入力したら「この内容で明細に追加」を押します。下の一覧に積まれます";
         CancelEditButton.Text = "入力内容をクリア";
     }
     LinesHint.IsVisible = canEdit;
