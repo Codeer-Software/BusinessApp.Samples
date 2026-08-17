@@ -760,10 +760,38 @@
     "ModuleName": ""
   },
   "DataWriteCondition": {
-    "ModuleName": ""
+    "ModuleName": "",
+    "Condition": {
+      "IsOrMatch": false,
+      "IsNot": false,
+      "Children": [
+        {
+          "SearchTargetVariable": "Creator.Value",
+          "Comparison": "Equal",
+          "Variable": "CurrentUser.Id.Value",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldVariableMatchCondition"
+        }
+      ],
+      "Name": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+    }
   },
   "DataReadCondition": {
-    "ModuleName": ""
+    "ModuleName": "",
+    "Condition": {
+      "IsOrMatch": false,
+      "IsNot": false,
+      "Children": [
+        {
+          "SearchTargetVariable": "Creator.Value",
+          "Comparison": "Equal",
+          "Variable": "CurrentUser.Id.Value",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldVariableMatchCondition"
+        }
+      ],
+      "Name": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+    }
   },
   "DetailLayouts": {
     "entry": {
