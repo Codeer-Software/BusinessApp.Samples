@@ -5,7 +5,7 @@ scope: 全体
 audience: [開発]
 updated: 2026-08-16
 supersedes: []
-related: []
+related: [docs/README.md, docs/00_ドキュメント規約.md, Designer/CLAUDE.md, Designer/Project.md]
 ---
 # 財務会計アプリ 自律構築ミッション（CLAUDE.md）
 
@@ -16,9 +16,11 @@ related: []
 ## 0. 着手前に必ず読む（順番厳守）
 
 1. **本ファイル全体**（ミッション・スコープ・運用ルール）
-2. **`Designer/CLAUDE.md`** — CLB デザインワークスペースの運用ルール（ツールの使い方・ファイル配置・検証手順・スコープ規律）
-3. **`Designer/ClaudeCodeForDesigner/CLAUDE.md`** — **CLB 仕様リファレンス（通読）**。フィールド型・レイアウト・スクリプト・`designcheck`/`sql`/`rename-*` CLI・生成リファレンス（`_defaults/`・`_samples/`・`_specs/`・`_field_catalog.md`・`_script_catalog.md`）の索引を兼ねる。**このフォルダ全体はデザイナが `ai-refresh` で再生成する生成物**（Git 追跡外・手で編集しない）
-4. 補助として **CLB Web マニュアル**（人間向け解説。`ClaudeCodeForDesigner/` と対になる内容）: https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Manual
+2. **`docs/README.md`** — **計画・仕様ドキュメントの唯一の入口**。「何をするときに何を読むか」のタスク起点索引。
+   個別の文書名を本書に列挙しない（腐るため）。**必要な文書はここから引く**
+3. **`Designer/CLAUDE.md`** — CLB デザインワークスペースの運用ルール（ツールの使い方・ファイル配置・検証手順・スコープ規律）
+4. **`Designer/ClaudeCodeForDesigner/CLAUDE.md`** — **CLB 仕様リファレンス（通読）**。フィールド型・レイアウト・スクリプト・`designcheck`/`sql`/`rename-*` CLI・生成リファレンス（`_defaults/`・`_samples/`・`_specs/`・`_field_catalog.md`・`_script_catalog.md`）の索引を兼ねる。**このフォルダ全体はデザイナが `ai-refresh` で再生成する生成物**（Git 追跡外・手で編集しない）
+5. 補助として **CLB Web マニュアル**（人間向け解説。`ClaudeCodeForDesigner/` と対になる内容）: https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Manual
 
 設計作業の実体は **`Designer/Design/`**（`app.clprj` を持つデザインプロジェクト）。ここに `Modules/` `PageFrames/` `Resources/` を作る。
 
@@ -73,7 +75,9 @@ related: []
 4. **検証する**（§5）: `designcheck` → `sql` で DB 整合 → 必要ならデプロイしてブラウザ実機確認
    - **CLB の改善に気づいたら都度 `docs/12_CLB改善提案/` に記録する**（回避策を作った・マニュアルに無い事実を実測した・静かな失敗を踏んだ、が記録タイミング。運用ルールは同 README）
 5. **コミットする**: **Conventional Commits**。意味のある単位で。**ローカル Git のみ（リモート無し）**。ブランチの切り方・手戻りは自由
-6. **記録する**: 進捗台帳・`Project.md`・仕様書を更新
+6. **記録する**: 進捗台帳・`Project.md`・仕様書を更新。**機能を変えたら `python Designer/tools/lint_docs.py --impact HEAD~1` を流し、
+   影響する体験シナリオの①層（導線・画面名・項目名）を同じコミットで直す**（規約 `docs/00_ドキュメント規約.md` §6-2）。
+   文書を追加・改名したら `docs/README.md` の索引を、ADR を起こしたら `docs/decisions/README.md` を更新する（食い違いは lint が error で出す）
 
 ### Phase 0 成果物（最初の実行で必ず作る）
 Fable が**自分でドキュメントを作成・管理**する。計画・仕様ドキュメントの置き場所は **`docs/` に統一**する:
@@ -85,6 +89,9 @@ Fable が**自分でドキュメントを作成・管理**する。計画・仕�
 - `Designer/Project.md` を埋める（データソース・命名・業務ルール・既存資産）
 
 ### ドキュメント運用
+- **規約は `docs/00_ドキュメント規約.md`。文書を書く・直す前に必ず読む。** 要点だけ挙げると:
+  全 `.md` にフロントマター（`status` が肝——`current` 以外は読まなくてよい）／**ヘッダに更新履歴を積まない**
+  （経緯は ADR・日付は `updated`・本文は現在形に書き換える）／「後で直す」は保留リストへ／1 文書 250 行が目安。
 - 仕様・設計・意思決定は**都度ドキュメント化**する（上司・顧客への説明資料の下地を兼ねる）。
 - 本 CLAUDE.md と `Project.md` は、方針が固まったら Fable 自身が更新してよい（ミッションの芯＝§1 は変えない）。
 - ユーザーとのやり取りは**日本語**で行う。
@@ -96,6 +103,7 @@ Fable が**自分でドキュメントを作成・管理**する。計画・仕�
 | デザイン読込妥当性 | `designcheck` CLI | 作成・編集の都度。`findingCount` が 0 になるまで直す。詳細は `Designer/ClaudeCodeForDesigner/CLAUDE.md` |
 | DB（DDL・投入・確認） | `sql` CLI | モジュールを作ったらテーブルも用意する。主キーは INTEGER 自動採番が原則 |
 | 稼働アプリへの反映（デプロイ） | **`Designer/tools/deploy.ps1` を実行**（`Designer/Design/` 一式を zip 化 → `LocalData\designs\App.zip` に配置） | `FileWatcher` が `*.zip` を検知して hot-reload（GUI「送信」の代替）。zip 内のパス区切りは `\`（デザイナ独自の詰め方・deploy.ps1 が再現） |
+| ドキュメント規約 | `python Designer/tools/lint_docs.py`（error 0 が期待値）。`--impact HEAD~1` で影響する体験シナリオ、`--stale` で腐った台本、`--stats` で指標 | 文書を触った回・機能を変えた回に流す。規約は `docs/00_ドキュメント規約.md` |
 | 画面・挙動 | サーバ起動（`http://localhost:5085`）→ ブラウザでスクショ／操作 | `designcheck` で拾えない意味的バグ（合計計算・状態による出し分け等）を実際に見て潰す |
 
 **検証系は設定済み（この環境で確認済み）**:
@@ -110,16 +118,17 @@ Fable が**自分でドキュメントを作成・管理**する。計画・仕�
 - **AI 連携**: プロバイダ切替式（`AISettings.Provider`: Mock／Claude／AzureOpenAI。Server の `Services/AI/`。AzureOpenAI パスは Extras.Server 0.5.0 の標準 `AITextAnalyzeService` へ委譲）。実キーは .NET User Secrets（ADR-0024）。Claude API を使う実装では**最新モデル（例: Claude Opus 4.8）**を使い、サーバ経由で実装する。実装前に `claude-api` の情報を確認すること。
 - **CLB バージョン**: ランタイム・デザイナとも 1.3.18（2026-08-15 に 1.3.16 から更新・ADR-0058。Extras 0.5.0／Designer.Standard 0.6.0／ApexCharts 0.25.3。`HorizontalAlignment` は列挙 `Start/Center/End/Stretch`——旧値 `Left/Right` は**エラーにならず既定 Start に化ける**ので使用禁止）。ソリューションは `BusinessApp.slnx`＋`BusinessApp/`（旧 AccountingApp ソリューションは廃止）。
 
-## 7. 参照ドキュメント（索引）
+## 7. 参照ドキュメント
+
+**計画・仕様の文書は `docs/README.md`（タスク起点の索引）から引く。本書に文書名を列挙しない**——
+列挙すると必ず索引と食い違い、どちらが正か分からなくなる。文書の書き方・`status` の意味・
+腐り防止の約束は `docs/00_ドキュメント規約.md`。
+
+docs の外にあるものだけ、ここに置く。
 
 | ドキュメント | 用途 |
 |---|---|
 | `Designer/CLAUDE.md` | ワークスペース運用ルール（着手前に必読） |
-| `Designer/ClaudeCodeForDesigner/CLAUDE.md` | **CLB 仕様リファレンス（通読）** |
-| `Designer/ClaudeCodeForDesigner/Docs/` | AppPatterns／各 Guidelines |
-| `Designer/ClaudeCodeForDesigner/_specs/` | フレームワーク仕様リファレンス（ModuleDesign／Layouts／Scripts 等） |
-| `Designer/ClaudeCodeForDesigner/_field_catalog.md`・`_script_catalog.md` | フィールド型・スクリプトオブジェクトの動的生成カタログ（真実の源） |
-| `Designer/ClaudeCodeForDesigner/_samples/` | 複製元の正典（PatternShowcase／PatternShowcaseAuth 等） |
-| `Designer/ClaudeCodeForDesigner/_defaults/` | 全デザイン型の既定 JSON |
-| `Designer/Project.md` | プロジェクト固有ルール（Fable が育てる） |
+| `Designer/Project.md` | プロジェクト固有ルール（DB・命名・レイアウト規約・デプロイ手順。Fable が育てる） |
+| `Designer/ClaudeCodeForDesigner/CLAUDE.md` | **CLB 仕様リファレンス（通読）**。`Docs/`（AppPatterns・Guidelines）・`_specs/`・`_field_catalog.md`／`_script_catalog.md`・`_samples/`・`_defaults/` の索引を兼ねる |
 | CLB Web マニュアル | 人間向け解説: https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Manual |
