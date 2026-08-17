@@ -19,6 +19,19 @@ SET creator = (
 )
 WHERE creator IS NULL;
 
+-- 「編集中の明細」（ADR-0066 の 4 ブロック構成のブロック 2）は、確定するまで
+-- expense_request_id が NULL のまま持たれる（ddl/603）。上の UPDATE は親を辿るので届かない。
+-- **この行が読めなくなると入力フォームが静かに空になる**（CLB は権限不成立の埋め込み子を
+-- エラーにせず空にするため）ので、expense_request.editing_line_id から逆に辿って埋める。
+UPDATE expense_request_lines
+SET creator = (
+    SELECT er.creator
+    FROM expense_request er
+    WHERE er.editing_line_id = expense_request_lines.id
+)
+WHERE creator IS NULL
+  AND EXISTS (SELECT 1 FROM expense_request er WHERE er.editing_line_id = expense_request_lines.id);
+
 -- 行レベル認可の絞り込みに使うので索引を張る
 CREATE INDEX IF NOT EXISTS idx_expense_request_lines_creator
     ON expense_request_lines (creator);
