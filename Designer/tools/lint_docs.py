@@ -301,6 +301,8 @@ def lint(root: str):
                         % line.strip()[:60], lineno)
                     break
             for lineno, line in prose:
+                if "保留リスト" in line:
+                    continue  # 保留リストへの誘導そのものは違反ではない
                 if DEFER_RE.search(line):
                     add(SEV_WARN, rel, "current に先送りの記述（規約 §4-3・保留リストへ）: %s"
                         % line.strip()[:60], lineno)
