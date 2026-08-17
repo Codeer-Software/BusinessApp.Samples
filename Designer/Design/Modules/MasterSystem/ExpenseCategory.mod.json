@@ -63,7 +63,7 @@
         "SortConditions": [],
         "SortFieldVariable": "Code.Value",
         "SortDescending": false,
-        "ModuleName": "Account",
+        "ModuleName": "AccountLookup",
         "Condition": {
           "IsOrMatch": false,
           "IsNot": false,
