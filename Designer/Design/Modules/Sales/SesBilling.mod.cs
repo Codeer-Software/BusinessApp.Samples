@@ -297,6 +297,15 @@ void Run_OnClick()
     cs.AddEquals(c => c.IsActive.Value, true);
     var tcat = cs.ExecuteFirstOrDefault();
     if (tcat != null) { salesTaxCatId = ((TaxCategory)tcat).Id.Value; }
+    // 科目と同じく**無ければ止める**。null のまま進むと税額 0 円の請求書と、
+    // 売上行が「対象外」に落ちた仕訳（MarkRemainingLinesOutOfScope）が無言で大量に作られ、
+    // 消費税集計から丸ごと消える。SES 精算は一括生成なので被害が一度に広がる
+    if (salesTaxCatId == null)
+    {
+        Toaster.Error("売上の既定税区分（税区分マスタの「既定用途＝売上」かつ有効）がありません。"
+            + "税区分マスタを確認してから実行してください");
+        return;
+    }
 
     // 押下時点の最新データでプランを再構築（プレビュー表示が古くてもここが正）
     BuildPlan();

@@ -86,12 +86,27 @@ void CarryOver_OnClick()
     NextYearId.Value = typedNext.Id.Value;
     var ret = this.Submit();
     NextYearId.Value = null;
-    if (ret == false)
+    // null（送信データなし）は「Update が起きていない＝ CarryOverSql が発火していない」を意味する。
+    // false と同じく失敗として扱う（成功と報せてしまうと、繰越されていない期首で決算を進めてしまう）
+    if (ret != true)
     {
         Toaster.Error("繰越に失敗しました");
         return;
     }
-    this.Submit();
+
+    // 2 回目は「NextYearId を NULL に戻す」後始末。**ここを検査しないと詰む**——
+    // 失敗して next_year_id が DB に残ると、CarryOverSql は Timing: Update なので
+    // **以後この年度を保存するたびに繰越 SQL が発火し、翌期の期首残高を無言で洗い替える**。
+    // 年度名を直した・状態を締め済みにした、といった無関係な保存でも起きるうえ、
+    // next_year_id は画面に出ないので気づく手立てが無い
+    var retClear = this.Submit();
+    if (retClear != true)
+    {
+        Toaster.Error($"{typedNext.Name.Value} への繰越は完了しましたが、繰越フラグの解除に失敗しました。"
+            + "このままこの年度を保存すると、そのたびに翌期の期首残高が繰越値で上書きされます。"
+            + "画面を開き直して保存し直し、解除されたことを確認してください");
+        return;
+    }
     Toaster.Success($"{typedNext.Name.Value} への繰越が完了しました");
 }
 
