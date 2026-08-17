@@ -31,6 +31,12 @@
           },
           {
             "IsParameter": false,
+            "Name": "sort_seq",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
             "Name": "entry_date",
             "DbType": "DATE",
             "DbParameterDirection": "Input"
@@ -144,6 +150,24 @@
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateFieldDesign"
+    },
+    {
+      "DbColumn": "sort_seq",
+      "Placeholder": "",
+      "Format": "",
+      "IsSlider": false,
+      "OnInput": "",
+      "IsUpdateProtected": true,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "整列",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "SortSeq",
+      "IgnoreModification": true,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
       "DbColumn": "entry_date",
@@ -350,7 +374,8 @@
     "": {
       "HeaderTitle": "",
       "DataOnlyFields": [
-        "LineNo"
+        "LineNo",
+        "SortSeq"
       ],
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "",

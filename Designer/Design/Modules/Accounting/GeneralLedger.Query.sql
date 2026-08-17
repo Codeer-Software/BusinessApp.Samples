@@ -12,10 +12,20 @@
 --              DB に無い＝BUG-0092）ため期首残高を含めず「期中発生分のみの累計」を表示する。
 --              このとき繰越行の摘要を「繰越（期首残高を含まず）」とし、0 起算であることを帳簿上で明示する
 --              （行を消すと起点が消えて元の不具合に戻り、0 と書くと期首が 0 だという嘘になる）。
-WITH yr AS (
-  SELECT id, start_date FROM fiscal_years
+--
+-- 【期間が空のとき】日付（自）／（至）を消して検索されたら、当年度（＝入っている方の日付、
+--   どちらも空なら今日を含む会計年度）の期首／期末で補う（BUG-0285）。
+--   （至）を「無期限」と解釈すると翌期の仕訳まで累計残高に載り、同じ操作で帳票ごとに違う期間が出る。
+--   TrialBalance.Query.sql / CashBook.Query.sql と同じ fy / rng の流儀。
+WITH fy AS (
+  SELECT id, start_date, end_date FROM fiscal_years
   WHERE date(start_date) <= date(COALESCE(@date_from, @date_to, date('now', 'localtime')))
-    AND date(end_date) >= date(COALESCE(@date_from, @date_to, date('now', 'localtime')))
+    AND date(end_date)   >= date(COALESCE(@date_from, @date_to, date('now', 'localtime')))
+),
+rng AS (
+  SELECT
+    COALESCE(date(@date_from), (SELECT date(start_date) FROM fy), '0001-01-01') AS d_from,
+    COALESCE(date(@date_to),   (SELECT date(end_date)   FROM fy), '9999-12-31') AS d_to
 ),
 acct AS (
   -- 元帳は単一科目が前提（@account_id 必須）なので、表示符号はここで 1 回だけ決める
@@ -25,7 +35,7 @@ acct AS (
 base AS (
   SELECT
     COALESCE((SELECT SUM(ob.balance) FROM opening_balances ob
-              WHERE ob.fiscal_year_id IN (SELECT id FROM yr) AND ob.account_id = @account_id), 0)
+              WHERE ob.fiscal_year_id IN (SELECT id FROM fy) AND ob.account_id = @account_id), 0)
     * (CASE WHEN @sub_account_id IS NULL AND @department_id IS NULL AND @project_id IS NULL
             THEN 1 ELSE 0 END)
     +
@@ -37,14 +47,13 @@ base AS (
                 AND (@sub_account_id IS NULL OR l.sub_account_id = @sub_account_id)
                 AND (@department_id IS NULL OR l.department_id = @department_id)
                 AND (@project_id IS NULL OR l.project_id = @project_id)
-                AND date(e.entry_date) >= (SELECT date(start_date) FROM yr)
-                AND @date_from IS NOT NULL
-                AND date(e.entry_date) < date(@date_from)), 0) AS dmc
+                AND date(e.entry_date) >= (SELECT date(start_date) FROM fy)
+                AND date(e.entry_date) <  (SELECT d_from FROM rng)), 0) AS dmc
 ),
 carry AS (
   SELECT
     -- 明細行の entry_date と同じ形（yyyy-MM-dd HH:mm:ss）に揃える。並び順も自然に先頭になる
-    datetime(COALESCE(@date_from, (SELECT start_date FROM yr))) AS carry_date,
+    datetime(COALESCE(@date_from, (SELECT start_date FROM fy))) AS carry_date,
     (SELECT dc_sign FROM acct) * (SELECT dmc FROM base) AS carry_balance
 )
 
@@ -60,7 +69,7 @@ SELECT
   CASE
     WHEN @sub_account_id IS NOT NULL OR @department_id IS NOT NULL OR @project_id IS NOT NULL
       THEN '繰越（期首残高を含まず）'
-    WHEN date(c.carry_date) <= (SELECT date(start_date) FROM yr) THEN '前期繰越'
+    WHEN date(c.carry_date) <= (SELECT date(start_date) FROM fy) THEN '前期繰越'
     ELSE '繰越'
   END AS line_description,
   CASE WHEN (SELECT dc_sign FROM acct) = 1 THEN c.carry_balance END AS debit_amount,
@@ -101,8 +110,8 @@ WHERE e.status = 'posted'
   AND (@sub_account_id IS NULL OR l.sub_account_id = @sub_account_id)
   AND (@department_id IS NULL OR l.department_id = @department_id)
   AND (@project_id IS NULL OR l.project_id = @project_id)
-  AND date(e.entry_date) >= COALESCE(date(@date_from), (SELECT date(start_date) FROM yr))
-  AND (@date_to IS NULL OR date(e.entry_date) <= date(@date_to))
+  AND date(e.entry_date) >= (SELECT d_from FROM rng)
+  AND date(e.entry_date) <= (SELECT d_to FROM rng)
 
 -- 複合 SELECT の ORDER BY は先頭 SELECT の出力列名で指定する（式は使えない。ProfitLoss.Query.sql と同じ流儀）
 ORDER BY sort_seq, entry_date, journal_no, line_no
