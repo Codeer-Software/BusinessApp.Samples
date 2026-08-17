@@ -44,6 +44,14 @@ void Detail_OnAfterInit()
         RestoreInputState();
         inLinesHandler = false;
     }
+    // 開いた時点の「科目と税区分の組」を控えに写す（BUG-0067）。これをしないと控えが空のままで、
+    // 保存済みの下書きを開き直してから科目を変えたときに旧科目の税区分が残る
+    if (!this.IsNewData)
+    {
+        inLinesHandler = true;
+        SeedTaxCategoryTrace();
+        inLinesHandler = false;
+    }
     UpdateTotals();
 }
 
@@ -120,10 +128,32 @@ void Lines_OnDataChanged()
     inLinesHandler = false;
 }
 
-// 新規明細行への既定値: 貸借は借方、科目選択時に科目マスタの既定税区分と内税を設定
+// 新規明細行への既定値: 貸借は借方、科目選択時に科目マスタの既定税区分と内税を設定。
+//
+// **税区分は科目に追従する。人が手で選んだ税区分は、その行の科目が変わるまで保持する**（BUG-0067）。
+// 旧実装は `TaxCategory != null` なら一律に素通りしていたため、消耗品費を選んで「課税仕入 10%」が
+// 自動で入ったあと同じ行の科目を普通預金に変えても税区分が残り、確定時に `RegenerateTaxLines` が
+// 現預金を勝手に税抜化していた。借方合計と貸方合計は揃うので貸借エラーも出ず、実測で消費税集計表の
+// 課税仕入を 1,000 円ぶん水増しした（伝票 No.94）。
+//
+// 実現のために、行ごとに「最後に見た科目と税区分の組」を 2 つの非 DB 項目に控える。
+//   `TaxCategoryAutoFrom`  … そのときの科目 id
+//   `TaxCategoryAutoValue` … そのときの税区分 id
+// 判定はこの 3 通りだけ:
+//   (1) 控えの科目 ≠ 現在の科目 → **科目が変わった。税区分を科目の既定で入れ直す**（補助科目も落とす）
+//   (2) 控えの科目 = 現在の科目 かつ 控えの税区分 ≠ 現在の税区分 → **人が税区分を選び直した。
+//       値はそのまま尊重し、控えだけ現在値へ進める**（次に科目が変わるまで保持される）
+//   (3) それ以外 → 何もしない
+//
+// **DB を引くのは (1) と「税区分が未設定」のときだけ。** 控えの比較は文字列同士なので通信が要らない。
+// `Lines_OnDataChanged` はセル編集ごと、かつスクリプトの代入ごとにも発火する（ADR-0053）ため、
+// ここで無条件に `ModuleSearcher` を回すと一括起票が数十往復に膨らむ（CommonMistakes #56）。
+//
+// 控えは保存済み伝票を開いた直後に `SeedTaxCategoryTrace()` が現在値で埋める。
+// これにより「下書きを開き直してから科目を変える」経路でも税区分が追従する。
 void ApplyLineDefaults()
 {
-    var missingAccountIds = new List<object>();
+    var staleAccountIds = new List<object>();
     foreach (var row in Lines.Rows)
     {
         var l = (JournalLine)row;
@@ -132,35 +162,80 @@ void ApplyLineDefaults()
         {
             l.Dc.Value = "D";
         }
-        if (l.Account.Value != null && l.TaxCategory.Value == null)
+        if (l.Account.Value == null) continue;
+
+        var accountKey = $"{l.Account.Value}";
+        if (l.TaxCategory.Value != null && $"{l.TaxCategoryAutoFrom.Value}" == accountKey)
         {
-            missingAccountIds.Add(l.Account.Value);
+            // (2)(3): 科目は変わっていない。税区分が動いていれば控えを進めるだけ（DB 不要）
+            l.TaxCategoryAutoValue.Value = $"{l.TaxCategory.Value}";
+            continue;
+        }
+        // (1) 科目が変わった／税区分が未設定。既定を引き直す対象
+        if (!staleAccountIds.Contains(l.Account.Value))
+        {
+            staleAccountIds.Add(l.Account.Value);
         }
     }
-    if (missingAccountIds.Count == 0) return;
+    if (staleAccountIds.Count == 0) return;
 
     var s = new ModuleSearcher<Account>();
-    s.AddIn(e => e.Id.Value, missingAccountIds);
+    s.AddIn(e => e.Id.Value, staleAccountIds);
     var accounts = s.Execute();
+
     foreach (var row in Lines.Rows)
     {
         var l = (JournalLine)row;
         if (l.IsTaxLine.Value == true) continue;
         if (l.Account.Value == null) continue;
-        if (l.TaxCategory.Value != null) continue;
+
+        var accountKey = $"{l.Account.Value}";
+        if (l.TaxCategory.Value != null && $"{l.TaxCategoryAutoFrom.Value}" == accountKey) continue;
+
+        object defaultTaxCategory = null;
         foreach (var a in accounts)
         {
             var acc = (Account)a;
-            if (acc.Id.Value == l.Account.Value)
+            if ($"{acc.Id.Value}" == accountKey)
             {
-                l.TaxCategory.Value = acc.DefaultTaxCategory.Value;
-                if (l.TaxCategory.Value != null && (l.TaxInputMode.Value == null || l.TaxInputMode.Value == ""))
-                {
-                    l.TaxInputMode.Value = "inclusive";
-                }
+                defaultTaxCategory = acc.DefaultTaxCategory.Value;
                 break;
             }
         }
+        // 科目マスタの既定は ADR-0052 以降すべて埋まっている（ddl/490）。万一 NULL なら
+        // 触らずに Submit 直前の保険（MarkRemainingLinesOutOfScope）へ委ねる
+        if (defaultTaxCategory == null) continue;
+
+        // 科目が変わった行は補助科目も前の科目のものが残っているので落とす
+        // （SubAccount の候補は AccountId で絞られるが、既存値はクリアされないため）
+        if ($"{l.TaxCategoryAutoFrom.Value}" != "" && $"{l.TaxCategoryAutoFrom.Value}" != accountKey)
+        {
+            l.SubAccount.Value = null;
+        }
+
+        l.TaxCategory.Value = defaultTaxCategory;
+        if (l.TaxInputMode.Value == null || l.TaxInputMode.Value == "")
+        {
+            l.TaxInputMode.Value = "inclusive";
+        }
+        l.TaxCategoryAutoFrom.Value = accountKey;
+        l.TaxCategoryAutoValue.Value = $"{defaultTaxCategory}";
+    }
+}
+
+// 保存済み伝票を開いたときの控えの初期化。現在の「科目と税区分の組」をそのまま控えに写す。
+// ＝**開いた時点の税区分は人が決めたものとして尊重し、科目を変えたときだけ追従させる**。
+// これをしないと控えが空のままになり、下書きを開き直してからの科目変更で BUG-0067 が再現する。
+void SeedTaxCategoryTrace()
+{
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.IsTaxLine.Value == true) continue;
+        if (l.Account.Value == null) continue;
+        if (l.TaxCategory.Value == null) continue;
+        l.TaxCategoryAutoFrom.Value = $"{l.Account.Value}";
+        l.TaxCategoryAutoValue.Value = $"{l.TaxCategory.Value}";
     }
 }
 
