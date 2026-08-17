@@ -115,13 +115,18 @@ void BuildPlan()
         }
 
         // 対象月の実績時間（分単位。型付き Year/Month 比較）
-        var ts = new ModuleSearcher<TimeEntry>();
+        // **TimeEntryAdmin で引く**（同じ time_entries の経理用モジュール。BUG-0217）。
+        // 一般社員向けの TimeEntry は「本人の行だけ」を読取条件で閉じており、
+        // ここで使うとログイン中の経理担当者自身の工数しか集まらず精算額が過少になる。
+        // SES 精算画面自体が経理限定（UserReadCondition: HasAccountingAccess）なので、
+        // 同じゲートを持つ TimeEntryAdmin なら必ず読める
+        var ts = new ModuleSearcher<TimeEntryAdmin>();
         ts.AddEquals(t => t.ProjectRef.Value, p.Id.Value);
         var entries = ts.Execute();
         var minutes = 0;
         foreach (var tm in entries)
         {
-            var t = (TimeEntry)tm;
+            var t = (TimeEntryAdmin)tm;
             if (t.WorkDate.Value == null) continue;
             if (t.WorkDate.Value.Year != monthFirst.Year) continue;
             if (t.WorkDate.Value.Month != monthFirst.Month) continue;
@@ -512,39 +517,14 @@ void CreatePendingReceiptFor(object invoiceId, string invoiceNo)
     if (ok != true) { Toaster.Warn($"入金予定の自動作成に失敗しました（{invoiceNo}。入金画面から手動で登録してください）"); }
 }
 
-// 請求書番号採番: INV-{西暦下2桁}-{連番3桁}（Invoice / RecurringRun と同一ロジック・.Value 規約）
+// 請求書番号採番の正典は Invoice.NextInvoiceNo（BUG-0133 で一本化）。ここは呼ぶだけ
 string NextInvoiceNo()
 {
-    var prefix = $"INV-{DateTime.Today:yy}-";
-    var s = new ModuleSearcher<Invoice>();
-    s.OrderByDescending(e => e.InvoiceNo.Value);
-    s.Limit(1);
-    var last = s.ExecuteFirstOrDefault();
-    var seq = 1;
-    if (last != null)
-    {
-        var lastNo = ((Invoice)last).InvoiceNo.Value;
-        if (lastNo != null && lastNo.StartsWith(prefix))
-        {
-            seq = int.Parse(lastNo.Substring(prefix.Length)) + 1;
-        }
-    }
-    return $"{prefix}{seq:000}";
+    return new Invoice().NextInvoiceNo();
 }
 
-// 伝票番号採番（年度内連番・.Value 規約）
+// 伝票採番の正典は JournalEntry.NextJournalNo（BUG-0069 で一本化）。ここは呼ぶだけ
 int NextJournalNo(object fiscalYearId)
 {
-    var ns = new ModuleSearcher<JournalEntry>();
-    ns.AddEquals(e => e.FiscalYearRef.Value, fiscalYearId);
-    ns.OrderByDescending(e => e.JournalNo.Value);
-    ns.Limit(1);
-    var last = ns.ExecuteFirstOrDefault();
-    var nextNo = 1;
-    if (last != null)
-    {
-        var typedLast = (JournalEntry)last;
-        if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
-    }
-    return nextNo;
+    return new JournalEntry().NextJournalNo(fiscalYearId);
 }

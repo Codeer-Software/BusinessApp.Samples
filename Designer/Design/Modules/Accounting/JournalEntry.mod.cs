@@ -538,19 +538,27 @@ void SaveEntry(bool post)
         }
         if (JournalNo.Value == null)
         {
-            JournalNo.Value = NextJournalNo();
+            JournalNo.Value = NextJournalNo(FiscalYearRef.Value);
         }
         Status.Value = "posted";
     }
 
     // 部門は NOT NULL。空の行を全社共通で埋める（税行は親行から継ぐ）。
     // 税行生成のあとに呼ぶ必要があるのでここに置く（ADR-0056）
-    FillMissingDepartments();
+    //
+    // ただし**収益行は全社共通で埋めない**（BUG-0266）。下書き保存で黙って埋まると、
+    // 確定時の ValidateDepartments は「部門が入っている」と見て素通りし、売上が
+    // 部門別 P/L から消える。post のときは上の ValidateDepartments が先に止めるので、
+    // ここで弾かれるのは下書き保存だけ——書きかけでも収益行の部門だけは決めてもらう
+    if (!TryFillMissingDepartments("明細の部門を選んでから保存してください")) { return; }
 
     var ret = this.Submit();
     if (ret == false)
     {
-        Toaster.Error("保存に失敗しました");
+        // 確定は伝票番号を伴う＝**他の人が同時に確定すると番号が衝突して弾かれる**（ddl/610）。
+        // 生の「UNIQUE constraint failed」を見せず、押し直せば通ることを伝える（欠番は許す方針）
+        if (post) { Toaster.Error("伝票の確定に失敗しました。ほかの人が同時に伝票を確定した可能性があります。もう一度「確定する」を押してください"); }
+        else { Toaster.Error("保存に失敗しました"); }
         if (post)
         {
             Status.Value = "draft";
@@ -587,6 +595,15 @@ void SaveEntry(bool post)
 // **ここは「入力を促す」役目を持たない。** 損益科目の行に正しい部門を入れさせるのは各画面の責任で、
 // 人が画面にいる経路（振替伝票・入出金起票・仕入先請求書・銀行の一括起票）はエラーで止める。
 // この関数は壊れたデータを DB に入れないための最後の砦であって、入力の正確さは UI が担う。
+//
+// **収益行にも全社共通を入れてしまう版**。売上が全社共通に入ると部門別 P/L に一切乗らないので
+// （BUG-0266・BUG-0061）、部門の出どころがある経路は下の TryFillMissingDepartments を使うこと。
+// こちらを残してあるのは「収益行の部門を決める材料がそもそも無い」経路のため:
+//   - JournalImport（仕訳 CSV 取込。CSV に部門列が無い。BUG-0061 と合流して別途決める）
+//   - SesBilling（SES 精算は案件・契約に部門ソースが無く、請求書の時点で全社共通を明示採用）
+// なお Receipt・VendorInvoice・FixedAsset・経費精算の各経路は収益行を作らず、
+// CashEntry・BankPosting は損益科目の行に部門が無ければ起票前に自分で止めるので、
+// どちらを使っても結果は変わらない（現状維持のためこちらのまま）。
 void FillMissingDepartments()
 {
     var hasMissing = false;
@@ -626,6 +643,52 @@ void FillMissingDepartments()
         var l = (JournalLine)row;
         if (l.Department.Value == null) { l.Department.Value = commonId; }
     }
+}
+
+// 部門を埋める版（BUG-0266）。**収益行だけは「全社共通」で埋めない。**
+// 費用行の全社共通は「配賦の受け皿」として意味があるが、売上を全社共通に寄せると
+// 部門別 P/L にその売上が一切乗らず、ペルソナの主要用途（部門別採算）が静かに壊れる。
+// journal_lines.department_id は NOT NULL なので「空のまま保存」はできない。だから
+// **収益行の部門が決まらないときは何も書き換えずに false を返し、保存自体を止める**。
+//
+// hint には「どこで部門を直せばよいか」を書く（画面ごとに直す場所が違うため）。
+// 呼び出し側は false なら Submit せずに戻ること（エラー表示はこの中で済ませている）。
+bool TryFillMissingDepartments(string hint)
+{
+    if (!ValidateRevenueDepartments(hint)) { return false; }
+    FillMissingDepartments();
+    return true;
+}
+
+// 収益科目の明細に部門が入っているかだけを見る（BUG-0266）。**何も書き換えない**——
+// 途中まで埋めてから中断すると、画面に残る伝票の費用行にだけ全社共通が入った状態になり
+// 「何が起きたのか」が読めなくなるため。税行は本体行から部門を継ぐので対象外。
+bool ValidateRevenueDepartments(string hint)
+{
+    var accountIds = new List<object>();
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.IsTaxLine.Value == true) continue;
+        if (l.Department.Value != null) continue;
+        if (l.Account.Value == null) continue;
+        if (!accountIds.Contains(l.Account.Value)) { accountIds.Add(l.Account.Value); }
+    }
+    if (accountIds.Count == 0) return true;
+
+    var s = new ModuleSearcher<Account>();
+    s.AddIn(e => e.Id.Value, accountIds);
+    var accounts = s.Execute();
+    foreach (var a in accounts)
+    {
+        var acc = (Account)a;
+        // 動的値の直接比較は避け、いったん受けてから比べる（ValidateDepartments と同じ書き方）
+        var t = acc.AccountType.Value;
+        if (t != "revenue") continue;
+        Toaster.Error($"収益科目（{acc.Name.Value}）の行に部門がありません。{hint}");
+        return false;
+    }
+    return true;
 }
 
 // 損益科目（費用・収益）の明細に部門が入っているかを検証する（ADR-0056）。
@@ -890,10 +953,22 @@ void RegenerateTaxLines()
     }
 }
 
-int NextJournalNo()
+// 伝票番号の採番【正典】（BUG-0069）。**伝票を作る全経路がここを呼ぶ**——
+// 他モジュールからは `new JournalEntry().NextJournalNo(年度Id)` で呼べる
+// （モジュールをまたいだメソッド呼び出しは実証済み。Project.md 2026-07-26）。
+//
+// 方式は「その年度の最大 journal_no + 1」。読み取りと INSERT の間にロックは無いので、
+// 同時起票では同じ番号を返しうる。**その衝突は DB の部分ユニークインデックスが弾く**
+// （ddl/610。`journal_entries(fiscal_year_id, journal_no) WHERE journal_no IS NOT NULL`）。
+// 弾かれた側は Submit() が false を返すだけで行は作られないので、押し直せば次の番号が取れる。
+// **欠番は許す**（2026-08-17 ユーザー決定。税務上、伝票番号の連続は要件ではない）。
+//
+// 引数で年度を受けるのは、他モジュールが「まだ FiscalYearRef を入れていない新しい伝票」に
+// 番号を振るため。自伝票の採番は NextJournalNo(FiscalYearRef.Value) と書く。
+int NextJournalNo(object fiscalYearId)
 {
     var s = new ModuleSearcher<JournalEntry>();
-    s.AddEquals(e => e.FiscalYearRef.Value, FiscalYearRef.Value);
+    s.AddEquals(e => e.FiscalYearRef.Value, fiscalYearId);
     s.OrderByDescending(e => e.JournalNo.Value);
     s.Limit(1);
     var last = s.ExecuteFirstOrDefault();

@@ -422,7 +422,7 @@ void Accrue_OnClick()
     je.MarkRemainingLinesOutOfScope();
     je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
     var ok = je.Submit();
-    if (ok != true) { Toaster.Error("未払計上仕訳の生成に失敗しました"); return; }
+    if (ok != true) { Toaster.Error("未払計上仕訳の生成に失敗しました。ほかの人が同時に伝票を確定した可能性があります。もう一度お試しください"); return; }
 
     // 生成仕訳の id をリンク（DB から引き直し）
     var js = new ModuleSearcher<JournalEntry>();
@@ -538,7 +538,7 @@ void Pay_OnClick()
     je.MarkRemainingLinesOutOfScope();
     je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
     var ok = je.Submit();
-    if (ok != true) { Toaster.Error("支払仕訳の生成に失敗しました"); return; }
+    if (ok != true) { Toaster.Error("支払仕訳の生成に失敗しました。ほかの人が同時に伝票を確定した可能性があります。もう一度お試しください"); return; }
 
     var js = new ModuleSearcher<JournalEntry>();
     js.AddEquals(e => e.SourceType.Value, "vendor_payment");
@@ -554,15 +554,8 @@ void Pay_OnClick()
     Toaster.Success($"支払仕訳 No.{nextNo}（{gross:#,0} 円）を生成し支払済にしました");
 }
 
+// 伝票採番の正典は JournalEntry.NextJournalNo（BUG-0069 で一本化）。ここは呼ぶだけ
 int NextJournalNo(object fiscalYearId)
 {
-    var s = new ModuleSearcher<JournalEntry>();
-    s.AddEquals(e => e.FiscalYearRef.Value, fiscalYearId);
-    s.OrderByDescending(e => e.JournalNo.Value);
-    s.Limit(1);
-    var last = s.ExecuteFirstOrDefault();
-    if (last == null) { return 1; }
-    var typedLast = (JournalEntry)last;
-    if (typedLast.JournalNo.Value == null) { return 1; }
-    return (int)typedLast.JournalNo.Value + 1;
+    return new JournalEntry().NextJournalNo(fiscalYearId);
 }

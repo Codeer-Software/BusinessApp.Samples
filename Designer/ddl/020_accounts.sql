@@ -113,7 +113,7 @@ FROM (
     SELECT '6000', '役員報酬',               'expense', 'SGA', 'D', 'NON_TAXABLE' UNION ALL
     SELECT '6010', '給料手当',               'expense', 'SGA', 'D', 'NON_TAXABLE' UNION ALL
     SELECT '6020', '賞与',                   'expense', 'SGA', 'D', 'NON_TAXABLE' UNION ALL
-    SELECT '6030', '法定福利費',             'expense', 'SGA', 'D', 'PUR_EXEMPT' UNION ALL
+    SELECT '6030', '法定福利費',             'expense', 'SGA', 'D', 'NON_TAXABLE' UNION ALL
     SELECT '6040', '福利厚生費',             'expense', 'SGA', 'D', 'PUR_10' UNION ALL
     SELECT '6100', '旅費交通費',             'expense', 'SGA', 'D', 'PUR_10' UNION ALL
     SELECT '6110', '交際費',                 'expense', 'SGA', 'D', 'PUR_10' UNION ALL

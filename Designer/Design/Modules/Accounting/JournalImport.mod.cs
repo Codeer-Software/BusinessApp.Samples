@@ -350,19 +350,9 @@ void Import_OnClick()
         else
         {
             je.Status.Value = "posted";
-            // 年度内連番の採番（伝票ごとに直前の最大値を取得。BankImport と同方式）
-            var ns = new ModuleSearcher<JournalEntry>();
-            ns.AddEquals(e => e.FiscalYearRef.Value, fyId);
-            ns.OrderByDescending(e => e.JournalNo.Value);
-            ns.Limit(1);
-            var last = ns.ExecuteFirstOrDefault();
-            var nextNo = 1;
-            if (last != null)
-            {
-                var typedLast = (JournalEntry)last;
-                if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
-            }
-            je.JournalNo.Value = nextNo;
+            // 年度内連番の採番（伝票ごとに直前の最大値を取得。BankImport と同方式）。
+            // 正典: JournalEntry.NextJournalNo（BUG-0069 で一本化）
+            je.JournalNo.Value = je.NextJournalNo(fyId);
         }
 
         je.Lines.AddRows(idxs.Count);

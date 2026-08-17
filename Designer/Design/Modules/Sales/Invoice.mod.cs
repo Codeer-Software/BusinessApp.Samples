@@ -496,7 +496,11 @@ decimal GetSalesTaxRatePercent()
     return ResolveTaxableSalesRatePercent(DefaultSalesTaxCategoryId());
 }
 
-// 請求書番号採番: INV-{西暦下2桁}-{連番3桁}
+// 請求書番号採番【正典】: INV-{西暦下2桁}-{連番3桁}（BUG-0133）。
+// 請求書を作る全経路（この画面の新規・検収からの作成・定期請求・SES 一括）がここを呼ぶ——
+// 他モジュールからは `new Invoice().NextInvoiceNo()` で呼べる（Project.md 2026-07-26）。
+// 番号自体に西暦下 2 桁が入るので、一意の範囲は**全期間**（ddl/610 の部分ユニークインデックス）。
+// 同時発行で衝突したら INSERT が UNIQUE で弾かれる。**欠番は許す**（2026-08-17 ユーザー決定）。
 string NextInvoiceNo()
 {
     var prefix = $"INV-{DateTime.Today:yy}-";

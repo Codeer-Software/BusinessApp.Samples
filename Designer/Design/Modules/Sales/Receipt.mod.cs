@@ -444,18 +444,8 @@ void Confirm_OnClick()
         }
     }
 
-    // 伝票採番
-    var ns = new ModuleSearcher<JournalEntry>();
-    ns.AddEquals(e => e.FiscalYearRef.Value, typedFy.Id.Value);
-    ns.OrderByDescending(e => e.JournalNo.Value);
-    ns.Limit(1);
-    var last = ns.ExecuteFirstOrDefault();
-    var nextNo = 1;
-    if (last != null)
-    {
-        var typedLast = (JournalEntry)last;
-        if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
-    }
+    // 伝票採番（正典: JournalEntry.NextJournalNo。BUG-0069 で一本化）
+    var nextNo = new JournalEntry().NextJournalNo(typedFy.Id.Value);
 
     int amount = Amount.Value;
     var invoiceNo = iv.InvoiceNo.Value;
@@ -525,7 +515,7 @@ void Confirm_OnClick()
     je.MarkRemainingLinesOutOfScope();
     je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
     var ret = je.Submit();
-    if (ret != true) { Toaster.Error("消込仕訳の生成に失敗しました"); return; }
+    if (ret != true) { Toaster.Error("消込仕訳の生成に失敗しました。ほかの人が同時に伝票を確定した可能性があります。もう一度お試しください"); return; }
 
     // 相殺（ADR-0035）: 仕入先請求を支払済みに連動させる（payment_entry_id=消込仕訳・paid_date=入金日）。
     // 消込仕訳 1 本が売掛・買掛両方の裏付けになる。取消は入金側から（買掛側の支払取消はブロック）

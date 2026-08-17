@@ -315,18 +315,8 @@ void PostAll_OnClick()
         }
         var baseAmount = gross - tax;
 
-        // 伝票採番（年度内連番）
-        var ns = new ModuleSearcher<JournalEntry>();
-        ns.AddEquals(e => e.FiscalYearRef.Value, typedFy.Id.Value);
-        ns.OrderByDescending(e => e.JournalNo.Value);
-        ns.Limit(1);
-        var last = ns.ExecuteFirstOrDefault();
-        var nextNo = 1;
-        if (last != null)
-        {
-            var typedLast = (JournalEntry)last;
-            if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
-        }
+        // 伝票採番（年度内連番。正典: JournalEntry.NextJournalNo。BUG-0069 で一本化）
+        var nextNo = new JournalEntry().NextJournalNo(typedFy.Id.Value);
 
         // 仕訳生成（税行方式）
         // 出金: D 相手科目(本体) [+ D 仮払消費税] / C 口座科目(総額)

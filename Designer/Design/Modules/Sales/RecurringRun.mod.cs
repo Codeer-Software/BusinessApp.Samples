@@ -550,7 +550,14 @@ void Run_OnClick()
                 }
             }
             je.MarkRemainingLinesOutOfScope();
-            je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
+            // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）。
+            // 収益行（月額売上）だけは埋めない——部門は定期請求契約が必ず持っている（BUG-0266）
+            if (!je.TryFillMissingDepartments("定期請求契約に部門を設定してから実行してください"))
+            {
+                ResultLabel.Text = $"中断: 月額 {created}件 / 年額請求 {annualCreated}件 / 按分振替 {deferCreated}件（{invoiceNo} の仕訳で中断）";
+                PlanLines.Reload();
+                return;
+            }
             var retJe = je.Submit();
             if (retJe != true)
             {
@@ -680,7 +687,14 @@ void Run_OnClick()
                 }
             }
             je.MarkRemainingLinesOutOfScope();
-            je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
+            // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）。
+            // 前受計上は負債科目だが、按分振替（CreateDeferJournal）で収益になる（BUG-0266）
+            if (!je.TryFillMissingDepartments("定期請求契約に部門を設定してから実行してください"))
+            {
+                ResultLabel.Text = $"中断: 月額 {created}件 / 年額請求 {annualCreated}件 / 按分振替 {deferCreated}件";
+                PlanLines.Reload();
+                return;
+            }
             var retJe = je.Submit();
             if (retJe != true)
             {
@@ -814,7 +828,9 @@ int CreateDeferJournal(object fiscalYearId, object billing, object annualInvId, 
     // 前受収益の按分振替は内部振替なので全明細を「対象外」に上書きする（ADR-0053）。
     // 課税売上は年額請求の時点で計上済みで、科目の既定に任せると月次の振替で二重計上になる。
     dje.MarkAllLinesOutOfScope();
-    dje.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
+    // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）。
+    // 按分振替の貸方は SaaS 売上高＝収益なので、全社共通では埋めない（BUG-0266）
+    if (!dje.TryFillMissingDepartments("定期請求契約に部門を設定してから実行してください")) { return 0; }
     var retDje = dje.Submit();
     if (retDje != true)
     {
@@ -846,39 +862,14 @@ void CreatePendingReceiptFor(object invoiceId, string invoiceNo)
     if (ok != true) { Toaster.Warn($"入金予定の自動作成に失敗しました（{invoiceNo}。入金画面から手動で登録してください）"); }
 }
 
-// 請求書番号採番: INV-{西暦下2桁}-{連番3桁}（Invoice 側と同一ロジック・.Value 規約）
+// 請求書番号採番の正典は Invoice.NextInvoiceNo（BUG-0133 で一本化）。ここは呼ぶだけ
 string NextInvoiceNo()
 {
-    var prefix = $"INV-{DateTime.Today:yy}-";
-    var s = new ModuleSearcher<Invoice>();
-    s.OrderByDescending(e => e.InvoiceNo.Value);
-    s.Limit(1);
-    var last = s.ExecuteFirstOrDefault();
-    var seq = 1;
-    if (last != null)
-    {
-        var lastNo = ((Invoice)last).InvoiceNo.Value;
-        if (lastNo != null && lastNo.StartsWith(prefix))
-        {
-            seq = int.Parse(lastNo.Substring(prefix.Length)) + 1;
-        }
-    }
-    return $"{prefix}{seq:000}";
+    return new Invoice().NextInvoiceNo();
 }
 
-// 伝票番号採番（年度内連番・.Value 規約）
+// 伝票採番の正典は JournalEntry.NextJournalNo（BUG-0069 で一本化）。ここは呼ぶだけ
 int NextJournalNo(object fiscalYearId)
 {
-    var ns = new ModuleSearcher<JournalEntry>();
-    ns.AddEquals(e => e.FiscalYearRef.Value, fiscalYearId);
-    ns.OrderByDescending(e => e.JournalNo.Value);
-    ns.Limit(1);
-    var last = ns.ExecuteFirstOrDefault();
-    var nextNo = 1;
-    if (last != null)
-    {
-        var typedLast = (JournalEntry)last;
-        if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
-    }
-    return nextNo;
+    return new JournalEntry().NextJournalNo(fiscalYearId);
 }

@@ -149,6 +149,11 @@ long? DefaultSalesTaxCategoryId()
     return ((TaxCategory)found).Id.Value;
 }
 
+// 受注番号採番【正典】: SO-{西暦下2桁}-{連番3桁}（BUG-0133）。
+// 他モジュールからは `new SalesOrder().NextOrderNo()` で呼べる（Project.md 2026-07-26）。
+// 一意の範囲は**全期間**（番号に西暦下 2 桁を含む。ddl/610 の部分ユニークインデックス）。
+// **欠番は許す**（2026-08-17 ユーザー決定）。
+// 未一本化: Quote.NextOrderNoForConvert が同じロジックを持つ（別作業と衝突するため今回は触っていない）
 string NextOrderNo()
 {
     var prefix = $"SO-{DateTime.Today:yy}-";

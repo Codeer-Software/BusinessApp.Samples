@@ -501,7 +501,9 @@ decimal GetSalesTaxRatePercent()
     return ResolveTaxableSalesRatePercent(((TaxCategory)found).Id.Value);
 }
 
-// 検収番号採番: A-{西暦下2桁}-{連番3桁}
+// 検収番号採番【正典・唯一の実装】: A-{西暦下2桁}-{連番3桁}（BUG-0133）。
+// 一意の範囲は**全期間**（番号に西暦下 2 桁を含む。ddl/610 の部分ユニークインデックス）。
+// **欠番は許す**（2026-08-17 ユーザー決定）。
 string NextAcceptanceNo()
 {
     var prefix = $"A-{DateTime.Today:yy}-";
@@ -622,18 +624,8 @@ void Confirm_OnClick()
     int tax = TaxAmount.Value ?? 0;
     int gross = amount + tax;
 
-    // 伝票採番
-    var ns = new ModuleSearcher<JournalEntry>();
-    ns.AddEquals(e => e.FiscalYearRef.Value, typedFy.Id.Value);
-    ns.OrderByDescending(e => e.JournalNo.Value);
-    ns.Limit(1);
-    var last = ns.ExecuteFirstOrDefault();
-    var nextNo = 1;
-    if (last != null)
-    {
-        var typedLast = (JournalEntry)last;
-        if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
-    }
+    // 伝票採番（正典: JournalEntry.NextJournalNo。BUG-0069 で一本化）
+    var nextNo = new JournalEntry().NextJournalNo(typedFy.Id.Value);
 
     // 売上仕訳 (docs/04 の税行方式: 借方 売掛金 / 貸方 売上 + is_tax_line 行)
     var lineCount = (tax > 0) ? 3 : 2;
@@ -687,9 +679,12 @@ void Confirm_OnClick()
         }
     }
     je.MarkRemainingLinesOutOfScope();
-    je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
+    // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）。
+    // 収益行（売上高）だけは埋めない——部門は受注が必ず持っているので、そこから来る（BUG-0266）。
+    // 検収の状態はまだ動かしていないので、ここで戻れば副作用は残らない
+    if (!je.TryFillMissingDepartments("受注に部門を設定してから検収を確定してください")) { return; }
     var ret = je.Submit();
-    if (ret != true) { Toaster.Error("売上仕訳の生成に失敗しました"); return; }
+    if (ret != true) { Toaster.Error("売上仕訳の生成に失敗しました。ほかの人が同時に伝票を確定した可能性があります。もう一度お試しください"); return; }
 
     Status.Value = "confirmed";
     var ret2 = this.Submit();
@@ -699,24 +694,10 @@ void Confirm_OnClick()
     Toaster.Success($"仕訳 No.{nextNo} を生成し検収を確定しました（売掛金 {gross:#,0} 円 / 売上 {amount:#,0} 円）");
 }
 
-// 請求書番号採番: INV-{西暦下2桁}-{連番3桁} (Invoice 側と同一ロジック)
+// 請求書番号採番は Invoice.NextInvoiceNo が正典（BUG-0133 で一本化）。ここは呼ぶだけ
 string NextInvoiceNoForCreate()
 {
-    var prefix = $"INV-{DateTime.Today:yy}-";
-    var s = new ModuleSearcher<Invoice>();
-    s.OrderByDescending(e => e.InvoiceNo.Value);
-    s.Limit(1);
-    var last = s.ExecuteFirstOrDefault();
-    var seq = 1;
-    if (last != null)
-    {
-        var lastNo = ((Invoice)last).InvoiceNo.Value;
-        if (lastNo != null && lastNo.StartsWith(prefix))
-        {
-            seq = int.Parse(lastNo.Substring(prefix.Length)) + 1;
-        }
-    }
-    return $"{prefix}{seq:000}";
+    return new Invoice().NextInvoiceNo();
 }
 
 // 請求書を作成 (confirmed のみ): 受注情報＋受注明細から Invoice を生成

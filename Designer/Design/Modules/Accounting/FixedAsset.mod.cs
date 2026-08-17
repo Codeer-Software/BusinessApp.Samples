@@ -274,18 +274,8 @@ void GenerateDep_OnClick()
     }
     var typedDepAcc = (Account)depAcc;
 
-    // 伝票番号の採番
-    var ns = new ModuleSearcher<JournalEntry>();
-    ns.AddEquals(e => e.FiscalYearRef.Value, TargetYear.Value);
-    ns.OrderByDescending(e => e.JournalNo.Value);
-    ns.Limit(1);
-    var last = ns.ExecuteFirstOrDefault();
-    var nextNo = 1;
-    if (last != null)
-    {
-        var typedLast = (JournalEntry)last;
-        if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
-    }
+    // 伝票番号の採番（正典: JournalEntry.NextJournalNo。BUG-0069 で一本化）
+    var nextNo = new JournalEntry().NextJournalNo(TargetYear.Value);
 
     // 償却仕訳を生成（借方 減価償却費 / 貸方 資産科目 = 直接法）
     var je = new JournalEntry();

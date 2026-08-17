@@ -1,9 +1,11 @@
 // Quote.mod.cs — 見積
 // 責務: 見積番号の自動採番 (Q-{yy}-{seq}) / 明細の行番号・金額(数量×単価)・合計の再計算 /
 //        「受注にする」= SalesOrder を生成して明細コピー (docs/08 B4-1) /
-//        状態遷移はボタン一元化 (ADR-0026): draft →(送付済にする)→ sent →(受注にする)→ accepted
-//        draft/sent →(失注にする)→ rejected ／ sent/rejected/accepted →(下書きに戻す)→ draft
+//        状態遷移はボタン一元化 (ADR-0026): draft →(送付済にする)→ sent →(受注にする／契約にする)→ accepted
+//        sent →(失注にする)→ rejected ／ sent/rejected/accepted →(下書きに戻す)→ draft
 //        （下流＝受注・定期請求契約が無い場合のみ戻せる・ADR-0057）。削除は draft のみ・詳細画面から
+//        **下書きからできるのは「送付済にする」だけ**（BUG-0241。受注・契約・失注はいずれも
+//        「客に出した見積がどうなったか」の記録なので、出す前の見積には起こりえない）
 
 bool inLinesHandler = false;
 
@@ -40,10 +42,12 @@ void UpdateButtons()
         DeleteQuoteButton.IsVisible = false;
         return;
     }
+    // 下書きから進めるのは「送付済にする」の 1 手だけ（BUG-0241）。
+    // 受注化・契約化・失注は「客に出した結果」なので、出す前には並べない
     MarkSentButton.IsVisible = (st == "draft");
-    ConvertToOrderButton.IsVisible = (st == "draft" || st == "sent");
-    ConvertToRecurringButton.IsVisible = (st == "draft" || st == "sent");
-    MarkRejectedButton.IsVisible = (st == "draft" || st == "sent");
+    ConvertToOrderButton.IsVisible = (st == "sent");
+    ConvertToRecurringButton.IsVisible = (st == "sent");
+    MarkRejectedButton.IsVisible = (st == "sent");
     RevertToDraftButton.IsVisible = (st == "sent" || st == "rejected" || st == "accepted");
     DeleteQuoteButton.IsVisible = (st == "draft");
 
@@ -372,11 +376,12 @@ void MarkSent_OnClick()
     Toaster.Success("見積を送付済にしました");
 }
 
-// 失注にする: draft/sent → rejected
+// 失注にする: sent → rejected（下書きは「まだ出していない」ので失注しようがない・BUG-0241）
 void MarkRejected_OnClick()
 {
     if (this.IsNewData) { Toaster.Error("先に見積を保存してください"); return; }
-    if (Status.Value != "draft" && Status.Value != "sent") { Toaster.Error("下書きまたは送付済の見積のみ失注にできます"); return; }
+    if (Status.Value == "draft") { Toaster.Error("下書きの見積は失注にできません（先に「送付済にする」を押してください。出さずにやめるなら削除してください）"); return; }
+    if (Status.Value != "sent") { Toaster.Error("送付済の見積のみ失注にできます"); return; }
     Status.Value = "rejected";
     var ret = this.Submit();
     if (ret == false) { Toaster.Error("状態の更新に失敗しました"); return; }
@@ -424,9 +429,15 @@ void ConvertToOrder_OnClick()
         Toaster.Error("先に見積を保存してください");
         return;
     }
-    if (Status.Value == "rejected")
+    // 受注化できるのは送付済のみ（BUG-0241）
+    if (Status.Value == "draft")
     {
-        Toaster.Error("失注した見積からは受注を作成できません（「下書きに戻す」で復活してから操作してください）");
+        Toaster.Error("下書きの見積からは受注を作成できません（先に「送付済にする」を押してください）");
+        return;
+    }
+    if (Status.Value != "sent")
+    {
+        Toaster.Error("送付済の見積のみ受注にできます（失注・受注済みなら「下書きに戻す」で復活してから操作してください）");
         return;
     }
 
@@ -511,9 +522,15 @@ void ConvertToRecurring_OnClick()
         Toaster.Error("先に見積を保存してください");
         return;
     }
-    if (Status.Value == "rejected")
+    // 契約化できるのは送付済のみ（BUG-0241）
+    if (Status.Value == "draft")
     {
-        Toaster.Error("失注した見積からは契約を作成できません（「下書きに戻す」で復活してから操作してください）");
+        Toaster.Error("下書きの見積からは契約を作成できません（先に「送付済にする」を押してください）");
+        return;
+    }
+    if (Status.Value != "sent")
+    {
+        Toaster.Error("送付済の見積のみ契約にできます（失注・受注済みなら「下書きに戻す」で復活してから操作してください）");
         return;
     }
 

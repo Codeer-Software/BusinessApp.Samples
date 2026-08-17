@@ -320,18 +320,9 @@ int PostOne(CashEntryDraft draft)
     if (fy == null) { return 0; }
     var typedFy = (FiscalYear)fy;
 
-    // 採番は 1 本ずつ取り直す（同じ年度に連続で起票するため、前の 1 本を含めた最大値が要る）
-    var ns = new ModuleSearcher<JournalEntry>();
-    ns.AddEquals(e => e.FiscalYearRef.Value, typedFy.Id.Value);
-    ns.OrderByDescending(e => e.JournalNo.Value);
-    ns.Limit(1);
-    var last = ns.ExecuteFirstOrDefault();
-    var nextNo = 1;
-    if (last != null)
-    {
-        var typedLast = (JournalEntry)last;
-        if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
-    }
+    // 採番は 1 本ずつ取り直す（同じ年度に連続で起票するため、前の 1 本を含めた最大値が要る）。
+    // 正典: JournalEntry.NextJournalNo（BUG-0069 で一本化）
+    var nextNo = new JournalEntry().NextJournalNo(typedFy.Id.Value);
 
     int amount = draft.Amount.Value;
     var isIn = (draft.Direction.Value == "in");
