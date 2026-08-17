@@ -29,7 +29,8 @@ rng AS (
 ),
 acct AS (
   -- 元帳は単一科目が前提（@account_id 必須）なので、表示符号はここで 1 回だけ決める
-  SELECT CASE WHEN dc_normal = 'D' THEN 1 ELSE -1 END AS dc_sign
+  SELECT CASE WHEN dc_normal = 'D' THEN 1 ELSE -1 END AS dc_sign,
+         CASE WHEN account_type IN ('expense', 'revenue') THEN 1 ELSE 0 END AS is_pl
   FROM accounts WHERE id = @account_id
 ),
 base AS (
@@ -78,6 +79,11 @@ SELECT
 FROM carry c
 WHERE @account_id IS NOT NULL
   AND c.carry_date IS NOT NULL
+  -- 損益科目は期末に締め切られるので「前期繰越」という概念が無い（弥生・奉行の元帳も出さない）。
+  -- 期首から見ているときは値も必ず 0 なので、行ごと落とす。
+  -- ただし**期中から見ているときの「繰越」はその期の期首からの累計**＝意味があるので残す
+  AND NOT ((SELECT is_pl FROM acct) = 1
+           AND date(c.carry_date) <= (SELECT date(start_date) FROM fy))
 
 UNION ALL
 
