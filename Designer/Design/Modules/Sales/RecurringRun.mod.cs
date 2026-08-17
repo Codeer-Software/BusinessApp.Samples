@@ -158,10 +158,14 @@ void BuildMonthlyPlanRow(DateOnly monthFirst, object billing, decimal taxPct)
     var b = (RecurringBilling)billing;
     var p = (RecurringRunPlan)NewPlanRow(monthFirst, billing);
 
-    // 生成済み判定（同契約×同月の請求書）
+    // 生成済み判定（同契約×同月×**月額であること**）。
+    // `InvoiceSource` を見ないと、年額で走っていた契約を月額に戻したときに
+    // その月のアンカー年額請求書を「月額が生成済み」と誤認し、月額請求が黙って作られなくなる
+    // （BUG-0145 の対称の穴。生成側は `:455` で "recurring" と書き分けている）
     var chk = new ModuleSearcher<Invoice>();
     chk.AddEquals(i => i.RecurringBillingRef.Value, b.Id.Value);
     chk.AddEquals(i => i.BillingMonth.Value, monthFirst);
+    chk.AddEquals(i => i.InvoiceSource.Value, "recurring");
     var existing = chk.ExecuteFirstOrDefault();
     if (existing != null)
     {
@@ -234,10 +238,16 @@ void BuildYearlyPlanRow(DateOnly monthFirst, object billing, decimal taxPct)
     p.CycleIndex.Value = cycleIndex;
     p.DeferAmount.Value = portion;
 
-    // アンカー年額請求書の有無（冪等: 契約×周期起点月）
+    // アンカー年額請求書の有無（冪等: 契約×周期起点月×**年額であること**）
+    // `InvoiceSource` を見ないと、月額で走っていた契約を年額に切り替えたときに
+    // 周期起点月に居る**過去の月額請求書**をアンカーと誤認する。以降 defer が毎月立ち、
+    // 前受計上の仕訳が無いまま `D 前受収益 / C SaaS売上高` が生成されて
+    // 前受収益(2110)が貸方残なしでマイナスに落ちる（BUG-0145）。
+    // 生成側（`:587`）は "recurring_annual" と書き分けているのに、判定側だけが区別を落としていた
     var invChk = new ModuleSearcher<Invoice>();
     invChk.AddEquals(i => i.RecurringBillingRef.Value, b.Id.Value);
     invChk.AddEquals(i => i.BillingMonth.Value, cycleStart);
+    invChk.AddEquals(i => i.InvoiceSource.Value, "recurring_annual");
     var annualInvRow = invChk.ExecuteFirstOrDefault();
 
     if (annualInvRow == null)

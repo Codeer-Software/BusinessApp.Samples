@@ -999,7 +999,9 @@
       "Candidates": [
         "手動,manual",
         "検収,acceptance",
-        "定期,recurring"
+        "定期,recurring",
+        "定期（年額）,recurring_annual",
+        "SES,ses"
       ],
       "SearchCondition": {
         "SelectFields": [],
