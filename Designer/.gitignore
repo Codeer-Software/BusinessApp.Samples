@@ -1,5 +1,9 @@
 # デザイナ (claude-workspace / ai-refresh) が再生成するもの・マシン固有のもの
 ClaudeCodeForDesigner/
-tools/
+# tools/ は依存（Playwright 等の node_modules）の置き場なので既定は追跡外。
+# ただし自作スクリプトは追跡する（ディレクトリごと除外すると再包含できないため tools/* と書く）
+tools/*
+!tools/*.py
+!tools/*.ps1
 LocalEnvironment.md
 .claude/settings.local.json
