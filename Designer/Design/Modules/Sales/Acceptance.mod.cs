@@ -674,7 +674,14 @@ void Confirm_OnClick()
     }
 
     // 売上仕訳 (docs/04 の税行方式: 借方 売掛金 / 貸方 売上 + is_tax_line 行)
-    var lineCount = 1 + catKeys.Count + taxLineCount;
+    //
+    // **`1 + catKeys.Count + taxLineCount` と 1 行で書いてはいけない。**
+    // CLB のスクリプトインタプリタは「数値リテラル ＋ メンバアクセス」の混じった算術式を
+    // 解決できず、実行時に `Value cannot be null. (Parameter 'source')` で落ちる（2026-08-17 実測）。
+    // designcheck は緑のまま素通りする。`.Count` は単独で受けてから足していく
+    var lineCount = catKeys.Count;
+    lineCount = lineCount + taxLineCount;
+    lineCount = lineCount + 1;
     var je = new JournalEntry();
     je.EntryDate.Value = AcceptanceDate.Value;
     je.EntryType.Value = "auto";
@@ -685,11 +692,10 @@ void Confirm_OnClick()
     je.SourceType.Value = "acceptance";
     je.SourceId.Value = this.Id.Value;
     je.Lines.AddRows(lineCount);
-    var rows = je.Lines.Rows;
     var pos = 0;
 
     // 1 行目: 借方 売掛金（税込総額）
-    var dr = (JournalLine)rows[pos];
+    var dr = (JournalLine)je.Lines.Rows[pos];
     dr.LineNo.Value = 1;
     dr.Description.Value = typedSo.Title.Value;
     if (typedSo.ProjectRef.Value != null) { dr.ProjectRef.Value = typedSo.ProjectRef.Value; }
@@ -705,7 +711,7 @@ void Confirm_OnClick()
     for (var i = 0; i < catKeys.Count; i++)
     {
         var salesLineNo = pos + 1;
-        var sl = (JournalLine)rows[pos];
+        var sl = (JournalLine)je.Lines.Rows[pos];
         sl.LineNo.Value = salesLineNo;
         sl.Description.Value = typedSo.Title.Value;
         if (typedSo.ProjectRef.Value != null) { sl.ProjectRef.Value = typedSo.ProjectRef.Value; }
@@ -719,7 +725,7 @@ void Confirm_OnClick()
         pos = pos + 1;
 
         if (catTaxes[i] == 0) continue;
-        var tl = (JournalLine)rows[pos];
+        var tl = (JournalLine)je.Lines.Rows[pos];
         tl.LineNo.Value = pos + 1;
         tl.Description.Value = $"消費税（行{salesLineNo}）";
         if (typedSo.ProjectRef.Value != null) { tl.ProjectRef.Value = typedSo.ProjectRef.Value; }
