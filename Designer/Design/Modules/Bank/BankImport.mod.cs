@@ -178,7 +178,33 @@ void SavePreviewEdits()
         if (okDel != true) { Logger.Warn($"プレビュー行の削除に失敗しました (id={idObj})"); }
     }
 
+    // DedupKey 末尾の連番は、**本番の既存明細から数え始める**。
+    // プレビュー内だけで数え直すと、Import_OnClick が本番と突合して `…|1` を振った行を
+    // ここで `…|0` に戻してしまい、直後の重複ガードが既存と誤判定して**無言で削除する**。
+    // 本物の入出金が 1 件そのまま帳簿に載らず、残高照合の「差異」として遅れて表面化する（BUG-0162）。
+    // 数える単位は口座ごと（口座をまたいで通し番号にすると、別口座に同じ明細が並んだだけで
+    // キーがずれ、次回の再取込で重複と判定されなくなる＝逆方向の事故になる）
     var baseKeys = new List<string>();
+
+    // プレビューに出ている口座の本番明細で先にシードする
+    var seededAccounts = new List<string>();
+    foreach (var r in PreviewLines.Rows)
+    {
+        var p0 = (BankStatementPreview)r;
+        var accKey = $"{p0.BankAccount.Value}";
+        if (seededAccounts.Contains(accKey)) continue;
+        seededAccounts.Add(accKey);
+        var ls = new ModuleSearcher<BankStatementLine>();
+        ls.AddEquals(e => e.BankAccount.Value, p0.BankAccount.Value);
+        foreach (var lm in ls.Execute())
+        {
+            var ex = (BankStatementLine)lm;
+            var ed = ex.LineDate.Value;
+            if (ed == null) continue;
+            baseKeys.Add($"{accKey}#{ed.Year}/{ed.Month}/{ed.Day}|{ex.Description.Value}|{ex.AmountOut.Value ?? 0}|{ex.AmountIn.Value ?? 0}");
+        }
+    }
+
     foreach (var r in PreviewLines.Rows)
     {
         var p = (BankStatementPreview)r;
@@ -186,9 +212,12 @@ void SavePreviewEdits()
         if (d != null)
         {
             var baseKey = $"{d.Year}/{d.Month}/{d.Day}|{p.Description.Value}|{p.AmountOut.Value ?? 0}|{p.AmountIn.Value ?? 0}";
+            // 数えるときだけ口座を混ぜる。**保存する DedupKey は従来どおり口座なし**
+            // （Import_OnClick 側が口座で絞ってから突合するので、既存データと互換が保たれる）
+            var countKey = $"{p.BankAccount.Value}#{baseKey}";
             var seq = 0;
-            foreach (var k in baseKeys) { if (k == baseKey) seq = seq + 1; }
-            baseKeys.Add(baseKey);
+            foreach (var k in baseKeys) { if (k == countKey) seq = seq + 1; }
+            baseKeys.Add(countKey);
             p.DedupKey.Value = $"{baseKey}|{seq}";
         }
         p.Submit();
