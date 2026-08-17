@@ -14,5 +14,16 @@ void OpenRequest_OnClick()
     var parentModule = rs[0].ParentModuleName.Value;
     var parentId = rs[0].ParentId.Value;
     if (string.IsNullOrEmpty(parentModule) || string.IsNullOrEmpty(parentId)) return;
-    NavigationService.NavigateTo(NavigationService.GetModuleDataUrl(parentModule, parentId));
+    NavigationService.NavigateTo(NavigationService.GetModuleDataUrl(ToApproverModule(parentModule), parentId));
+}
+
+// approval_flow.parent_module_name は「申請者が申請したときのモジュール名」が保存された値で、
+// 常に "ExpenseRequest"（ApprovalFlow.mod.cs:812）。閲覧者ごとに行き先を変える写像は DB では作れず、
+// ここでスクリプトとして書くしかない（ADR-0069 帰結）。
+// 承認者を申請者用モジュールへ送ると、明細（ExpenseRequestLine）の行条件 Creator == CurrentUser に
+// 引っかかって **エラーにならず明細が空**になる。承認者用モジュールへ写像してこれを塞ぐ。
+string ToApproverModule(string parentModuleName)
+{
+    if (parentModuleName == "ExpenseRequest") return "ExpenseRequestApproval";
+    return parentModuleName;
 }
