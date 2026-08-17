@@ -435,6 +435,40 @@ void BilledInvoiceRef_OnDataChanged()
 {
     if (this.IsNewData) return;
     if (Status.Value != "confirmed") return;
+
+    // **取引先の一致を確かめる。** 候補は `InvoiceLookup` を無条件に引いているので、
+    // 別の取引先の請求書も選べてしまう。合算してしまうと
+    // ①この検収から請求書を作れなくなり ②別の客の請求書に紐づいたまま誰も気づけない
+    // （画面には請求書番号しか出ないため）。検収は取引先を持たないので受注から辿る
+    if (BilledInvoiceRef.Value != null && SalesOrderRef.Value != null)
+    {
+        var os2 = new ModuleSearcher<SalesOrder>();
+        os2.AddEquals(e => e.Id.Value, SalesOrderRef.Value);
+        var so2 = os2.ExecuteFirstOrDefault();
+        var is2 = new ModuleSearcher<Invoice>();
+        is2.AddEquals(e => e.Id.Value, BilledInvoiceRef.Value);
+        var inv2 = is2.ExecuteFirstOrDefault();
+        if (so2 != null && inv2 != null)
+        {
+            var orderPartner = ((SalesOrder)so2).PartnerRef.Value;
+            var invoicePartner = ((Invoice)inv2).PartnerRef.Value;
+            if ($"{orderPartner}" != $"{invoicePartner}")
+            {
+                // 値を戻して**その場で保存まで確定させる**。
+                // スクリプトでの代入は OnDataChanged を再入させるが（ADR-0053）、
+                // それに保存を委ねると「画面は空・DB は誤った請求書」という食い違いが残りうる
+                var badNo = ((Invoice)inv2).InvoiceNo.Value;
+                BilledInvoiceRef.Value = null;
+                this.IsViewOnly = false;
+                this.Submit();
+                UpdateButtons();
+                Toaster.Error($"請求書 {badNo} は取引先が違うため合算先にできません"
+                    + "（合算できるのは同じ取引先の請求書だけです）");
+                return;
+            }
+        }
+    }
+
     using var loading = LoadingService.StartLoading(0);
     this.IsViewOnly = false;
     var ret = this.Submit();
