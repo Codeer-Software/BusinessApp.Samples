@@ -63,8 +63,14 @@ def git(root: str, *args: str) -> str:
 
 
 def tracked_docs(root: str):
-    """Git 追跡下の対象 .md を返す（リポジトリ相対・スラッシュ区切り）。"""
-    paths = [p.strip() for p in git(root, "ls-files", "*.md").splitlines() if p.strip()]
+    """検査対象の .md を返す（リポジトリ相対・スラッシュ区切り）。
+
+    追跡済みに加え **未追跡だが .gitignore で除外されていないもの**（`--others
+    --exclude-standard`）も含める。含めないと、新規作成してまだ add していない文書が
+    リンタから見えず、索引の突合が誤検出になる。
+    """
+    listed = git(root, "ls-files", "--cached", "--others", "--exclude-standard", "*.md")
+    paths = sorted({p.strip() for p in listed.splitlines() if p.strip()})
     return [p for p in paths if not any(x in p for x in EXCLUDE_PATTERNS)]
 
 

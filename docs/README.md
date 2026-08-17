@@ -39,7 +39,7 @@ related: [00_ドキュメント規約.md]
 | 機能を直した後、どの台本が腐ったか知る | `python Designer/tools/lint_docs.py --impact HEAD~1` → [00_ドキュメント規約](00_ドキュメント規約.md) §6 |
 | 期待値（金額・仕訳）を確かめる | [tests/11_E2Eテストシナリオ/README](tests/11_E2Eテストシナリオ/README.md)（分岐 ID と期待値）＋ [qa/20_不変条件SQL/README](qa/20_不変条件SQL/README.md)（機械判定・`run_all.ps1`） |
 | **バグを直す**（長期・自律タスク） | [qa/01_作業指示書](qa/01_作業指示書.md) が実行の正典 → [qa/03_進捗](qa/03_進捗.md)（次にやること）→ [qa/02_バグ台帳](qa/02_バグ台帳.md) |
-| 不具合票・改善候補を見る | [issues/](issues/) — ISSUE-nnnn ＋ 体験シナリオ／市販ソフト比較から起票した改善候補 |
+| 不具合票・改善候補を見る | [issues/](issues/) — ISSUE-nnnn ＋ 体験シナリオ／市販ソフト比較から起票した改善候補。未解決は [ISSUE-0002 変更契約](issues/ISSUE-0002_販売_変更契約と訂正フロー.md)・[ISSUE-0005 着手金の受け皿](issues/ISSUE-0005_着手金_中間金請求の受け皿が無い.md) |
 | デザインの静的検査 | `designcheck` CLI ／ `python Designer/tools/lint_design.py` ／ `check_navigation.py` |
 
 ## 3. 説明する・売り込む
