@@ -667,21 +667,20 @@ void Confirm_OnClick()
         catTaxes[lastTaxable] = catTaxes[lastTaxable] + (tax - taxSum);
     }
 
-    var taxLineCount = 0;
-    for (var i = 0; i < catTaxes.Count; i++)
-    {
-        if (catTaxes[i] != 0) { taxLineCount = taxLineCount + 1; }
-    }
 
     // 売上仕訳 (docs/04 の税行方式: 借方 売掛金 / 貸方 売上 + is_tax_line 行)
     //
-    // **`1 + catKeys.Count + taxLineCount` と 1 行で書いてはいけない。**
-    // CLB のスクリプトインタプリタは「数値リテラル ＋ メンバアクセス」の混じった算術式を
-    // 解決できず、実行時に `Value cannot be null. (Parameter 'source')` で落ちる（2026-08-17 実測）。
-    // designcheck は緑のまま素通りする。`.Count` は単独で受けてから足していく
-    var lineCount = catKeys.Count;
-    lineCount = lineCount + taxLineCount;
-    lineCount = lineCount + 1;
+    // **行数を数える変数に `.Count` を代入してはいけない**（2026-08-17 実測・FB-053）。
+    // `AddRows(list.Count)` のようにその場で渡すのは動くが、
+    // `var n = list.Count;` と受けた変数を `AddRows(n)` に渡すと実行時に
+    // `Value cannot be null. (Parameter 'source')` で落ちる。designcheck は緑のまま素通りする。
+    // このコードベースで動いている 6 箇所はすべて**整数リテラルから始めて加算するだけ**なので、それに揃える。
+    var lineCount = 1;                       // 1 行目 = 借方 売掛金（税込総額）
+    for (var i = 0; i < catKeys.Count; i++)  // ループ条件での .Count 参照は動く
+    {
+        lineCount = lineCount + 1;                              // 税区分ごとの売上行
+        if (catTaxes[i] != 0) { lineCount = lineCount + 1; }    // 税額がある区分は消費税行も
+    }
     var je = new JournalEntry();
     je.EntryDate.Value = AcceptanceDate.Value;
     je.EntryType.Value = "auto";
@@ -781,10 +780,10 @@ void CreateInvoice_OnClick()
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 
-    // 既請求ガード
-    var check = new ModuleSearcher<Invoice>();
-    check.AddEquals(e => e.AcceptanceRef.Value, this.Id.Value);
-    if (check.Execute().Count > 0)
+    // 既請求ガード。**void（取消済み）の請求書は数えない**——
+    // ボタンの出し分け（FindExistingInvoiceNo）は void を除外しているので、
+    // ここだけ除外しないと「ボタンは出るのに押すと既作成エラー」という片手落ちになる（BUG-0130）
+    if (FindExistingInvoiceNo() != null)
     {
         Toaster.Error("この検収の請求書は既に作成済みです");
         return;
