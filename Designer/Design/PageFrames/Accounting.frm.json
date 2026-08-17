@@ -967,7 +967,7 @@
           "SearchLayoutName": "",
           "UserUrlParameter": true,
           "PageTitle": "合計残高試算表",
-          "HeaderTitle": "合計残高試算表です。全科目の借方・貸方合計と残高を確認できます（最下行は貸借一致の検算行）。",
+          "HeaderTitle": "合計残高試算表です。全科目の借方・貸方合計と残高を確認できます。日付を空にすると当年度（期首〜期末）で集計します。最下行は貸借一致の検算行です（借方合計＝貸方合計、繰越残高と残高は借方−貸方の純額なので 0 が正常）。",
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": true,
           "UseSubmitButton": false,
