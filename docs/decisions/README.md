@@ -3,7 +3,7 @@ title: 検討・判断ログ（ADR）インデックス
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-08-16
+updated: 2026-08-17
 supersedes: []
 related: []
 ---

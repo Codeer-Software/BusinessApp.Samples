@@ -3,7 +3,7 @@ title: 体験シナリオ・ライブラリ
 status: current
 scope: 全体
 audience: [テスト, 開発]
-updated: 2026-08-13
+updated: 2026-08-17
 verified: 2026-08-13
 supersedes: []
 related: []
