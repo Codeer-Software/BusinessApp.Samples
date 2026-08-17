@@ -1,3 +1,12 @@
+---
+title: ADR-0037: BusinessApp ソリューションへの移行と CLB 1.3.16 対応
+status: current
+scope: CLB
+audience: [開発]
+updated: 2026-07-29
+supersedes: []
+related: []
+---
 # ADR-0037: BusinessApp ソリューションへの移行と CLB 1.3.16 対応
 
 - 日付: 2026-07-29

@@ -1,3 +1,12 @@
+---
+title: ADR-0028: 1ロール1ページフレームへの再編と Modules フォルダ再分類
+status: superseded
+scope: マスタ・組織・権限
+audience: [開発]
+updated: 2026-07-21
+supersedes: []
+related: [0040-部品アーキテクチャとPageFrame再編.md]
+---
 # ADR-0028: 1ロール1ページフレームへの再編と Modules フォルダ再分類
 
 - 日付: 2026-07-19

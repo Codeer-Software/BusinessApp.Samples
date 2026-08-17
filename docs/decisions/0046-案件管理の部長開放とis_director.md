@@ -1,3 +1,12 @@
+---
+title: ADR-0046: 案件管理の部長開放と is_director キャッシュ
+status: current
+scope: 工数・案件
+audience: [開発]
+updated: 2026-08-06
+supersedes: []
+related: []
+---
 # ADR-0046: 案件管理の部長開放と is_director キャッシュ
 
 - 日付: 2026-08-06

@@ -1,3 +1,12 @@
+---
+title: 0018: 組織・ユーザーの全面再編（命名規約の統一）と sysadmin ロールの新設
+status: current
+scope: マスタ・組織・権限
+audience: [開発]
+updated: 2026-07-21
+supersedes: []
+related: []
+---
 # 0018: 組織・ユーザーの全面再編（命名規約の統一）と sysadmin ロールの新設
 
 - 日付: 2026-07-09 ／ 状態: 採用（組織 seed は実施済み・sysadmin の権限実装は本 ADR を正として進行中）

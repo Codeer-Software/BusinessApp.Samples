@@ -1,3 +1,12 @@
+---
+title: LocalData — 実行環境データ置き場
+status: current
+scope: 全体
+audience: [開発, 運用]
+updated: 2026-07-31
+supersedes: []
+related: []
+---
 # LocalData — 実行環境データ置き場
 
 > 2026-07-09 に `C:\Codeer.LowCode.Blazor.Local\` からプロジェクト配下へ移設（経緯: `docs/decisions/0017`）。

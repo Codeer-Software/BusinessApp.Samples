@@ -1,3 +1,12 @@
+---
+title: 0017: 実行環境データを C:\Codeer.LowCode.Blazor.Local からプロジェクト配下 LocalData/ へ移設
+status: current
+scope: 全体
+audience: [開発]
+updated: 2026-07-09
+supersedes: []
+related: []
+---
 # 0017: 実行環境データを C:\Codeer.LowCode.Blazor.Local からプロジェクト配下 LocalData/ へ移設
 
 - 日付: 2026-07-09 ／ 状態: 採用・実施済み ／ 起票: ユーザー要望（「C ドライブ直下に置く必要ないですよね？」）

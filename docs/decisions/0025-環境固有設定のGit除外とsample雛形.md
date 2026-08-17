@@ -1,3 +1,12 @@
+---
+title: ADR-0025: 環境固有設定ファイルの Git 除外と .sample 雛形方式
+status: current
+scope: 全体
+audience: [開発]
+updated: 2026-07-29
+supersedes: []
+related: []
+---
 # ADR-0025: 環境固有設定ファイルの Git 除外と .sample 雛形方式
 
 - 日付: 2026-07-18

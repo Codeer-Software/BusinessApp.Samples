@@ -1,3 +1,12 @@
+---
+title: BusinessApp — CLB 製 財務会計アプリ（デモ）
+status: current
+scope: 全体
+audience: [開発, 営業]
+updated: 2026-08-16
+supersedes: []
+related: []
+---
 # BusinessApp — CLB 製 財務会計アプリ（デモ）
 
 ASP.NET Core + [Codeer.LowCode.Blazor](https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Manual)（CLB）で構築した、中小 IT 受託企業向けの"全部入り"財務会計アプリ。

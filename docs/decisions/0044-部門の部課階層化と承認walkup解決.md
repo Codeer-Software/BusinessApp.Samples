@@ -1,3 +1,12 @@
+---
+title: ADR-0044: 部門の部課階層化と承認役職の walk-up 解決
+status: current
+scope: マスタ・組織・権限
+audience: [開発]
+updated: 2026-08-05
+supersedes: []
+related: []
+---
 # ADR-0044: 部門の部課階層化と承認役職の walk-up 解決
 
 - 日付: 2026-08-05

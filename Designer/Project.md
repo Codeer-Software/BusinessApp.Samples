@@ -1,3 +1,12 @@
+---
+title: Project.md（プロジェクト固有ルール）
+status: current
+scope: 全体
+audience: [開発]
+updated: 2026-08-17
+supersedes: []
+related: []
+---
 # Project.md（プロジェクト固有ルール）
 
 このデザインプロジェクト固有の前提を書く。

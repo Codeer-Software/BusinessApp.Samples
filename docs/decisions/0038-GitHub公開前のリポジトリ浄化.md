@@ -1,3 +1,12 @@
+---
+title: ADR-0038: GitHub 公開前のリポジトリ浄化（マシン固有設定の追跡外化・履歴書き換え・ベンダーサンプル除去）
+status: current
+scope: 全体
+audience: [開発]
+updated: 2026-07-29
+supersedes: []
+related: []
+---
 # ADR-0038: GitHub 公開前のリポジトリ浄化（マシン固有設定の追跡外化・履歴書き換え・ベンダーサンプル除去）
 
 - 日付: 2026-07-29

@@ -1,3 +1,12 @@
+---
+title: CLB 改善提案（フィードバック集）
+status: current
+scope: CLB
+audience: [開発]
+updated: 2026-08-17
+supersedes: []
+related: []
+---
 # CLB 改善提案（フィードバック集）
 
 > 目的: 本プロジェクト（財務会計アプリの自律構築）で Codeer.LowCode.Blazor を**限界まで使い倒した**過程で得た、CLB 本体・マニュアルへの改善提案を集約する。読者は CLB の開発担当者を想定し、アプリ固有の文脈が無くても分かるように書く。

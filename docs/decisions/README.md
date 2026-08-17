@@ -1,3 +1,12 @@
+---
+title: 検討・判断ログ（ADR）インデックス
+status: current
+scope: 全体
+audience: [開発]
+updated: 2026-08-16
+supersedes: []
+related: []
+---
 # 検討・判断ログ（ADR）インデックス
 
 > 仕様・設計で悩んだ判断は、判断直後に1件1ファイルでここに残す（ユーザー要望による運用）。

@@ -1,3 +1,12 @@
+---
+title: CLB「静かな失敗」機械検査ルール
+status: current
+scope: 全体
+audience: [テスト, 開発]
+updated: 2026-08-17
+supersedes: []
+related: []
+---
 # CLB「静かな失敗」機械検査ルール
 
 CLB には「エラーにも designcheck の指摘にもならず、静かに壊れる」挙動が多数ある（`docs/12_CLB改善提案/` の A 群）。

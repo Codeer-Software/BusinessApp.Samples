@@ -1,3 +1,12 @@
+---
+title: 財務会計アプリ 自律構築ミッション（CLAUDE.md）
+status: current
+scope: 全体
+audience: [開発]
+updated: 2026-08-16
+supersedes: []
+related: []
+---
 # 財務会計アプリ 自律構築ミッション（CLAUDE.md）
 
 > このファイルは、本リポジトリで **Fable（Claude Code）が自律的に本格財務会計アプリを構築する**ための最上位の指示書（ミッションブリーフ）。

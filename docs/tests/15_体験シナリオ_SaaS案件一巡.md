@@ -1,3 +1,13 @@
+---
+title: 体験シナリオ: SaaS 案件の一巡
+status: superseded
+scope: 工数・案件
+audience: [テスト, 開発]
+updated: 2026-08-11
+verified: 2026-08-11
+supersedes: []
+related: [20_体験シナリオ/README.md]
+---
 # （廃止）体験シナリオ: SaaS 案件の一巡
 
 > **2026-08-09 廃止。** 後継は **[`20_体験シナリオ/03_営業_定期請求/`](20_体験シナリオ/03_営業_定期請求/)** です。

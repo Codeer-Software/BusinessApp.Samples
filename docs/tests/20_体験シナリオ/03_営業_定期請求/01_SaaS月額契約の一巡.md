@@ -1,3 +1,16 @@
+---
+title: 体験シナリオ 定期-01: SaaS 月額契約の一巡（見積 → 契約確定 → 8月バッチ実行 → 入金 → 解約）
+status: current
+scope: 営業（定期請求）
+audience: [テスト, 開発]
+updated: 2026-08-12
+verified: 2026-08-12
+modules: [Sales/Quote, Sales/QuoteLine, Sales/RecurringBilling, Sales/RecurringRun, Sales/RecurringRunPlan, Sales/Invoice, Sales/InvoiceLine, Sales/Receipt, Accounting/JournalEntry, Accounting/JournalLine]
+verifies: [Sales/ReceivableBalance, Sales/ReceiptBoard, Accounting/FiscalYear, Accounting/JournalBook]
+screens: ["営業業務 > 定期請求契約", "営業業務 > 定期請求の実行", "営業業務 > 入金", "会計業務 > 設定 > 会計年度"]
+supersedes: []
+related: []
+---
 # 体験シナリオ 定期-01: SaaS 月額契約の一巡（見積 → 契約確定 → 8月バッチ実行 → 入金 → 解約）
 
 > 作成: 2026-08-09 ／ 所要時間: 約30分 ／ 影響: 定期請求契約 1 件追加＋当月（2026-08）分の請求書・仕訳・入金予定を一括生成（既存の確定済み契約の 8 月分も一緒に生成される＝実務どおりの月次バッチ）

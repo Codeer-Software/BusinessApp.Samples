@@ -1,3 +1,12 @@
+---
+title: ADR-0024: APIキー管理を .NET User Secrets へ移行（skip-worktree 運用の廃止）
+status: current
+scope: 全体
+audience: [開発]
+updated: 2026-07-18
+supersedes: []
+related: []
+---
 # ADR-0024: APIキー管理を .NET User Secrets へ移行（skip-worktree 運用の廃止）
 
 - 日付: 2026-07-18

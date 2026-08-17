@@ -1,3 +1,12 @@
+---
+title: ISSUE-0001: Update タイミングの ExecuteSqlField が Submit 経由で発火しない（翌期繰越ボタン）
+status: historical
+scope: 決算・年度
+audience: [開発]
+updated: 2026-08-11
+supersedes: []
+related: []
+---
 # ISSUE-0001: Update タイミングの ExecuteSqlField が Submit 経由で発火しない（翌期繰越ボタン）
 
 > ## ✅ 解決済み（2026-07-08）

@@ -41,8 +41,11 @@ EXCLUDE_PATTERNS = (
 )
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-NOTICE_RE = re.compile(r"(さらに更新|追補|更新)\s*[:：]")
-DEFER_RE = re.compile(r"(TODO|未了|後述)")
+NOTICE_RE = re.compile(r"(さらに更新|追補|更新|改訂|最終更新)\s*[:：]")
+DEFER_RE = re.compile(r"(TODO|未了|後で直す)")
+# 規約そのものは禁止パターンを本文で引用するため、散文検査を免除する
+PROSE_EXEMPT = ("docs/00_ドキュメント規約.md",)
+INLINE_CODE_RE = re.compile(r"`[^`]*`")
 HEADER_SCAN_LINES = 20
 
 
@@ -215,7 +218,8 @@ class Doc:
                     fence = None
                 continue
             if fence is None:
-                yield self.body_start + offset + 1, line
+                # インラインコード（`TODO` のような言及）は検査しない
+                yield self.body_start + offset + 1, INLINE_CODE_RE.sub("", line)
 
 
 def resolve_link(root: str, doc_rel: str, target: str):
@@ -279,8 +283,8 @@ def lint(root: str):
             add(SEV_ERROR, rel, "superseded なのに related（後継）が空（規約 §3-2）")
 
         if rel.startswith(SCENARIO_DIR) and os.path.basename(rel) != "README.md":
-            if not as_list(doc.get("modules")):
-                add(SEV_ERROR, rel, "体験シナリオに modules: が無い（規約 §6-1）")
+            if not as_list(doc.get("modules")) and not as_list(doc.get("verifies")):
+                add(SEV_ERROR, rel, "体験シナリオに modules:／verifies: が無い（規約 §6-1）")
             for field in ("modules", "verifies"):
                 for name in as_list(doc.get(field)):
                     if name not in modules:
@@ -290,7 +294,7 @@ def lint(root: str):
             if doc.get("growth") != "append" and len(doc.lines) > LINE_LIMIT:
                 add(SEV_WARN, rel, "current で %d 行（目安 %d 行・分割を検討／台帳型なら growth: append）"
                     % (len(doc.lines), LINE_LIMIT))
-            prose = list(doc.prose_lines())
+            prose = [] if rel in PROSE_EXEMPT else list(doc.prose_lines())
             for lineno, line in prose[:HEADER_SCAN_LINES]:
                 if NOTICE_RE.search(line):
                     add(SEV_WARN, rel, "冒頭に更新履歴の積み上げ（規約 §4-2）: %s"

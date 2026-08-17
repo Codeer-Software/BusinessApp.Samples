@@ -1,3 +1,16 @@
+---
+title: 体験シナリオ ポータル-03: 直 URL ゲートと着地（フレーム素 URL・権限外ブロック・職務分掌）
+status: current
+scope: ポータル・通知
+audience: [テスト, 開発]
+updated: 2026-08-11
+verified: 2026-08-11
+modules: []
+verifies: [Shell/PortalHome, Shell/NotificationCenter, Expense/MyApplication, Expense/ApprovalInbox, Expense/ExpenseSettlementQueue, Timesheet/TimeEntry, Timesheet/TimeEntryAdmin, Sales/Quote, Sales/Invoice, Accounting/JournalEntryBoard, Purchasing/VendorInvoice, Management/BudgetVsActual, MasterBusiness/Partner, MasterSystem/AppUser]
+screens: []
+supersedes: []
+related: []
+---
 # 体験シナリオ ポータル-03: 直 URL ゲートと着地（フレーム素 URL・権限外ブロック・職務分掌）
 
 > 作成: 2026-08-09 ／ 所要時間: 約15分 ／ 影響: なし（閲覧のみ）

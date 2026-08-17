@@ -1,3 +1,16 @@
+---
+title: 体験シナリオ SES-01: SES 精算の一巡（契約条件 → 工数実績 → 精算プラン → 請求生成 → 入金）
+status: current
+scope: 営業（SES）
+audience: [テスト, 開発]
+updated: 2026-08-11
+verified: 2026-08-11
+modules: [MasterBusiness/Project, Timesheet/TimeEntry, Sales/SesBilling, Sales/SesRunPlan, Sales/Invoice, Sales/InvoiceLine, Sales/Receipt, Accounting/JournalEntry, Accounting/JournalLine]
+verifies: [Timesheet/TimeEntryAdmin, Sales/ReceiptBoard, Accounting/JournalBook, Accounting/FiscalYear, FinancialReports/ProfitLoss, Management/ProjectProfit]
+screens: ["業務マスタ > 案件", "工数管理 > 案件一覧", "工数管理 > 工数入力", "営業業務 > SES精算・請求", "営業業務 > 請求書", "営業業務 > 入金", "会計業務 > 帳簿 > 仕訳帳", "経営管理 > 案件損益 > 案件損益"]
+supersedes: []
+related: []
+---
 # 体験シナリオ SES-01: SES 精算の一巡（契約条件 → 工数実績 → 精算プラン → 請求生成 → 入金）
 
 > 作成: 2026-08-09 ／ 所要時間: 約35分 ／ 影響: 2026-08 の工数 2 行を追加＋ SES 請求書 1 件・仕訳 2 本（売上・入金消込）・入金 1 件を生成。既存 SES 案件 2 件を一時無効化する（**後片付けで必ず戻す**）。生成物は後片付け手順ですべて巻き戻せる。

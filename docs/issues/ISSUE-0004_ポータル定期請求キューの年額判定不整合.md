@@ -1,3 +1,12 @@
+---
+title: ISSUE-0004: ポータル「定期請求・SES の当月未生成」が年額契約を毎月カウントする
+status: historical
+scope: 営業
+audience: [開発]
+updated: 2026-08-11
+supersedes: []
+related: []
+---
 # ISSUE-0004: ポータル「定期請求・SES の当月未生成」が年額契約を毎月カウントする
 
 - 起票: 2026-08-09（体験シナリオ執筆中に発見）

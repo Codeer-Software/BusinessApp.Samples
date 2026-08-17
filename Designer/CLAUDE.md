@@ -1,3 +1,12 @@
+---
+title: Codeer.LowCode.Blazor デザインワークスペース
+status: current
+scope: 全体
+audience: [開発]
+updated: 2026-07-29
+supersedes: []
+related: []
+---
 # Codeer.LowCode.Blazor デザインワークスペース
 
 このフォルダで Claude Code を起動し、Codeer.LowCode.Blazor のデザインファイル（JSON / C# スクリプト / SQL / CSS）を編集する。デザイナ（GUI アプリ）と並行して使う。

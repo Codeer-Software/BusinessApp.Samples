@@ -1,3 +1,13 @@
+---
+title: 体験シナリオ: SES 案件の一巡
+status: superseded
+scope: 営業
+audience: [テスト, 開発]
+updated: 2026-08-11
+verified: 2026-08-11
+supersedes: []
+related: [20_体験シナリオ/README.md]
+---
 # （廃止）体験シナリオ: SES 案件の一巡
 
 > **2026-08-09 廃止。** 後継は **[`20_体験シナリオ/04_営業_SES/`](20_体験シナリオ/04_営業_SES/)** です。
