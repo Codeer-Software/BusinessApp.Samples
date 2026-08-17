@@ -1,5 +1,8 @@
 // TimeEntry.mod.cs — 工数入力
 // 新規時の既定: 担当者=自分・日付=今日・時間=480分(8時間)。一覧の検索初期値も自分。
+// **行レベルの可視範囲は本人のみ**（DataReadCondition / DataWriteCondition が同じ条件で
+// UserRef=CurrentUser に閉じている。BUG-0217）。全員分を見る・直すのは経理の TimeEntryAdmin。
+// 課長・部長が部下の工数を「見る」のは別モジュール TeamTimeEntry（ファンアウト・ビューの閲覧専用）。
 
 void Detail_OnAfterInit()
 {
