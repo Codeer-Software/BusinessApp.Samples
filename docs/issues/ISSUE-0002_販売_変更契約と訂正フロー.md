@@ -9,7 +9,6 @@ related: []
 ---
 # 販売業務の変更契約・訂正フロー検討（考慮漏れの棚卸し）
 
-> 作成: 2026-07-21。ユーザー指摘「実務では変更契約がある。本アプリではどんなフローが自然か、販売全業務で考慮漏れがないか」への検討結果。
 > 現行仕様の根拠: Quote/SalesOrder/Acceptance/Invoice/Receipt/RecurringBilling/SesBilling の各 mod.cs・docs/08・docs/tests/11/07（特殊取引）を精査（2026-07-21 時点のコード）。
 
 ## 0. 結論（推奨原則）

@@ -9,7 +9,6 @@ related: []
 ---
 # LocalData — 実行環境データ置き場
 
-> 2026-07-09 に `C:\Codeer.LowCode.Blazor.Local\` からプロジェクト配下へ移設（経緯: `docs/decisions/0017`）。
 > サーバ・デザイナ CLI が実行時に読み書きするデータをここに集約する。
 
 | ディレクトリ | 内容 | Git |

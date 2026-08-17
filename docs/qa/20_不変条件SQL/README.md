@@ -9,7 +9,6 @@ related: []
 ---
 # 不変条件 SQL（会計整合性の実行可能アサーション集）
 
-> 作成: 2026-08-17 ／ 更新: 2026-08-17（A11 の対象範囲を売上高区分に是正、NULL 比較・行番号一意性の穴を 5 本で修正）
 > 対象 DB: `LocalData/db/business-app_v1.db`（データソース `BusinessAppSQLite`）
 > 正典: `docs/04_会計ドメイン設計.md`（何が成り立つべきか）・`docs/decisions/`（個別の判断）
 
