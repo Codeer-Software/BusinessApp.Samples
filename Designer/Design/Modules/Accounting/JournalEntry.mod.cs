@@ -646,10 +646,15 @@ bool ValidateDepartments()
     s.AddIn(e => e.Id.Value, accountIds);
     var accounts = s.Execute();
 
+    // 行番号は保存時に採番されるので、**入力中は LineNo が空**（実測 2026-08-17。
+    // 「明細 行目（消耗品費）の部門を…」と数字が抜けたメッセージが出ていた）。
+    // 画面に見えている並び順で数えて補う。税行は画面に出ないので数に含めない
+    var displayNo = 0;
     foreach (var row in Lines.Rows)
     {
         var l = (JournalLine)row;
         if (l.IsTaxLine.Value == true) continue;
+        displayNo = displayNo + 1;
         if (l.Department.Value != null) continue;
         foreach (var a in accounts)
         {
@@ -658,7 +663,9 @@ bool ValidateDepartments()
             var t = acc.AccountType.Value;
             if (t == "expense" || t == "revenue")
             {
-                Toaster.Error($"明細 {l.LineNo.Value} 行目（{acc.Name.Value}）の部門を選択してください（損益科目の行には部門が必要です）");
+                var lineLabel = $"{l.LineNo.Value}";
+                if (lineLabel == "") { lineLabel = $"{displayNo}"; }
+                Toaster.Error($"明細 {lineLabel} 行目（{acc.Name.Value}）の部門を選択してください（損益科目の行には部門が必要です）");
                 return false;
             }
             break;
