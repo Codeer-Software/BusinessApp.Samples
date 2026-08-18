@@ -19,19 +19,52 @@ void PendingList_OnDataChanged()
 
 void UpdateSummary()
 {
+    // **「起票対象」は `PostAll` が実際に起票できる行だけを数える**（BUG-0223）。
+    // 旧実装は「相手科目の候補が入っているか」しか見ておらず、
+    // 損益科目の行に部門が要る（ADR-0056）という起票の必須条件を数えていなかった。
+    // その結果「未起票 3 件／起票対象 3 件」と出ている状態で起票すると
+    // 「0 件起票／部門未選択でスキップ 3 件」になる——**同じ判定を 2 通りに実装していた**。
+    // 部門が要るかどうかは相手科目の種別で決まるので、ここでも科目マスタを引く（画面表示なので毎回でよい）。
+    var deptRequired = DeptRequiredAccountIds();
+
     var total = 0;
     var ready = 0;
     var unset = 0;
+    var needDept = 0;
     var marked = 0;
     foreach (var r in PendingList.Rows)
     {
         var t = (BankStatementLine)r;
         total = total + 1;
         if (t.MarkExcluded.Value == true) { marked = marked + 1; continue; }
-        if (t.SuggestedAccount.Value != null) { ready = ready + 1; }
-        else { unset = unset + 1; }
+        if (t.SuggestedAccount.Value == null) { unset = unset + 1; continue; }
+        if (deptRequired.Contains($"{t.SuggestedAccount.Value}") && t.DepartmentRef.Value == null)
+        {
+            needDept = needDept + 1;
+            continue;
+        }
+        ready = ready + 1;
     }
-    SummaryLabel.Text = $"未起票 {total} 件 ／ 起票対象（候補設定済み） {ready} 件 ／ 候補未設定 {unset} 件 ／ 対象外チェック中 {marked} 件";
+    var deptText = "";
+    if (needDept > 0) { deptText = $" ／ 部門未選択で起票できない {needDept} 件"; }
+    SummaryLabel.Text = $"未起票 {total} 件 ／ 起票対象（起票できる） {ready} 件 ／ 候補未設定 {unset} 件{deptText} ／ 対象外チェック中 {marked} 件";
+}
+
+// 部門が必須な科目（＝損益科目・ADR-0056）の id を文字列で集める。
+// `PostAll` の判定（`counterType == "expense" || counterType == "revenue"`）と同じ式にしてある。
+// **`List<object>` を引数で持ち回らない**——`Execute()` の戻り値をそのまま渡すと
+// スクリプトが黙って例外になり、サマリのラベルが空のまま描画された（2026-08-19 実測）
+List<string> DeptRequiredAccountIds()
+{
+    var ids = new List<string>();
+    var accS = new ModuleSearcher<Account>();
+    foreach (var a in accS.Execute())
+    {
+        var acc = (Account)a;
+        var ty = acc.AccountType.Value;
+        if (ty == "expense" || ty == "revenue") { ids.Add($"{acc.Id.Value}"); }
+    }
+    return ids;
 }
 
 // ============ 保存（候補の確定＋対象外の分別） ============
@@ -181,17 +214,36 @@ void PostAll_OnClick()
     // すでに DB に入っていた（チェックした行は一覧から消えたまま戻らない）。
     // 件数は**画面のメモリ行**から数えれば保存しなくても分かる。
     // 順序は同じアプリの `BankImport.ConfirmImport_OnClick`（ダイアログ → 保存）に揃える。
+    var plannedDeptRequired = DeptRequiredAccountIds();
     var plannedCount = 0;
     foreach (var r in PendingList.Rows)
     {
         var t = (BankStatementLine)r;
         if (t.MarkExcluded.Value == true) continue;   // これから「対象外」にする行は数えない
         if (t.SuggestedAccount.Value == null) continue;
+        // サマリと同じ判定で数える（BUG-0223）。ダイアログの件数と結果が食い違わないようにする
+        if (plannedDeptRequired.Contains($"{t.SuggestedAccount.Value}") && t.DepartmentRef.Value == null) continue;
         plannedCount = plannedCount + 1;
     }
     if (plannedCount == 0)
     {
-        Toaster.Info("起票対象（相手科目候補が設定済みの未起票明細）がありません");
+        // なぜ 0 件なのかを言う（BUG-0223）。「候補が無い」と「部門が無い」では次の一手が違う
+        var noDept = 0;
+        foreach (var r in PendingList.Rows)
+        {
+            var t = (BankStatementLine)r;
+            if (t.MarkExcluded.Value == true) continue;
+            if (t.SuggestedAccount.Value == null) continue;
+            if (plannedDeptRequired.Contains($"{t.SuggestedAccount.Value}") && t.DepartmentRef.Value == null) { noDept = noDept + 1; }
+        }
+        if (noDept > 0)
+        {
+            Toaster.Warn($"起票できる明細がありません（{noDept} 件は損益科目の行なのに部門が未選択です。部門を選んでから起票してください）");
+        }
+        else
+        {
+            Toaster.Info("起票対象（相手科目候補が設定済みの未起票明細）がありません");
+        }
         return;
     }
 
