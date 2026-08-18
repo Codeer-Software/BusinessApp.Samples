@@ -2,7 +2,7 @@
 -- days_left = 支払期限までの日数（負=期限超過）。警告: 超過=⚠ / N日以内=まもなく
 -- N は system_thresholds.PAY_DUE_SOON_DAYS（ADR-0045 でマスタ化。ポータルのアラート件数と共用）
 WITH threshold AS (
-  SELECT COALESCE((SELECT amount FROM system_thresholds WHERE code = 'PAY_DUE_SOON_DAYS' LIMIT 1), 7) AS days
+  SELECT COALESCE((SELECT amount FROM v_system_threshold_current WHERE code = 'PAY_DUE_SOON_DAYS'), 7) AS days
 ),
 pend AS (
   SELECT
@@ -32,10 +32,13 @@ SELECT
 FROM pend
 
 UNION ALL
+-- 合計行はクエリの 1 行なので、一覧のページャは合計行も 1 件として数える（BUG-0336）。
+-- 合計行に明細件数を書き込んでおけば「(1-7 /7件)」の 7 が明細 6 件＋合計行だと読み手に分かる。
+-- CLB のサマリー行 API（AddSummaryRow）は ListField 専用で、Query モジュールの一覧画面には使えない。
 SELECT
   '9-ZZZZ',
   NULL,
-  '合計',
+  '合計（明細 ' || (SELECT COUNT(*) FROM pend) || ' 件）',
   NULL,
   COALESCE(SUM(amount), 0),
   NULL,

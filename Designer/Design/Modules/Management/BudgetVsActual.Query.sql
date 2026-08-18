@@ -24,7 +24,8 @@ keys AS (
   SELECT department_id, account_id FROM act
 ),
 alert_rate AS (
-  SELECT amount AS rate FROM system_thresholds WHERE code = 'BUDGET_ALERT_RATE' LIMIT 1
+  -- 行が無ければ 80%（ポータルのアラートと同じ既定。欠けたら黙って警告が消える、を作らない）
+  SELECT COALESCE((SELECT amount FROM v_system_threshold_current WHERE code = 'BUDGET_ALERT_RATE'), 80) AS rate
 )
 SELECT
   COALESCE(d.name, '(部門未設定)') AS department_name,

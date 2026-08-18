@@ -86,12 +86,8 @@ sales AS (
 ),
 th AS (
   SELECT
-    (SELECT amount FROM system_thresholds WHERE code = 'FULL_DEDUCT_RATIO_MIN'
-       AND (valid_from IS NULL OR date(valid_from) <= date('now', 'localtime'))
-       AND (valid_to   IS NULL OR date(valid_to)   >= date('now', 'localtime')) LIMIT 1) AS ratio_min,
-    (SELECT amount FROM system_thresholds WHERE code = 'FULL_DEDUCT_SALES_CAP'
-       AND (valid_from IS NULL OR date(valid_from) <= date('now', 'localtime'))
-       AND (valid_to   IS NULL OR date(valid_to)   >= date('now', 'localtime')) LIMIT 1) AS sales_cap
+    (SELECT amount FROM v_system_threshold_current WHERE code = 'FULL_DEDUCT_RATIO_MIN') AS ratio_min,
+    (SELECT amount FROM v_system_threshold_current WHERE code = 'FULL_DEDUCT_SALES_CAP') AS sales_cap
 )
 SELECT * FROM (
   SELECT

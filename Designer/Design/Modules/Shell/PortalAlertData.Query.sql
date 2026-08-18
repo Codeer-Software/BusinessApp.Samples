@@ -11,7 +11,7 @@ WITH RECURSIVE months(idx, month_first) AS (
   SELECT idx + 1, date(month_first, '+1 month') FROM months WHERE idx < 3
 ),
 threshold AS (
-  SELECT COALESCE((SELECT amount FROM system_thresholds WHERE code = 'PAY_DUE_SOON_DAYS' LIMIT 1), 7) AS days
+  SELECT COALESCE((SELECT amount FROM v_system_threshold_current WHERE code = 'PAY_DUE_SOON_DAYS'), 7) AS days
 ),
 pay AS (
   SELECT CAST(julianday(date(v.due_date)) - julianday(date('now', 'localtime')) AS INTEGER) AS days_left
@@ -140,7 +140,7 @@ alert_rate AS (
   -- 下の比較が NULL → budget_alert が 0 行 → ポータルの予算警告が行ごと消える。
   -- 「警告が無い＝健全」に見えるので気づけない。同ファイルの PAY_DUE_SOON_DAYS は
   -- 既に COALESCE を持っており、作法が割れていた（既定 80% は投入値と同じ）
-  SELECT COALESCE((SELECT amount FROM system_thresholds WHERE code = 'BUDGET_ALERT_RATE' LIMIT 1), 80) AS rate
+  SELECT COALESCE((SELECT amount FROM v_system_threshold_current WHERE code = 'BUDGET_ALERT_RATE'), 80) AS rate
 ),
 budget_alert AS (
   SELECT b.department_id AS department_id
@@ -175,8 +175,8 @@ SELECT
   -- 閾値が 0／未設定なら 0 件になり、従来どおり「マイナスのときだけ」の挙動に戻る
   (SELECT count(*) FROM cash_final
     WHERE ending >= 0
-      AND COALESCE((SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' AND (valid_from IS NULL OR date(valid_from) <= date('now','localtime')) AND (valid_to   IS NULL OR date(valid_to)   >= date('now','localtime')) ORDER BY COALESCE(date(valid_from),'0001-01-01') DESC LIMIT 1), 0) > 0
-      AND ending < (SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' AND (valid_from IS NULL OR date(valid_from) <= date('now','localtime')) AND (valid_to   IS NULL OR date(valid_to)   >= date('now','localtime')) ORDER BY COALESCE(date(valid_from),'0001-01-01') DESC LIMIT 1)
+      AND COALESCE((SELECT amount FROM v_system_threshold_current WHERE code = 'CASH_ALERT_BALANCE'), 0) > 0
+      AND ending < (SELECT amount FROM v_system_threshold_current WHERE code = 'CASH_ALERT_BALANCE')
   ) AS cash_warn_months,
   (SELECT count(*) FROM budget_alert) AS budget_alert_depts,
   -- 警告が出ている部門の ID リスト（カンマ区切り。非経理ユーザーの「自部門のみ表示」判定用・2026-08-06）

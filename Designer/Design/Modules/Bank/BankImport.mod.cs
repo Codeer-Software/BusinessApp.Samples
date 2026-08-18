@@ -111,6 +111,10 @@ void Import_OnClick()
             hasBal = true;
         }
         if (outAmt <= 0 && inAmt <= 0) { badLines = badLines + 1; continue; }
+        // 出金と入金が両方入っている行は取り込まない（BUG-0348）。
+        // 起票は「出金があれば出金として扱う」ので、通してしまうと入金額が
+        // どの仕訳行にも現れないまま明細だけ起票済みになる（静かに消える）
+        if (outAmt > 0 && inAmt > 0) { badLines = badLines + 1; continue; }
 
         // 同一内容の明細は同一貼り付け内の出現順で連番を振って一意化
         var baseKey = $"{dateStr}|{desc}|{outAmt}|{inAmt}";

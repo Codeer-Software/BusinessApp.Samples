@@ -85,7 +85,7 @@
       "DbColumn": "",
       "IsMultiline": true,
       "IsAutoFitRows": false,
-      "Placeholder": "銀行サイトの CSV をそのまま貼り付け（形式: 日付,摘要,出金額,入金額,残高。ヘッダ行は自動スキップ。\"1,234\" のような引用符付き金額にも対応）",
+      "Placeholder": "銀行サイトの CSV をそのまま貼り付け（形式: 日付,摘要,出金額,入金額,残高。1 列目が日付として読めない行は取り込まない（ヘッダ行・合計行はここで落ちる）。\"1,234\" のような引用符付き金額にも対応）",
       "Rows": 8,
       "TextEditEmptyType": "StringEmpty",
       "ShouldTrimAfterEdit": false,

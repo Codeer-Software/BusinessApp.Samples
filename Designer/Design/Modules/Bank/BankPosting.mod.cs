@@ -339,15 +339,18 @@ void PostAll_OnClick()
             idx = idx + 1;
             l.LineNo.Value = idx;
             l.Description.Value = t.Description.Value;
-            // 明細で選んだ部門を仕訳に持ち込む（ADR-0056）。空なら FillMissingDepartments が
-            // 全社共通で埋める。相手科目が損益科目のときに部門を促すのは一括起票前のチェック
-            if (t.DepartmentRef.Value != null) { l.Department.Value = t.DepartmentRef.Value; }
+            // 明細で選んだ部門は**相手科目の行だけ**に持ち込む（ADR-0056・BUG-0347）。
+            // 口座（普通預金）の行は「どの部門の預金か」という意味を持たないので全社共通に寄せる
+            // ——ここに部門を付けると、資産科目を部門で絞った元帳が部門ごとにバラけてしまう。
+            // 税行は FillMissingDepartments が ParentLineNo をたどって相手科目行から継ぐ。
+            // 正典は入出金起票（CashEntry.mod.cs）の同じ処理
             if (isOut)
             {
                 if (idx == 1)
                 {
                     l.Dc.Value = "D";
                     l.Account.Value = counter.Id.Value;
+                    if (t.DepartmentRef.Value != null) { l.Department.Value = t.DepartmentRef.Value; }
                     if (taxCatId != null) l.TaxCategory.Value = taxCatId;
                     l.TaxInputMode.Value = (tax > 0) ? "inclusive" : "none";
                     l.Amount.Value = baseAmount;
@@ -388,6 +391,7 @@ void PostAll_OnClick()
                 {
                     l.Dc.Value = "C";
                     l.Account.Value = counter.Id.Value;
+                    if (t.DepartmentRef.Value != null) { l.Department.Value = t.DepartmentRef.Value; }
                     if (taxCatId != null) l.TaxCategory.Value = taxCatId;
                     l.TaxInputMode.Value = (tax > 0) ? "inclusive" : "none";
                     l.Amount.Value = baseAmount;
