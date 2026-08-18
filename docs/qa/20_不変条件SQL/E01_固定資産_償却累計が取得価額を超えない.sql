@@ -7,16 +7,24 @@
 --       Modules/Accounting/FixedAsset.mod.cs（source_type='depreciation', source_id=資産id で起票）
 -- 備考: 「残存簿価 1 円」まで償却する規約なので、累計 = 取得価額 - 1 は正常。
 --       累計 > 取得価額 - 1（＝簿価 0 以下）になった行を返す。
+-- 数え方は ADR-0073 に合わせる（2026-08-18）:
+--   ① 自動生成した償却仕訳（source_type='depreciation'）
+--   ② **伝票ヘッダの「固定資産」欄でこの資産を指した伝票**＝手で打った償却の訂正
+--   処分仕訳（disposal）は簿価を落とす仕訳であって償却ではないので数えない。
+--   金額は**その資産の計上科目に立った行の（貸方 − 借方）**で測る（直接法）。
+--   アプリの画面と同じ式にしておかないと、訂正で過大償却になっても検査が素通りする。
 WITH dep AS (
-  SELECT je.source_id AS asset_id,
+  SELECT fa.id AS asset_id,
          SUM(CASE WHEN jl.dc = 'C' THEN jl.amount ELSE -jl.amount END) AS accum
-  FROM journal_entries je
+  FROM fixed_assets fa
+  JOIN journal_entries je
+    ON je.status = 'posted'
+   AND COALESCE(je.source_type, '') <> 'disposal'
+   AND ((je.source_type = 'depreciation' AND je.source_id = fa.id)
+        OR je.fixed_asset_id = fa.id)
   JOIN journal_lines jl ON jl.journal_entry_id = je.id
-  JOIN accounts a ON a.id = jl.account_id
-  WHERE je.source_type = 'depreciation'
-    AND je.status = 'posted'
-    AND a.account_type = 'asset'
-  GROUP BY je.source_id
+                       AND jl.account_id = fa.asset_account_id
+  GROUP BY fa.id
 )
 SELECT
     fa.id   AS 資産id,

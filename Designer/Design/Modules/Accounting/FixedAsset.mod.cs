@@ -212,15 +212,38 @@ bool IsFixedAssetAccount(object accountId)
 // 資産科目の純増減で見れば、生成分も訂正分も同じ式で正しく数えられる。
 int AccumulatedDepreciation()
 {
+    return AccumulatedDepreciationAsOf(DateTime.Today);
+}
+
+// 基準日の属する**年度末まで**の償却だけを数える（BUG-0357）。
+//
+// 翌年度の償却仕訳は年度さえ作ってあれば先に起票できるので、**未到来の年度の償却が
+// 帳簿価額を先食いする**。実データでも 2028-03-31 付（第19期）の償却が既に立っていて、
+// 2026 年時点の簿価が 115,000 円過小に見えていた。この状態で処分すると、
+// 除却損・売却損益がその分ずれる。
+//
+// 切り口を「基準日そのもの」ではなく「**基準日の属する年度の期末**」にするのは、
+// このアプリが償却を**年度末の日付で 1 本**起票するからである。基準日で切ると、
+// 期中に見たときに当年度の償却まで落ちてしまい、台帳の簿価が帳簿と食い違う。
+int AccumulatedDepreciationAsOf(var asOf)
+{
     if (this.Id.Value == null) return 0;
     if (AssetAccount.Value == null) return 0;
+    var cutoff = asOf;
+    var fyOf = ResolveYearForDate(asOf);
+    if (fyOf != null && fyOf.EndDate.Value != null) { cutoff = fyOf.EndDate.Value; }
 
     var entryIds = new List<string>();
     var js = new ModuleSearcher<JournalEntry>();
     js.AddEquals(e => e.SourceType.Value, "depreciation");
     js.AddEquals(e => e.SourceId.Value, this.Id.Value);
     js.AddEquals(e => e.Status.Value, "posted");
-    foreach (var row in js.Execute()) { entryIds.Add($"{((JournalEntry)row).Id.Value}"); }
+    foreach (var row in js.Execute())
+    {
+        var jd = (JournalEntry)row;
+        if (cutoff != null && jd.EntryDate.Value != null && jd.EntryDate.Value > cutoff) continue;
+        entryIds.Add($"{jd.Id.Value}");
+    }
 
     var ts = new ModuleSearcher<JournalEntry>();
     ts.AddEquals(e => e.FixedAssetRef.Value, this.Id.Value);
@@ -229,6 +252,7 @@ int AccumulatedDepreciation()
     {
         var je = (JournalEntry)row;
         if (je.SourceType.Value == "disposal") continue;   // 処分は償却ではない
+        if (cutoff != null && je.EntryDate.Value != null && je.EntryDate.Value > cutoff) continue;
         var key = $"{je.Id.Value}";
         var known = false;
         foreach (var k in entryIds) { if (k == key) { known = true; break; } }
@@ -253,11 +277,17 @@ int AccumulatedDepreciation()
     return total;
 }
 
-// 帳簿価額 = 取得価額 − 償却累計
+// 帳簿価額 = 取得価額 − 償却累計（今日時点）
 int BookValue()
 {
+    return BookValueAsOf(DateTime.Today);
+}
+
+// 基準日時点の帳簿価額。処分はこちらを使う（処分日より後に立っている償却を数えないため）
+int BookValueAsOf(var asOf)
+{
     var cost = AcquisitionCost.Value ?? 0;
-    return cost - AccumulatedDepreciation();
+    return cost - AccumulatedDepreciationAsOf(asOf);
 }
 
 // 処分仕訳（この資産の除却／売却で起票したもの）を 1 本返す。無ければ null
@@ -273,6 +303,23 @@ JournalEntry FindDisposalJournal()
 }
 
 // 日付が属する会計年度（この画面には TargetYear があるが、処分は「本日」で起票するので別途要る）
+// この資産の償却仕訳（自動生成・手入力の訂正とも）が 1 本でもあるか
+bool HasDepreciationJournal()
+{
+    if (this.Id.Value == null) return false;
+    var js = new ModuleSearcher<JournalEntry>();
+    js.AddEquals(e => e.SourceType.Value, "depreciation");
+    js.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    if (js.Execute().Count > 0) return true;
+    var ts = new ModuleSearcher<JournalEntry>();
+    ts.AddEquals(e => e.FixedAssetRef.Value, this.Id.Value);
+    foreach (var row in ts.Execute())
+    {
+        if (((JournalEntry)row).SourceType.Value != "disposal") return true;
+    }
+    return false;
+}
+
 FiscalYear ResolveYearForDate(var d)
 {
     if (d == null) return null;
@@ -351,6 +398,13 @@ void UpdateDisposalUi()
         var cost = AcquisitionCost.Value ?? 0;
         var bvWord = (Status.Value == "retired" || Status.Value == "sold") ? "処分時点の帳簿価額" : "帳簿価額";
         BookValueLabel.Text = $"{bvWord}: {cost - acc:#,0} 円（取得価額 {cost:#,0} − 償却累計 {acc:#,0}）";
+
+        // **償却仕訳が 1 本でもある資産は、資産計上科目を変えさせない**（BUG-0358）。
+        // 償却累計は「その資産科目に立った貸方−借方」で数えるので（ADR-0073）、
+        // あとから科目を選び直すと過去の償却が集計から外れ、**償却累計が黙って 0 になる**。
+        // 帳簿価額が取得価額のまま表示され、除却損・売却損益が過大になる。
+        // 科目を直したいときは、償却仕訳を取り消してから変える
+        AssetAccount.IsViewOnly = HasDepreciationJournal();
     }
     else
     {

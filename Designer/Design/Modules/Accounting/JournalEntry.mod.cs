@@ -88,6 +88,7 @@ void LockPostedFields()
     EntryDate.IsViewOnly = true;
     FiscalYearRef.IsViewOnly = true;
     EntryType.IsViewOnly = true;
+    FixedAssetRef.IsViewOnly = true;
     Description.IsViewOnly = true;
     Lines.IsViewOnly = true;
 }

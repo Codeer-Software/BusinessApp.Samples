@@ -13,6 +13,24 @@ WHERE je.source_type = 'depreciation'
   AND NOT EXISTS (SELECT 1 FROM fixed_assets fa WHERE fa.id = je.source_id)
 
 UNION ALL
+-- ヘッダの「固定資産」欄（ADR-0073）が実在しない資産を指している。
+-- この欄は償却累計の集計キーなので、切れていると訂正が黙って数えられなくなる
+SELECT '固定資産欄が実在しない資産を指している', je.id, je.entry_date,
+       je.fixed_asset_id, NULL, NULL, NULL
+FROM journal_entries je
+WHERE je.fixed_asset_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM fixed_assets fa WHERE fa.id = je.fixed_asset_id)
+
+UNION ALL
+-- 自動生成の償却・処分なのに固定資産欄が空（730 の移行漏れ、または生成側のセット漏れ）。
+-- 空のままだと訂正伝票と同じ土俵で数えられない
+SELECT '自動生成なのに固定資産欄が空', je.id, je.entry_date,
+       je.source_id, NULL, NULL, NULL
+FROM journal_entries je
+WHERE je.source_type IN ('depreciation', 'disposal')
+  AND je.fixed_asset_id IS NULL
+
+UNION ALL
 SELECT '貸方科目が台帳の計上科目と違う', je.id, je.entry_date, fa.id,
        la.code || ' ' || la.name, ja.code || ' ' || ja.name, NULL
 FROM journal_entries je

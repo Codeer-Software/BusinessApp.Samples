@@ -16,6 +16,12 @@ exp AS (
   JOIN accounts a ON a.id = l.account_id
   WHERE e.status = 'posted' AND e.fiscal_year_id = @fiscal_year_id
     AND a.account_type = 'expense' AND l.project_id IS NOT NULL
+    -- 仕掛品の期末振替・翌期首の振戻は**案件別損益に混ぜない**（ADR-0072）。
+    -- 案件別損益は案件の生涯採算を見るもので、仕掛品は期間損益を正しくするための決算整理。
+    -- 混ぜると「振り替えた瞬間に粗利が改善し、翌期に悪化する」ように見える。
+    -- **仕掛品の計算に使う v_project_direct_cost とは除外の範囲が違う**（あちらは振戻を数える）ので、
+    -- ビューを共用せずここに書く
+    AND COALESCE(e.source_type, '') NOT IN ('wip', 'wip_reversal')
   GROUP BY l.project_id
 ),
 te AS (

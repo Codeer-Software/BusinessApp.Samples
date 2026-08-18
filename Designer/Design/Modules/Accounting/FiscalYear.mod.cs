@@ -401,6 +401,16 @@ void UpdateWipStatus()
 
     if (postedEntries == 0)
     {
+        // 振替を消したのに振戻だけ残っている（取消が途中で失敗した痕跡）。
+        // 放っておくと翌期の原価が二重に費用化されるので、画面で気づけるようにする
+        if (reversalEntries > 0)
+        {
+            WipStatusLabel.Text = "⚠ 仕掛品の振替: 期末の振替仕訳が無いのに、翌期首の振戻だけが残っています"
+                + "（取消が途中で失敗した可能性があります）。「期末振替を取り消す」を押して残りを消してください";
+            WipStatusLabel.Color = "#dc3545";
+            WipCancelButton.IsVisible = true;
+            return;
+        }
         if (computed <= 0)
         {
             WipStatusLabel.Text = "仕掛品の振替: 対象なし（当期の原価が付いた未検収の受託案件がありません）";
@@ -447,8 +457,26 @@ void WipTransfer_OnClick()
     if (st == null) { Toaster.Error("仕掛品の状態を取得できませんでした"); return; }
     var computed = st.ComputedAmount.Value ?? 0;
     var projects = st.ProjectCount.Value ?? 0;
+    var alreadyPosted = (st.PostedEntries.Value ?? 0) > 0;
     if (computed <= 0)
     {
+        // 起票済みなのに対象が 0 になった＝振替の後に検収が確定した、といった順序で起きる。
+        // ここで「対象がありません」と返すと、陳腐化の警告が「押し直してください」と言っているのに
+        // 押しても何も起きない**行き止まり**になる。**取り消して整合を戻す**のが正しい出口
+        if (alreadyPosted)
+        {
+            var ans0 = MessageBox.Show(
+                "仕掛品に振り替える対象が無くなりました（振替の後に検収が確定した等）。"
+                + "起票済みの期末振替と翌期首の振戻を取り消して、帳簿を整合させます。よろしいですか？",
+                "取り消す", "やめる");
+            if (ans0 != "取り消す") return;
+            using var suspend0 = this.SuspendNotifyStateChanged();
+            using var loading0 = LoadingService.StartLoading(0);
+            if (!DeleteWipJournals(true)) return;
+            UpdateWipStatus();
+            Toaster.Success("仕掛品の期末振替を取り消しました（対象が無くなったため）");
+            return;
+        }
         Toaster.Info("仕掛品に振り替える対象がありません（当期の原価が付いた未検収の受託案件がありません）");
         return;
     }
@@ -467,7 +495,7 @@ void WipTransfer_OnClick()
     }
     var typedNext = (FiscalYear)next;
 
-    var already = (st.PostedEntries.Value ?? 0) > 0;
+    var already = alreadyPosted;
     var head = already ? "仕掛品の期末振替を打ち直します（既存の振替と振戻を削除して作り直します）。" : "仕掛品の期末振替を起票します。";
     var answer = MessageBox.Show(
         head + $"対象 {projects} 案件・合計 {computed:#,0} 円。{Name.Value} の期末に「借方 仕掛品 / 貸方 仕掛品振替高」、{typedNext.Name.Value} の期首に同額の振戻を起票します。よろしいですか？",

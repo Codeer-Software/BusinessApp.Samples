@@ -15,8 +15,9 @@ SELECT '処分日より後の償却仕訳がある' AS 違反,
        je.journal_no AS 伝票番号, je.entry_date AS 仕訳日
 FROM fixed_assets fa
 JOIN journal_entries je
-  ON je.source_type = 'depreciation'
- AND je.source_id = fa.id
+  ON COALESCE(je.source_type, '') <> 'disposal'
+ AND ((je.source_type = 'depreciation' AND je.source_id = fa.id)
+      OR je.fixed_asset_id = fa.id)   -- 手で打った訂正伝票も見る（ADR-0073）
 WHERE fa.status IN ('retired', 'sold')
   AND fa.retired_date IS NOT NULL
   AND date(je.entry_date) > date(fa.retired_date)
