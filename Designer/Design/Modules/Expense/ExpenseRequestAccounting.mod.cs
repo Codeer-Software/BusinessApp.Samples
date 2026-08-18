@@ -89,11 +89,28 @@ void GenerateJournal_OnClick()
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 
-    // 二重生成ガード
+    // 二重生成ガード。ただし**仕訳はあるのに状態が approved のまま**なら、それは
+    // 「仕訳の保存は成功したが直後の状態更新が失敗した」中断状態である（BUG-0311）。
+    // 以前はここで一律にエラーを返していたため、**SQL で直すまで画面から先へ進めない詰み**になっていた。
+    // 仕訳を作り直すのではなく、**状態だけ進めて自己修復する**——押し直せば直る形にしておく
     var js = new ModuleSearcher<JournalEntry>();
     js.AddEquals(e => e.SourceType.Value, "expense");
     js.AddEquals(e => e.SourceId.Value, this.Id.Value);
-    if (js.Execute().Count > 0) { Toaster.Error("この申請の仕訳は既に生成済みです"); return; }
+    var existing = js.Execute();
+    if (existing.Count > 0)
+    {
+        SettlementStatus.Value = "accounting";
+        var retFix = this.Submit();
+        if (retFix != true)
+        {
+            Toaster.Error("この申請の仕訳は既に生成済みですが、精算ステータスの更新に失敗しました。画面を開き直してもう一度お試しください");
+            return;
+        }
+        UpdateAccountingButtons();
+        var fixedNo = ((JournalEntry)existing[0]).JournalNo.Value;
+        Toaster.Info($"仕訳 No.{fixedNo} は既に生成されていました。二重には作らず、精算ステータスだけ「経理処理中」に進めました");
+        return;
+    }
 
     // 会計年度の解決と締め済み期間ガード（境界日知見: 月末日は辞書順比較で失敗するため月初日で解決）
     // 計上日の期間が締め済み（または期間未設定）なら処理日（今日）へ自動フォールバックする
@@ -367,11 +384,26 @@ void Settle_OnClick()
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 
-    // 二重生成ガード
+    // 二重生成ガード。仕訳生成側と同じく、**支払仕訳はあるのに状態が accounting のまま**なら
+    // 中断状態なので、作り直さずに状態だけ進めて自己修復する（BUG-0311）
     var js = new ModuleSearcher<JournalEntry>();
     js.AddEquals(e => e.SourceType.Value, "expense_payment");
     js.AddEquals(e => e.SourceId.Value, this.Id.Value);
-    if (js.Execute().Count > 0) { Toaster.Error("この申請の支払仕訳は既に生成済みです"); return; }
+    var existingPay = js.Execute();
+    if (existingPay.Count > 0)
+    {
+        SettlementStatus.Value = "settled";
+        var retFix = this.Submit();
+        if (retFix != true)
+        {
+            Toaster.Error("この申請の支払仕訳は既に生成済みですが、精算ステータスの更新に失敗しました。画面を開き直してもう一度お試しください");
+            return;
+        }
+        UpdateAccountingButtons();
+        var fixedNo = ((JournalEntry)existingPay[0]).JournalNo.Value;
+        Toaster.Info($"支払仕訳 No.{fixedNo} は既に生成されていました。二重には作らず、精算ステータスだけ「精算済」に進めました");
+        return;
+    }
 
     // 支払日=今日。会計年度・期間の解決 (境界日知見: 期間解決はその月の月初日で行う)
     var payDate = DateOnly.FromDateTime(DateTime.Today);
