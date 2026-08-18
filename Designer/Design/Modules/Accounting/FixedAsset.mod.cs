@@ -361,6 +361,95 @@ void UpdateDisposalUi()
     DisposalHint.IsVisible = true;
 }
 
+// 期首から処分月までの月数（処分月を含める。取得年度の月割が「取得月を 1 か月目として数える」ので、
+// 出口側も同じ数え方にそろえる）
+int MonthsFromYearStartToDisposal(var yearStart, var disposal)
+{
+    var elapsed = disposal.Month - yearStart.Month;
+    if (elapsed < 0) { elapsed = elapsed + 12; }
+    return elapsed + 1;
+}
+
+// 処分日までの期中償却を 1 本起こす（BUG-0339）。
+//
+// 償却仕訳は期末日付でしか作れないので、期中に処分すると**当期分の減価償却費が 0 のまま
+// 全額が除却損**になり、PL の科目配分が狂う。処分の直前に、期首から処分月までの月割を
+// **処分日と同じ日付**で起票する（不変条件 E03 の備考が定める作法）。
+// 当期の償却仕訳が既にあるときは何もしない（二重計上を避ける）。
+// 戻り値: 起票した金額（0 なら何もしていない）。失敗したら -1
+int PostPartialYearDepreciation(FiscalYear fy, var dispDate)
+{
+    if (fy == null) return 0;
+
+    // 当期の償却が既に立っていれば触らない
+    var exist = new ModuleSearcher<JournalEntry>();
+    exist.AddEquals(e => e.SourceType.Value, "depreciation");
+    exist.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    exist.AddEquals(e => e.FiscalYearRef.Value, fy.Id.Value);
+    if (exist.Execute().Count > 0) return 0;
+
+    var full = CalcDepreciationForYear(fy.StartDate.Value, fy.EndDate.Value);
+    if (full <= 0) return 0;
+    var months = MonthsFromYearStartToDisposal(fy.StartDate.Value, dispDate);
+    if (months >= 12) { months = 12; }
+    var amount = full * months / 12;
+    if (amount <= 0) return 0;
+
+    // 残存簿価 1 円を割らない（理論値の丸めで割り込むことがある）
+    var bookNow = BookValue();
+    if (amount > bookNow - 1) { amount = bookNow - 1; }
+    if (amount <= 0) return 0;
+
+    var depAcc = FindAccountByRole("depreciation_expense");
+    if (depAcc == null)
+    {
+        var accS = new ModuleSearcher<Account>();
+        accS.AddEquals(e => e.Code.Value, "6300");
+        var f = accS.ExecuteFirstOrDefault();
+        if (f == null) { Toaster.Error("減価償却費の科目がありません"); return -1; }
+        depAcc = (Account)f;
+    }
+
+    var nextNo = new JournalEntry().NextJournalNo(fy.Id.Value);
+    var je = new JournalEntry();
+    je.EntryDate.Value = dispDate;
+    je.EntryType.Value = "auto";
+    je.Description.Value = $"減価償却 {Name.Value}（処分までの期中償却 {months} か月分）";
+    je.Status.Value = "posted";
+    je.JournalNo.Value = nextNo;
+    je.FiscalYearRef.Value = fy.Id.Value;
+    je.SourceType.Value = "depreciation";
+    je.SourceId.Value = this.Id.Value;
+    je.Lines.AddRows(2);
+    var i2 = 0;
+    foreach (var row in je.Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        i2 = i2 + 1;
+        l.LineNo.Value = i2;
+        l.Amount.Value = amount;
+        l.InputAmount.Value = amount;
+        l.TaxInputMode.Value = "none";
+        l.Description.Value = $"減価償却 {Name.Value}（期中）";
+        if (i2 == 1)
+        {
+            l.Dc.Value = "D";
+            l.Account.Value = depAcc.Id.Value;
+            if (Department.Value != null) { l.Department.Value = Department.Value; }
+        }
+        else
+        {
+            l.Dc.Value = "C";
+            l.Account.Value = AssetAccount.Value;
+        }
+    }
+    je.MarkAllLinesOutOfScope();
+    je.FillMissingDepartments();
+    var ret = je.Submit();
+    if (ret != true) { Toaster.Error("処分までの期中償却の生成に失敗しました"); return -1; }
+    return amount;
+}
+
 void Retire_OnClick()
 {
     DoDisposal(false);
@@ -441,6 +530,13 @@ void DoDisposal(bool isSale)
         Toaster.Error("当月の月次期間が締め済みです。期間を再オープンしてから処分してください");
         return;
     }
+
+    // 期中償却を先に起こす（BUG-0339）。期末日付でしか償却できないと、期中処分で
+    // **当期の減価償却費が 0 のまま全額が除却損**になり PL の科目配分が狂う。
+    // **簿価はこのあとで取り直す**（償却した分だけ簿価が下がる）
+    var partial = PostPartialYearDepreciation(typedFy, dispDate);
+    if (partial < 0) return;
+    if (partial > 0) { book = BookValue(); }
 
     var assetName = Name.Value ?? "";
     var what = isSale ? "売却" : "除却";
@@ -578,7 +674,8 @@ void DoDisposal(bool isSale)
         return;
     }
     UpdateDisposalUi();
-    Toaster.Success($"固定資産「{assetName}」を{what}しました（仕訳 No.{nextNo}・{detail}）");
+    var partialText = (partial > 0) ? $"／処分までの期中償却 {partial:#,0} 円も起票" : "";
+    Toaster.Success($"固定資産「{assetName}」を{what}しました（仕訳 No.{nextNo}・{detail}{partialText}）");
 }
 
 // 処分の取消（ADR-0070: 締め前なら仕訳ごと巻き戻す／締め済みなら取り消せない）
@@ -616,13 +713,31 @@ void CancelDisposal_OnClick()
         if (okDel != true) { Toaster.Error("処分仕訳の削除に失敗しました"); return; }
     }
 
+    // 処分と同じ日付で起票した**期中償却**も一緒に戻す（BUG-0339）。
+    // 残すと「使用中なのに期中で償却が切れている」状態になり、次に処分するとき二重に償却してしまう。
+    // 判別は「source_type='depreciation' かつ仕訳日＝処分日」——期末日付の通常の償却とはぶつからない
+    var removedPartial = 0;
+    if (RetiredDate.Value != null)
+    {
+        var ds = new ModuleSearcher<JournalEntry>();
+        ds.AddEquals(e => e.SourceType.Value, "depreciation");
+        ds.AddEquals(e => e.SourceId.Value, this.Id.Value);
+        ds.AddEquals(e => e.EntryDate.Value, RetiredDate.Value);
+        foreach (var drow in ds.Execute())
+        {
+            var dje = (JournalEntry)drow;
+            if (dje.Delete() == true) { removedPartial = removedPartial + 1; }
+        }
+    }
+
     Status.Value = "in_use";
     RetiredDate.Value = null;
     DisposalAmount.Value = null;
     var retSelf = this.Submit();
     if (retSelf != true) { Toaster.Error("台帳の状態更新に失敗しました。画面を開き直してもう一度お試しください"); return; }
     UpdateDisposalUi();
-    var doneMsg = (no == "") ? "処分を取り消しました" : $"処分仕訳 No.{no} を削除し、処分を取り消しました";
+    var partialMsg = (removedPartial > 0) ? "（処分までの期中償却も戻しました）" : "";
+    var doneMsg = (no == "") ? $"処分を取り消しました{partialMsg}" : $"処分仕訳 No.{no} を削除し、処分を取り消しました{partialMsg}";
     Toaster.Success(doneMsg);
 }
 
