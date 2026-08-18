@@ -346,16 +346,30 @@ void Lines_OnDataChanged()
     UpdateLineButtons();
 }
 
-// 明細の行番号を 1 から振り直す（削除で空いた番号を詰める）
+// 明細の行番号を 1 から振り直す（削除で空いた番号を詰める）。
+//
+// **DB 側と画面のリスト側の両方に同じ番号を書く**（BUG-0313）。
+// 詰め直しは `GetLinesFromDb()` が返す別インスタンス経由で行うが、この直後に呼ばれる
+// 親の `Submit()` は**画面のリストが抱えている古い line_no** を書き戻しうる。
+// どちらが勝っても同じ値になるように、両方へ書いておく。
+// 順序の正は DB 側（line_no 昇順で取得している）で、画面側は Id で突き合わせて当てる。
 void RenumberLines()
 {
     var n = 0;
     foreach (var l in GetLinesFromDb())
     {
         n = n + 1;
-        if (l.LineNo.Value == n) continue;
-        l.LineNo.Value = n;
-        l.Submit();
+        if (l.LineNo.Value != n)
+        {
+            l.LineNo.Value = n;
+            l.Submit();
+        }
+        foreach (var row in Lines.Rows)
+        {
+            var lr = (ExpenseRequestLine)row;
+            if (!IsSameId(lr.Id.Value, l.Id.Value)) continue;
+            if (lr.LineNo.Value != n) { lr.LineNo.Value = n; }
+        }
     }
 }
 
