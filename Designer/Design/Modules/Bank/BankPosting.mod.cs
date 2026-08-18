@@ -284,6 +284,17 @@ void PostAll_OnClick()
     var trS = new ModuleSearcher<TaxRate>();
     var taxRates = trS.Execute();
 
+    // インボイス経過措置の控除割合（本日基準で期間解決。期間外は 0%・BUG-0419）。
+    // 明細ごとの仕訳日は明細の日付だが、控除割合は年単位でしか変わらないので
+    // 一括起票の実行日で 1 回だけ引く（ループ内 I/O の削減）
+    decimal transitionRate = 0;
+    var trFirst = new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1);
+    var itS = new ModuleSearcher<InvoiceTransitionRate>();
+    itS.AddLessThanOrEqual(e => e.ValidFrom.Value, trFirst);
+    itS.AddGreaterThanOrEqual(e => e.ValidTo.Value, trFirst);
+    var itFound = itS.ExecuteFirstOrDefault();
+    if (itFound != null) { transitionRate = ((InvoiceTransitionRate)itFound).RatePercent.Value ?? 0; }
+
     object purchaseTaxId = null;
     object salesTaxId = null;
     foreach (var am in accounts)
@@ -383,6 +394,16 @@ void PostAll_OnClick()
                         if ($"{r2.Id.Value}" != $"{c.Rate.Value}") continue;
                         decimal pct = r2.RatePercent.Value ?? 0;
                         if (pct > 0) tax = gross * pct / (100 + pct);
+                        // **インボイス経過措置は控除できる分だけを税行に載せる**（BUG-0419）。
+                        // 相手科目の既定税区分が経過措置区分（免税事業者からの仕入）なら、
+                        // 控除割合の分しか仕入税額控除できない。控除できない残りは費用の本体額へ。
+                        // 振替伝票（`JournalEntry.RegenerateTaxLines`）・経費（BUG-0183）・
+                        // 購買（BUG-0417）と同じ規則。**`int` で受けて切り捨てる**（CLB-040）
+                        if (c.UsesTransitionDeduction.Value == true)
+                        {
+                            int deductible = tax * transitionRate / 100;
+                            tax = deductible;
+                        }
                         break;
                     }
                 }
