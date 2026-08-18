@@ -12,8 +12,13 @@
 --
 -- 精算処理待ち = ExpenseSettlementQueue と同一条件（approved/accounting/settled）
 -- 定期請求の当月未生成 = RecurringRun.BuildPlan が status='planned' にする契約と同条件
---   （確定済み・有効・当月が契約期間内・金額が 1 円以上・当月分の請求書が無い。
---    月額は毎月、年額は周期起点月のみ対象）
+--   （確定済み・有効・当月が契約期間内・金額が 1 円以上）。**3 つの型を数える**（BUG-0149）:
+--     ① 月額 …… 当月分の請求書がまだ無い
+--     ② 年額・周期起点月 …… アンカーの年額請求書がまだ無い
+--     ③ 年額・按分月 …… アンカーがあって取消でなく、当月の按分振替（`recurring_defer` 仕訳）がまだ無い
+--   **③ を落としていたのが BUG-0149**。年額契約は 12 ヶ月のうち 11 ヶ月が③なので、
+--   「画面は生成予定 1 件・ホームは 0 件」が年の大半で起きていた。
+--   ADR-0060「決定 3」の『BuildPlan と同条件にする』に揃えた（2026-08-19）
 -- SES の当月未生成 = SesBilling.BuildPlan が status='planned' にする案件と同条件
 --   （有効・進行中・月額精算額が設定済み・当月の工数実績あり・精算後の請求額が 1 円以上・
 --    当月の SES 請求書が無い）
@@ -28,12 +33,42 @@ SELECT
       AND (rb.end_month IS NULL OR date(rb.end_month) >= date('now', 'localtime', 'start of month'))
       AND (CASE WHEN rb.billing_cycle = 'yearly'
                 THEN COALESCE(rb.annual_amount, 0) ELSE COALESCE(rb.monthly_amount, 0) END) > 0
-      AND (rb.billing_cycle <> 'yearly'
-           OR ((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) * 12 + CAST(strftime('%m', 'now', 'localtime') AS INTEGER))
-               - (CAST(strftime('%Y', rb.start_month) AS INTEGER) * 12 + CAST(strftime('%m', rb.start_month) AS INTEGER))) % 12 = 0)
-      AND NOT EXISTS (SELECT 1 FROM invoices iv
-                      WHERE iv.recurring_billing_id = rb.id
-                        AND date(iv.billing_month) = date('now', 'localtime', 'start of month'))) AS recurring_pending,
+      AND (
+        -- ① 月額: 当月分の請求書がまだ無い
+        (rb.billing_cycle <> 'yearly'
+         AND NOT EXISTS (SELECT 1 FROM invoices iv
+                          WHERE iv.recurring_billing_id = rb.id
+                            AND date(iv.billing_month) = date('now', 'localtime', 'start of month')))
+        -- ② 年額・周期起点月: アンカーの年額請求書がまだ無い
+        OR (rb.billing_cycle = 'yearly'
+            AND (((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) * 12 + CAST(strftime('%m', 'now', 'localtime') AS INTEGER))
+                  - (CAST(strftime('%Y', rb.start_month) AS INTEGER) * 12 + CAST(strftime('%m', rb.start_month) AS INTEGER))) % 12) = 0
+            AND NOT EXISTS (SELECT 1 FROM invoices iv
+                             WHERE iv.recurring_billing_id = rb.id
+                               AND iv.invoice_source = 'recurring_annual'
+                               AND date(iv.billing_month) = date('now', 'localtime', 'start of month')))
+        -- ③ 年額・按分月: アンカーがあって取消でなく、当月の按分振替がまだ無い（BUG-0149）
+        OR (rb.billing_cycle = 'yearly'
+            AND (((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) * 12 + CAST(strftime('%m', 'now', 'localtime') AS INTEGER))
+                  - (CAST(strftime('%Y', rb.start_month) AS INTEGER) * 12 + CAST(strftime('%m', rb.start_month) AS INTEGER))) % 12) <> 0
+            AND EXISTS (SELECT 1 FROM invoices iv
+                         WHERE iv.recurring_billing_id = rb.id
+                           AND iv.invoice_source = 'recurring_annual'
+                           AND iv.status <> 'void'
+                           AND date(iv.billing_month) = date('now', 'localtime', 'start of month',
+                                 '-' || (((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) * 12 + CAST(strftime('%m', 'now', 'localtime') AS INTEGER))
+                                        - (CAST(strftime('%Y', rb.start_month) AS INTEGER) * 12 + CAST(strftime('%m', rb.start_month) AS INTEGER))) % 12) || ' months'))
+            AND NOT EXISTS (SELECT 1 FROM journal_entries je
+                             WHERE je.source_type = 'recurring_defer'
+                               AND je.source_id = (SELECT iv2.id FROM invoices iv2
+                                                    WHERE iv2.recurring_billing_id = rb.id
+                                                      AND iv2.invoice_source = 'recurring_annual'
+                                                      AND date(iv2.billing_month) = date('now', 'localtime', 'start of month',
+                                                            '-' || (((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) * 12 + CAST(strftime('%m', 'now', 'localtime') AS INTEGER))
+                                                                   - (CAST(strftime('%Y', rb.start_month) AS INTEGER) * 12 + CAST(strftime('%m', rb.start_month) AS INTEGER))) % 12) || ' months')
+                                                    LIMIT 1)
+                               AND strftime('%Y-%m', je.entry_date) = strftime('%Y-%m', 'now', 'localtime')))
+      )) AS recurring_pending,
   (SELECT count(*) FROM (
      SELECT p.id,
             CAST(COALESCE((SELECT sum(t.minutes) FROM time_entries t
