@@ -860,6 +860,17 @@ void DoDisposal(bool isSale)
             saved.Submit();
         }
     }
+    // **別インスタンス（saved）で Submit すると、画面のインスタンスの値が落ちることがある**（BUG-0375）。
+    // 売却の直後だけ「除却・売却日」が空欄になり、案内文も「この資産は  に売却済みです」と
+    // 日付が抜けて表示されていた（データは正しく、再読込すると直る＝表示だけの問題）。
+    // DB は既に正しいので、**画面の値を入れ直してから**表示を組み直す
+    Status.Value = isSale ? "sold" : "retired";
+    RetiredDate.Value = dispDate;
+    if (isSale)
+    {
+        DisposalAmount.Value = sale;
+        if (saleTaxCatId != null) { DisposalTaxCategory.Value = saleTaxCatId; }
+    }
     UpdateDisposalUi();
     var partialText = (partial > 0) ? $"／処分までの期中償却 {partial:#,0} 円も起票" : "";
     Toaster.Success($"固定資産「{assetName}」を{what}しました（仕訳 No.{nextNo}・{detail}{partialText}）");
