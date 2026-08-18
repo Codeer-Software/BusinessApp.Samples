@@ -233,6 +233,17 @@ bool BuildOrdersFromTemplates(List<object> templateIds, bool validateOnly)
 
     var applicantId = ResolveApplicantUserId();
     var dept = FindUserDepartment(applicantId);
+    // **所属部門が無い申請は通さない**（BUG-0394）。
+    // 部門が引けないと役職段（課長・部長）の承認者が 1 人も出せず、経理 1 名の代替に落ちる。
+    // その結果、金額がいくらでも**積み上げ承認（ADR-0048）を飛ばして 1 段で終わる**——
+    // 統制の穴なのに警告も出ない。代替承認者は「部門は引けたが承認者が居ない」ときのための仕組みであって、
+    // 「部門が無い」ことの受け皿ではない
+    if (dept == null)
+    {
+        Toaster.Error("申請者の所属部門が設定されていないため、承認ルートを決められません。"
+            + "システム管理 > 組織 > ユーザー管理 で所属部門を設定してください");
+        return false;
+    }
 
     // 事前パス: 全メンバーの承認者を解決できるか検証してから行を作る
     foreach (var tmplOrder in tmplOrders)
