@@ -362,6 +362,13 @@ int CreateReversalJournal(JournalEntry src, string sourceType, string kind)
     }
     je.MarkRemainingLinesOutOfScope();
     je.FillMissingDepartments();  // 部門は NOT NULL。元仕訳から写しているので通常は素通り（ADR-0056）
+    // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+    var imbalance = je.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"仕訳の生成を中止しました（{imbalance}）");
+        return 0;
+    }
     var ret = je.Submit();
     if (ret != true) { return 0; }
     return nextNo;

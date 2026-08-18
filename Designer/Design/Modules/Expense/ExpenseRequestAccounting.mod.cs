@@ -365,6 +365,13 @@ void GenerateJournal_OnClick()
     }
     je.MarkRemainingLinesOutOfScope();
     je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
+    // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+    var imbalance = je.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"仕訳の生成を中止しました（{imbalance}）");
+        return;
+    }
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("仕訳の生成に失敗しました"); return; }
 
@@ -509,6 +516,13 @@ void Settle_OnClick()
     }
     je.MarkRemainingLinesOutOfScope();
     je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
+    // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+    var imbalance = je.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"支払仕訳の生成を中止しました（{imbalance}）");
+        return;
+    }
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("支払仕訳の生成に失敗しました"); return; }
 

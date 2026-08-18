@@ -460,6 +460,15 @@ void Run_OnClick()
         }
         je.MarkRemainingLinesOutOfScope();
         je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
+        // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+        var imbalance = je.ValidateBalanced();
+        if (imbalance != "")
+        {
+            Toaster.Error($"売上仕訳の生成を中止しました: {invTitle}（{imbalance}）（請求書 {invoiceNo} は作成済み）");
+            ResultLabel.Text = $"中断: 生成 {created}件（{invoiceNo} の仕訳で中止）";
+            PlanLines.Reload();
+            return;
+        }
         var retJe = je.Submit();
         if (retJe != true)
         {

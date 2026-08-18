@@ -459,6 +459,13 @@ bool PostDeferredSettlement(int amount, var endMonthFirst)
     // 内部振替なので消費税の対象外（ADR-0053）
     je.MarkAllLinesOutOfScope();
     je.FillMissingDepartments();
+    // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+    var imbalance = je.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"前受収益の打ち切り仕訳の生成を中止しました（{imbalance}）");
+        return false;
+    }
     if (je.Submit() != true) { Toaster.Error("前受収益の打ち切り仕訳の生成に失敗しました"); return false; }
     Toaster.Info($"前受収益の未償却残 {amount:#,0} 円を {endMonthFirst:yyyy年M月} の売上に振り替えました（伝票 No.{nextNo}）");
     return true;

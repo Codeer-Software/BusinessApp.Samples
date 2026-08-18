@@ -314,6 +314,35 @@ void MarkRemainingLinesOutOfScope()
     }
 }
 
+// 貸借一致の検証（BUG-0068）。**他モジュールが `je.Submit()` する直前に必ず呼ぶ**。
+// 一致していれば ""、していなければ人が読める理由を返す。
+//
+// なぜ共有ヘルパにするのか: 「貸借一致しない伝票は確定できない」（docs/04 §0-2）は
+// このアプリの一番外側の約束なのに、長らく `JournalEntry` の確定と CSV 取込の 2 経路でしか
+// 守られていなかった。自動起票（入金・検収・経費・償却・銀行・定期請求 …）は
+// 金額を自分で組み立てて `Submit()` していて、組み立てを間違えても誰も気づけない。
+// SQLite 側にも制約は置けない（親と明細は別 INSERT なので、行が揃う瞬間が無い）。
+// **確定の直前にアプリ層で 1 回見る**のが唯一の止め場所である。
+//
+// 呼ぶのは `Submit()` の前。ここで止めれば伝票そのものが生まれないので、
+// 「途中まで書けてしまった伝票をどう巻き戻すか」（BUG-0131／0148）の論点に立ち入らずに済む。
+string ValidateBalanced()
+{
+    var d = 0;
+    var c = 0;
+    var n = 0;
+    foreach (var row in Lines.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.Amount.Value == null) continue;
+        if (l.Dc.Value == "D") { d = d + l.Amount.Value; n = n + 1; }
+        else if (l.Dc.Value == "C") { c = c + l.Amount.Value; n = n + 1; }
+    }
+    if (n == 0) { return "仕訳明細が 1 行もありません"; }
+    if (d != c) { return $"貸借が一致していません（借方 {d:#,0} 円 / 貸方 {c:#,0} 円 / 差額 {d - c:#,0} 円）"; }
+    return "";
+}
+
 void UpdateTotals()
 {
     var d = 0;

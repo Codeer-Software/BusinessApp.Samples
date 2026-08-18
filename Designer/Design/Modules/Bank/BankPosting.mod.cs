@@ -417,6 +417,14 @@ void PostAll_OnClick()
         }
         je.MarkRemainingLinesOutOfScope();
         je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
+        // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+        var imbalance = je.ValidateBalanced();
+        if (imbalance != "")
+        {
+            Toaster.Error($"起票を中止した明細があります（{imbalance}）");
+            failed = failed + 1;
+            continue;
+        }
         var ok = je.Submit();
         if (ok != true) { failed = failed + 1; continue; }
 

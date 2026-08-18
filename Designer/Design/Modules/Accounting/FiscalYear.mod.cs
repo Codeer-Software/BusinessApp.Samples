@@ -735,6 +735,13 @@ bool PostOneWipJournal(FiscalYear fy, var entryDate, string sourceType, string d
     // 決算整理なので消費税の対象外（原価の付け替えであって取引ではない）
     je.MarkAllLinesOutOfScope();
     je.FillMissingDepartments();
+    // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+    var imbalance = je.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"{description} の起票を中止しました（{imbalance}）");
+        return false;
+    }
     if (je.Submit() != true)
     {
         Toaster.Error($"{description} の起票に失敗しました");

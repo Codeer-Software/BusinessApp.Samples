@@ -421,6 +421,13 @@ void Accrue_OnClick()
     }
     je.MarkRemainingLinesOutOfScope();
     je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
+    // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+    var imbalance = je.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"未払計上仕訳の生成を中止しました（{imbalance}）");
+        return;
+    }
     var ok = je.Submit();
     if (ok != true) { Toaster.Error("未払計上仕訳の生成に失敗しました。ほかの人が同時に伝票を確定した可能性があります。もう一度お試しください"); return; }
 
@@ -537,6 +544,13 @@ void Pay_OnClick()
     }
     je.MarkRemainingLinesOutOfScope();
     je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
+    // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+    var imbalance = je.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"支払仕訳の生成を中止しました（{imbalance}）");
+        return;
+    }
     var ok = je.Submit();
     if (ok != true) { Toaster.Error("支払仕訳の生成に失敗しました。ほかの人が同時に伝票を確定した可能性があります。もう一度お試しください"); return; }
 

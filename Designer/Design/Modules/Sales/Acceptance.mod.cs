@@ -753,6 +753,13 @@ void Confirm_OnClick()
     // 収益行（売上高）だけは埋めない——部門は受注が必ず持っているので、そこから来る（BUG-0266）。
     // 検収の状態はまだ動かしていないので、ここで戻れば副作用は残らない
     if (!je.TryFillMissingDepartments("受注に部門を設定してから検収を確定してください")) { return; }
+    // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+    var imbalance = je.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"売上仕訳の生成を中止しました（{imbalance}）");
+        return;
+    }
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("売上仕訳の生成に失敗しました。ほかの人が同時に伝票を確定した可能性があります。もう一度お試しください"); return; }
 

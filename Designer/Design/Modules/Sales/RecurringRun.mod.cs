@@ -558,6 +558,15 @@ void Run_OnClick()
                 PlanLines.Reload();
                 return;
             }
+            // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+            var imbalance = je.ValidateBalanced();
+            if (imbalance != "")
+            {
+                Toaster.Error($"売上仕訳の生成を中止しました: {invTitle}（{imbalance}）（請求書 {invoiceNo} は作成済み）");
+                ResultLabel.Text = $"中断: 月額 {created}件 / 年額請求 {annualCreated}件 / 按分振替 {deferCreated}件";
+                PlanLines.Reload();
+                return;
+            }
             var retJe = je.Submit();
             if (retJe != true)
             {
@@ -691,6 +700,15 @@ void Run_OnClick()
             // 前受計上は負債科目だが、按分振替（CreateDeferJournal）で収益になる（BUG-0266）
             if (!je.TryFillMissingDepartments("定期請求契約に部門を設定してから実行してください"))
             {
+                ResultLabel.Text = $"中断: 月額 {created}件 / 年額請求 {annualCreated}件 / 按分振替 {deferCreated}件";
+                PlanLines.Reload();
+                return;
+            }
+            // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+            var imbalance = je.ValidateBalanced();
+            if (imbalance != "")
+            {
+                Toaster.Error($"前受計上仕訳の生成を中止しました: {invTitle}（{imbalance}）（請求書 {invoiceNo} は作成済み）");
                 ResultLabel.Text = $"中断: 月額 {created}件 / 年額請求 {annualCreated}件 / 按分振替 {deferCreated}件";
                 PlanLines.Reload();
                 return;
@@ -831,6 +849,13 @@ int CreateDeferJournal(object fiscalYearId, object billing, object annualInvId, 
     // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）。
     // 按分振替の貸方は SaaS 売上高＝収益なので、全社共通では埋めない（BUG-0266）
     if (!dje.TryFillMissingDepartments("定期請求契約に部門を設定してから実行してください")) { return 0; }
+    // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+    var imbalance = dje.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"按分振替仕訳の生成を中止しました: {b.Title.Value}（{imbalance}）");
+        return 0;
+    }
     var retDje = dje.Submit();
     if (retDje != true)
     {

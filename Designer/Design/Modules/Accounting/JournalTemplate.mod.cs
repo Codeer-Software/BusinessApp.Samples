@@ -92,6 +92,13 @@ void CreateEntry_OnClick()
     // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）。
     // 収益行だけは埋めない——定型の明細に部門欄があるので、そこで決めてもらう（BUG-0266）
     if (!je.TryFillMissingDepartments("定型仕訳の明細に部門を設定してから起票してください")) { return; }
+    // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+    var imbalance = je.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"伝票の作成を中止しました（{imbalance}）");
+        return;
+    }
     var ret = je.Submit();
     if (ret != true)
     {

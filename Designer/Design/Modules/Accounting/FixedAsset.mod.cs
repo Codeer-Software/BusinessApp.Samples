@@ -567,6 +567,13 @@ bool PostPartialDepreciationJournal(FiscalYear fy, var dispDate, int amount)
     }
     je.MarkAllLinesOutOfScope();
     je.FillMissingDepartments();
+    // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+    var imbalance = je.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"処分までの期中償却の生成を中止しました（{imbalance}）");
+        return false;
+    }
     var ret = je.Submit();
     if (ret != true) { Toaster.Error("処分までの期中償却の生成に失敗しました"); return false; }
     return true;
@@ -817,6 +824,13 @@ void DoDisposal(bool isSale)
     // **MarkAllLinesOutOfScope は使えない**——売却では課税売上の行と税行を残す必要がある
     je.MarkRemainingLinesOutOfScope();
     je.FillMissingDepartments();
+    // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+    var imbalance = je.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"{what}仕訳の生成を中止しました（{imbalance}）");
+        return;
+    }
     var ret = je.Submit();
     if (ret != true) { Toaster.Error($"{what}仕訳の生成に失敗しました"); return; }
 
@@ -1088,6 +1102,13 @@ void GenerateDep_OnClick()
     // 科目の既定に任せると、貸方の固定資産科目に取得時の「課税仕入 10%」が入り消費税集計表が狂う。
     je.MarkAllLinesOutOfScope();
     je.FillMissingDepartments();  // 部門は NOT NULL。空の行を全社共通で埋める（ADR-0056）
+    // 貸借一致の検証（BUG-0068）。**Submit の前**に見るので、止めれば伝票は生まれない
+    var imbalance = je.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"償却仕訳の生成を中止しました（{imbalance}）");
+        return;
+    }
     var ret = je.Submit();
     if (ret == false)
     {
