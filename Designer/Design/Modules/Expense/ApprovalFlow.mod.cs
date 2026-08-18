@@ -219,6 +219,14 @@ bool IsRouteChanged(List<object> templateIds)
 // 失敗時 (テンプレ未設定・役職が解決できない) は行を作らず false を返す（中途半端な Orders を残さない）。
 bool LoadFromTemplates(List<object> templateIds)
 {
+    return BuildOrdersFromTemplates(templateIds, false);
+}
+
+// validateOnly = true のときは行を作らず、事前パス（テンプレの構成と承認者が解決できるか）だけを走らせる。
+// 「作れることを確かめてから消す」ために使う（BUG-0309）——同じ判定を 2 か所に書かないための引数である。
+// オーバーロードにしないのは、CLB のスクリプトで解決されるか確証が無いため（名前を分ける方が安全）
+bool BuildOrdersFromTemplates(List<object> templateIds, bool validateOnly)
+{
     if (templateIds == null || templateIds.Count == 0) { Toaster.Error("承認テンプレートが未設定です"); return false; }
     var tmplOrders = BuildMergedOrders(templateIds);
     if (tmplOrders.Count == 0) { Toaster.Error("承認テンプレートに承認段階がありません"); return false; }
@@ -267,6 +275,8 @@ bool LoadFromTemplates(List<object> templateIds)
             return false;
         }
     }
+
+    if (validateOnly) return true;
 
     var first = true;
     List<object> prevRoleApprovers = null;  // 直前の役職段の承認者集合（重複段の圧縮用・ADR-0044）
@@ -1255,13 +1265,19 @@ bool RebuildOrdersFromTemplate()
 {
     var parent = GetParentModule();
 
+    // **消す前に、作れることを確かめる**（BUG-0309）。
+    // 先に全段を消してから失敗すると、削除と Status="Pending" がメモリに残り、
+    // その後の親 Submit（明細の追加など）が**段 0 件の「進行中」フロー**を永続化してしまう。
+    // そうなると申請ボタンも承認者も出ず、画面からは復旧できない
+    var tmplIds = parent.SelectTemplateIds();
+    if (tmplIds.Count == 0) return false;   // 解決できない理由は親側でトースト済み
+    if (!BuildOrdersFromTemplates(tmplIds, true)) return false;   // 事前パスだけ走らせる（行は作らない）
+
     var rowsToDelete = new List<ApprovalFlowOrder>();
     foreach (var o in Orders.Rows) rowsToDelete.Add(o);
     foreach (var o in rowsToDelete) Orders.DeleteRow(o);
 
-    var tmplIds = parent.SelectTemplateIds();
-    if (tmplIds.Count == 0) return false;   // 解決できない理由は親側でトースト済み
-    return LoadFromTemplates(tmplIds);
+    return BuildOrdersFromTemplates(tmplIds, false);
 }
 
 // 監査用: 合成に使ったテンプレートを履歴コメントに残す
