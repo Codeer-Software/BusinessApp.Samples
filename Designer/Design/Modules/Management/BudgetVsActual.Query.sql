@@ -16,6 +16,10 @@ act AS (
   WHERE e.status = 'posted'
     AND e.fiscal_year_id = @fiscal_year_id
     AND a.account_type = 'expense'
+    -- 仕掛品の期末振替・翌期首の振戻は実績に混ぜない（BUG-0371）。
+    -- 予実対比が見たいのは「部門がいくら使ったか」で、仕掛品は**決算の付け替え**である。
+    -- 混ぜると予算 0 の「仕掛品振替高」に大きなマイナス実績が並び、部門の消化率も歪む
+    AND COALESCE(e.source_type, '') NOT IN ('wip', 'wip_reversal')
   GROUP BY l.department_id, l.account_id
 ),
 keys AS (

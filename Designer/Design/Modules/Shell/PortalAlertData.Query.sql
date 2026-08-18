@@ -148,6 +148,9 @@ budget_alert AS (
              WHERE e.status = 'posted'
                AND e.fiscal_year_id IN (SELECT id FROM cur_yr)
                AND a.account_type = 'expense'
+               -- 予実対比（BudgetVsActual）と**同一条件**に保つ（BUG-0371）。
+               -- 片方だけ直すとポータルの件数と画面の警告行数が黙ってずれる（ADR-0060）
+               AND COALESCE(e.source_type, '') NOT IN ('wip', 'wip_reversal')
              GROUP BY l.department_id, l.account_id) act
     ON act.department_id IS b.department_id AND act.account_id = b.account_id
   WHERE b.budget > 0
