@@ -820,8 +820,9 @@ void DeleteDraft_OnClick()
         }
     }
 
-    // 既知の限界: 承認フロー（子）の行はスクリプトから物理削除できず孤児として残る
-    // （実測 2026-07-16）。明細は ListField の DeleteTogether で親と一緒に消える
+    // 承認フロー（子）の行はスクリプトから物理削除できない（実測 2026-07-16）ので、
+    // **DB 側のトリガで片付ける**（`ddl/810_expense_delete_cleans_flow.sql`・BUG-0413）。
+    // 明細は ListField の DeleteTogether で親と一緒に消える
     this.Delete();
     Toaster.Success("下書きを削除しました");
     NavigationService.NavigateTo(NavigationService.GetModuleUrl("ExpenseRequest"));
