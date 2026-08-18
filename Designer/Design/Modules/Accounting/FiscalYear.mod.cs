@@ -61,6 +61,40 @@ void UpdateOpeningTotal()
     }
 }
 
+// 期首残高の合計を **DB から数え直す**（BUG-0091）。
+// 画面の OpeningBalances は開いている年度のぶんしか持たないうえ、
+// 「入力途中で保存しただけ」の状態と区別できない。確定の関門で使うのはこちら。
+//
+// **保存そのものは止めない。** 期首残高は科目を 1 行ずつ入れていくものなので、
+// 入力途中は必ず貸借が合わない。合計が赤いのは「まだ途中」の合図であって誤りではない。
+// 止めるべきは**確定の瞬間**——翌期へ繰り越すときと、年度を締めるときである
+// （`docs/04 §6`「投入合計が貸借一致しないと**確定不可**」の「確定」はこれを指す）。
+int OpeningBalanceTotalFromDb()
+{
+    var total = 0;
+    var s = new ModuleSearcher<OpeningBalance>();
+    s.AddEquals(o => o.FiscalYearId.Value, this.Id.Value);
+    foreach (var row in s.Execute())
+    {
+        var b = (OpeningBalance)row;
+        if (b.Balance.Value == null) continue;
+        total = total + b.Balance.Value;
+    }
+    return total;
+}
+
+// 期首残高が貸借一致していないなら理由を出して false を返す（確定系の入口で呼ぶ）
+bool CheckOpeningBalanced(string actionName)
+{
+    var total = OpeningBalanceTotalFromDb();
+    if (total == 0) return true;
+    var side = (total > 0) ? "借方" : "貸方";
+    var abs = (total > 0) ? total : -total;
+    Toaster.Error($"{Name.Value} の期首残高が貸借一致していません（{side}が {abs:#,0} 円多い）。"
+        + $"このまま{actionName}と、以後の帳票がすべて同額ずれ続けます。期首残高を直してから実行してください");
+    return false;
+}
+
 // 翌期繰越の状態を表示する（ADR-0068・BUG-0060）。
 //
 // 繰越は「実行した瞬間のスナップショット」なので、実行後に当年度の伝票を足す／直すと
@@ -156,6 +190,9 @@ bool RunCarryOver(bool confirm)
         return false;
     }
 
+    // 貸借の合っていない期首を土台に繰り越すと、ずれたまま翌期へ伝播する（BUG-0091）
+    if (!CheckOpeningBalanced("繰り越す")) return false;
+
     if (confirm)
     {
         var answer = MessageBox.Show($"{typedNext.Name.Value} の期首残高を作成します（既存の期首残高は洗い替えされます）。よろしいですか？", "実行", "キャンセル");
@@ -215,6 +252,8 @@ void CloseYear_OnClick()
         Toaster.Error("この年度は既に締め済みです");
         return;
     }
+    // 締めは決算の確定契機。貸借の合っていない期首のまま締めさせない（BUG-0091）
+    if (!CheckOpeningBalanced("締める")) return;
 
     // 下書きのまま残っている伝票は締めても確定されない（＝この年度の帳簿に載らない）ので、件数を先に伝える
     var ds = new ModuleSearcher<JournalEntry>();
