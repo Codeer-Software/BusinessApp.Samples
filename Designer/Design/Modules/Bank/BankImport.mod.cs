@@ -306,6 +306,10 @@ void ConfirmImport_OnClick()
             if (dir == "out" && outAmt <= 0) continue;
             if (!desc.Contains(kw)) continue;
             line.SuggestedAccount.Value = rule.Account.Value;
+            // ルールが部門を持っていれば一緒に入れる（ADR-0056・BUG-0407）。
+            // ここを忘れると、一括起票の「ルールを適用」は**候補が空の行しか見ない**ので、
+            // 取込で科目が入った行の部門は二度と埋まらない（ルールの部門欄が死ぬ）
+            if (rule.DepartmentRef.Value != null) { line.DepartmentRef.Value = rule.DepartmentRef.Value; }
             line.SuggestionSource.Value = "rule";
             ruled = ruled + 1;
             break;

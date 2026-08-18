@@ -161,8 +161,12 @@ void AiSuggest_OnClick()
         }
     }
     UpdateSummary();
+    // 「（モック応答）」は AI プロバイダが Mock のときだけ付く印。
+    // 判定は文字列化して比べる（この repo の定石。動的型の生の `==` は型が違うと黙って false になる）。
+    // **この開発機は User Secrets で AzureOpenAI に切り替わっている**ので、通常は印が出ない＝実 API を呼んでいる。
     var mockNote = "";
-    if (data.isMock == true) mockNote = "（モック応答）";
+    var isMock = $"{data.isMock}";
+    if (isMock == "True" || isMock == "true") mockNote = "（モック応答）";
     ResultLabel.Text = $"AI 推定: 対象 {targets.Count} 件 / 反映 {applied} 件{mockNote}（保存または一括起票で確定されます）";
     Toaster.Success($"AI が {applied} 件の相手科目を推定しました{mockNote}");
 }
