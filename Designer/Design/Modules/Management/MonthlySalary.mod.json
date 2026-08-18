@@ -97,7 +97,9 @@
       "Name": "PeriodNo",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign",
+      "Min": 1,
+      "Max": 12
     },
     {
       "DbColumn": "cost",
@@ -115,7 +117,8 @@
       "Name": "Cost",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign",
+      "Min": 0
     },
     {
       "SearchCondition": {
