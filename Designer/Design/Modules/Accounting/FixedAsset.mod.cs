@@ -93,7 +93,7 @@ int CalcDepreciationForYear(var yearStart, var yearEnd)
     if (method == "lump_sum_3yr")
     {
         // 3年均等（月割なし・取得年度から3年）
-        var annual3 = cost / 3;
+        int annual3 = cost / 3;  // int で受ける（`var` だと小数になり最終年度の端数調整が狂う。BUG-0410 と同型）
         // 対象年度が取得年度から何年目か
         var k3 = YearIndex(acq, yearStart, yearEnd);
         if (k3 < 1 || k3 > 3) return 0;

@@ -133,8 +133,12 @@ void BuildPlan()
             if (t.Minutes.Value == null) continue;
             minutes = minutes + t.Minutes.Value;
         }
-        var hours = minutes / 60;  // 1h 未満は切捨て（実績時間に分を併記）
-        var rem = minutes % 60;
+        // **`int` で受けるのが肝**（BUG-0410）。`var` のままだと CLB のスクリプトは
+        // **整数どうしの割り算でも小数になる**（minutes が動的値との加算で小数型に化けるため）。
+        // 小数のまま比べると「160h59m が上限 160h を超えている」と判定され、
+        // 下限側では控除時間が 1 時間ぶん少なく出て**請求額が実際に狂う**。
+        int hours = minutes / 60;  // 1h 未満は切捨て（実績時間に分を併記）
+        int rem = minutes % 60;
         plan.ActualTime.Value = $"{hours}h{rem:00}m";
 
         // 精算計算

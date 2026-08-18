@@ -69,6 +69,7 @@ RULES = {
     "CLB-037": ("高", "DataWriteCondition が参照する列がその画面で未ロード（全項目が読み取り専用になる）"),
     "CLB-038": ("高", "資金繰り SQL の複製（ポータル ⇄ 予測画面）が食い違っている"),
     "CLB-039": ("高", "AddRows の引数が List<モジュール型> の .Count 由来（多重定義が外れて実行時に落ちる）"),
+    "CLB-040": ("高", "整数どうしの割り算を var で受けている（CLB では小数になり、切り捨て前提の計算が狂う）"),
 }
 
 # 実装しなかったルール（黙って落とさず実行時に一覧表示する）
@@ -1808,6 +1809,53 @@ def rule_039(idx, add):
                     "プリミティブの並行リストの .Count を渡すこと".format(hit[0], hit[1]))
 
 
+def rule_040(idx, add):
+    """CLB-040: 整数どうしの割り算を `var` で受けている。
+
+    **実測（2026-08-19・BUG-0410）**: `SesBilling.mod.cs` で
+
+    ```csharp
+    var minutes = 0;
+    foreach (...) { minutes = minutes + t.Minutes.Value; }
+    var hours = minutes / 60;   // ← C# のつもりなら整数除算
+    ```
+
+    と書いたところ、`hours` が **160.98333…** になった。CLB のスクリプトは
+    **動的な値を代入した変数が小数型に化ける**ため、`/` が整数除算にならない。
+
+    実害（実機で確認）:
+
+    - 実績時間の表示が `160.98333…h59m` になる
+    - `hours > upper` の判定が小数で行われ、**160h59m が「上限超過」と判定される**
+    - 下限側は `int shortage = (int)lower - hours;` の代入で切り捨てられ、
+      **控除時間が 1 時間ぶん少なくなる**（130h30m の控除が 10h → 9h＝請求 5,000 円ぶん過大）
+
+    **金額に効くのに例外も警告も出ない**。切り捨てを期待する割り算は
+    **`int` で受ける**（`int hours = minutes / 60;`）。代入時に切り捨てられるので、
+    `/` が小数を返しても結果は正しくなる。
+
+    誤検知を避けるため、**右辺が割り算だけの単純な代入**に限って報告する
+    （`Math.Max(...)` などの中に入っている割り算や、明示的に `(int)` へキャストしている式は対象外）。
+    """
+    import re as _re
+    # var x = <式> / <式>;  ただし右辺全体が単純な算術（関数呼び出し・キャストを含まない）
+    pat = _re.compile(r"\bvar\s+(\w+)\s*=\s*([^;=]*?/[^;]*?);")
+    for mod in idx.modules.values():
+        cs = mod["cs"]
+        if not cs:
+            continue
+        for m in pat.finditer(cs):
+            rhs = m.group(2)
+            if "(" in rhs or ")" in rhs:      # 関数呼び出し・キャストは対象外（意図が読めない）
+                continue
+            if '"' in rhs:
+                continue
+            add("CLB-040", SEV_ERROR, mod["cs_path"], line_of(cs, m.start()),
+                "`var {} = {};` — CLB のスクリプトは**整数どうしでも小数になる**ことがあり、"
+                "切り捨て前提の計算（時間・年数・按分）が静かに狂う（BUG-0410・実測）。"
+                "切り捨てたいなら `int {} = ...;` と型で受ける".format(m.group(1), rhs.strip(), m.group(1)))
+
+
 RULE_FUNCS = [
     ("CLB-001", rule_001), ("CLB-002", rule_002), ("CLB-003", rule_003), ("CLB-004", rule_004),
     ("CLB-005", rule_005), ("CLB-006", rule_006), ("CLB-007", rule_007), ("CLB-008", rule_008),
@@ -1819,6 +1867,7 @@ RULE_FUNCS = [
     ("CLB-029", rule_029), ("CLB-030", rule_030), ("CLB-031", rule_031), ("CLB-032", rule_032),
     ("CLB-033", rule_033), ("CLB-034", rule_034), ("CLB-035", rule_035), ("CLB-036", rule_036),
     ("CLB-037", rule_037), ("CLB-038", rule_038), ("CLB-039", rule_039),
+    ("CLB-040", rule_040),
 ]
 
 # 仕様書が warn 専用と明記しているルール（群に関わらず error にしない）
