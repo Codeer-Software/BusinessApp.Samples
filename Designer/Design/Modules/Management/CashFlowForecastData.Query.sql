@@ -52,13 +52,24 @@ inv_in AS (
   WHERE i.status IN ('issued', 'partial') AND i.due_date IS NOT NULL
 ),
 rec_in AS (
+  -- 【周期で金額と月が変わる・BUG-0412】月額契約は毎月 monthly_amount、
+  --   年額契約は**起点月の応当月に 1 回だけ** annual_amount を請求する（`RecurringRun` と同じ規則:
+  --   起点月からの経過月数を 12 で割った余りが 0 の月が周期起点）。
+  --   旧実装は billing_cycle を見ずに monthly_amount だけを毎月足していたため、
+  --   ①年額契約の入金見込みが**丸ごと落ちる**（monthly_amount が空なので NULL＝加算されない）
+  --   ②年額契約に古い monthly_amount が残っていると**毎月その額が乗る**、という二重の誤りがあった。
   SELECT date(mm.month_first, '+1 month') AS m,
-         rb.monthly_amount * (100 + (SELECT pct FROM sales_rate)) / 100 AS amt
+         CASE WHEN rb.billing_cycle = 'yearly' THEN COALESCE(rb.annual_amount, 0)
+              ELSE COALESCE(rb.monthly_amount, 0) END
+           * (100 + (SELECT pct FROM sales_rate)) / 100 AS amt
   FROM months mm
   -- 確定済のみ（ADR-0057）。下書き・終了は「定期請求の実行」の対象外なので入金見込みにも載せない
   JOIN recurring_billings rb ON rb.is_active = 1 AND rb.status = 'confirmed'
     AND date(rb.start_month) <= mm.month_first
     AND (rb.end_month IS NULL OR date(rb.end_month) >= mm.month_first)
+    AND (rb.billing_cycle <> 'yearly'
+         OR ((CAST(strftime('%Y', mm.month_first) AS INTEGER) - CAST(strftime('%Y', rb.start_month) AS INTEGER)) * 12
+             + (CAST(strftime('%m', mm.month_first) AS INTEGER) - CAST(strftime('%m', rb.start_month) AS INTEGER))) % 12 = 0)
   WHERE NOT EXISTS (SELECT 1 FROM invoices iv
                     WHERE iv.recurring_billing_id = rb.id
                       AND date(iv.billing_month) = mm.month_first)
