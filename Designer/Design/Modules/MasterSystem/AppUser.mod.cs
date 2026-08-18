@@ -42,7 +42,9 @@ void ShowPasswordPolicy()
 void ShowPasswordGuidance()
 {
     PasswordHintLabel.Color = "";
-    PasswordHintLabel.Text = $"条件: {passwordGuidance}（空欄のままにするとパスワードは変更されません）";
+    // CLB のパスワード欄は入力欄を 2 つ描くが、プレースホルダが英語のままで確認欄だと分からない
+    // （BUG-0403・FB-058）。ラベルは差し替えられないので、この説明文で補う
+    PasswordHintLabel.Text = $"条件: {passwordGuidance}（空欄のままにするとパスワードは変更されません。2 つ目の欄には確認のため同じものを入力してください）";
     PasswordHintLabel.IsVisible = true;
 }
 
