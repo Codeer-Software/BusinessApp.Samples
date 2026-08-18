@@ -58,6 +58,12 @@
             "Name": "reversal_amount",
             "DbType": "integer",
             "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "missing_salary_count",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
           }
         ]
       },
@@ -204,6 +210,24 @@
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "ReversalAmount",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "DbColumn": "missing_salary_count",
+      "Placeholder": "",
+      "Format": "",
+      "IsSlider": false,
+      "OnInput": "",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "人件費未入力",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "MissingSalaryCount",
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
@@ -371,6 +395,23 @@
             "FieldName": "ReversalAmount",
             "ContextMenu": "",
             "Label": "振戻額",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "Width": 150,
+            "TextWrap": "Unset",
+            "CanResize": true,
+            "CanUserSort": false,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "MissingSalaryCount",
+            "ContextMenu": "",
+            "Label": "人件費未入力",
             "ColumnSpan": 1,
             "RowSpan": 1,
             "Width": 150,

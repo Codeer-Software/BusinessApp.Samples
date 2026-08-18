@@ -10,7 +10,8 @@
 --   receipt                                 → receipts
 --   expense / expense_payment               → expense_request
 --   vendor_invoice / vendor_payment         → vendor_invoices
---   depreciation                            → fixed_assets
+--   depreciation / disposal                 → fixed_assets
+--   wip / wip_reversal                      → fiscal_years（どの年度の振替か。振戻は前期の年度 id）
 --   recurring / recurring_annual /
 --   recurring_defer / ses                   → invoices
 --   bank                                    → bank_statement_lines
@@ -29,8 +30,10 @@ WHERE je.source_id IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM expense_request p WHERE p.id = je.source_id))
     OR (je.source_type IN ('vendor_invoice', 'vendor_payment')
         AND NOT EXISTS (SELECT 1 FROM vendor_invoices p WHERE p.id = je.source_id))
-    OR (je.source_type = 'depreciation'
+    OR (je.source_type IN ('depreciation', 'disposal')
         AND NOT EXISTS (SELECT 1 FROM fixed_assets p WHERE p.id = je.source_id))
+    OR (je.source_type IN ('wip', 'wip_reversal')
+        AND NOT EXISTS (SELECT 1 FROM fiscal_years p WHERE p.id = je.source_id))
     OR (je.source_type IN ('recurring', 'recurring_annual', 'recurring_defer', 'ses')
         AND NOT EXISTS (SELECT 1 FROM invoices p WHERE p.id = je.source_id))
     OR (je.source_type = 'bank'

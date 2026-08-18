@@ -12,5 +12,6 @@ SELECT
   posted_entries,
   posted_amount,
   reversal_entries,
-  reversal_amount
+  reversal_amount,
+  missing_salary_count
 FROM v_wip_status

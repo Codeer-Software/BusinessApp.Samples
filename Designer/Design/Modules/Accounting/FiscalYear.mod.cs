@@ -271,8 +271,27 @@ void CloseYear_OnClick()
         if (pr.Status.Value != "closed") { openPeriods = openPeriods + 1; }
     }
 
+    // 締めると 12 か月すべてが closed になり、以後は仕掛品の振替も取消もできなくなる（ADR-0070）。
+    // **未実行・陳腐化のまま締めると誤った決算がその場で確定する**ので、締める前に必ず状態を見せる
+    var wipText = "";
+    var wipSt = FindWipStatus();
+    if (wipSt != null)
+    {
+        var wipComputed = wipSt.ComputedAmount.Value ?? 0;
+        var wipPosted = wipSt.PostedAmount.Value ?? 0;
+        var wipEntries = wipSt.PostedEntries.Value ?? 0;
+        if (wipEntries == 0 && wipComputed > 0)
+        {
+            wipText = $"【注意】仕掛品の期末振替がまだ実行されていません（対象 {wipSt.ProjectCount.Value ?? 0} 案件・{wipComputed:#,0} 円）。締めると振り替えられなくなります。";
+        }
+        else if (wipEntries > 0 && wipPosted != wipComputed)
+        {
+            wipText = $"【注意】仕掛品の期末振替が古くなっています（起票 {wipPosted:#,0} 円 / 現在の計算 {wipComputed:#,0} 円）。締めると打ち直せなくなります。";
+        }
+    }
+
     var answer = MessageBox.Show(
-        $"{Name.Value} を締めます。翌期繰越を打ち直して確定し、進行中の月次期間 {openPeriods} か月をすべて締め済みにします。{draftText}",
+        $"{Name.Value} を締めます。翌期繰越を打ち直して確定し、進行中の月次期間 {openPeriods} か月をすべて締め済みにします。{draftText}{wipText}",
         "締める", "キャンセル");
     if (answer != "締める") return;
 
@@ -417,7 +436,7 @@ void UpdateWipStatus()
             WipStatusLabel.Color = "#6c757d";
             return;
         }
-        WipStatusLabel.Text = $"仕掛品の振替: 未実行（対象 {projects} 案件・合計 {computed:#,0} 円）。「仕掛品を期末振替」を押すと決算整理仕訳を起票し、翌期首に振り戻します";
+        WipStatusLabel.Text = $"仕掛品の振替: 未実行（対象 {projects} 案件・合計 {computed:#,0} 円）。「仕掛品を期末振替」を押すと決算整理仕訳を起票し、翌期首に振り戻します{MissingSalaryNote(st)}";
         WipStatusLabel.Color = "#6c757d";
         return;
     }
@@ -428,8 +447,18 @@ void UpdateWipStatus()
         return;
     }
     var reversalText = (reversalEntries > 0) ? "・翌期首に振戻済み" : "・⚠ 翌期首の振戻がありません";
-    WipStatusLabel.Text = $"仕掛品の振替: 済み（{projects} 案件・{posted:#,0} 円{reversalText}）";
+    WipStatusLabel.Text = $"仕掛品の振替: 済み（{projects} 案件・{posted:#,0} 円{reversalText}）{MissingSalaryNote(st)}";
     WipStatusLabel.Color = (reversalEntries > 0) ? "#198754" : "#dc3545";
+}
+
+// 人件費コストが未入力の「人 × 月」があるときの注意書き（BUG-0367）。
+// 未入力の月の工数は配賦で 0 円として扱われるので、**仕掛品の金額が静かに過小になる**。
+// 金額を勝手に補うことはできない（いくらか分からない）ので、気づけるようにするしかない
+string MissingSalaryNote(WipStatus st)
+{
+    var n = st.MissingSalaryCount.Value ?? 0;
+    if (n <= 0) return "";
+    return $"　⚠ 人件費コストが未入力の月があります（{n} 人月）。その分の工数は配賦 0 円で計算されるため、仕掛品の金額が過小になります";
 }
 
 WipStatus FindWipStatus()
@@ -497,8 +526,12 @@ void WipTransfer_OnClick()
 
     var already = alreadyPosted;
     var head = already ? "仕掛品の期末振替を打ち直します（既存の振替と振戻を削除して作り直します）。" : "仕掛品の期末振替を起票します。";
+    var missing = st.MissingSalaryCount.Value ?? 0;
+    var missingText = (missing > 0)
+        ? $"【注意】人件費コストが未入力の月があります（{missing} 人月）。その分の工数は配賦 0 円で計算され、仕掛品の金額が過小になります。"
+        : "";
     var answer = MessageBox.Show(
-        head + $"対象 {projects} 案件・合計 {computed:#,0} 円。{Name.Value} の期末に「借方 仕掛品 / 貸方 仕掛品振替高」、{typedNext.Name.Value} の期首に同額の振戻を起票します。よろしいですか？",
+        head + missingText + $"対象 {projects} 案件・合計 {computed:#,0} 円。{Name.Value} の期末に「借方 仕掛品 / 貸方 仕掛品振替高」、{typedNext.Name.Value} の期首に同額の振戻を起票します。よろしいですか？",
         "実行", "キャンセル");
     if (answer != "実行") return;
 
