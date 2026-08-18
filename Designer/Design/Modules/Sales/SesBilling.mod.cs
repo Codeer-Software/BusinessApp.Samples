@@ -350,8 +350,16 @@ void Run_OnClick()
         inv.InvoiceNo.Value = invoiceNo;
         inv.PartnerRef.Value = p.PartnerRef.Value;
         inv.ProjectRef.Value = p.Id.Value;
-        // 部門: SES 精算は案件・契約に部門ソースが無いため「全社共通」を既定にする（部門必須化・2026-07-25）
-        inv.DepartmentRef.Value = CommonDepartmentId();
+        // 部門: **案件の担当部門**を使う（BUG-0061）。SES の契約実体は案件そのものなので、
+        // 定期請求契約が `department_id` を持つのと同じ形で案件が持つ（ADR-0061 相当・2026-08-18 開発者判断）。
+        // 空なら従来どおり全社共通に落とす（後退経路）——ただしその場合は部門別 P/L に売上が乗らないので警告する
+        var sesDept = p.DepartmentRef.Value;
+        if (sesDept == null)
+        {
+            sesDept = CommonDepartmentId();
+            Toaster.Warn($"案件「{p.Name.Value}」に担当部門が設定されていないため、売上を全社共通で計上します（部門別 P/L に乗りません）。案件マスタで担当部門を設定してください");
+        }
+        inv.DepartmentRef.Value = sesDept;
         inv.Title.Value = invTitle;
         inv.IssueDate.Value = monthEnd;
         inv.DueDate.Value = dueDate;
