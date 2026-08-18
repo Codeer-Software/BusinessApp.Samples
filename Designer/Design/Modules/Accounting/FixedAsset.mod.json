@@ -359,6 +359,24 @@
                 "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
               },
               "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+            },
+            {
+              "SearchTargetVariable": "TaxationType.Value",
+              "Comparison": "NotEqual",
+              "Value": {
+                "Value": "non_taxable",
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+            },
+            {
+              "SearchTargetVariable": "TaxationType.Value",
+              "Comparison": "NotEqual",
+              "Value": {
+                "Value": "out_of_scope",
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
             }
           ],
           "Name": "",

@@ -352,10 +352,11 @@ void UpdateDisposalUi()
     else
     {
         DisposalHint.Text = "「除却する」＝ 帳簿価額を固定資産除却損へ振り替えて資産を落とします（売却価額・税区分は使いません）。"
-            + "　／　「売却する」＝ 売却価額（税抜）を未収入金に立て、帳簿価額との差額を固定資産売却益／売却損に振り替えます。"
-            + "　**売却は課税取引なので、税区分に応じて仮受消費税を立てます**（既定は売上の既定税区分。"
-            + "土地のように非課税の売却は税区分で「非課税売上」を選んでください）。"
-            + "　なお消費税集計表の課税標準には**売却損益の額**が載ります（差額で計上する方式のため、対価総額ではありません）。"
+            + "　／　「売却する」＝ **総額法**で起票します（借方 未収入金〈税込〉・固定資産売却原価〈簿価〉／"
+            + "貸方 固定資産〈簿価〉・固定資産売却益〈対価〉・仮受消費税）。差引の純額は売却損益と同じですが、"
+            + "**消費税の課税標準が対価と一致する**のはこの形だけです。"
+            + "　税区分は既定で売上の既定税区分が入ります。土地のように非課税の売却は「非課税売上」を選んでください。"
+            + "　処分日が期の途中なら、**その年度に使った月数ぶんの減価償却を処分日付で先に 1 本起票**します。"
             + "　どちらも処分日は本日で起票します（締め済みの期間には起票できません）。";
     }
     DisposalHint.IsVisible = true;
@@ -370,43 +371,74 @@ int MonthsFromYearStartToDisposal(var yearStart, var disposal)
     return elapsed + 1;
 }
 
-// 処分日までの期中償却を 1 本起こす（BUG-0339）。
+// 処分日までの期中償却（BUG-0339）。
 //
 // 償却仕訳は期末日付でしか作れないので、期中に処分すると**当期分の減価償却費が 0 のまま
-// 全額が除却損**になり、PL の科目配分が狂う。処分の直前に、期首から処分月までの月割を
-// **処分日と同じ日付**で起票する（不変条件 E03 の備考が定める作法）。
-// 当期の償却仕訳が既にあるときは何もしない（二重計上を避ける）。
-// 戻り値: 起票した金額（0 なら何もしていない）。失敗したら -1
-int PostPartialYearDepreciation(FiscalYear fy, var dispDate)
+// 全額が除却損**になり、PL の科目配分が狂う。処分の直前に、その年度に実際に使った月数ぶんを
+// **処分日と同じ日付**で 1 本起票する（不変条件 E03 の備考が定める作法）。
+//
+// 計算だけ先に行い（Calc）、**確認ダイアログを通ってから起票する**（Post）。
+// 先に起票すると「キャンセル」で償却仕訳だけが孤児として残る。
+int CalcPartialYearDepreciation(FiscalYear fy, var dispDate)
 {
     if (fy == null) return 0;
+    if (this.Id.Value == null) return 0;
 
-    // 当期の償却が既に立っていれば触らない
+    // 当期の償却が既に立っていれば触らない（確定済みのものだけを見る）
     var exist = new ModuleSearcher<JournalEntry>();
     exist.AddEquals(e => e.SourceType.Value, "depreciation");
     exist.AddEquals(e => e.SourceId.Value, this.Id.Value);
     exist.AddEquals(e => e.FiscalYearRef.Value, fy.Id.Value);
+    exist.AddEquals(e => e.Status.Value, "posted");
     if (exist.Execute().Count > 0) return 0;
 
     var full = CalcDepreciationForYear(fy.StartDate.Value, fy.EndDate.Value);
     if (full <= 0) return 0;
-    var months = MonthsFromYearStartToDisposal(fy.StartDate.Value, dispDate);
-    if (months >= 12) { months = 12; }
-    var amount = full * months / 12;
+
+    var method = DepreciationMethod.Value;
+    var amount = full;
+    // **即時償却と一括償却(3年均等)は月割しない。** 即時償却は取得年度に全額が正で、
+    // 一括償却も制度上は月割しない（`CalcDepreciationForYear` も月割していない）
+    if (method != "immediate" && method != "lump_sum_3yr")
+    {
+        // その年度に実際に使った月数 ÷ その年度の本来の月数。
+        // **取得年度は `full` が既に取得月按分済み**なので、分母も取得月起点にしないと二重に按分される
+        var acq = AcquisitionDate.Value;
+        var startMonthBase = fy.StartDate.Value;
+        var denom = 12;
+        if (acq != null && acq >= fy.StartDate.Value && acq <= fy.EndDate.Value)
+        {
+            startMonthBase = acq;
+            denom = MonthsFromAcqToYearEnd(acq, fy.StartDate.Value);
+        }
+        if (denom <= 0) { denom = 12; }
+        var used = MonthsFromYearStartToDisposal(startMonthBase, dispDate);
+        if (used <= 0) return 0;
+        if (used > denom) { used = denom; }
+        amount = full * used / denom;
+    }
     if (amount <= 0) return 0;
 
     // 残存簿価 1 円を割らない（理論値の丸めで割り込むことがある）
     var bookNow = BookValue();
     if (amount > bookNow - 1) { amount = bookNow - 1; }
     if (amount <= 0) return 0;
+    return amount;
+}
 
+// 期中償却を起票する。**摘要に目印を入れる**——処分の取消でこの 1 本だけを戻すために、
+// 通常の期末償却と機械的に区別できる必要がある（日付だけで判別すると、年度末に処分したとき
+// 期末償却まで巻き添えで消える）
+bool PostPartialDepreciationJournal(FiscalYear fy, var dispDate, int amount)
+{
+    if (amount <= 0) return true;
     var depAcc = FindAccountByRole("depreciation_expense");
     if (depAcc == null)
     {
         var accS = new ModuleSearcher<Account>();
         accS.AddEquals(e => e.Code.Value, "6300");
         var f = accS.ExecuteFirstOrDefault();
-        if (f == null) { Toaster.Error("減価償却費の科目がありません"); return -1; }
+        if (f == null) { Toaster.Error("減価償却費の科目がありません"); return false; }
         depAcc = (Account)f;
     }
 
@@ -414,7 +446,7 @@ int PostPartialYearDepreciation(FiscalYear fy, var dispDate)
     var je = new JournalEntry();
     je.EntryDate.Value = dispDate;
     je.EntryType.Value = "auto";
-    je.Description.Value = $"減価償却 {Name.Value}（処分までの期中償却 {months} か月分）";
+    je.Description.Value = $"減価償却 {Name.Value}（{PartialDepMark()}）";
     je.Status.Value = "posted";
     je.JournalNo.Value = nextNo;
     je.FiscalYearRef.Value = fy.Id.Value;
@@ -446,8 +478,14 @@ int PostPartialYearDepreciation(FiscalYear fy, var dispDate)
     je.MarkAllLinesOutOfScope();
     je.FillMissingDepartments();
     var ret = je.Submit();
-    if (ret != true) { Toaster.Error("処分までの期中償却の生成に失敗しました"); return -1; }
-    return amount;
+    if (ret != true) { Toaster.Error("処分までの期中償却の生成に失敗しました"); return false; }
+    return true;
+}
+
+// 期中償却の目印（摘要に入れる文字列）。取消のときこの文字列で自分の起票分を見分ける
+string PartialDepMark()
+{
+    return "処分までの期中償却";
 }
 
 void Retire_OnClick()
@@ -531,21 +569,19 @@ void DoDisposal(bool isSale)
         return;
     }
 
-    // 期中償却を先に起こす（BUG-0339）。期末日付でしか償却できないと、期中処分で
-    // **当期の減価償却費が 0 のまま全額が除却損**になり PL の科目配分が狂う。
-    // **簿価はこのあとで取り直す**（償却した分だけ簿価が下がる）
-    var partial = PostPartialYearDepreciation(typedFy, dispDate);
-    if (partial < 0) return;
-    if (partial > 0) { book = BookValue(); }
+    // 期中償却は**金額だけ先に出す**（起票は確認ダイアログのあと）。簿価はその分だけ下がる見込みになる
+    var partial = CalcPartialYearDepreciation(typedFy, dispDate);
+    if (partial > 0) { book = book - partial; }
 
     var assetName = Name.Value ?? "";
     var what = isSale ? "売却" : "除却";
     var diff = sale - book;   // 売却のときだけ意味を持つ（プラス＝売却益）
     var gainLoss = (diff >= 0) ? "売却益" : "売却損";
     var diffAbs = (diff >= 0) ? diff : (0 - diff);
+    var partialNote = (partial > 0) ? $"（処分までの期中償却 {partial:#,0} 円を先に計上します）" : "";
     var detail = isSale
-        ? $"売却価額 {sale:#,0} 円（税抜）／帳簿価額 {book:#,0} 円／差額 {diffAbs:#,0} 円（{gainLoss}）"
-        : $"帳簿価額 {book:#,0} 円を固定資産除却損へ振り替えます";
+        ? $"売却価額 {sale:#,0} 円（税抜）／帳簿価額 {book:#,0} 円／差額 {diffAbs:#,0} 円（{gainLoss}）{partialNote}"
+        : $"帳簿価額 {book:#,0} 円を固定資産除却損へ振り替えます{partialNote}";
     var answer = MessageBox.Show(
         $"固定資産「{assetName}」を{what}します。{detail}。処分日は本日（{dispDate:yyyy/MM/dd}）です。よろしいですか？",
         $"{what}する", "キャンセル");
@@ -554,25 +590,36 @@ void DoDisposal(bool isSale)
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 
-    // 役割で科目を引く（コード直書きをしない・ddl/630）
-    var roleName = "disposal_loss";
-    if (isSale) { roleName = (diff < 0) ? "sale_loss" : "sale_gain"; }
-    var lossAcc = FindAccountByRole(roleName);
-    if (lossAcc == null)
-    {
-        Toaster.Error("処分の振替先科目が見つかりません（科目マスタの「役割」を確認してください）");
-        return;
-    }
+    // 期中償却をここで起票する（確認を通ったあと。先に起こすとキャンセルで孤児が残る）
+    if (!PostPartialDepreciationJournal(typedFy, dispDate, partial)) return;
+
+    // 役割で科目を引く（コード直書きをしない・ddl/630, 710）。
+    // 総額法なので、売却では**損益の符号で科目を変えない**（対価は必ず売却益・簿価は必ず売却原価）
+    Account lossAcc = null;
+    Account gainAcc = null;
     Account recvAcc = null;
     if (isSale)
     {
+        gainAcc = FindAccountByRole("sale_gain");
+        if (gainAcc == null) { Toaster.Error("固定資産売却益の科目が見つかりません（科目マスタの「役割」に sale_gain を設定してください）"); return; }
         recvAcc = FindAccountByRole("disposal_receivable");
-        if (recvAcc == null) { Toaster.Error("売却代金の未収科目が見つかりません（科目マスタの「役割」を確認してください）"); return; }
+        if (recvAcc == null) { Toaster.Error("売却代金の未収科目が見つかりません（科目マスタの「役割」に disposal_receivable を設定してください）"); return; }
+    }
+    else
+    {
+        lossAcc = FindAccountByRole("disposal_loss");
+        if (lossAcc == null) { Toaster.Error("固定資産除却損の科目が見つかりません（科目マスタの「役割」に disposal_loss を設定してください）"); return; }
     }
 
     // 売却の消費税（BUG-0338）。**対価（売却価額・税抜）に対して**計算する。切り捨て（ADR-0050 と同じ流儀）。
     // 税区分が課税売上でなければ税率 0 になり、従来どおり税額は立たない（土地の売却など）
     var saleTaxCat = isSale ? ResolveSaleTaxCategory() : null;
+    if (isSale && saleTaxCat == null)
+    {
+        // 静かに税ゼロへ落ちると BUG-0338 が再発したことに誰も気づけない
+        Toaster.Error("売却の税区分が決まりません。画面で税区分を選ぶか、税区分マスタで「既定用途＝売上」を設定してください");
+        return;
+    }
     var saleTax = 0;
     object saleTaxCatId = null;
     object taxAccId = null;
@@ -582,7 +629,7 @@ void DoDisposal(bool isSale)
         decimal pct = SaleTaxRatePercent(saleTaxCat);
         if (pct > 0)
         {
-            saleTax = sale * pct / 100;
+            saleTax = (int)(sale * pct / 100);     // 切り捨て（家の作法・ADR-0050）
             var ta = FindAccountByRole("consumption_tax_payable");
             if (ta == null)
             {
@@ -601,7 +648,21 @@ void DoDisposal(bool isSale)
     }
     if (saleTax <= 0) { taxAccId = null; }
 
-    // 明細を組み立てる（借方・貸方・科目・金額・税区分）
+    // 対象外の税区分を引く。**MarkRemainingLinesOutOfScope では埋まらない**——
+    // 科目の既定（固定資産なら取得時の「課税仕入 10%」）が既に入っているので「残り」に該当せず、
+    // 資産の貸方行が課税仕入のまま posted されて消費税集計表が膨らむ（ADR-0053 の事故の再発。実測で確認）
+    object outOfScopeId = null;
+    var oss = new ModuleSearcher<TaxCategory>();
+    oss.AddEquals(c => c.Code.Value, "OUT_OF_SCOPE");
+    var osf = oss.ExecuteFirstOrDefault();
+    if (osf == null) { Toaster.Error("税区分「対象外」がありません（税区分マスタを確認してください）"); return; }
+    outOfScopeId = ((TaxCategory)osf).Id.Value;
+
+    // 明細を組み立てる（借方・貸方・科目・金額・税区分）。
+    // **売却は総額法**（ddl/710）: 対価を売却益に、簿価を売却原価に、それぞれ総額で立てる。
+    // 差額方式だと消費税の課税標準が「売却損益の額」になり、売却損のときは
+    // **損失が課税売上として ＋計上**されてしまう（消費税集計表は dc=dc_normal を +1 と数えるため）。
+    // 総額法なら課税標準＝対価で一致し、貸借も損益の符号に関わらず必ず釣り合う（分岐が消える）。
     var dcList = new List<string>();
     var accList = new List<object>();
     var amtList = new List<int>();
@@ -610,19 +671,22 @@ void DoDisposal(bool isSale)
     var taxParentNo = 1;
     if (isSale)
     {
-        dcList.Add("D"); accList.Add(recvAcc.Id.Value); amtList.Add(sale + saleTax); catList.Add(null); taxFlag.Add(false);   // 未収入金（税込）
-        dcList.Add("C"); accList.Add(AssetAccount.Value); amtList.Add(book); catList.Add(null); taxFlag.Add(false);           // 資産を落とす
-        if (diff > 0) { dcList.Add("C"); accList.Add(lossAcc.Id.Value); amtList.Add(diff); catList.Add(saleTaxCatId); taxFlag.Add(false); }       // 売却益
-        if (diff < 0) { dcList.Add("D"); accList.Add(lossAcc.Id.Value); amtList.Add(0 - diff); catList.Add(saleTaxCatId); taxFlag.Add(false); }   // 売却損
-        // 税行の親は**損益の行**。ただし対価＝簿価で損益が立たないときは損益行そのものが無いので、
-        // 未収入金の行（1 行目）を親にする（親の無い税行を作ると不変条件 A09 が落ちる）
-        taxParentNo = (diff == 0) ? 1 : 3;
-        if (saleTax > 0) { dcList.Add("C"); accList.Add(taxAccId); amtList.Add(saleTax); catList.Add(saleTaxCatId); taxFlag.Add(true); }          // 仮受消費税
+        var costAcc = FindAccountByRole("sale_cost");
+        if (costAcc == null) { Toaster.Error("固定資産売却原価の科目が見つかりません（科目マスタの「役割」に sale_cost を設定してください）"); return; }
+        dcList.Add("D"); accList.Add(recvAcc.Id.Value);   amtList.Add(sale + saleTax); catList.Add(outOfScopeId); taxFlag.Add(false);  // 未収入金（税込）
+        if (book > 0)
+        {
+            dcList.Add("D"); accList.Add(costAcc.Id.Value);  amtList.Add(book); catList.Add(outOfScopeId); taxFlag.Add(false);        // 売却原価（簿価）
+            dcList.Add("C"); accList.Add(AssetAccount.Value); amtList.Add(book); catList.Add(outOfScopeId); taxFlag.Add(false);       // 資産を落とす
+        }
+        dcList.Add("C"); accList.Add(gainAcc.Id.Value);   amtList.Add(sale); catList.Add(saleTaxCatId); taxFlag.Add(false);           // 売却益（対価・課税標準）
+        taxParentNo = dcList.Count;   // 税行の親は必ず「売却益（対価）」の行
+        if (saleTax > 0) { dcList.Add("C"); accList.Add(taxAccId); amtList.Add(saleTax); catList.Add(saleTaxCatId); taxFlag.Add(true); }
     }
     else
     {
-        dcList.Add("D"); accList.Add(lossAcc.Id.Value); amtList.Add(book); catList.Add(null); taxFlag.Add(false);             // 除却損
-        dcList.Add("C"); accList.Add(AssetAccount.Value); amtList.Add(book); catList.Add(null); taxFlag.Add(false);           // 資産を落とす
+        dcList.Add("D"); accList.Add(lossAcc.Id.Value);   amtList.Add(book); catList.Add(outOfScopeId); taxFlag.Add(false);           // 除却損
+        dcList.Add("C"); accList.Add(AssetAccount.Value); amtList.Add(book); catList.Add(outOfScopeId); taxFlag.Add(false);           // 資産を落とす
     }
 
     var nextNo = new JournalEntry().NextJournalNo(typedFy.Id.Value);
@@ -726,6 +790,10 @@ void CancelDisposal_OnClick()
         foreach (var drow in ds.Execute())
         {
             var dje = (JournalEntry)drow;
+            // **摘要の目印で自分の起票分だけを消す。** 日付だけで判別すると、年度末に処分したとき
+            // 通常の期末償却まで巻き添えで消える（同じ日付になるため）
+            var desc = dje.Description.Value ?? "";
+            if (!desc.Contains(PartialDepMark())) continue;
             if (dje.Delete() == true) { removedPartial = removedPartial + 1; }
         }
     }
