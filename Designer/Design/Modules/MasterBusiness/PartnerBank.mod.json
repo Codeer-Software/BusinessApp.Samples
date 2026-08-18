@@ -216,11 +216,15 @@
       "Icon": "",
       "Variant": "Primary",
       "IsHtml": false,
-      "IsBlock": true,
       "Name": "SubmitButton",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SubmitButtonFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign",
+      "OnClick": "Register_OnClick",
+      "ShowTextInToolTip": false,
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": ""
     },
     {
       "Style": "Text",
@@ -241,6 +245,29 @@
       "IgnoreModification": false,
       "OnValidateInput": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
+    },
+    {
+      "Text": "口座情報を削除",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "Icon": "",
+      "Variant": "OutlineSecondary",
+      "OnClick": "Delete_OnClick",
+      "ShowTextInToolTip": false,
+      "IsHtml": false,
+      "Name": "DeleteAccountButton",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -692,6 +719,30 @@
               {
                 "Layout": {
                   "FieldName": "SubmitButton",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "HorizontalAlignment": "Center",
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "DeleteAccountButton",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",

@@ -70,6 +70,7 @@ RULES = {
     "CLB-038": ("高", "資金繰り SQL の複製（ポータル ⇄ 予測画面）が食い違っている"),
     "CLB-039": ("高", "AddRows の引数が List<モジュール型> の .Count 由来（多重定義が外れて実行時に落ちる）"),
     "CLB-040": ("高", "整数どうしの割り算を var で受けている（CLB では小数になり、切り捨て前提の計算が狂う）"),
+    "CLB-041": ("高", "`.mod.cs` のイベントハンドラが `.mod.json` から一度も参照されていない（書いたのに呼ばれない）"),
 }
 
 # 実装しなかったルール（黙って落とさず実行時に一覧表示する）
@@ -1856,6 +1857,66 @@ def rule_040(idx, add):
                 "切り捨てたいなら `int {} = ...;` と型で受ける".format(m.group(1), rhs.strip(), m.group(1)))
 
 
+def rule_041(idx, add):
+    """CLB-041: `.mod.cs` に書いたハンドラが `.mod.json` のどこからも参照されていない。
+
+    **実測（2026-08-19・BUG-0045）**: `PartnerBank.mod.cs` に口座 5 項目の整合検証つきの
+    `Register_OnClick()` と `Delete_OnClick()` が実装されていたのに、画面のボタンは
+    CLB 標準の `SubmitButtonFieldDesign` だった。**この型には `OnClick` が無く、
+    押すとスクリプトを一切通らずに保存される。** 結果、銀行コードだけ入れた
+    部分入力の口座がそのまま保存でき、不備に気づくのは振込データ作成のときだった。
+
+    「書いたのに呼ばれていない」は静かな失敗の典型で、`designcheck` も緑のまま通る。
+    ハンドラ名が `.mod.json`（同じモジュール）のどこにも文字列として現れなければ報告する。
+
+    誤検知を避けるため:
+
+    - CLB が名前で呼ぶ規約ハンドラ（`OnAfterInitialization` など）は対象外
+    - 他モジュールから `xx.Foo()` の形で呼ばれるヘルパは、**リポジトリ全体の `.mod.cs`**
+      に呼び出しがあれば対象外（`JournalEntry.ValidateBalanced` のような共有ヘルパ）
+    - `_OnClick` / `_OnDataChanged` / `_OnSelectedIndexChanged` / `_Completed` /
+      `_OnInitialization` で終わる名前だけを見る（純粋なヘルパは対象外）
+    """
+    import re as _re
+
+    # CLB が名前規約で直接呼ぶもの（json に書かれない）
+    CONVENTION = {
+        "OnAfterInitialization", "OnBeforeSubmit", "OnAfterSubmit",
+        "OnLoaded", "OnInitialized",
+    }
+    SUFFIXES = ("_OnClick", "_OnDataChanged", "_OnSelectedIndexChanged",
+                "_Completed", "_OnInitialization", "_OnValidateInput",
+                "_OnSearchDataChanged", "_OnDoubleClickRow")
+
+    decl = _re.compile(r"^\s*(?:void|bool|int|string|decimal)\s+(\w+)\s*\(", _re.M)
+
+    # 全モジュールの .cs を連結しておく（他モジュールからの呼び出し検出用）
+    all_cs = chr(10).join((m["cs"] or "") for m in idx.modules.values())
+
+    for mod in idx.modules.values():
+        cs = mod["cs"]
+        if not cs:
+            continue
+        import json as _json
+        raw_json = _json.dumps(mod.get("json") or {}, ensure_ascii=False)
+        for m in decl.finditer(cs):
+            name = m.group(1)
+            if name in CONVENTION:
+                continue
+            if not name.endswith(SUFFIXES):
+                continue
+            if '"' + name + '"' in raw_json:
+                continue
+            # 他モジュール・自モジュールのスクリプトから明示的に呼ばれていれば良しとする
+            if all_cs.count(name) > 1:
+                continue
+            add("CLB-041", SEV_ERROR, mod["cs_path"], line_of(cs, m.start()),
+                "`{}()` は `.mod.json` のどこからも参照されていない（書いたのに呼ばれない）。"
+                "とくに CLB 標準の `SubmitButtonFieldDesign` は `OnClick` を持たず"
+                "**スクリプトを通らずに保存する**ので、検証を書いても効かない（BUG-0045・実測）。"
+                "`ButtonFieldDesign` に変えて `OnClick` を張るか、不要なら削除する".format(name))
+
+
 RULE_FUNCS = [
     ("CLB-001", rule_001), ("CLB-002", rule_002), ("CLB-003", rule_003), ("CLB-004", rule_004),
     ("CLB-005", rule_005), ("CLB-006", rule_006), ("CLB-007", rule_007), ("CLB-008", rule_008),
@@ -1867,7 +1928,7 @@ RULE_FUNCS = [
     ("CLB-029", rule_029), ("CLB-030", rule_030), ("CLB-031", rule_031), ("CLB-032", rule_032),
     ("CLB-033", rule_033), ("CLB-034", rule_034), ("CLB-035", rule_035), ("CLB-036", rule_036),
     ("CLB-037", rule_037), ("CLB-038", rule_038), ("CLB-039", rule_039),
-    ("CLB-040", rule_040),
+    ("CLB-040", rule_040), ("CLB-041", rule_041),
 ]
 
 # 仕様書が warn 専用と明記しているルール（群に関わらず error にしない）
