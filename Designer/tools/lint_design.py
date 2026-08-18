@@ -1683,6 +1683,8 @@ def rule_038(idx, add):
     vend_out / sal_out / flows / cash_final）を逐語コピーで共有しており、片方だけ直すと
     ポータルの「今後4ヶ月中 N ヶ月」と画面の警告行数が**黙ってずれる**（BUG-0257・ADR-0060）。
     tasks/04 でビュー化して 1 か所に畳むまでの保険として、CTE 本文の一致を機械で見る。
+    **最終 SELECT（警告条件など）は CTE ではないので比較できない**——そこは
+    「片方だけが CASH_ALERT_BALANCE を見ている」形だけを別に検出する。
     """
     import re as _re
     a = None
@@ -1696,7 +1698,7 @@ def rule_038(idx, add):
     if a is None or b is None:
         return
 
-    names = ["cash_now", "inv_in", "rec_in", "ap_now", "exp_now", "vend_out", "sal_out"]
+    names = ["cash_now", "inv_in", "rec_in", "ap_now", "exp_now", "vend_out", "sal_out", "flows"]
 
     def cte_body(text, name):
         # "name AS (" から対応する括弧までを取り出す
@@ -1713,6 +1715,16 @@ def rule_038(idx, add):
                 if depth == 0:
                     return _re.sub(r"\s+", " ", strip_sql_comments(text[i + 1:j])).strip()
         return None
+
+    # 危険水域の閾値（BUG-0249）は最終 SELECT 側にあるので CTE の比較では拾えない。
+    # 「片方だけが閾値を見ている」状態だけは検出できるので、それを別に見る
+    ta = "CASH_ALERT_BALANCE" in a[1]
+    tb = "CASH_ALERT_BALANCE" in b[1]
+    if ta != tb:
+        only = "PortalAlertData" if ta else "CashFlowForecastData"
+        add("CLB-038", SEV_ERROR, a[0], 1,
+            "危険水域の閾値 CASH_ALERT_BALANCE を {} だけが見ている。"
+            "ポータルと予測画面で警告の条件がずれる（BUG-0249/0257）".format(only))
 
     for name in names:
         ba = cte_body(a[1], name)

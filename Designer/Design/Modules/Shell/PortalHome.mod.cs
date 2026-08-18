@@ -131,6 +131,7 @@ void Detail_OnAfterInit()
             var paySoon = (int)(a.PaySoon.Value ?? 0);
             var recvOver = (int)(a.ReceivableOverdue.Value ?? 0);
             var cashMonths = (int)(a.CashAlertMonths.Value ?? 0);
+            var cashWarnMonths = (int)(a.CashWarnMonths.Value ?? 0);
             var budgetDepts = (int)(a.BudgetAlertDepts.Value ?? 0);
             var soonDays = (int)(a.DueSoonDays.Value ?? 7);
             if (hasAccounting && (payOver > 0 || paySoon > 0))
@@ -143,10 +144,20 @@ void Detail_OnAfterInit()
                 ReceivableOverdueLink.IsVisible = true;
                 ReceivableOverdueLink.Text = $"⚠ 期限超過の売掛: {recvOver} 件";
             }
-            if ((isApprover || hasAccounting) && cashMonths > 0)
+            // 資金の警告は 2 段階（BUG-0249）。**ショートと危険水域を 1 つの件数に混ぜない**——
+            // 混ぜると黒字の月まで「ショート」と表示され、予測画面の「△ 危険水域」と重大度が食い違う
+            if ((isApprover || hasAccounting) && (cashMonths > 0 || cashWarnMonths > 0))
             {
                 CashAlertLink.IsVisible = true;
-                CashAlertLink.Text = $"⚠ 資金ショート予測: 今後4ヶ月中 {cashMonths} ヶ月";
+                if (cashMonths > 0)
+                {
+                    var more = (cashWarnMonths > 0) ? $"（ほかに危険水域 {cashWarnMonths} ヶ月）" : "";
+                    CashAlertLink.Text = $"⚠ 資金ショート予測: 今後4ヶ月中 {cashMonths} ヶ月{more}";
+                }
+                else
+                {
+                    CashAlertLink.Text = $"△ 資金が危険水域: 今後4ヶ月中 {cashWarnMonths} ヶ月";
+                }
             }
             // 予算警告の表示範囲（2026-08-06 ユーザー仕様）:
             // 経理 = どこかの部門に警告があれば表示（全部門を横断で見る役割）
