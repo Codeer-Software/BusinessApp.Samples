@@ -19,8 +19,60 @@ void Detail_OnAfterInit()
         // 部門の初期値: 作成者の所属部（主所属が課でも伝票部門は部・ADR-0044。自動生成は各スクリプトが設定）
         if (DepartmentRef.Value == null) { DepartmentRef.Value = CurrentUser.所属部.Value; }
     }
-    RecalcTotal();
+    // **init では表示用の合計だけを作り直す**（BUG-0132）。
+    // 旧実装は `RecalcTotal()` を無条件に呼んでおり、これは DB 列である `Amount` / `TaxAmount` を
+    // メモリ上の `Lines.Rows` の合計で上書きする。明細が遅延ロードで空のまま開いた回に
+    // 状態遷移ボタン（発行取消・下書きに戻す等はいずれも `Submit()` する）を押すと、
+    // **請求額 0 円がそのまま保存される**。同じファイルの `PrintInvoice` が
+    // 「明細は DB から取り直す（メモリ行の遅延ロード対策）」として `ModuleSearcher` に
+    // 切り替えているとおり、この遅延ロードは実測済みの現象である。
+    SeedAmountTrace();
+    RefreshTotalDisplay();
     UpdateButtons();
+}
+
+// 表示用の合計だけを更新する（DB 列 `Amount` / `TaxAmount` には触らない）。
+// 保存済みの請求書では**明細を DB から取り直す**——メモリの `Lines.Rows` は遅延ロードで空のことがある
+void RefreshTotalDisplay()
+{
+    var total = 0;
+    foreach (var l in GetLinesForTotal())
+    {
+        if (l.Amount.Value != null) total = total + l.Amount.Value;
+    }
+    TotalAmount.Value = total;
+    UpdateOverAcceptanceWarning();
+}
+
+// 合計に使う明細行。編集中（メモリに行がある）ならそれを、
+// 保存済みで空なら DB から取り直す（遅延ロード対策・`PrintInvoice` と同じ方針）
+List<InvoiceLine> GetLinesForTotal()
+{
+    var result = new List<InvoiceLine>();
+    foreach (var row in Lines.Rows) { result.Add((InvoiceLine)row); }
+    if (result.Count > 0) return result;
+    if (this.IsNewData || this.Id.Value == null) return result;
+
+    var ls = new ModuleSearcher<InvoiceLine>();
+    ls.AddEquals(e => e.InvoiceId.Value, this.Id.Value);
+    ls.OrderBy(e => e.LineNo.Value);
+    foreach (var row in ls.Execute()) { result.Add((InvoiceLine)row); }
+    return result;
+}
+
+// 保存済みの行について「金額は数量×単価のまま（＝人が触っていない）」かどうかの痕跡を作る（BUG-0134）。
+// 非 DB 項目なので開き直すたびに空になる。ここで埋めておかないと、
+// 開き直したあとに単価を直しても金額が追随しなくなる
+void SeedAmountTrace()
+{
+    foreach (var row in Lines.Rows)
+    {
+        var l = (InvoiceLine)row;
+        if (l.Amount.Value == null) continue;
+        if (l.Qty.Value == null || l.UnitPrice.Value == null) continue;
+        int auto = l.Qty.Value * l.UnitPrice.Value;
+        if (auto == l.Amount.Value) { l.AmountAutoValue.Value = $"{auto}"; }
+    }
 }
 
 // 状態遷移はボタン経由に一本化（ADR-0026）。状態セレクトは表示専用。
@@ -750,9 +802,23 @@ void Lines_OnDataChanged()
         // 検収明細から写した行の金額は「検収金額」そのもの。数量×単価で再計算してはならない
         // （分割検収では 検収金額 < 数量×単価 になるため。ADR-0049 / 改善候補 A-1 の真因）。
         // 手で足した行だけ、入力の手間を省くために 数量×単価 を自動で入れる。
+        // ただし**人が手で入れた金額は上書きしない**（BUG-0134）。
+        // 合算請求書（複数検収を手動の請求書にまとめる正規フロー）の明細は
+        // `AcceptanceLineRef` が NULL なので、旧実装では全行が上書き対象だった。
+        // 分割検収の按分額（数量 1 × 単価 2,000,000 だが請求は 1,200,000）を入れても、
+        // 別の行を触った瞬間に 2,000,000 へ戻ってしまう。
+        // 自動で入れた値を痕跡に控え、**金額が痕跡と一致している間だけ**追随させる
+        // （税区分の追随 BUG-0067 / BUG-0182 と同じ型）
         if (l.AcceptanceLineRef.Value == null && l.UnitPrice.Value != null)
         {
-            l.Amount.Value = l.Qty.Value * l.UnitPrice.Value;
+            int auto = l.Qty.Value * l.UnitPrice.Value;
+            var trace = l.AmountAutoValue.Value ?? "";
+            var isUntouched = (l.Amount.Value == null) || (trace != "" && trace == $"{l.Amount.Value}");
+            if (isUntouched)
+            {
+                l.Amount.Value = auto;
+                l.AmountAutoValue.Value = $"{auto}";
+            }
         }
     }
     RecalcTotal();
