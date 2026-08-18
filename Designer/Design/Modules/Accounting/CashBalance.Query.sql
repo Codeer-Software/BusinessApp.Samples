@@ -8,9 +8,27 @@
 --
 -- 見込み残高（未起票の下書きを足した額）は SQL では出さない。下書きは入力者ごとに絞って
 -- 見せるものなので、画面側が自分の下書き行から計算して book_balance に足す（CashEntry.mod.cs）。
+-- 【今日がどの年度にも入らない日の縮退・BUG-0097】
+--   旧実装は「今日を含む年度」だけを見ていたので、期初に翌期をまだ作っていない日や年度の隙間に開くと
+--   `yr` が 0 件になり、`COALESCE(...,0)` が効いて**全科目 0 円**が並んだ。エラーも警告も出ないので
+--   「本当に残高がゼロ」と区別できない——**期初は経理がいちばん画面を開く時期**なので必ず踏む。
+--   今日を含む年度が無いときは**直近の年度**へ縮退する（0 円よりは直近の実残高の方が 判断を誤らせない）。
 WITH yr AS (
-  SELECT id FROM fiscal_years
-  WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime')
+  -- 優先順: ①今日を含む年度 → ②**直前に終わった年度**（期初に翌期を作り忘れた日はここ）
+  --         → ③これから始まる年度（過去の年度が 1 つも無いとき）
+  SELECT id FROM (
+    SELECT id, 0 AS pri, 0 AS ord FROM fiscal_years
+     WHERE date(start_date) <= date('now', 'localtime')
+       AND date(end_date)   >= date('now', 'localtime')
+    UNION ALL
+    SELECT id, 1 AS pri, -julianday(date(end_date)) AS ord FROM fiscal_years
+     WHERE date(end_date) < date('now', 'localtime')
+    UNION ALL
+    SELECT id, 2 AS pri,  julianday(date(start_date)) AS ord FROM fiscal_years
+     WHERE date(start_date) > date('now', 'localtime')
+  )
+  ORDER BY pri, ord
+  LIMIT 1
 )
 SELECT
   a.id   AS account_id,
