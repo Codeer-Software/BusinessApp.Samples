@@ -215,7 +215,13 @@ void CancelReceipt_OnClick()
             {
                 this.IsViewOnly = false;  // 確定中ロックの解除（UpdateButtons が最終状態を再設定する）
                 Amount.Value = remaining;
-                Note.Value = "入金の取消により残額の入金予定に戻りました（入金日・金額を実額に修正して確定してください）";
+                // 入金方法も既定（銀行振込）へ戻す（BUG-0064）。相殺入金を取り消したときに
+                // `method='offset'` を残すと、相殺先を消したのに相殺のまま＝**相殺先が無い相殺**という
+                // 自己矛盾した行になる（不変条件 C05 が実データで検出した）。
+                // 残額の予定は「これから普通に入金される見込み」なので、既定に戻すのが素直
+                Method.Value = "bank";
+                OffsetVendorInvoiceRef.Value = null;
+                Note.Value = "入金の取消により残額の入金予定に戻りました（入金日・金額・入金方法を実額に修正して確定してください）";
                 var retSelf = this.Submit();
                 if (retSelf != true) { Toaster.Warn("入金予定の金額更新に失敗しました（金額を確認してください）"); }
                 else { mergedRemaining = remaining; }

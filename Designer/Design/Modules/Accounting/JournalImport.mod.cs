@@ -51,6 +51,7 @@ void Import_OnClick()
     var rTaxCatId = new List<object>();
     var rIsTaxLine = new List<bool>();
     var rDesc = new List<string>();
+    var rParentRi = new List<int>();    // 税行 → 親（本体行）の行 index。-1 は未解決（BUG-0063）
 
     var badLines = 0;
 
@@ -151,6 +152,7 @@ void Import_OnClick()
         rAmount.Add(amount);
         rTaxCatId.Add(taxCatId);
         rIsTaxLine.Add(isTaxLine);
+        rParentRi.Add(-1);
         rDesc.Add((cols.Count > 6) ? cols[6].Trim() : "");
     }
 
@@ -182,7 +184,7 @@ void Import_OnClick()
                 if (rGroup[rj] != rGroup[ri]) continue;
                 if (rIsTaxLine[rj]) continue;
                 if (rTaxCatId[rj] == null) continue;
-                if (found == null) { found = rTaxCatId[rj]; }
+                if (found == null) { found = rTaxCatId[rj]; rParentRi[ri] = rj; }
                 else if ($"{found}" != $"{rTaxCatId[rj]}") { conflict = true; break; }
             }
             if (conflict)
@@ -368,7 +370,23 @@ void Import_OnClick()
             l.Amount.Value = rAmount[ri];
             l.InputAmount.Value = rAmount[ri];
             if (rTaxCatId[ri] != null) { l.TaxCategory.Value = rTaxCatId[ri]; }
-            if (rIsTaxLine[ri]) { l.IsTaxLine.Value = true; }
+            if (rIsTaxLine[ri])
+            {
+                l.IsTaxLine.Value = true;
+                // 税行の親行を記録する（BUG-0063）。これが無いと税額を本体行へ遡って辿れず、
+                // 不変条件 A09（消費税行と親行の整合）が成立しない。
+                // 親は「税区分の継承元にした本体行」＝上の補完ループで決めた行と同じものを使う
+                // （別の決め方をすると、税区分は A 行から・親は B 行、という食い違いが起きる）
+                if (rParentRi[ri] >= 0)
+                {
+                    var pln = 0;
+                    for (int k = 0; k < idxs.Count; k++)
+                    {
+                        if (idxs[k] == rParentRi[ri]) { pln = k + 1; break; }
+                    }
+                    if (pln > 0) { l.ParentLineNo.Value = pln; }
+                }
+            }
             l.TaxInputMode.Value = "none";
             l.Description.Value = rDesc[ri];
         }
