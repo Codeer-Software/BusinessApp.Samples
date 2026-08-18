@@ -85,7 +85,7 @@
       "OnSearchDataChanged": "",
       "DisplayName": "有効",
       "IsRequired": false,
-      "OnDataChanged": "",
+      "OnDataChanged": "IsActive_OnDataChanged",
       "Name": "IsActive",
       "IgnoreModification": false,
       "OnValidateInput": "",

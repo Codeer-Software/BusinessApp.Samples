@@ -13,18 +13,24 @@ void Detail_OnAfterInit()
 
 void ClearRead_OnClick()
 {
-    var s = new ModuleSearcher<Notification>();
-    s.AddEquals(n => n.IsRead.Value, true);
-    s.Limit(500);
-    var rows = s.Execute();
-    if (rows.Count == 0)
+    // **全件を数えてから 500 件ずつ消す**（BUG-0388）。
+    // 以前は 500 件だけ取って「すべて削除します」と言っていたので、既読が 600 件あると
+    // 100 件残るのに「すべて削除しました」と表示された（台本の「検索し直しても出てこない」が成立しない）
+    var all = new ModuleSearcher<Notification>();
+    all.AddEquals(n => n.IsRead.Value, true);
+    var total = all.Execute().Count;
+    if (total == 0)
     {
         Toaster.Info("既読の通知はありません");
         return;
     }
 
-    var answer = MessageBox.Show($"既読の通知 {rows.Count} 件をすべて削除します（元に戻せません）。よろしいですか？", "削除する", "キャンセル");
+    var answer = MessageBox.Show($"既読の通知 {total} 件をすべて削除します（元に戻せません）。よろしいですか？", "削除する", "キャンセル");
     if (answer != "削除する") return;
+
+    var s = new ModuleSearcher<Notification>();
+    s.AddEquals(n => n.IsRead.Value, true);
+    var rows = s.Execute();
 
     using var loading = LoadingService.StartLoading(0);
     var failed = 0;

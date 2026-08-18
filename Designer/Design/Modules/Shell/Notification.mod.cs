@@ -45,6 +45,14 @@ string ResolveLinkUrl(string linkModule, string linkId)
     // （ApprovalFlow.mod.cs:ToApproverModule）
     if (linkModule == "ExpenseRequestApproval")
     {
+        // **経理を先に見る**（BUG-0387）。承認者あての通知でも、受け手が経理なら経理用の画面へ送る——
+        // サイドバーやポータルから同じ申請を開くと経理用が開くので、通知だけ別画面だと入口で挙動が変わる。
+        // 承認代替（`FindFallbackApprover`）で経理ユーザーが承認者になったとき、
+        // その人が `IsApprover=false` だと承認者フレームの門番に弾かれて**行き止まり**になる問題も同時に消える
+        if (CurrentUser.HasAccountingAccess.Value == true)
+        {
+            return $"/ExpenseAccounting/ExpenseRequestApproval/{linkId}";
+        }
         return $"/ExpenseApprover/ExpenseRequestApproval/{linkId}";
     }
     if (linkModule == "ExpenseRequest")

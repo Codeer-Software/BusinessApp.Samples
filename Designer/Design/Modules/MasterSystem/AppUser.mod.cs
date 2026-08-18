@@ -79,6 +79,19 @@ void Password_OnDataChanged()
     PasswordHintLabel.IsVisible = true;
 }
 
+// 自分自身を無効にできない（BUG-0386）。
+// 無効化はアプリではなく認証ビュー `active_app_users` で効くので、**次のログインから本人が入れなくなる**。
+// システム管理者が 1 名しかいない環境で自分を無効にすると、システム管理のフレームに入れる人間がゼロになり、
+// 画面からは復旧できない（SQL 直叩きしかない）。管理者権限のガードと対で必要だった
+void IsActive_OnDataChanged()
+{
+    if (IsNewData) return;
+    if (IsActive.Value == true) return;
+    if ($"{Id.Value}" != $"{CurrentUser.Id.Value}") return;
+    IsActive.Value = true;
+    Toaster.Error("自分自身を無効にはできません（ロックアウト防止）。別の管理者で操作してください。");
+}
+
 // 自分自身のシステム管理者権限は外せない（唯一の管理者が自分を降格するとロックアウトするため）
 void IsSysAdmin_OnDataChanged()
 {
