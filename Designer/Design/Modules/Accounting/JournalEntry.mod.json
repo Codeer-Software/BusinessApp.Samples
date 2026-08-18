@@ -191,7 +191,7 @@
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
-      "RelativeField": "EntryType",
+      "RelativeField": "FixedAssetRef",
       "OnClick": "",
       "Name": "FixedAssetLabel",
       "IgnoreModification": false,

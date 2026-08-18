@@ -124,7 +124,9 @@ int CountLiveInvoices()
 bool CanDeleteContract()
 {
     if (CurrentUser.HasAccountingAccess.Value == true) return true;
-    return Creator.Value == CurrentUser.Id.Value;
+    // **生の `==` で id を比べない**（BUG-0399 と同型）。動的型の比較は型が違うと黙って false になり、
+    // 「自分が作った下書きなのに削除ボタンが出ない」という静かな失敗になる
+    return $"{Creator.Value}" == $"{CurrentUser.Id.Value}";
 }
 
 void Confirm_OnClick()

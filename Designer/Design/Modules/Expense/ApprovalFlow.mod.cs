@@ -662,7 +662,10 @@ bool IsCurrentUserCreator()
     hs.AddEquals(h => h.Action.Value, "Submit");
     var subHistory = hs.Execute();
     if (subHistory.Count == 0) return false;
-    return subHistory[0].ActorUser.Value == CurrentUser.Id.Value;
+    // **生の `==` で id を比べない**（BUG-0399）。動的型の比較は型が違うと黙って false になり、
+    // 「申請者本人なのに本人と判定されない」＝取下げボタンが出ない、という静かな失敗になる。
+    // このリポジトリの定石は `IsSameId`（文字列化して比べる）
+    return IsSameId(subHistory[0].ActorUser.Value, CurrentUser.Id.Value);
 }
 
 // ============================================================

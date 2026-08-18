@@ -516,7 +516,7 @@
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
-      "RelativeField": "Note",
+      "RelativeField": "",
       "OnClick": "",
       "Name": "LinesLabel",
       "IgnoreModification": false,

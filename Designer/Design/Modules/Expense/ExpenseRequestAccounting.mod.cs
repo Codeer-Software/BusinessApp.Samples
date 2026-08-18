@@ -161,7 +161,7 @@ void GenerateJournal_OnClick()
             Toaster.Error("計上日の期間に起票できず、本日の期間も締め済みまたは未設定です。会計年度・月次期間の設定を確認してください");
             return;
         }
-        if (typedFy != null && fyToday.Id.Value != typedFy.Id.Value)
+        if (typedFy != null && $"{fyToday.Id.Value}" != $"{typedFy.Id.Value}")
         {
             Toaster.Warn($"計上日（{ExpenseDate.Value:yyyy/MM/dd}）は前年度です。当期の費用として計上します。金額が重要な場合は決算修正をご検討ください");
         }

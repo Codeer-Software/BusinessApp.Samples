@@ -377,14 +377,14 @@ void UpdateTaxHint()
         foreach (var cItem in cats)
         {
             var cat = (TaxCategory)cItem;
-            if (cat.Id.Value != l.TaxCategory.Value) continue;
+            if ($"{cat.Id.Value}" != $"{l.TaxCategory.Value}") continue;
             var taxType = cat.TaxationType.Value;
             if (taxType != "taxable_sales" && taxType != "taxable_purchase") break;
             if (cat.Rate.Value == null) break;
             foreach (var rItem in rates)
             {
                 var rate = (TaxRate)rItem;
-                if (rate.Id.Value != cat.Rate.Value) continue;
+                if ($"{rate.Id.Value}" != $"{cat.Rate.Value}") continue;
                 decimal ratePercent = rate.RatePercent.Value ?? 0;
                 int input = l.Amount.Value;
                 int fullTax = input * ratePercent / 100;
@@ -626,7 +626,7 @@ void FillMissingDepartments()
         {
             var p = (JournalLine)parentRow;
             if (p.IsTaxLine.Value == true) continue;
-            if (p.LineNo.Value != l.ParentLineNo.Value) continue;
+            if ($"{p.LineNo.Value}" != $"{l.ParentLineNo.Value}") continue;
             l.Department.Value = p.Department.Value;
             break;
         }
@@ -723,7 +723,7 @@ bool ValidateDepartments()
         foreach (var a in accounts)
         {
             var acc = (Account)a;
-            if (acc.Id.Value != l.Account.Value) continue;
+            if ($"{acc.Id.Value}" != $"{l.Account.Value}") continue;
             var t = acc.AccountType.Value;
             if (t == "expense" || t == "revenue")
             {
@@ -854,7 +854,7 @@ void RegenerateTaxLines()
         foreach (var cItem in cats)
         {
             var cat = (TaxCategory)cItem;
-            if (cat.Id.Value == l.TaxCategory.Value)
+            if ($"{cat.Id.Value}" == $"{l.TaxCategory.Value}")
             {
                 taxType = cat.TaxationType.Value;
                 if (cat.UsesTransitionDeduction.Value == true) { isTransition = true; }
@@ -863,7 +863,7 @@ void RegenerateTaxLines()
                     foreach (var rItem in rates)
                     {
                         var rate = (TaxRate)rItem;
-                        if (rate.Id.Value == cat.Rate.Value)
+                        if ($"{rate.Id.Value}" == $"{cat.Rate.Value}")
                         {
                             ratePercent = rate.RatePercent.Value ?? 0;
                             break;

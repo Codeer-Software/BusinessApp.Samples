@@ -363,7 +363,7 @@ int GetConfirmedTotalForOrderLine(long? salesOrderLineId)
     foreach (var m in found)
     {
         var al = (AcceptanceLine)m;
-        if (al.AcceptanceId.Value == this.Id.Value) continue;   // 編集中の自分の行は除く
+        if ($"{al.AcceptanceId.Value}" == $"{this.Id.Value}") continue;   // 編集中の自分の行は除く
         var acc = new ModuleSearcher<Acceptance>();
         acc.AddEquals(a => a.Id.Value, al.AcceptanceId.Value);
         var accFound = acc.ExecuteFirstOrDefault();
