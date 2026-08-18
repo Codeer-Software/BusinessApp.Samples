@@ -72,6 +72,62 @@ void UpdateMethodHint()
     }
 }
 
+
+// 償却額が 0 になった理由を、利用者が次の一手を取れる言葉で返す（BUG-0099）
+string ExplainZeroDepreciation(var yearStart, var yearEnd)
+{
+    if (AcquisitionCost.Value == null || AcquisitionCost.Value <= 0) { return "取得価額が入力されていません"; }
+    if (AcquisitionDate.Value == null) { return "取得日が入力されていません"; }
+
+    var method = DepreciationMethod.Value;
+    if (method == "none") { return "この資産は償却方法が「償却しない」に設定されています（土地・建設仮勘定など）"; }
+
+    if (AcquisitionDate.Value > yearEnd)
+    {
+        return $"取得日（{AcquisitionDate.Value:yyyy/MM/dd}）が対象年度の期末より後です。取得年度から償却を始めてください";
+    }
+
+    if (NeedsUsefulLife(method) && (UsefulLife.Value == null || UsefulLife.Value <= 0))
+    {
+        return "耐用年数が入力されていません（定額法・200% 定率法では必須です）。耐用年数を入れてから、もう一度この年度の償却を生成してください";
+    }
+
+    if (method == "immediate")
+    {
+        return "即時償却は取得年度に全額を計上します。取得年度は既に償却済みです";
+    }
+    if (method == "lump_sum_3yr")
+    {
+        return "一括償却資産（3年均等）の償却期間は取得年度から 3 年です。対象年度はその範囲外です";
+    }
+    return "この年度の償却額はありません（既に簿価が残存 1 円まで償却されています）";
+}
+
+// この償却方法は耐用年数を必要とするか
+bool NeedsUsefulLife(string method)
+{
+    return (method == "straight_line") || (method == "declining_200");
+}
+
+// 償却方法を選び直したとき: 耐用年数が要る方法なのに空なら、その場で気づかせる（BUG-0099）。
+// CLB の `IsRequired` は「方法によって必須が変わる」を表現できないので、警告で補う
+void DepreciationMethod_OnDataChanged()
+{
+    WarnMissingUsefulLife();
+}
+
+void UsefulLife_OnDataChanged()
+{
+    WarnMissingUsefulLife();
+}
+
+void WarnMissingUsefulLife()
+{
+    if (!NeedsUsefulLife(DepreciationMethod.Value)) return;
+    if (UsefulLife.Value != null && UsefulLife.Value > 0) return;
+    Toaster.Warn("この償却方法では耐用年数が必須です。空のままだと償却額が 0 円になり、償却仕訳を生成できません");
+}
+
 // 対象年度の償却額を計算する（理論値ベース）
 // 戻り値 0 = 対象外/償却済み
 int CalcDepreciationForYear(var yearStart, var yearEnd)
@@ -1041,7 +1097,10 @@ void GenerateDep_OnClick()
     var amount = CalcDepreciationForYear(typedFy.StartDate.Value, typedFy.EndDate.Value);
     if (amount <= 0)
     {
-        Toaster.Info("この年度の償却額はありません（対象外または償却済み）");
+        // **原因を分けて伝える**（BUG-0099）。旧実装は「対象外または償却済み」の 1 文で、
+        // ①年度が対象外 ②耐用年数の未入力 ③算定バグ の 3 つを畳み込んでいた。
+        // とくに②は入力の不備なのに、利用者からは「このアプリは償却してくれない」に見える
+        Toaster.Info(ExplainZeroDepreciation(typedFy.StartDate.Value, typedFy.EndDate.Value));
         return;
     }
 

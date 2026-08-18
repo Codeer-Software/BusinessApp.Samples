@@ -15,8 +15,24 @@ WITH bal AS (
     AND c.statement = 'PL'
     -- 年度未選択（初期表示）は現在日付を含む年度に自動解決（BS/EquityChange と同方式）
     AND e.fiscal_year_id = COALESCE(@fiscal_year_id,
-      (SELECT id FROM fiscal_years
-       WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime')))
+      (SELECT id FROM (
+       -- 【今日がどの年度にも入らない日の縮退・BUG-0288】
+       --   旧実装は「今日を含む年度」だけを見ていたので、期末をまたいで年度マスタの登録が遅れると
+       --   `= NULL` になり、**帳票がある日突然すべて空になる**（エラーも警告も出ない）。
+       --   年度登録は年 1 回の作業なので現実に起きる。**直近の年度へ縮退する**。
+       --   優先順は入出金起票の残高（BUG-0097）と同じ:
+       --     ①今日を含む年度 →②直前に終わった年度 →③これから始まる年度
+       SELECT id,
+              CASE WHEN date(start_date) <= date('now','localtime')
+                    AND date(end_date)   >= date('now','localtime') THEN 0
+                   WHEN date(end_date)   <  date('now','localtime') THEN 1
+                   ELSE 2 END AS pri,
+              CASE WHEN date(end_date) < date('now','localtime')
+                   THEN julianday(date('now','localtime')) - julianday(date(end_date))
+                   ELSE julianday(date(start_date)) - julianday(date('now','localtime')) END AS ord
+       FROM fiscal_years
+       ORDER BY pri, ord
+       LIMIT 1)))
   GROUP BY a.id
 ),
 amt AS (
