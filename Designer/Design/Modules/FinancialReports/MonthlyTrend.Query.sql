@@ -18,15 +18,28 @@ per AS (
   FROM fiscal_periods
   WHERE fiscal_year_id IN (SELECT id FROM yr)
 ),
+-- 【期間に載らない仕訳を落とさない・BUG-0110】
+--   対象は他 6 帳票と同じく `e.fiscal_year_id`。期間の JOIN は**月列への割り当てだけ**に使う。
+--   旧実装は INNER JOIN だったため、`fiscal_periods` の隙間に落ちた日付の仕訳が
+--   **月次推移表からだけ静かに消え**、PL の年間合計 ≠ 月次推移の Total、BS の検算行が合わなくなった
+--   （`journal_entries` には entry_date と fiscal_year_id の整合制約が無く、
+--     `fiscal_periods` が年度を隙間なく覆う保証も無い）。
+--   割り当てできない仕訳は、期首より前なら最初の期間へ、期末より後なら最後の期間へ寄せる。
+--   こうすれば「列の合計 ＝ Total」が常に成り立ち、異常な日付の伝票も画面から見える。
 mv AS (
-  SELECT l.account_id, p.period_no,
+  SELECT l.account_id,
+         COALESCE(p.period_no,
+                  CASE WHEN date(e.entry_date) < (SELECT MIN(date(start_date)) FROM per)
+                       THEN (SELECT MIN(period_no) FROM per)
+                       ELSE (SELECT MAX(period_no) FROM per) END,
+                  1) AS period_no,
          SUM(CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END) AS dmc
   FROM journal_lines l
   JOIN journal_entries e ON e.id = l.journal_entry_id
-  JOIN per p ON date(e.entry_date) BETWEEN date(p.start_date) AND date(p.end_date)
+  LEFT JOIN per p ON date(e.entry_date) BETWEEN date(p.start_date) AND date(p.end_date)
   WHERE e.status = 'posted'
     AND e.fiscal_year_id IN (SELECT id FROM yr)
-  GROUP BY l.account_id, p.period_no
+  GROUP BY l.account_id, 2
 ),
 
 -- ============ PL（月次発生額） ============

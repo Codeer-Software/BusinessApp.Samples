@@ -17,13 +17,17 @@ ob AS (
   WHERE fiscal_year_id IN (SELECT id FROM yr)
   GROUP BY account_id
 ),
+-- 【対象仕訳の選び方は他 6 帳票と揃える・BUG-0112】
+--   BS・PL・C/F・月次推移・消費税 2 本はすべて `e.fiscal_year_id` を基準にしている。
+--   ここだけ `entry_date` の範囲で選んでいると、`fiscal_year_id` と日付が食い違う伝票が
+--   1 本でもあったときに**この帳票だけ別の仕訳集合を見る**ことになり、
+--   当期純利益が BS・PL と 食い違う（エラーは出ない）。基準を年度 id に揃える。
 mv AS (
   SELECT l.account_id, SUM(CASE WHEN l.dc = 'C' THEN l.amount ELSE -l.amount END) AS chg
   FROM journal_lines l
   JOIN journal_entries e ON e.id = l.journal_entry_id
   WHERE e.status = 'posted'
-    AND date(e.entry_date) >= (SELECT date(start_date) FROM yr)
-    AND date(e.entry_date) <= (SELECT date(end_date) FROM yr)
+    AND e.fiscal_year_id IN (SELECT id FROM yr)
   GROUP BY l.account_id
 ),
 ni AS (
@@ -32,8 +36,7 @@ ni AS (
   JOIN journal_entries e ON e.id = l.journal_entry_id
   JOIN accounts a ON a.id = l.account_id
   WHERE e.status = 'posted'
-    AND date(e.entry_date) >= (SELECT date(start_date) FROM yr)
-    AND date(e.entry_date) <= (SELECT date(end_date) FROM yr)
+    AND e.fiscal_year_id IN (SELECT id FROM yr)
     AND a.account_type IN ('revenue', 'expense')
 ),
 final AS (
