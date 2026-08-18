@@ -1,4 +1,5 @@
 using Codeer.LowCode.Blazor;
+using Dapper;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
 using Codeer.LowCode.Blazor.DesignLogic;
@@ -83,7 +84,7 @@ namespace BusinessApp.Server.Services
         /// （フィールド名「ユーザー識別名」を直に書くと、モジュール側のリネームで静かに効かなくなる）。
         /// 見つからないときは空を返し、「識別名と同一の禁止」だけが適用されない（長さ・文字種は効く）。
         /// </summary>
-        static string FindUserName(ModuleDesign moduleDesign, ModuleData data)
+        string FindUserName(ModuleDesign moduleDesign, ModuleData data)
         {
             var userNameColumn = SystemConfig.Instance.PasswordCheckUserTableInfo.UserNameColumn;
             if (string.IsNullOrEmpty(userNameColumn)) return string.Empty;
@@ -92,11 +93,48 @@ namespace BusinessApp.Server.Services
             {
                 if (field is not TextFieldDesign text) continue;
                 if (text.DbColumn != userNameColumn) continue;
-                if (!data.Fields.TryGetValue(text.Name, out var fieldData)) return string.Empty;
-                if (fieldData is TextFieldData textData) return textData.Value ?? string.Empty;
-                return string.Empty;
+                if (data.Fields.TryGetValue(text.Name, out var fieldData)
+                    && fieldData is TextFieldData textData
+                    && !string.IsNullOrEmpty(textData.Value))
+                {
+                    return textData.Value;
+                }
+                //更新では変更した項目しか送られてこない。パスワードだけ直したときに識別名が
+                //payload に無く、「識別名と同じパスワード禁止」が静かに素通りしていた（BUG-0401）。
+                //送られてこないときは DB から引く。
+                return FindUserNameFromDb(FindRecordId(moduleDesign, data), userNameColumn);
             }
             return string.Empty;
+        }
+
+        /// <summary>送信データから主キーの値を拾う（更新のときだけ入っている）。</summary>
+        static string FindRecordId(ModuleDesign moduleDesign, ModuleData data)
+        {
+            foreach (var field in moduleDesign.Fields)
+            {
+                if (field is not IdFieldDesign) continue;
+                if (!data.Fields.TryGetValue(field.Name, out var fieldData)) return string.Empty;
+                return $"{(fieldData as IdFieldData)?.Value}";
+            }
+            return string.Empty;
+        }
+
+        /// <summary>保存対象の行から識別名を引く。引けなければ空（＝この規則だけ適用されない）。</summary>
+        string FindUserNameFromDb(string? id, string userNameColumn)
+        {
+            if (string.IsNullOrEmpty(id)) return string.Empty;
+            var info = SystemConfig.Instance.PasswordCheckUserTableInfo;
+            if (string.IsNullOrEmpty(info.TableName) || string.IsNullOrEmpty(info.IdColumn)) return string.Empty;
+            try
+            {
+                var conn = _dbAccess.GetConnection(PasswordPolicyService.GetUserDataSourceName());
+                var sql = $"SELECT {userNameColumn} FROM {info.TableName} WHERE {info.IdColumn} = @id";
+                return conn.QueryFirstOrDefault<string>(sql, new { id }) ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
         }
     }
 }
