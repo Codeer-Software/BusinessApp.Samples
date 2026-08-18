@@ -175,8 +175,8 @@ SELECT
   -- 閾値が 0／未設定なら 0 件になり、従来どおり「マイナスのときだけ」の挙動に戻る
   (SELECT count(*) FROM cash_final
     WHERE ending >= 0
-      AND COALESCE((SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' LIMIT 1), 0) > 0
-      AND ending < (SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' LIMIT 1)
+      AND COALESCE((SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' AND (valid_from IS NULL OR date(valid_from) <= date('now','localtime')) AND (valid_to   IS NULL OR date(valid_to)   >= date('now','localtime')) ORDER BY COALESCE(date(valid_from),'0001-01-01') DESC LIMIT 1), 0) > 0
+      AND ending < (SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' AND (valid_from IS NULL OR date(valid_from) <= date('now','localtime')) AND (valid_to   IS NULL OR date(valid_to)   >= date('now','localtime')) ORDER BY COALESCE(date(valid_from),'0001-01-01') DESC LIMIT 1)
   ) AS cash_warn_months,
   (SELECT count(*) FROM budget_alert) AS budget_alert_depts,
   -- 警告が出ている部門の ID リスト（カンマ区切り。非経理ユーザーの「自部門のみ表示」判定用・2026-08-06）

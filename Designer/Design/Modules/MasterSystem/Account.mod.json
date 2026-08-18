@@ -328,7 +328,7 @@
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
-      "RelativeField": "Kana",
+      "RelativeField": "AccountRole",
       "OnClick": "",
       "Name": "AccountRoleLabel",
       "IgnoreModification": false,

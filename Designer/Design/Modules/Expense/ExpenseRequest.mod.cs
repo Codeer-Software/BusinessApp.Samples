@@ -328,21 +328,29 @@ void UpdateLineButtons()
 
 // 明細リストの変更（行の削除）→ 削除を確定してから採番を詰め、合計を取り直す。
 // 税区分の補完・少額資産の判定は入力フォーム側（ExpenseRequestLine）が受け持つので、ここは持たない。
+// 削除の詰め直しで画面側の LineNo を書くと、このハンドラが同期で再発火しうる
+// （`AddRow()` が OnDataChanged を同期発火する実測知見と同型。`SuspendNotifyStateChanged` は
+//  UI 通知を止めるだけでスクリプトのイベントは止めない）。2 周目に入らないよう自前で止める
+bool inLinesHandler = false;
+
 void Lines_OnDataChanged()
 {
     if (IsNewData) return;
     if (!CanEditLines()) return;
+    if (inLinesHandler) return;
+    inLinesHandler = true;
 
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 
     // 先に削除を DB へ反映する（反映前に集計すると消したはずの行が合計に残る）
     var ret = this.Submit();
-    if (ret == false) { Toaster.Error("明細の削除に失敗しました"); return; }
+    if (ret == false) { Toaster.Error("明細の削除に失敗しました"); inLinesHandler = false; return; }
 
     RenumberLines();
     RecalcFromLines();
     this.Submit();
+    inLinesHandler = false;
     UpdateLineButtons();
 }
 

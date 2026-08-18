@@ -319,7 +319,7 @@
       "Text": "売却価額（税抜）",
       "Icon": "",
       "Style": "Default",
-      "RelativeField": "AcquisitionCost",
+      "RelativeField": "DisposalAmount",
       "OnClick": "",
       "Name": "DisposalAmountLabel",
       "IgnoreModification": false,

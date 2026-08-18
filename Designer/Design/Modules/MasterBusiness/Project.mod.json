@@ -172,7 +172,7 @@
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
-      "RelativeField": "PartnerRef",
+      "RelativeField": "DepartmentRef",
       "OnClick": "",
       "Name": "DepartmentRefLabel",
       "IgnoreModification": false,

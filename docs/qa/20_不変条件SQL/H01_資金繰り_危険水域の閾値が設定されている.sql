@@ -7,5 +7,5 @@
 --       SQL では書けないので、`Designer/tools/lint_design.py` の CLB-038（複製の一致検査）が担当する。
 SELECT
   '資金繰りの危険水域（CASH_ALERT_BALANCE）が未設定または 0' AS 違反,
-  COALESCE((SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' LIMIT 1), 0) AS 現在値
-WHERE COALESCE((SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' LIMIT 1), 0) <= 0
+  COALESCE((SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' AND (valid_from IS NULL OR date(valid_from) <= date('now','localtime')) AND (valid_to   IS NULL OR date(valid_to)   >= date('now','localtime')) ORDER BY COALESCE(date(valid_from),'0001-01-01') DESC LIMIT 1), 0) AS 現在値
+WHERE COALESCE((SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' AND (valid_from IS NULL OR date(valid_from) <= date('now','localtime')) AND (valid_to   IS NULL OR date(valid_to)   >= date('now','localtime')) ORDER BY COALESCE(date(valid_from),'0001-01-01') DESC LIMIT 1), 0) <= 0

@@ -194,6 +194,10 @@ bool IsFixedAssetAccount(object accountId)
 // ============================================================
 
 // この資産の償却仕訳の合計（直接法なので、これが減価償却累計額にあたる）
+//
+// **明細は JournalLine を直接検索して数える。** 検索で取った JournalEntry の `Lines.Rows` は
+// 遅延ロードで空のことがあり（実測 2026-08-18: 償却仕訳があるのに累計 0 と出た）、
+// そのまま使うと**帳簿価額が取得価額のまま＝除却損が過大**になる。
 int AccumulatedDepreciation()
 {
     if (this.Id.Value == null) return 0;
@@ -205,7 +209,9 @@ int AccumulatedDepreciation()
     foreach (var row in js.Execute())
     {
         var je = (JournalEntry)row;
-        foreach (var lrow in je.Lines.Rows)
+        var ls = new ModuleSearcher<JournalLine>();
+        ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
+        foreach (var lrow in ls.Execute())
         {
             var l = (JournalLine)lrow;
             if (l.Dc.Value != "D") continue;          // 借方＝減価償却費の行だけ数える
@@ -281,7 +287,8 @@ void UpdateDisposalUi()
     {
         var acc = AccumulatedDepreciation();
         var cost = AcquisitionCost.Value ?? 0;
-        BookValueLabel.Text = $"帳簿価額: {cost - acc:#,0} 円（取得価額 {cost:#,0} − 償却累計 {acc:#,0}）";
+        var bvWord = (Status.Value == "retired" || Status.Value == "sold") ? "処分時点の帳簿価額" : "帳簿価額";
+        BookValueLabel.Text = $"{bvWord}: {cost - acc:#,0} 円（取得価額 {cost:#,0} − 償却累計 {acc:#,0}）";
     }
     else
     {
@@ -335,6 +342,25 @@ void DoDisposal(bool isSale)
 {
     if (this.IsNewData) { Toaster.Error("資産を保存してから実行してください"); return; }
     if (Status.Value == "retired" || Status.Value == "sold") { Toaster.Error("この資産は既に処分済みです"); return; }
+    // 処分仕訳はあるのに状態が使用中のまま＝「仕訳の保存は成功したが直後の状態更新が失敗した」中断状態。
+    // ここで作り直すと**2 本目の処分仕訳**が立って資産が二重に落ちる。作らずに状態だけ進めて自己修復する
+    // （経費の仕訳生成と同じ作法・BUG-0311）
+    var already = FindDisposalJournal();
+    if (already != null)
+    {
+        var wasSale = (DisposalAmount.Value ?? 0) > 0;
+        Status.Value = wasSale ? "sold" : "retired";
+        if (RetiredDate.Value == null) { RetiredDate.Value = already.EntryDate.Value; }
+        var retFix = this.Submit();
+        if (retFix != true)
+        {
+            Toaster.Error($"処分仕訳 No.{already.JournalNo.Value} は既に生成済みですが、台帳の状態更新に失敗しました。画面を開き直してもう一度お試しください");
+            return;
+        }
+        UpdateDisposalUi();
+        Toaster.Info($"処分仕訳 No.{already.JournalNo.Value} は既に生成されていました。二重には作らず、台帳の状態だけ合わせました");
+        return;
+    }
     if (!IsFixedAssetAccount(AssetAccount.Value))
     {
         Toaster.Error("資産計上科目が「固定資産科目」ではありません。科目マスタで固定資産科目にするか、この資産の計上科目を選び直してください");
@@ -348,6 +374,23 @@ void DoDisposal(bool isSale)
     if (book < 0)
     {
         Toaster.Error($"帳簿価額がマイナス（{book:#,0} 円）です。償却仕訳を確認してから処分してください");
+        return;
+    }
+    // 簿価 0（即時償却・一括償却で償却しきった資産）を**除却**するときは、振り替える金額が無い。
+    // 0 円の仕訳行を作ると帳簿にノイズが残るだけなので、仕訳は起こさず台帳の状態だけ変える
+    if (!isSale && book == 0)
+    {
+        var ans0 = MessageBox.Show(
+            $"固定資産「{Name.Value}」は帳簿価額が 0 円です（償却済み）。振り替える金額が無いので**仕訳は作らず**、台帳の状態だけ除却にします。よろしいですか？",
+            "除却する", "キャンセル");
+        if (ans0 != "除却する") return;
+        using var suspend0 = this.SuspendNotifyStateChanged();
+        Status.Value = "retired";
+        RetiredDate.Value = DateOnly.FromDateTime(DateTime.Today);
+        var ret0 = this.Submit();
+        if (ret0 != true) { Toaster.Error("台帳の状態更新に失敗しました"); return; }
+        UpdateDisposalUi();
+        Toaster.Success($"固定資産「{Name.Value}」を除却しました（帳簿価額 0 円のため仕訳は作っていません）");
         return;
     }
 
@@ -369,8 +412,9 @@ void DoDisposal(bool isSale)
     var what = isSale ? "売却" : "除却";
     var diff = sale - book;   // 売却のときだけ意味を持つ（プラス＝売却益）
     var gainLoss = (diff >= 0) ? "売却益" : "売却損";
+    var diffAbs = (diff >= 0) ? diff : (0 - diff);
     var detail = isSale
-        ? $"売却価額 {sale:#,0} 円／帳簿価額 {book:#,0} 円／差額 {diff:#,0} 円（{gainLoss}）"
+        ? $"売却価額 {sale:#,0} 円／帳簿価額 {book:#,0} 円／差額 {diffAbs:#,0} 円（{gainLoss}）"
         : $"帳簿価額 {book:#,0} 円を固定資産除却損へ振り替えます";
     var answer = MessageBox.Show(
         $"固定資産「{assetName}」を{what}します。{detail}。処分日は本日（{dispDate:yyyy/MM/dd}）です。よろしいですか？",
@@ -509,6 +553,13 @@ void GenerateDep_OnClick()
         Toaster.Error("資産を保存してから実行してください");
         return;
     }
+    // 処分済みの資産に償却を足さない。資産は処分仕訳で既に貸方に落ちているので、
+    // ここで償却を足すと**二重に落ちて簿価がマイナス**になる（不変条件 E03 の前提でもある）
+    if (Status.Value == "retired" || Status.Value == "sold")
+    {
+        Toaster.Error("この資産は処分済みです。償却仕訳は生成できません（必要なら「処分を取り消す」で戻してから実行してください）");
+        return;
+    }
     if (TargetYear.Value == null)
     {
         Toaster.Error("対象年度を選択してください");
@@ -583,16 +634,21 @@ void GenerateDep_OnClick()
         return;
     }
 
-    // 減価償却費(6300)の科目を取得
-    var accS = new ModuleSearcher<Account>();
-    accS.AddEquals(e => e.Code.Value, "6300");
-    var depAcc = accS.ExecuteFirstOrDefault();
-    if (depAcc == null)
+    // 減価償却費の科目は**役割で引く**（ddl/630 の account_role='depreciation_expense'）。
+    // コード直値だと科目体系を組み替えた瞬間に静かに壊れる。役割が未設定の環境では従来のコードで拾う
+    var typedDepAcc = FindAccountByRole("depreciation_expense");
+    if (typedDepAcc == null)
     {
-        Toaster.Error("減価償却費(6300)の科目がありません");
-        return;
+        var accS = new ModuleSearcher<Account>();
+        accS.AddEquals(e => e.Code.Value, "6300");
+        var depAcc = accS.ExecuteFirstOrDefault();
+        if (depAcc == null)
+        {
+            Toaster.Error("減価償却費の科目がありません（科目マスタの「役割」に depreciation_expense を設定してください）");
+            return;
+        }
+        typedDepAcc = (Account)depAcc;
     }
-    var typedDepAcc = (Account)depAcc;
 
     // 伝票番号の採番（正典: JournalEntry.NextJournalNo。BUG-0069 で一本化）
     var nextNo = new JournalEntry().NextJournalNo(TargetYear.Value);

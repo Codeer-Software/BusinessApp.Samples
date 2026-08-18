@@ -99,6 +99,37 @@ void GenerateJournal_OnClick()
     var existing = js.Execute();
     if (existing.Count > 0)
     {
+        // **固定資産の台帳登録も拾い直す。** 中断は仕訳の保存後・資産登録ループの途中でも起こりうるので、
+        // 状態だけ進めると「資産が永久に台帳へ登録されない」まま先へ行ってしまう（敵対的レビュー指摘）。
+        // RegisterFixedAsset は同じ管理番号が既にあれば登録しないので、押し直しても二重にはならない
+        var reRegistered = 0;
+        var reAssetNo = 0;
+        var reLines = GetLines();
+        object reAssetAccountId = null;
+        var reAccS = new ModuleSearcher<Account>();
+        reAccS.AddEquals(e => e.Code.Value, "1520");
+        var reAssetAcc = reAccS.ExecuteFirstOrDefault();
+        if (reAssetAcc != null) { reAssetAccountId = ((Account)reAssetAcc).Id.Value; }
+        object reDeptId = null;
+        var reCreatorId = Creator.Value;
+        if (reCreatorId != null)
+        {
+            var reUs = new ModuleSearcher<AppUser>();
+            reUs.AddEquals(u => u.Id.Value, reCreatorId);
+            var reUser = reUs.ExecuteFirstOrDefault();
+            if (reUser != null) { reDeptId = ((AppUser)reUser).所属部.Value; }
+        }
+        foreach (var l in reLines)
+        {
+            reAssetNo = reAssetNo + 1;
+            if (l.IsFixedAsset.Value != true) continue;
+            if (reAssetAccountId == null) continue;
+            int reGross = l.Amount.Value ?? 0;
+            int reBase = reGross - CalcLineTax(l);
+            var reDate = ((JournalEntry)existing[0]).EntryDate.Value;
+            if (RegisterFixedAsset(l, reAssetNo, reAssetAccountId, reBase, reDeptId, reDate)) reRegistered = reRegistered + 1;
+        }
+
         SettlementStatus.Value = "accounting";
         var retFix = this.Submit();
         if (retFix != true)
@@ -108,7 +139,8 @@ void GenerateJournal_OnClick()
         }
         UpdateAccountingButtons();
         var fixedNo = ((JournalEntry)existing[0]).JournalNo.Value;
-        Toaster.Info($"仕訳 No.{fixedNo} は既に生成されていました。二重には作らず、精算ステータスだけ「経理処理中」に進めました");
+        var addText = (reRegistered > 0) ? $"（あわせて固定資産 {reRegistered} 件を台帳へ登録しました）" : "";
+        Toaster.Info($"仕訳 No.{fixedNo} は既に生成されていました。二重には作らず、精算ステータスだけ「経理処理中」に進めました{addText}");
         return;
     }
 

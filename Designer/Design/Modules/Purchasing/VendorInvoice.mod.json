@@ -656,7 +656,7 @@
       "Text": "部門",
       "Icon": "",
       "Style": "Default",
-      "RelativeField": "ExpenseAccount",
+      "RelativeField": "DepartmentRef",
       "OnClick": "",
       "Name": "DepartmentRefLabel",
       "IgnoreModification": false,

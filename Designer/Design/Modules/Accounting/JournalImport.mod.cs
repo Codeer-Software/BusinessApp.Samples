@@ -167,6 +167,22 @@ void Import_OnClick()
     // 空欄は勘定科目マスタの既定で埋める。ただし税行（仮払/仮受消費税）は本体行に対する消費税なので
     // 本体行と同じ税区分が正しく、科目の既定（＝対象外）を入れると集計表からその税額が消える（B-5 の再発）。
     // 税行は同一伝票の本体行から継承し、推定できないものは伝票ごとスキップして税区分コードの指定を促す。
+    // 親行の決定は**税区分が明示されている税行にも要る**（BUG-0063 の当て漏れ）。
+    // 税区分の補完ループは「税区分が空の行」しか通らないので、親行の記録だけ先に全行ぶん済ませる
+    for (int ri = 0; ri < rGroup.Count; ri++)
+    {
+        if (!rIsTaxLine[ri]) continue;
+        if (rParentRi[ri] >= 0) continue;
+        for (int rj = 0; rj < rGroup.Count; rj++)
+        {
+            if (rGroup[rj] != rGroup[ri]) continue;
+            if (rIsTaxLine[rj]) continue;
+            if (rDc[rj] != rDc[ri]) continue;         // 貸借が同じ本体行を親にする
+            rParentRi[ri] = rj;
+            break;
+        }
+    }
+
     for (int ri = 0; ri < rGroup.Count; ri++)
     {
         if (rTaxCatId[ri] != null) continue;

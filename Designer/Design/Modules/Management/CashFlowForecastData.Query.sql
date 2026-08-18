@@ -117,7 +117,7 @@ final AS (
 ),
 -- 危険水域の閾値はマスタから引く（BUG-0249）。行が無い／0 なら従来どおり「マイナスのときだけ」になる
 alert_limit AS (
-  SELECT COALESCE((SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' LIMIT 1), 0) AS v
+  SELECT COALESCE((SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' AND (valid_from IS NULL OR date(valid_from) <= date('now','localtime')) AND (valid_to   IS NULL OR date(valid_to)   >= date('now','localtime')) ORDER BY COALESCE(date(valid_from),'0001-01-01') DESC LIMIT 1), 0) AS v
 )
 SELECT
   idx AS sort_no,
