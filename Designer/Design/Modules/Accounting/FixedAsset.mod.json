@@ -299,7 +299,7 @@
     },
     {
       "DbColumn": "disposal_amount",
-      "Placeholder": "税抜",
+      "Placeholder": "売却価額（税抜）",
       "Format": "#,0",
       "IsSlider": false,
       "OnInput": "",

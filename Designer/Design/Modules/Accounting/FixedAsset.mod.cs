@@ -351,12 +351,16 @@ void UpdateDisposalUi()
     }
     else
     {
+        // ラベルは Markdown を解釈しない（`**` がそのまま出る）。強調記号は使わず「」で括る
+        var defCatName = "（売上の既定税区分）";
+        var defCat = ResolveSaleTaxCategory();
+        if (defCat != null) { defCatName = defCat.Name.Value ?? defCatName; }
         DisposalHint.Text = "「除却する」＝ 帳簿価額を固定資産除却損へ振り替えて資産を落とします（売却価額・税区分は使いません）。"
-            + "　／　「売却する」＝ **総額法**で起票します（借方 未収入金〈税込〉・固定資産売却原価〈簿価〉／"
+            + "　／　「売却する」＝ 総額法で起票します（借方 未収入金〈税込〉・固定資産売却原価〈簿価〉／"
             + "貸方 固定資産〈簿価〉・固定資産売却益〈対価〉・仮受消費税）。差引の純額は売却損益と同じですが、"
-            + "**消費税の課税標準が対価と一致する**のはこの形だけです。"
-            + "　税区分は既定で売上の既定税区分が入ります。土地のように非課税の売却は「非課税売上」を選んでください。"
-            + "　処分日が期の途中なら、**その年度に使った月数ぶんの減価償却を処分日付で先に 1 本起票**します。"
+            + "消費税の課税標準が対価と一致するのはこの形だけです。"
+            + $"　税区分を選ばないときは「{defCatName}」が使われます。土地のように非課税の売却は「非課税売上」を選んでください。"
+            + "　処分日が期の途中なら、その年度に使った月数ぶんの減価償却を処分日付で先に 1 本起票します。"
             + "　どちらも処分日は本日で起票します（締め済みの期間には起票できません）。";
     }
     DisposalHint.IsVisible = true;
@@ -729,13 +733,45 @@ void DoDisposal(bool isSale)
     var ret = je.Submit();
     if (ret != true) { Toaster.Error($"{what}仕訳の生成に失敗しました"); return; }
 
+    // 台帳の確定は**DB から取り直したインスタンス**へ書く。
+    // 画面のインスタンスに書いて Submit すると、「取消 → 再売却」のように
+    // 同じ画面で 2 回操作したときに**処分日と売却価額が保存されない**（実測 2026-08-18）。
+    // 保存済みの値を DB 基準で置き直すのが確実（#60 と同じ「DB から取り直す」作法）
     Status.Value = isSale ? "sold" : "retired";
     RetiredDate.Value = dispDate;
+    if (!isSale) { DisposalAmount.Value = null; DisposalTaxCategory.Value = null; }   // 除却は売却の欄を使わない
     var retSelf = this.Submit();
     if (retSelf != true)
     {
         Toaster.Error($"{what}仕訳 No.{nextNo} は生成しましたが、台帳の状態更新に失敗しました。画面を開き直してもう一度お試しください");
         return;
+    }
+    // 念のため DB 側も突き合わせて、抜けていたら埋め直す
+    var vs = new ModuleSearcher<FixedAsset>();
+    vs.AddEquals(e => e.Id.Value, this.Id.Value);
+    var vfound = vs.ExecuteFirstOrDefault();
+    if (vfound != null)
+    {
+        var saved = (FixedAsset)vfound;
+        var needFix = (saved.RetiredDate.Value == null)
+            || (isSale && (saved.DisposalAmount.Value ?? 0) != sale)
+            || (saved.Status.Value != (isSale ? "sold" : "retired"));
+        if (needFix)
+        {
+            saved.Status.Value = isSale ? "sold" : "retired";
+            saved.RetiredDate.Value = dispDate;
+            if (isSale)
+            {
+                saved.DisposalAmount.Value = sale;
+                if (saleTaxCatId != null) { saved.DisposalTaxCategory.Value = saleTaxCatId; }
+            }
+            else
+            {
+                saved.DisposalAmount.Value = null;
+                saved.DisposalTaxCategory.Value = null;
+            }
+            saved.Submit();
+        }
     }
     UpdateDisposalUi();
     var partialText = (partial > 0) ? $"／処分までの期中償却 {partial:#,0} 円も起票" : "";
