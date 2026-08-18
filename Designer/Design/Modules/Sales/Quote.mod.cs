@@ -166,6 +166,7 @@ void PrintQuote(bool asPdf)
     }
     using var loading = LoadingService.StartLoading(0);
 
+    var truncated = 0;
     var stream = Resources.GetMemoryStream("quote_template.xlsx");
     if (stream == null)
     {
@@ -240,6 +241,7 @@ void PrintQuote(bool asPdf)
             }
             if (lines.Count > 10)
             {
+                truncated = lines.Count;
                 Toaster.Warn($"明細が10行を超えています（{lines.Count}行）。11行目以降は出力されません");
             }
         }
@@ -253,8 +255,12 @@ void PrintQuote(bool asPdf)
             return;
         }
     }
-    if (asPdf) { Toaster.Success($"見積書 {QuoteNo.Value} を PDF でダウンロードしました"); }
-    else { Toaster.Success($"見積書 {QuoteNo.Value} を Excel でダウンロードしました"); }
+    // 切り捨ての注意は**成功メッセージにも入れる**（実測 2026-08-18: Excel はダウンロードが始まると
+    // 直前の警告トーストが即座に消えて読めない。PDF は生成に時間がかかるので読めていた＝
+    // 「Excel だけ警告が出ない」ように見えていた）
+    var truncNote = (truncated > 10) ? $"（明細 {truncated} 行のうち 10 行のみ出力）" : "";
+    if (asPdf) { Toaster.Success($"見積書 {QuoteNo.Value} を PDF でダウンロードしました{truncNote}"); }
+    else { Toaster.Success($"見積書 {QuoteNo.Value} を Excel でダウンロードしました{truncNote}"); }
 }
 
 void SetByMarker(Excel excel, string marker, object value)
@@ -354,7 +360,8 @@ string FindDownstreamLabel()
     var so = new ModuleSearcher<SalesOrder>();
     so.AddEquals(e => e.QuoteRef.Value, this.Id.Value);
     var foundSo = so.ExecuteFirstOrDefault();
-    if (foundSo != null) { return $"受注 {((SalesOrder)foundSo).OrderNo.Value}"; }
+    // 「受注 SO-26-011 が…」と読めるよう末尾に空白を入れる（数字と助詞がくっついて読みにくい）
+    if (foundSo != null) { return $"受注 {((SalesOrder)foundSo).OrderNo.Value} "; }
 
     var rb = new ModuleSearcher<RecurringBilling>();
     rb.AddEquals(e => e.QuoteRef.Value, this.Id.Value);
