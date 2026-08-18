@@ -328,7 +328,9 @@ void GenerateJournal_OnClick()
         if (l.IsFixedAsset.Value != true) continue;
         int gross = l.Amount.Value ?? 0;
         int baseAmount = gross - CalcLineTax(l);
-        if (RegisterFixedAsset(l, assetNo, assetAccountId, baseAmount, creatorDeptId)) registered = registered + 1;
+        // 取得日は**仕訳と同じ日**を使う（BUG-0318）。行の利用日をそのまま入れると、
+        // 計上日が締め済みで仕訳を当日へ逃がしたときに、台帳だけ締めた月を起点に償却が始まる
+        if (RegisterFixedAsset(l, assetNo, assetAccountId, baseAmount, creatorDeptId, entryDate)) registered = registered + 1;
     }
 
     SettlementStatus.Value = "accounting";
@@ -562,13 +564,20 @@ string ResolveAccountName(object accountId)
 }
 
 // 固定資産台帳への自動登録（償却方法は仮=定額法。耐用年数と方法は経理が台帳で確定する）
-bool RegisterFixedAsset(ExpenseRequestLineAccounting l, int lineNo, object assetAccountId, int baseAmount, object departmentId)
+bool RegisterFixedAsset(ExpenseRequestLineAccounting l, int lineNo, object assetAccountId, int baseAmount, object departmentId, var acquisitionDate)
 {
     var code = l.AssetNo.Value;
     if (code == null || code == "") { code = $"EXP-{this.Id.Value}-{lineNo}"; }
     var fs = new ModuleSearcher<FixedAsset>();
     fs.AddEquals(f => f.Code.Value, code);
-    if (fs.Execute().Count > 0) return false;
+    if (fs.Execute().Count > 0)
+    {
+        // 同じ管理番号が既にあるときは黙って飛ばさない（BUG-0310）。
+        // 2 行に同じ番号を手入力すると仕訳は 2 行とも資産計上されるのに台帳は 1 件だけ、という
+        // 食い違いが**何の表示も無いまま**残っていた
+        Toaster.Error($"{lineNo} 行目: 資産管理番号「{code}」は既に固定資産台帳にあります。番号を直すか、台帳側で確認してください（この行は台帳に登録していません）");
+        return false;
+    }
 
     var name = l.Description.Value;
     if (string.IsNullOrEmpty(name)) name = $"{Title.Value}";
@@ -578,7 +587,7 @@ bool RegisterFixedAsset(ExpenseRequestLineAccounting l, int lineNo, object asset
     fa.Name.Value = name;
     if (departmentId != null) { fa.Department.Value = departmentId; }
     fa.AssetAccount.Value = assetAccountId;
-    fa.AcquisitionDate.Value = l.UsedDate.Value;
+    fa.AcquisitionDate.Value = acquisitionDate;
     fa.AcquisitionCost.Value = baseAmount;
     fa.DepreciationMethod.Value = "straight_line";
     fa.Status.Value = "in_use";
