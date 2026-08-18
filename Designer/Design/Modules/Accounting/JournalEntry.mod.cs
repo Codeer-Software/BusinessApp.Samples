@@ -32,14 +32,18 @@ void Detail_OnAfterInit()
     // 修正はサブ画面（JournalLineDepartment）が担う——この明細グリッドは
     // 「下書きは全項目編集／確定済みは部門だけ編集」を切り替えられないため（レイアウトは設計時固定）
     DeptEditButton.IsVisible = isPosted;
+    // 取消（赤伝）の作成も確定済みのときだけ（ADR-0075）
+    ReverseButton.IsVisible = isPosted;
     ShowLastUpdate();
     // 削除は「保存済みの下書き」だけ（確定済み伝票は削除不可＝赤黒訂正で消し込む。ADR-0026）
     DeleteDraftButton.IsVisible = !this.IsNewData && (Status.Value == "draft");
-    if (!this.IsNewData && Status.Value == "draft" && SourceType.Value != "import")
+    if (!this.IsNewData && Status.Value == "draft"
+        && SourceType.Value != "import" && SourceType.Value != "reversal")
     {
         // 旧仕様の下書き（税抜変換済み・税行あり）を入力状態へ戻す。
         // 現仕様の下書きは生の入力のまま保存されるので通常は no-op。
-        // CSV インポート由来（source_type='import'）は税行込みの生データが正なので畳まない。
+        // CSV インポート由来（source_type='import'）と取消の赤伝（'reversal'・ADR-0075）は
+        // **税行込みの生データが正**なので畳まない——畳むと税行が消えて貸借が崩れる（実測）。
         inLinesHandler = true;
         RestoreInputState();
         inLinesHandler = false;
@@ -553,7 +557,10 @@ void SaveEntry(bool post)
     // （下書き保存→確定、確定失敗→再確定 の順路で必ず踏む罠だった）。
     // CSV インポート由来の下書き（source_type='import'）は税行込みの生データを
     // 無加工のまま確定する（移行元と 1 円もズレない保証。税の再計算はしない）。
-    var isRawImport = (SourceType.Value == "import");
+    // **無加工で確定する伝票**（税抜化も税行生成もしない）。
+    //   import   … 移行元と 1 円もズレない保証（既存）
+    //   reversal … 元伝票の完全な鏡像。税行まで写してあるので触ってはいけない（ADR-0075）
+    var isRawImport = (SourceType.Value == "import" || SourceType.Value == "reversal");
     if (post)
     {
         if (!isRawImport)
@@ -1021,6 +1028,111 @@ int NextJournalNo(object fiscalYearId)
 }
 
 // 下書き伝票の削除（確定済みは削除不可＝赤黒訂正で対応。ADR-0026）
+
+// 確定済み伝票の「取消（赤伝）」を下書きで作る（BUG-0073・ADR-0075）。
+//
+// なぜ機械化するのか: 確定伝票は**税抜化済み**（本体 50,000 ＋ 仮払消費税 5,000）で保存されている。
+// 手で赤伝を切るときの正解は「**税込 55,000 を内税で入れ直す**」で、画面に出ている本体額 50,000 を
+// そのまま入れると再度税抜化されて 45,455 ＋ 4,545 になり、元伝票と 1 円単位で合わない。
+// 正解を知っていないと当てられないうえ、税込額は画面のどこにも出ていない（足し戻すしかない）。
+//
+// このボタンは**全行を D/C 反転してそのまま複製する**——本体行も税行も、
+// 部門・案件・税区分・摘要も含めて。`TaxInputMode` は全行 `none` にし、
+// `SourceType = "reversal"` で確定時の税行再生成を止める（`SaveEntry` の `isRawImport` と同じ扱い）。
+// これで**税まで含めた完全な鏡像**になる。
+//
+// 作るのは**下書き**。日付も摘要も直せるし、要らなければ削除できる——
+// 「確定は不可逆」（ADR-0026）を崩さないための線引きである。
+void Reverse_OnClick()
+{
+    if (this.IsNewData || Status.Value != "posted")
+    {
+        Toaster.Error("確定済みの伝票だけ取消（赤伝）を作れます");
+        return;
+    }
+
+    // 元伝票の明細を DB から取り直す（メモリ行の遅延ロード対策）
+    var ls = new ModuleSearcher<JournalLine>();
+    ls.AddEquals(e => e.JournalEntryId.Value, this.Id.Value);
+    ls.OrderBy(e => e.LineNo.Value);
+    var srcLines = ls.Execute();
+    if (srcLines.Count == 0) { Toaster.Error("元伝票の明細が読み込めませんでした"); return; }
+
+    // 取消の日付は**今日**。元伝票と同じ日にしたいときは下書きのまま直せる
+    // （元の月が締め済みのことがあるので、既定を元日付にはしない）
+    var today = DateOnly.FromDateTime(DateTime.Today);
+    var monthFirst = new DateOnly(today.Year, today.Month, 1);
+    var ys = new ModuleSearcher<FiscalYear>();
+    ys.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
+    ys.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);
+    var fy = ys.ExecuteFirstOrDefault();
+    if (fy == null) { Toaster.Error("本日に対応する会計年度がありません"); return; }
+
+    using var loading = LoadingService.StartLoading(0);
+
+    var je = new JournalEntry();
+    je.EntryDate.Value = today;
+    je.EntryType.Value = EntryType.Value;
+    je.Description.Value = $"No.{JournalNo.Value} 取消（赤伝）";
+    je.Status.Value = "draft";
+    je.FiscalYearRef.Value = ((FiscalYear)fy).Id.Value;
+    je.SourceType.Value = "reversal";
+    je.SourceId.Value = this.Id.Value;
+    je.Lines.AddRows(srcLines.Count);
+
+    var i = 0;
+    foreach (var row in je.Lines.Rows)
+    {
+        var dst = (JournalLine)row;
+        var src = (JournalLine)srcLines[i];
+        i = i + 1;
+        dst.LineNo.Value = i;
+        dst.Dc.Value = (src.Dc.Value == "D") ? "C" : "D";   // ここが赤伝の本体
+        dst.Account.Value = src.Account.Value;
+        dst.SubAccount.Value = src.SubAccount.Value;
+        dst.Department.Value = src.Department.Value;
+        dst.ProjectRef.Value = src.ProjectRef.Value;
+        dst.TaxCategory.Value = src.TaxCategory.Value;
+        dst.TaxInputMode.Value = "none";                    // 再度の税抜化をさせない
+        dst.IsTaxLine.Value = src.IsTaxLine.Value;
+        dst.ParentLineNo.Value = src.ParentLineNo.Value;
+        dst.Amount.Value = src.Amount.Value;
+        dst.InputAmount.Value = src.Amount.Value;
+        dst.Description.Value = src.Description.Value;
+    }
+
+    // 貸借一致の検証（BUG-0068）。鏡像なので通るはずだが、通らないなら元伝票が壊れている
+    var imbalance = je.ValidateBalanced();
+    if (imbalance != "")
+    {
+        Toaster.Error($"取消伝票を作れませんでした（{imbalance}）。元伝票の明細を確認してください");
+        return;
+    }
+    if (je.Submit() != true) { Toaster.Error("取消伝票の作成に失敗しました"); return; }
+
+    Toaster.Success($"No.{JournalNo.Value} の取消（赤伝）を下書きで作りました。日付と摘要を確認して確定してください");
+
+    var newId = FindReversalId(this.Id.Value);
+    if (newId != null)
+    {
+        var url = NavigationService.GetModuleUrl("JournalEntry");
+        NavigationService.NavigateTo($"{url}/{newId}");
+    }
+}
+
+// いま作った取消伝票の id を DB から引く（`Submit()` 後のインスタンスの Id は信用しない）
+object FindReversalId(object srcId)
+{
+    var s = new ModuleSearcher<JournalEntry>();
+    s.AddEquals(e => e.SourceType.Value, "reversal");
+    s.AddEquals(e => e.SourceId.Value, srcId);
+    s.OrderByDescending(e => e.Id.Value);
+    s.Limit(1);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return ((JournalEntry)found).Id.Value;
+}
+
 void DeleteDraft_OnClick()
 {
     if (this.IsNewData) { Toaster.Error("保存されていない伝票です"); return; }
