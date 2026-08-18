@@ -66,6 +66,7 @@ RULES = {
     "CLB-034": ("低", "CurrentUser.<SelectField>.DisplayText を参照している"),
     "CLB-035": ("低", "LoadingService.StartLoading() が MessageBox.Show() より前にある"),
     "CLB-036": ("低", "自作 SQL の日付比較が date() で正規化されていない（warn 専用）"),
+    "CLB-037": ("高", "DataWriteCondition が参照する列がその画面で未ロード（全項目が読み取り専用になる）"),
 }
 
 # 実装しなかったルール（黙って落とさず実行時に一覧表示する）
@@ -1619,6 +1620,61 @@ def rule_036(idx, add):
                 "DATE/DATETIME 列 '{}' が date() 正規化なしで比較/GROUP BY されている（{} 箇所）。境界日だけ外れうる".format(col, n))
 
 
+def rule_037(idx, add):
+    """CLB-037: DataWriteCondition が参照する自モジュールの列が、その画面で読み込まれていない。
+
+    書き込み条件は**画面側で評価される**ため、条件が見る列がレイアウトにも DataOnlyFields にも
+    無いと値が null になり、条件が常に偽＝**全項目が読み取り専用に描画される**。
+    エラーもトーストも出ないので「なぜか直せない」という形でしか気づけない（BUG-0323 で実害）。
+    読み取り条件（DataReadCondition）は SQL の WHERE で効くため、未ロードでも問題ない。
+    """
+    def fields_in(node):
+        found = set()
+        stack = [node]
+        while stack:
+            n = stack.pop()
+            if isinstance(n, dict):
+                fn = n.get("FieldName")
+                if fn:
+                    found.add(fn)
+                stack.extend(n.values())
+            elif isinstance(n, list):
+                stack.extend(n)
+        return found
+
+    for mod in idx.modules.values():
+        data = mod["json"]
+        cond_holder = data.get("DataWriteCondition") or {}
+        if cond_holder.get("ModuleName"):
+            continue          # 他モジュール基準の条件は自モジュールの列を見ない
+        cond = cond_holder.get("Condition") or {}
+        targets = set()
+        stack = [cond]
+        while stack:
+            n = stack.pop()
+            if isinstance(n, dict):
+                v = n.get("SearchTargetVariable")
+                if v:
+                    targets.add(v.split(".")[0])
+                stack.extend(n.values())
+            elif isinstance(n, list):
+                stack.extend(n)
+        if not targets:
+            continue
+        for kind in ("DetailLayouts", "ListLayouts"):
+            for lay_name, lay in (data.get(kind) or {}).items():
+                loaded = fields_in(lay.get("Layout") or lay.get("Elements"))
+                loaded |= set(lay.get("DataOnlyFields") or [])
+                missing = sorted(t for t in targets if t not in loaded)
+                if not missing:
+                    continue
+                add("CLB-037", SEV_ERROR, mod["path"], 1,
+                    "{}: {} '{}' で DataWriteCondition が参照する {} が未ロード"
+                    "（レイアウトにも DataOnlyFields にも無い）。"
+                    "条件が常に偽になり全項目が読み取り専用に描画される".format(
+                        mod["name"], kind, lay_name or "(既定)", "/".join(missing)))
+
+
 RULE_FUNCS = [
     ("CLB-001", rule_001), ("CLB-002", rule_002), ("CLB-003", rule_003), ("CLB-004", rule_004),
     ("CLB-005", rule_005), ("CLB-006", rule_006), ("CLB-007", rule_007), ("CLB-008", rule_008),
@@ -1629,6 +1685,7 @@ RULE_FUNCS = [
     ("CLB-025", rule_025), ("CLB-026", rule_026), ("CLB-027", rule_027), ("CLB-028", rule_028),
     ("CLB-029", rule_029), ("CLB-030", rule_030), ("CLB-031", rule_031), ("CLB-032", rule_032),
     ("CLB-033", rule_033), ("CLB-034", rule_034), ("CLB-035", rule_035), ("CLB-036", rule_036),
+    ("CLB-037", rule_037),
 ]
 
 # 仕様書が warn 専用と明記しているルール（群に関わらず error にしない）

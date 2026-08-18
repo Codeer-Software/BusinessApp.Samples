@@ -804,7 +804,8 @@
       "InitialFocusField": "",
       "DataOnlyFields": [
         "LineNo",
-        "ExpenseRequestId"
+        "ExpenseRequestId",
+        "Creator"
       ],
       "ClassName": "",
       "Color": "",
@@ -2151,7 +2152,8 @@
       "HeaderTitle": "",
       "DataOnlyFields": [
         "LineNo",
-        "ExpenseRequestId"
+        "ExpenseRequestId",
+        "Creator"
       ],
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,

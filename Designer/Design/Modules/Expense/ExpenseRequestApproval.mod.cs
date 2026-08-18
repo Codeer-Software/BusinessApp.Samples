@@ -68,7 +68,17 @@ void OnApprovalFlowStatusChanged(string flowStatus)
     }
     else if (flowStatus == "Rejected" || flowStatus == "Cancelled")
     {
-        SettlementStatus.Value = "draft";
+        // 経理処理以降へ進んでいる場合は巻き戻さない（Approved 分岐と対称にする・BUG-0315）
+        var st2 = SettlementStatus.Value;
+        if (st2 == null || st2 == "" || st2 == "draft" || st2 == "applying" || st2 == "approved")
+        {
+            SettlementStatus.Value = "draft";
+            // 事前申請の実費確定フラグも戻す（BUG-0308）。戻さないと再申請・再承認しても
+            // 「実費を確定」の導線が二度と出ず、**見込み額のまま仕訳が立つ**。
+            // **却下を実行するのはこの承認者用モジュールなので、ここに無いと効かない**
+            // （申請者用 ExpenseRequest 側にも同じ処理があるが、そちらは申請者が取り消したときの経路）
+            if (RequestType.Value == "advance") { ActualConfirmed.Value = false; }
+        }
     }
     else if (flowStatus == "Pending")
     {
