@@ -3,7 +3,7 @@ title: 財務会計アプリ 自律構築ミッション（CLAUDE.md）
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-08-16
+updated: 2026-08-18
 supersedes: []
 related: [docs/README.md, docs/00_ドキュメント規約.md, Designer/CLAUDE.md, Designer/Project.md]
 ---
@@ -23,6 +23,17 @@ related: [docs/README.md, docs/00_ドキュメント規約.md, Designer/CLAUDE.m
 5. 補助として **CLB Web マニュアル**（人間向け解説。`ClaudeCodeForDesigner/` と対になる内容）: https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Manual
 
 設計作業の実体は **`Designer/Design/`**（`app.clprj` を持つデザインプロジェクト）。ここに `Modules/` `PageFrames/` `Resources/` を作る。
+
+## 0-1. 呼称の約束（会話・文書とも厳守）
+
+| 語 | 指すもの |
+|---|---|
+| **ユーザー** | **このアプリの使用者＝エンドユーザー（顧客）**。経理担当・部長・営業など、画面を操作する人 |
+| **開発者** | **このリポジトリでアプリを作る側**（このセッションの依頼主、および Fable 自身） |
+
+- **依頼主を「ユーザー」と呼ばない。** 依頼主を指すときは「開発者」と書く（2026-08-18 開発者指示）。
+- 会話・レビュー・ADR・仕様書・体験シナリオのすべてでこの呼称を使う。セッションをまたいで有効。
+- 既存文書に混在があっても一括置換はしない（触った文書から直す）。「ユーザー」が曖昧になる文脈では「エンドユーザー」「利用部門」など具体名に言い換えてよい。
 
 ## 1. ミッション（芯・変更不可）
 
