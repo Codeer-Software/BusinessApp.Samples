@@ -153,8 +153,17 @@ void CommitEntry()
 
     // 読み直して、空の入力欄と最新の明細リストにする
     this.Reload();
+
+    // **足した直後に**重複を知らせる（BUG-0031）。台帳の元案は「申請時に警告」だったが、
+    // 申請時だと**もう出してしまった後**なので、気づいても取り下げるしかない。
+    // 足した瞬間なら「行を消す」で済む。申請時のチェックは残してあるので、
+    // 複製（`DuplicateButton`）で丸ごとコピーした場合の安全網もある
     if (isUpdate) { Toaster.Success($"{line.LineNo.Value} 件目の明細を更新しました"); }
     else { Toaster.Success($"明細に追加しました（{line.LineNo.Value} 件目）"); }
+
+    // **成功トーストの後に出す**。CLB のトーストは**最後の 1 件しか見えない**ので、
+    // 先に出すと成功メッセージに上書きされて気づけない（2026-08-19 実測）
+    WarnDuplicateLines();
 }
 
 // 入力中の行の検証（メッセージは行番号を出さない——見えているのはこの 1 件だけなので）
@@ -650,7 +659,74 @@ bool ValidateForApply()
     {
         Toaster.Warn($"領収書が添付されていない明細が {missingReceipt} 行あります。紙の原本を保管してください（申請後は添付できません）");
     }
+
+    WarnDuplicateLines();
     return true;
+}
+
+// 同じ領収書を 2 回申請していないかを警告する（BUG-0031）。
+//
+// 判定は「**同じ申請者・同じ利用日・同じ費目・同じ金額**の明細が、この申請の外に既にある」。
+// 突合の軸を 4 つにしているのは、1 つでも欠くと誤検知だらけになるため
+// （同じ日に同じ費目の 500 円のコーヒーが 2 杯、は実務で普通に起きる）。
+//
+// **ブロックはしない**（領収書の未添付警告と同じ思想）。同額・同日の正当な 2 件は実在するので、
+// 止めると入力できない人が出る。**気づかせて判断は人に委ねる**のが役割。
+// 取り下げ済み（キャンセル・却下で下書きに戻ったもの）は突合の対象に含める——
+// 「前に出したのを忘れてもう一度出した」がまさに防ぎたい形だから。
+void WarnDuplicateLines()
+{
+    var me = CurrentUser.Id.Value;
+    if (me == null) return;
+
+    // 自分が作った申請の id を集める（この申請は除く）
+    var reqIds = new List<string>();
+    var rs = new ModuleSearcher<ExpenseRequest>();
+    rs.AddEquals(e => e.Creator.Value, me);
+    foreach (var row in rs.Execute())
+    {
+        var r = (ExpenseRequest)row;
+        if ($"{r.Id.Value}" == $"{this.Id.Value}") continue;
+        reqIds.Add($"{r.Id.Value}");
+    }
+    if (reqIds.Count == 0) return;
+
+    // 過去の明細を「利用日|費目|金額」のキーで持っておく（1 行ごとに DB を引かない）
+    var pastKeys = new List<string>();
+    var ls = new ModuleSearcher<ExpenseRequestLine>();
+    foreach (var row in ls.Execute())
+    {
+        var l = (ExpenseRequestLine)row;
+        if (l.LineNo.Value == null) continue;              // 入力途中の行は対象外
+        if (!reqIds.Contains($"{l.ExpenseRequestId.Value}")) continue;
+        if (l.UsedDate.Value == null || l.Amount.Value == null) continue;
+        pastKeys.Add($"{l.UsedDate.Value:yyyy-MM-dd}|{l.ExpenseCategoryRef.Value}|{l.Amount.Value}");
+    }
+    if (pastKeys.Count == 0) return;
+
+    var hits = new List<string>();
+    var no = 0;
+    foreach (var l in GetLinesFromDb())
+    {
+        no = no + 1;
+        if (l.UsedDate.Value == null || l.Amount.Value == null) continue;
+        var key = $"{l.UsedDate.Value:yyyy-MM-dd}|{l.ExpenseCategoryRef.Value}|{l.Amount.Value}";
+        if (!pastKeys.Contains(key)) continue;
+        hits.Add($"{no} 行目（{l.UsedDate.Value:yyyy/MM/dd} {l.Amount.Value:#,0} 円）");
+    }
+    if (hits.Count == 0) return;
+
+    // 長くなりすぎないよう先頭 3 件まで（振込データの除外理由と同じ見せ方）
+    var shown = hits;
+    var more = "";
+    if (hits.Count > 3)
+    {
+        shown = new List<string>();
+        for (int i = 0; i < 3; i++) { shown.Add(hits[i]); }
+        more = $" ほか {hits.Count - 3} 行";
+    }
+    Toaster.Warn($"同じ内容の明細が過去の申請にあります: {string.Join(" / ", shown)}{more}。"
+        + "同じ領収書を 2 回出していないか確認してください（利用日・費目・金額が一致しています）");
 }
 
 // 手入力の「うち消費税」の検算（行単位・ADR-0051 の判定を明細に適用）。
