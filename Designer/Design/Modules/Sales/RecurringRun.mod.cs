@@ -334,6 +334,13 @@ void Run_OnClick()
         return;
     }
 
+    // **件数を数える前にプランを作り直す**（BUG-0150）。
+    // プランテーブルは全ユーザー共有の一時領域（ADR-0034）で対象月の絞り込みも無いので、
+    // 直前に別の人が（または自分が別の月を）プレビューして planned=0 になっていると、
+    // **当月に生成すべきものがあっても「生成対象はありませんでした」で黙って終わる**＝請求漏れ。
+    // 「押下時点の最新データが正」という方針は元から実装の後半にあった——それを判断の前に持ってきた。
+    BuildPlan();
+
     // 一括操作なので確認する（ADR-0062）。押した本数が一度に会計データになる
     var picked0 = TargetMonth.Value;
     var plannedCount = 0;
@@ -414,9 +421,8 @@ void Run_OnClick()
         return;
     }
 
-    // 押下時点の最新データでプランを再構築（プレビュー表示が古くてもここが正）
-    BuildPlan();
-
+    // プランは確認ダイアログの前で作り直し済み（BUG-0150）。ここで再構築すると
+    // 「ユーザーが見て承諾した件数」と実際に生成する件数がずれうるので、二度は作らない
     var pls = new ModuleSearcher<RecurringRunPlan>();
     pls.AddEquals(e => e.Status.Value, "planned");
     pls.OrderBy(e => e.Id.Value);
