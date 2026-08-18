@@ -615,7 +615,20 @@ void OpenRequest_OnClick()
     var parentModule = rs[0].ParentModuleName.Value;
     var parentId = rs[0].ParentId.Value;
     if (string.IsNullOrEmpty(parentModule) || string.IsNullOrEmpty(parentId)) return;
-    NavigationService.NavigateTo(NavigationService.GetModuleDataUrl(parentModule, parentId));
+    // 申請者用モジュールには行フィルタ Creator == CurrentUser が掛かっている（ADR-0069）。
+    // 自分の申請でなければ、読む側に合わせたモジュールへ写像しないと**静かに空の画面**が開く
+    NavigationService.NavigateTo(NavigationService.GetModuleDataUrl(ViewerModule(parentModule), parentId));
+}
+
+// 読む側に合わせた申請モジュールを返す（ApprovalInbox.mod.cs:ToApproverModule と同じ写像に
+// 経理を足したもの。申請種別が増えたら両方に足す）
+string ViewerModule(string parentModuleName)
+{
+    if (parentModuleName != "ExpenseRequest") return parentModuleName;
+    if (IsCurrentUserCreator()) return "ExpenseRequest";
+    if (CurrentUser.HasAccountingAccess.Value == true) return "ExpenseRequestAccounting";
+    if (CurrentUser.IsApprover.Value == true) return "ExpenseRequestApproval";
+    return "ExpenseRequest";
 }
 
 // 現在ユーザーが申請者か (parent.Creator.Value は LinkField 遅延ロードで取れないため履歴ベース)
@@ -859,19 +872,65 @@ string TargetSummary(ApprovalFlow flow)
     var disp = ModuleDisplayName(moduleName);
     if (moduleName == "ExpenseRequest" && flow.ParentId.Value != null)
     {
-        var s = new ModuleSearcher<ExpenseRequest>();
-        s.AddEquals(e => e.Id.Value, flow.ParentId.Value);
-        var found = s.ExecuteFirstOrDefault();
-        if (found != null)
+        // 読む側によってモジュールを変える（ADR-0069）。申請者用 ExpenseRequest には
+        // 行フィルタ Creator == CurrentUser が掛かるので、承認者がこれを検索すると
+        // **エラーにならず 0 件**になり、通知の文面から件名と金額が静かに落ちる。
+        // 承認者は承認者用モジュール（同じ expense_request テーブル・人ゲートは IsApprover）から読む
+        var viewer = ViewerModule(moduleName);
+        if (viewer == "ExpenseRequest")
         {
-            var er = (ExpenseRequest)found;
-            var title = er.Title.Value ?? "";
-            if (er.Amount.Value != null) { return $"{disp}「{title}」（{er.Amount.Value:#,0}円）"; }
-            return $"{disp}「{title}」";
+            var s = new ModuleSearcher<ExpenseRequest>();
+            s.AddEquals(e => e.Id.Value, flow.ParentId.Value);
+            var found = s.ExecuteFirstOrDefault();
+            if (found != null)
+            {
+                var er = (ExpenseRequest)found;
+                return FormatTarget(disp, er.Title.Value, er.Amount.Value);
+            }
+        }
+        else if (viewer == "ExpenseRequestAccounting")
+        {
+            // 経理が超過再承認を起こす経路がある。経理は IsApprover を持たないことがあるので、
+            // 承認者用ではなく経理用から読む（そうしないと通知の文面から件名と金額が静かに落ちる）
+            var s = new ModuleSearcher<ExpenseRequestAccounting>();
+            s.AddEquals(e => e.Id.Value, flow.ParentId.Value);
+            var found = s.ExecuteFirstOrDefault();
+            if (found != null)
+            {
+                var er = (ExpenseRequestAccounting)found;
+                return FormatTarget(disp, er.Title.Value, er.Amount.Value);
+            }
+        }
+        else
+        {
+            var s = new ModuleSearcher<ExpenseRequestApproval>();
+            s.AddEquals(e => e.Id.Value, flow.ParentId.Value);
+            var found = s.ExecuteFirstOrDefault();
+            if (found != null)
+            {
+                var er = (ExpenseRequestApproval)found;
+                return FormatTarget(disp, er.Title.Value, er.Amount.Value);
+            }
         }
     }
     return disp;
 }
+
+// 承認者あての導線は承認者用モジュールへ写像する（ApprovalInbox.mod.cs:ToApproverModule と同じ写像。
+// 申請種別が増えたら両方に足す）。Notification.ResolveLinkUrl がこの名前を URL に解決する
+string ToApproverModule(string parentModuleName)
+{
+    if (parentModuleName == "ExpenseRequest") return "ExpenseRequestApproval";
+    return parentModuleName;
+}
+
+string FormatTarget(string disp, string title, int? amount)
+{
+    var t = title ?? "";
+    if (amount != null) { return $"{disp}「{t}」（{amount:#,0}円）"; }
+    return $"{disp}「{t}」";
+}
+
 
 // 実 Id・実 ParentId を DB から解決した自フロー (メモリの遅延ロードを信用しない)
 ApprovalFlow FetchSelfFromDb()
@@ -912,7 +971,11 @@ ApprovalFlow FetchLatestOwnFlowFromDb()
 void NotifyActiveApprovers(ApprovalFlow flow, string title)
 {
     if (flow == null) return;
-    var linkModule = flow.ParentModuleName.Value;
+    // 通知のリンク先は「誰に送る通知か」で決める。これは承認者あての通知なので承認者用モジュールを指す
+    // （parent_module_name は DB に保存された申請者側の名前＝常に "ExpenseRequest"）。
+    // 受信者の権限で当てにいくと、承認者かつ申請者である課長が自分の申請の通知を開いたときに
+    // 承認者用の画面へ飛んでしまう。送り手は宛先を知っているのだから、送り手が決めるのが素直
+    var linkModule = ToApproverModule(flow.ParentModuleName.Value);
     var linkId = $"{flow.ParentId.Value}";
     var body = $"{TargetSummary(flow)}の承認をお願いします";
     var os = new ModuleSearcher<ApprovalFlowOrder>();

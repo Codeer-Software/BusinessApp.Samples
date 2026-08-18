@@ -38,12 +38,33 @@ void Send(object recipientUserId, string title, string body, string linkModule, 
 // 新しい部品の通知を追加したらここに分岐を足す（モジュール名の文字列マッピング＝型参照ではない）
 string ResolveLinkUrl(string linkModule, string linkId)
 {
+    // 経費は対象者ごとにモジュールが分かれている（ADR-0069）。申請者用 ExpenseRequest には
+    // 行フィルタ Creator == CurrentUser が掛かるので、承認者・経理をそこへ送ると
+    // **エラーにならず中身が空の画面**が開く（埋め込み子は権限不成立で静かに空になる）。
+    // 承認者あての通知は送り手が LinkModule に承認者用モジュールを入れている
+    // （ApprovalFlow.mod.cs:ToApproverModule）
+    if (linkModule == "ExpenseRequestApproval")
+    {
+        return $"/ExpenseApprover/ExpenseRequestApproval/{linkId}";
+    }
     if (linkModule == "ExpenseRequest")
     {
-        var frame = "ExpenseStaff";
-        if (CurrentUser.HasAccountingAccess.Value == true) { frame = "ExpenseAccounting"; }
-        else if (CurrentUser.IsApprover.Value == true) { frame = "ExpenseApprover"; }
-        return $"/{frame}/ExpenseRequest/{linkId}";
+        // 申請者あての通知。ただし ADR-0069 より前に作られた古い通知は、承認者あてでもこの名前で
+        // 保存されている。**自分の申請かどうかは申請者用モジュールで読めるかどうかで分かる**
+        // （行フィルタ Creator == CurrentUser がそのまま判定になる）ので、それで振り分ける
+        var s = new ModuleSearcher<ExpenseRequest>();
+        s.AddEquals(e => e.Id.Value, linkId);
+        var mine = s.ExecuteFirstOrDefault() != null;
+        if (mine) { return $"/ExpenseStaff/ExpenseRequest/{linkId}"; }
+        if (CurrentUser.HasAccountingAccess.Value == true)
+        {
+            return $"/ExpenseAccounting/ExpenseRequestAccounting/{linkId}";
+        }
+        if (CurrentUser.IsApprover.Value == true)
+        {
+            return $"/ExpenseApprover/ExpenseRequestApproval/{linkId}";
+        }
+        return $"/ExpenseStaff/ExpenseRequest/{linkId}";
     }
     return null;
 }

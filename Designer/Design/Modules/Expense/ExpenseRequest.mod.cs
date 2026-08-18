@@ -1,8 +1,11 @@
-// 申請一覧の既定検索: 申請者=自分（2026-08-06 ユーザー要望）。
-// 経理は全社の申請を見る運用のため既定を付けない。検索ページの Link は SearchValue 系統（#48）
+// このモジュールは**申請者用**（ADR-0069）。行フィルタ Creator == CurrentUser が掛かっているので、
+// 誰が開いても自分の申請しか出てこない。既定検索も全員に同じものを付ける——
+// 以前は「経理は全社を見る運用だから既定を付けない」という分岐があったが、
+// 行フィルタが入った今は経理も自分の分しか読めないので、分岐は差を生まないまま誤解だけを残す。
+// 経理が全社の申請を見る導線は「精算処理待ち」（ExpenseSettlementQueue → ExpenseRequestAccounting）。
+// 検索ページの Link は SearchValue 系統（#48）
 void Search_OnInit()
 {
-    if (CurrentUser.HasAccountingAccess.Value == true) return;
     Creator.SearchValue = CurrentUser.Id.Value;
 }
 
