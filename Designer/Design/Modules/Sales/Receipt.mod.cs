@@ -188,9 +188,6 @@ void CancelReceipt_OnClick()
         if (iv != null)
         {
             int gross = (iv.Amount.Value ?? 0) + (iv.TaxAmount.Value ?? 0);
-            var rs = new ModuleSearcher<Receipt>();
-            rs.AddEquals(e => e.InvoiceRef.Value, InvoiceRef.Value);
-            var rows = rs.Execute();
             // 消込済みの合計は **SumReceipts（消込明細ベース）** で数える（ADR-0071）。
             // ヘッダの請求書欄で兄弟を探す旧実装だと、**合算された入金の充当分を取りこぼす**
             // （合算入金のヘッダは 1 件目の請求書しか指していない）。
