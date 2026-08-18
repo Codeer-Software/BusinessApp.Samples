@@ -198,27 +198,58 @@ bool IsFixedAssetAccount(object accountId)
 // **明細は JournalLine を直接検索して数える。** 検索で取った JournalEntry の `Lines.Rows` は
 // 遅延ロードで空のことがあり（実測 2026-08-18: 償却仕訳があるのに累計 0 と出た）、
 // そのまま使うと**帳簿価額が取得価額のまま＝除却損が過大**になる。
+// 償却累計 = **資産科目に立った「貸方 − 借方」**（直接法なので償却は資産科目の貸方に立つ）。
+//
+// 数える伝票は 2 種類（BUG-0340・ADR-0073）:
+//   ① この資産の償却として自動生成した伝票（source_type='depreciation'）
+//   ② 伝票ヘッダの「固定資産」欄でこの資産を指した伝票 —— **手で打った訂正の振替伝票**がこれ。
+//      償却生成の確認ダイアログが「誤りは振替伝票側で訂正してください」と案内している以上、
+//      その訂正が簿価に効かないと案内が嘘になる（旧実装は①しか見ておらず、訂正が無視されていた）
+// 処分伝票（source_type='disposal'）は簿価を落とす仕訳であって償却ではないので数えない。
+//
+// 「借方＝減価償却費の行を足す」ではなく資産科目の増減で測るのは、訂正伝票が
+// 「借方 資産科目 / 貸方 減価償却費」（＝償却の戻し）の向きにもなるため。
+// 資産科目の純増減で見れば、生成分も訂正分も同じ式で正しく数えられる。
 int AccumulatedDepreciation()
 {
     if (this.Id.Value == null) return 0;
-    var total = 0;
+    if (AssetAccount.Value == null) return 0;
+
+    var entryIds = new List<string>();
     var js = new ModuleSearcher<JournalEntry>();
     js.AddEquals(e => e.SourceType.Value, "depreciation");
     js.AddEquals(e => e.SourceId.Value, this.Id.Value);
     js.AddEquals(e => e.Status.Value, "posted");
-    foreach (var row in js.Execute())
+    foreach (var row in js.Execute()) { entryIds.Add($"{((JournalEntry)row).Id.Value}"); }
+
+    var ts = new ModuleSearcher<JournalEntry>();
+    ts.AddEquals(e => e.FixedAssetRef.Value, this.Id.Value);
+    ts.AddEquals(e => e.Status.Value, "posted");
+    foreach (var row in ts.Execute())
     {
         var je = (JournalEntry)row;
+        if (je.SourceType.Value == "disposal") continue;   // 処分は償却ではない
+        var key = $"{je.Id.Value}";
+        var known = false;
+        foreach (var k in entryIds) { if (k == key) { known = true; break; } }
+        if (!known) { entryIds.Add(key); }
+    }
+
+    var total = 0;
+    foreach (var id in entryIds)
+    {
         var ls = new ModuleSearcher<JournalLine>();
-        ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
+        ls.AddEquals(l => l.JournalEntryId.Value, id);
         foreach (var lrow in ls.Execute())
         {
             var l = (JournalLine)lrow;
-            if (l.Dc.Value != "D") continue;          // 借方＝減価償却費の行だけ数える
             if (l.Amount.Value == null) continue;
-            total = total + l.Amount.Value;
+            if ($"{l.Account.Value}" != $"{AssetAccount.Value}") continue;   // 資産科目の行だけ見る
+            if (l.Dc.Value == "C") { total = total + l.Amount.Value; }
+            else { total = total - l.Amount.Value; }
         }
     }
+    if (total < 0) return 0;
     return total;
 }
 
@@ -455,6 +486,7 @@ bool PostPartialDepreciationJournal(FiscalYear fy, var dispDate, int amount)
     je.JournalNo.Value = nextNo;
     je.FiscalYearRef.Value = fy.Id.Value;
     je.SourceType.Value = "depreciation";
+    je.FixedAssetRef.Value = this.Id.Value;
     je.SourceId.Value = this.Id.Value;
     je.Lines.AddRows(2);
     var i2 = 0;
@@ -702,6 +734,7 @@ void DoDisposal(bool isSale)
     je.JournalNo.Value = nextNo;
     je.FiscalYearRef.Value = typedFy.Id.Value;
     je.SourceType.Value = "disposal";
+    je.FixedAssetRef.Value = this.Id.Value;
     je.SourceId.Value = this.Id.Value;
     je.Lines.AddRows(dcList.Count);
     var idx = -1;
@@ -961,6 +994,7 @@ void GenerateDep_OnClick()
     je.JournalNo.Value = nextNo;
     je.FiscalYearRef.Value = TargetYear.Value;
     je.SourceType.Value = "depreciation";
+    je.FixedAssetRef.Value = this.Id.Value;
     je.SourceId.Value = this.Id.Value;
     je.Lines.AddRows(2);
     var idx = 0;
