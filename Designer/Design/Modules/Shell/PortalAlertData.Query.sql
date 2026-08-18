@@ -98,7 +98,9 @@ rec_in AS (
                       AND date(iv.billing_month) = mm.month_first)
 ),
 ap_now AS (
-  -- 未払金も「今日まで」（BUG-0328）。先日付の未払計上を含めると当月の出金が水増しされる
+  -- **未払金は今日で切らない**（BUG-0414 の見直し）。負債は「すでに確定した債務」なので、
+  -- 月末付の未払計上も当月の出金予定に含める。ここで切ると**確定済みの支払いが予測から消え**、
+  -- 資金ショートの警告が鈍る（保守主義の原則。現預金＝資産の側だけ「今日まで」で切る）
   SELECT
     COALESCE((SELECT SUM(-ob.balance)
               FROM opening_balances ob JOIN accounts a ON a.id = ob.account_id
@@ -109,7 +111,6 @@ ap_now AS (
               JOIN journal_entries e ON e.id = l.journal_entry_id
               JOIN accounts a ON a.id = l.account_id
               WHERE e.status = 'posted' AND a.code = '2020'
-                AND date(e.entry_date) <= date('now', 'localtime')
                 AND e.fiscal_year_id IN (SELECT id FROM cur_yr)), 0) AS ap
 ),
 exp_now AS (

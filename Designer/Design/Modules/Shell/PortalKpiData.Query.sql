@@ -17,9 +17,13 @@ bs AS (
     + COALESCE((SELECT SUM(CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END)
                 FROM journal_lines l JOIN journal_entries e ON e.id = l.journal_entry_id
                 WHERE e.status = 'posted' AND l.account_id = a.id
-                  -- **今日までの仕訳だけ**（BUG-0414）。先日付の支払仕訳や決算整理（3/31 付）を
-                  -- 含めると「いまの現預金」が実在しない額になる。資金繰り予測（BUG-0328）と同じ約束
-                  AND date(e.entry_date) <= date('now', 'localtime')
+                  -- **今日で切るのは現預金だけ**（BUG-0414）。
+                  --   資産（現預金）＝「いま実際に残っている額」なので、先日付の支払仕訳を引いてはいけない
+                  --   売掛金・買掛金＝「すでに確定した債権債務」なので、月末付の計上も含める。
+                  --     定期請求の売上は月末付で起票するのが通常運用で、ここで切ると
+                  --     **売掛残高一覧と食い違う**（保守主義の原則: 資産は控えめに、負債は漏らさず）
+                  AND (a.is_cash_equivalent <> 1
+                       OR date(e.entry_date) <= date('now', 'localtime'))
                   AND e.fiscal_year_id IN (SELECT id FROM cur)), 0) AS bal
   FROM accounts a
 ),
