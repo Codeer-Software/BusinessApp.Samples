@@ -94,3 +94,28 @@ DB 層の検査を足すまで誰も気づけなかった。
 
 - 2026-08-18 上記「CLB 本体へ起票すべき 2 件」を `docs/12_CLB改善提案/` に FB として起票する
   （FB 番号の連番がバグ狩りセッションと衝突するため保留）
+
+## この文書の賞味期限と、腐りの直し方
+
+**実測の基準は `ecd677b`（2026-08-18）。** 数字はすべてこの時点のスナップショットで、
+アプリを変えれば当然ずれる。ただし**本書は手で書き写した数字ではなく機械抽出の結果**なので、
+腐ったかどうかは読まずに確かめられる。
+
+```
+python docs/15_再利用性レビュー/_prototype/deps_script.py   # 部品間の型参照（逆行の有無）
+python docs/15_再利用性レビュー/_prototype/deps_json.py     # モジュール JSON の部品間参照
+python docs/15_再利用性レビュー/_prototype/deps_sql.py      # クエリ SQL のテーブル参照
+python docs/15_再利用性レビュー/_prototype/deps_ddl.py      # DDL のトリガ・FK・ビュー
+python docs/15_再利用性レビュー/_prototype/master_usage.py  # 基盤モジュールの利用元
+python docs/15_再利用性レビュー/_prototype/check_db_dangling.py  # DB の参照切れ
+```
+
+**測り直すべきタイミング**（いずれも依存の形が変わる）:
+
+- 部品（`Modules/` 直下のフォルダ）を足した・消した
+- 基盤テーブル（`app_users` `partners` `projects` `departments`）に列やトリガを足した
+- ポータルの契約 SQL（`Portal*Data`）を触った
+- モジュール間で新しく型を参照した（`new X()` / `ModuleSearcher<X>`）
+
+**とくに [05 §2 の禁止 3 本](05_依存方向の原則.md)（型参照 1・DB トリガ 2）が
+増えていないかだけは見てほしい。** 増えていなければ、本書の結論はそのまま生きている。
