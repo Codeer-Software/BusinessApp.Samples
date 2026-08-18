@@ -355,11 +355,36 @@ void Accrue_OnClick()
                 {
                     decimal pct = ((TaxRate)foundRate).RatePercent.Value ?? 0;
                     if (pct > 0) tax = gross * pct / (100 + pct);
+                    // **インボイス経過措置は控除できる分だけを税行に載せる**（BUG-0417）。
+                    // 免税事業者からの仕入は控除割合（2026-08 時点 80%、2026-10-01 以降 50%）の分しか
+                    // 仕入税額控除できず、残りは費用の本体額へ寄せる。
+                    // ここが抜けていたため、経過措置区分を正しく選ぶほど仮払消費税が過大になっていた
+                    // （振替伝票＝`JournalEntry.RegenerateTaxLines`・経費＝BUG-0183 と同じ形）
+                    if (tcat.UsesTransitionDeduction.Value == true)
+                    {
+                        // **`int` で受けて切り捨てる**（CLB-040）。`var` のままだと小数になり、
+                        // 仕訳の金額が丸められて貸借が 1 円ずれうる
+                        int deductible = tax * ResolveTransitionRatePercent(d) / 100;
+                        tax = deductible;
+                    }
                 }
             }
         }
     }
     var baseAmount = gross - tax;
+
+    // 税行の摘要（経過措置なら控除割合を書いて、レシートの税額と食い違う理由が分かるようにする）
+    var taxLineDesc = "消費税（行1）";
+    if (taxCatId != null)
+    {
+        var ds = new ModuleSearcher<TaxCategory>();
+        ds.AddEquals(c => c.Id.Value, taxCatId);
+        var dcat = ds.ExecuteFirstOrDefault();
+        if (dcat != null && ((TaxCategory)dcat).UsesTransitionDeduction.Value == true)
+        {
+            taxLineDesc = $"消費税（行1・経過措置 控除{ResolveTransitionRatePercent(d):0.#}%）";
+        }
+    }
 
     // 採番
     var nextNo = NextJournalNo(typedFy.Id.Value);
@@ -408,7 +433,7 @@ void Accrue_OnClick()
             l.ParentLineNo.Value = 1;
             l.Amount.Value = tax;
             l.InputAmount.Value = tax;
-            l.Description.Value = "消費税（行1）";
+            l.Description.Value = taxLineDesc;
         }
         else
         {
@@ -569,6 +594,19 @@ void Pay_OnClick()
 }
 
 // 伝票採番の正典は JournalEntry.NextJournalNo（BUG-0069 で一本化）。ここは呼ぶだけ
+
+// 仕訳日で解決したインボイス経過措置の控除割合(%)。期間外・未設定は 0（＝1 円も控除できない）
+decimal ResolveTransitionRatePercent(var entryDate)
+{
+    var first = new DateOnly(entryDate.Year, entryDate.Month, 1);
+    var s = new ModuleSearcher<InvoiceTransitionRate>();
+    s.AddLessThanOrEqual(e => e.ValidFrom.Value, first);
+    s.AddGreaterThanOrEqual(e => e.ValidTo.Value, first);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return 0;
+    return ((InvoiceTransitionRate)found).RatePercent.Value ?? 0;
+}
+
 int NextJournalNo(object fiscalYearId)
 {
     return new JournalEntry().NextJournalNo(fiscalYearId);
