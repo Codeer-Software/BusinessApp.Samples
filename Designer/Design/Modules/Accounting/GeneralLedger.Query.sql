@@ -6,12 +6,16 @@
 --   繰越行の残高＝明細行の累計の起点（下の base.dmc）と同じ値なので、両者は必ず一致する。
 --   借方残の科目は借方欄に、貸方残の科目は貸方欄に出す（accounts.dc_normal）。
 --
--- 【残高の意味】絞り込みなし: 期首残高＋期中累計。繰越行の摘要は「前期繰越」
+-- 【残高の意味】期首残高＋期中累計。繰越行の摘要は「前期繰越」
 --              （@date_from が期首より後なら期中の途中からの繰越なので「繰越」）。
---              絞り込みあり: opening_balances は科目単位でしか持たない（補助科目・部門別の期首が
---              DB に無い＝BUG-0092）ため期首残高を含めず「期中発生分のみの累計」を表示する。
+--              補助科目・部門で絞ったときも期首残高を含める——翌期繰越が (科目 × 補助科目 × 部門) の
+--              粒度で期首残高を作るようになったため（BUG-0092 の修正）。
+--              ただし**案件（@project_id）で絞ったときだけは期首残高を含めない**。
+--              opening_balances に案件の次元が無く、期首を案件へ割り当てる術がないためである。
 --              このとき繰越行の摘要を「繰越（期首残高を含まず）」とし、0 起算であることを帳簿上で明示する
 --              （行を消すと起点が消えて元の不具合に戻り、0 と書くと期首が 0 だという嘘になる）。
+--              なお導入初年度の期首残高は手入力で投入するため補助科目・部門を持たない。
+--              その年度を補助科目・部門で絞ると期首は 0 起算になる（嘘ではなく「その次元の期首が無い」）。
 --
 -- 【期間が空のとき】日付（自）／（至）を消して検索されたら、当年度（＝入っている方の日付、
 --   どちらも空なら今日を含む会計年度）の期首／期末で補う（BUG-0285）。
@@ -36,9 +40,10 @@ acct AS (
 base AS (
   SELECT
     COALESCE((SELECT SUM(ob.balance) FROM opening_balances ob
-              WHERE ob.fiscal_year_id IN (SELECT id FROM fy) AND ob.account_id = @account_id), 0)
-    * (CASE WHEN @sub_account_id IS NULL AND @department_id IS NULL AND @project_id IS NULL
-            THEN 1 ELSE 0 END)
+              WHERE ob.fiscal_year_id IN (SELECT id FROM fy) AND ob.account_id = @account_id
+                AND (@sub_account_id IS NULL OR ob.sub_account_id = @sub_account_id)
+                AND (@department_id IS NULL OR ob.department_id = @department_id)), 0)
+    * (CASE WHEN @project_id IS NULL THEN 1 ELSE 0 END)
     +
     COALESCE((SELECT SUM(CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END)
               FROM journal_lines l
@@ -68,8 +73,7 @@ SELECT
   NULL AS line_no,
   '' AS counter_account_name,
   CASE
-    WHEN @sub_account_id IS NOT NULL OR @department_id IS NOT NULL OR @project_id IS NOT NULL
-      THEN '繰越（期首残高を含まず）'
+    WHEN @project_id IS NOT NULL THEN '繰越（期首残高を含まず）'
     WHEN date(c.carry_date) <= (SELECT date(start_date) FROM fy) THEN '前期繰越'
     ELSE '繰越'
   END AS line_description,
