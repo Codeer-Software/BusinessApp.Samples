@@ -19,6 +19,10 @@ void UpdateSesVisibility()
 
 void Detail_OnAfterInitialization()
 {
+    // マスタの有効フラグは DB 既定が 1 だが、**CLB の Boolean は新規作成で常に未チェック**になる
+    // （CLB-017・実測）。既定が効いていると思って保存すると、作った直後から無効なマスタができ、
+    // 参照側のピッカーに出てこない。新規のときだけ明示的に立てる
+    if (IsNewData && IsActive.Value != true) { IsActive.Value = true; }
     UpdateSesVisibility();
 
     // SES 精算条件は経理のみ編集可（部長は基本情報のみ・ADR-0046）

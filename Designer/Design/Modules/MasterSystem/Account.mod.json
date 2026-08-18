@@ -377,7 +377,7 @@
       "CanUserSort": false,
       "CanSelect": false,
       "UseIndexSort": false,
-      "OnDataChanged": "",
+      "OnDataChanged": "SubAccounts_OnDataChanged",
       "OnSearchDataChanged": "",
       "OnSelectedIndexChanged": "",
       "OnSelectedIndexChanging": "",
@@ -632,7 +632,7 @@
   "DetailLayouts": {
     "": {
       "OnBeforeInitialization": "",
-      "OnAfterInitialization": "",
+      "OnAfterInitialization": "Detail_OnAfterInit",
       "OnLocationChanging": "",
       "OnFieldDataChanged": "",
       "DataOnlyFields": [],
