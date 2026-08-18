@@ -589,8 +589,8 @@
           {
             "FieldName": "TaxAmount",
             "ContextMenu": "",
-            "Label": "うち消費税",
-            "Width": 130,
+            "Label": "うち消費税（記載）",
+            "Width": 150,
             "ColumnSpan": 1,
             "RowSpan": 1,
             "TextWrap": "Unset",
