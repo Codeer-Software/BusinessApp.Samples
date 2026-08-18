@@ -18,6 +18,7 @@ void Detail_OnAfterInit()
     // 確定済みの案内（編集不可の理由と赤黒訂正への誘導。驚き最小: 2026-08-03 UXレビュー）
     PostedNote.IsVisible = !this.IsNewData && Status.Value == "posted";
     var isPosted = !this.IsNewData && Status.Value == "posted";
+    if (isPosted) { ShowReversalNote(); }
     if (isPosted)
     {
         // 確定済み伝票は閲覧専用（訂正は赤黒訂正で行う）。
@@ -1043,6 +1044,44 @@ int NextJournalNo(object fiscalYearId)
 //
 // 作るのは**下書き**。日付も摘要も直せるし、要らなければ削除できる——
 // 「確定は不可逆」（ADR-0026）を崩さないための線引きである。
+
+// この伝票を取り消した赤伝があれば、案内文に書き足す（ADR-0075 の副産物）。
+//
+// 赤伝は `source_type='reversal'` / `source_id=元伝票の id` で機械的に繋がっている。
+// 繋がりが無かった頃は「摘要が唯一の手がかり」で、
+// **元伝票だけを開いた人には取り消されたことが分からなかった**。
+// 帳簿を読む側にとっては「この数字はもう生きていない」が最初に要る情報なので、上に出す。
+void ShowReversalNote()
+{
+    var s = new ModuleSearcher<JournalEntry>();
+    s.AddEquals(e => e.SourceType.Value, "reversal");
+    s.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    s.OrderBy(e => e.Id.Value);
+    var rows = s.Execute();
+    if (rows.Count == 0) return;
+
+    var nos = new List<string>();
+    var hasDraft = false;
+    foreach (var row in rows)
+    {
+        var r = (JournalEntry)row;
+        if (r.Status.Value == "posted") { nos.Add($"No.{r.JournalNo.Value}"); }
+        else { hasDraft = true; }
+    }
+
+    if (nos.Count > 0)
+    {
+        PostedNote.Text = $"⚠ この伝票は {string.Join(" / ", nos)} の取消（赤伝）で打ち消されています。"
+            + "帳簿上の残高には反映済みです（元伝票と赤伝の両方が帳簿に残るのが赤黒訂正の形）。";
+        return;
+    }
+    if (hasDraft)
+    {
+        PostedNote.Text = "この伝票の取消（赤伝）が下書きのまま残っています。"
+            + "確定するまで打ち消しは帳簿に反映されません（振替伝票の一覧で下書きを探してください）。";
+    }
+}
+
 void Reverse_OnClick()
 {
     if (this.IsNewData || Status.Value != "posted")
