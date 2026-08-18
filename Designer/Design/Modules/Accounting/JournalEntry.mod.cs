@@ -1090,6 +1090,33 @@ void Reverse_OnClick()
         return;
     }
 
+    // **二重の赤伝を止める**。元 + 赤伝 = 0 なので、もう 1 本切ると
+    // 「元伝票をもう一度マイナスで立てた」のと同じになり、帳簿が元伝票 1 本ぶん狂う。
+    // 下書きが残っているだけなら、新しく作らずにそれを開く（作りかけを増やさない）
+    var exS = new ModuleSearcher<JournalEntry>();
+    exS.AddEquals(e => e.SourceType.Value, "reversal");
+    exS.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    exS.OrderByDescending(e => e.Id.Value);
+    var exRows = exS.Execute();
+    object draftId = null;
+    foreach (var row in exRows)
+    {
+        var r = (JournalEntry)row;
+        if (r.Status.Value == "posted")
+        {
+            Toaster.Error($"この伝票は既に No.{r.JournalNo.Value} の取消（赤伝）で打ち消されています。二重に取り消すと帳簿が狂います");
+            return;
+        }
+        if (draftId == null) { draftId = r.Id.Value; }
+    }
+    if (draftId != null)
+    {
+        Toaster.Warn("この伝票の取消（赤伝）は既に下書きで作ってあります。その下書きを開きます");
+        var durl = NavigationService.GetModuleUrl("JournalEntry");
+        NavigationService.NavigateTo($"{durl}/{draftId}");
+        return;
+    }
+
     // 元伝票の明細を DB から取り直す（メモリ行の遅延ロード対策）
     var ls = new ModuleSearcher<JournalLine>();
     ls.AddEquals(e => e.JournalEntryId.Value, this.Id.Value);
