@@ -79,6 +79,15 @@ void ApplyAssetSuggestion(ExpenseCategory cat)
         IsFixedAsset.Value = true;
         Toaster.Info($"金額 {amt:#,0} 円 ≧ 少額基準 {limit:#,0} 円のため固定資産計上対象にしました（承認後に固定資産台帳へ登録されます）");
     }
+    // 金額を下げたときも戻す（BUG-0319）。上げるときだけ動いて下げるときに動かないと、
+    // 一度でも基準を超えた行が**そのまま台帳に登録される**。
+    // 「人が手で付けた ON」と「自動で付いた ON」を区別する列は持たない——
+    // 代わりに**外したことを必ず知らせる**ので、意図して付けていたなら気づいて戻せる（静かな失敗にしない）
+    else if (limit > 0 && amt > 0 && amt < limit && IsFixedAsset.Value == true)
+    {
+        IsFixedAsset.Value = false;
+        Toaster.Info($"金額 {amt:#,0} 円 < 少額基準 {limit:#,0} 円になったので固定資産の指定を外しました（必要なら手で戻してください）");
+    }
 }
 
 // この行の税区分が課税仕入か

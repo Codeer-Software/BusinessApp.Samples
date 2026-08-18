@@ -721,6 +721,12 @@ void OnApprovalFlowStatusChanged(string flowStatus)
         // 経理処理以降へ進んでいる場合は巻き戻さない
         var st = SettlementStatus.Value;
         if (st == null || st == "" || st == "draft" || st == "applying") SettlementStatus.Value = "approved";
+        // 超過の再承認が承認されたら、その実費を新しい基準にする（BUG-0324。承認者用モジュールと同じ規約——
+        // **承認を実行するのは承認者用モジュールなので、実際に効くのはあちら**。ここは経路対称のため）
+        if (RequestType.Value == "advance" && ActualConfirmed.Value == true && Amount.Value != null)
+        {
+            EstimatedAmount.Value = Amount.Value;
+        }
     }
     else if (flowStatus == "Rejected" || flowStatus == "Cancelled")
     {

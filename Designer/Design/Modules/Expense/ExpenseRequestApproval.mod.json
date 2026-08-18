@@ -95,6 +95,27 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
+      "DbColumn": "estimated_amount",
+      "Placeholder": "申請したときの明細合計が記録されます（実費との比較に使います）",
+      "Format": "#,0",
+      "IsSlider": false,
+      "OnInput": "",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "見込み額（申請時の明細合計）",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "EstimatedAmount",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
       "DbColumn": "tax_amount",
       "Placeholder": "",
       "Format": "#,0",
@@ -880,7 +901,8 @@
       "DataOnlyFields": [
         "ActualConfirmed",
         "Updater",
-        "UpdatedAt"
+        "UpdatedAt",
+        "EstimatedAmount"
       ],
       "ClassName": "",
       "Color": "",

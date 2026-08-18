@@ -65,6 +65,13 @@ void OnApprovalFlowStatusChanged(string flowStatus)
         // 経理処理以降へ進んでいる場合は巻き戻さない（申請者用 ExpenseRequest と同じ規約）
         var st = SettlementStatus.Value;
         if (st == null || st == "" || st == "draft" || st == "applying") { SettlementStatus.Value = "approved"; }
+        // 超過の再承認が**承認された**なら、その実費が新しい基準になる（BUG-0324）。
+        // 更新しないと、却下 → 直して再申請のたびに超過判定が真のままで、承認が 2 回要る。
+        // estimated_amount は超過判定と画面表示にしか使っていないので、帳簿には影響しない
+        if (RequestType.Value == "advance" && ActualConfirmed.Value == true && Amount.Value != null)
+        {
+            EstimatedAmount.Value = Amount.Value;
+        }
     }
     else if (flowStatus == "Rejected" || flowStatus == "Cancelled")
     {
