@@ -60,6 +60,20 @@ void UpdateButtons()
         PrintPdfButton.IsViewOnly = false;
     }
 
+    // 検収に紐づく請求書の明細は「検収明細の写し」（ADR-0049）なので読み取り専用にする（ADR-0067）。
+    // 警告を出すだけでは、検収額を超える請求を画面から作れてしまう（BUG-0058 が現に残骸として残っている）。
+    // 保存時にブロックする案は採らない——締め済み期間の訂正で詰むため（ISSUE-0002 S6）。
+    // **そもそも入力させない**のがいちばん静かで、直す入口が検収の 1 か所に定まる
+    if (AcceptanceRef.Value != null)
+    {
+        Lines.IsViewOnly = true;
+        LinesLabel.Text = "明細（検収の写しなので直せません。金額を変えるときは検収を訂正するか、増額なら変更契約として新しい受注・検収を起こしてください）";
+    }
+    else
+    {
+        LinesLabel.Text = "明細";
+    }
+
     UpdateStateActionHint();  // 状態遷移ボタンの効き方の説明は、ボタンの出し分けと必ず対で更新する
 }
 
