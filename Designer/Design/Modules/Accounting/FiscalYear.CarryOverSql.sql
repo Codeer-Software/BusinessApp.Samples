@@ -44,7 +44,10 @@ FROM (
   UNION ALL
 
   -- ③ 当期純利益を繰越利益剰余金(3100) へ（損益振替仕訳は作らない方式・decisions/0006）
-  SELECT (SELECT id FROM accounts WHERE code = '3100'), NULL, NULL,
+  -- 補助科目は持たせない（全社の利益なので内訳が無い）が、部門は ① と同じく「全社共通」を入れる。
+  -- ここだけ NULL にすると 3100 が「部門なしの行」と「全社共通の行」に割れる
+  SELECT (SELECT id FROM accounts WHERE code = '3100'), NULL,
+         (SELECT id FROM departments WHERE is_common = 1),
          COALESCE(SUM(CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END), 0)
   FROM journal_lines l
   JOIN journal_entries e ON e.id = l.journal_entry_id

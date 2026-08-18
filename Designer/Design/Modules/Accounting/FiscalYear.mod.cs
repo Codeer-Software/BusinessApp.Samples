@@ -27,6 +27,8 @@ void UpdateYearButtons()
     // 直すときは必ず「締めを解除する」を通す（ADR-0068 の 4「再オープンを要求する」）
     Periods.IsViewOnly = closed;
     OpeningBalances.IsViewOnly = closed;
+    // 月次期間を読み取り専用にしても、生成ボタンが生きていると締めた年度に 12 行足せてしまう
+    GeneratePeriodsButton.IsVisible = !closed;
     // 「翌期繰越を実行」は締めた年度でも押せるままにする。締めた年度は動かないので打ち直しは no-op だが、
     // **翌期の期首残高を誰かが手で壊したときの復旧手段**がこれしかない（洗い替えの冪等性が事故復旧に効く）
 }
