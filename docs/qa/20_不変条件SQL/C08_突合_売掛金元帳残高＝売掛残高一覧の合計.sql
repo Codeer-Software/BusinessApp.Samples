@@ -43,11 +43,29 @@ listed AS (
   -- 黙って集計から落ちて差額の原因が見えなくなるため COALESCE で拾う。
   WHERE COALESCE(i.status, '') NOT IN ('void', 'draft')
 ),
+-- 【調整項目】売上は検収の確定で計上する（ADR-0008）ので、**検収済み・未請求**の期間は
+-- 元帳に売掛金があるのに請求書がまだ無い。これは業務として正常な状態であり、
+-- 一覧に出ないぶんを調整項目として足さないと、この検査は「請求書を作るまで毎回赤」になってしまう。
+-- 対象は「確定済みで、void/draft でない請求書が 1 枚も紐づいていない検収」。
+-- **売上仕訳が実際に立っている検収だけ**を数える。確定済みでも仕訳が無い検収は
+-- 元帳に売掛金を作っていないので、調整項目に入れると今度は逆向きにずれる。
+uninvoiced AS (
+  SELECT COALESCE(SUM(COALESCE(a.amount, 0) + COALESCE(a.tax_amount, 0)), 0) AS bal
+  FROM acceptances a
+  WHERE a.status = 'confirmed'
+    AND EXISTS (SELECT 1 FROM journal_entries je
+                WHERE je.source_type = 'acceptance' AND je.source_id = a.id AND je.status = 'posted')
+    -- **請求書が 1 枚も無い**検収に限る。void の請求書があるものは対象外——
+    -- 請求書が一度でも作られたなら、その後の売掛金は請求書の一生（取消・貸倒れ・赤伝）で動く。
+    -- 実例: A-26-002 は請求書 INV-26-005 が void だが、売掛金は貸倒れ処理の仕訳で消えている
+    AND NOT EXISTS (SELECT 1 FROM invoices i WHERE i.acceptance_id = a.id)
+),
 cmp AS (
   SELECT (SELECT bal FROM ledger) AS 売掛金元帳残高,
-         COALESCE((SELECT bal FROM listed), 0) AS 売掛残高一覧合計
+         COALESCE((SELECT bal FROM listed), 0) AS 売掛残高一覧合計,
+         COALESCE((SELECT bal FROM uninvoiced), 0) AS 検収済み未請求
 )
-SELECT 売掛金元帳残高, 売掛残高一覧合計,
-       売掛金元帳残高 - 売掛残高一覧合計 AS 差額
+SELECT 売掛金元帳残高, 売掛残高一覧合計, 検収済み未請求,
+       売掛金元帳残高 - (売掛残高一覧合計 + 検収済み未請求) AS 差額
 FROM cmp
-WHERE 売掛金元帳残高 <> 売掛残高一覧合計
+WHERE 売掛金元帳残高 <> 売掛残高一覧合計 + 検収済み未請求
