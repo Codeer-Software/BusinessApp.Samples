@@ -175,7 +175,30 @@ void AiSuggest_OnClick()
 
 void PostAll_OnClick()
 {
-    // 画面の編集（候補・対象外チェック）を反映してから起票する（暗黙保存）
+    // **確認より先に保存してはいけない**（BUG-0163 / ADR-0062）。
+    // 旧実装は `SaveListEdits()` を確認ダイアログの前に呼んでおり、
+    // 件数を見て「キャンセル」を押しても候補科目の確定と `対象外 → excluded` の遷移は
+    // すでに DB に入っていた（チェックした行は一覧から消えたまま戻らない）。
+    // 件数は**画面のメモリ行**から数えれば保存しなくても分かる。
+    // 順序は同じアプリの `BankImport.ConfirmImport_OnClick`（ダイアログ → 保存）に揃える。
+    var plannedCount = 0;
+    foreach (var r in PendingList.Rows)
+    {
+        var t = (BankStatementLine)r;
+        if (t.MarkExcluded.Value == true) continue;   // これから「対象外」にする行は数えない
+        if (t.SuggestedAccount.Value == null) continue;
+        plannedCount = plannedCount + 1;
+    }
+    if (plannedCount == 0)
+    {
+        Toaster.Info("起票対象（相手科目候補が設定済みの未起票明細）がありません");
+        return;
+    }
+
+    var answer = MessageBox.Show($"{plannedCount} 件の明細を仕訳として一括起票します。よろしいですか？", "起票する", "キャンセル");
+    if (answer != "起票する") return;
+
+    // ここから先は確定操作。画面の編集（候補・対象外チェック）を反映してから起票する
     SaveListEdits();
 
     var ls = new ModuleSearcher<BankStatementLine>();
@@ -195,9 +218,6 @@ void PostAll_OnClick()
         Toaster.Info("起票対象（相手科目候補が設定済みの未起票明細）がありません");
         return;
     }
-
-    var answer = MessageBox.Show($"{targets.Count} 件の明細を仕訳として一括起票します。よろしいですか？", "起票する", "キャンセル");
-    if (answer != "起票する") return;
 
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
