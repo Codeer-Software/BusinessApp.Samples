@@ -108,10 +108,17 @@ SELECT * FROM (
     agg.tax_amount                   AS tax_amount,
     agg.base_reverse                 AS base_reverse,
     agg.tax_reverse                  AS tax_reverse,
-    -- 控除率・控除対象税額は課税仕入だけに出す（売上・非課税仕入・不課税・対象外は空欄）
+    -- 控除率・控除対象税額は課税仕入だけに出す（売上・非課税仕入・不課税・対象外は空欄）。
+    -- 控除率は**その区分がどの経過措置期間に当たるかを示す情報**であって、ここで掛ける係数ではない。
+    -- 【重要・BUG-0411】控除対象税額は「計上済みの仮払消費税」そのもの。
+    --   経過措置の 80%（70%…）は**仕訳を起こす時点で既に適用済み**で、控除できない残りは
+    --   本体（費用）に算入されている（税抜経理・国税庁の「取引時に処理する方法」）。
+    --   例: 免税事業者から 11,000 円の仕入 → 仮払消費税 800 ／ 修繕費 10,200。
+    --   したがって申告の控除対象仕入税額は **800**。ここで再度 80% を掛けると 640 になり、
+    --   **控除額を 20% 過小に出す＝納めすぎになる**。旧実装はこれをやっていた。
     CASE WHEN agg.taxation_type = 'taxable_purchase' THEN agg.deduct_rate || '%' END AS deduct_rate,
     CASE WHEN agg.taxation_type = 'taxable_purchase'
-         THEN CAST(ROUND(agg.tax_amount * agg.deduct_rate / 100.0) AS INTEGER) END AS deductible_tax
+         THEN agg.tax_amount END AS deductible_tax
   FROM agg
 
   UNION ALL
