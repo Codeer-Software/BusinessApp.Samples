@@ -586,6 +586,21 @@ bool ValidateForApply()
         return false;
     }
 
+    // ヘッダの合計が明細合計と食い違っていたら、ここで撮り直す（BUG-0307）。
+    // 明細を足す `CommitEntry` は「行を親に付ける Submit」と「合計を保存する Submit」の 2 段構えで、
+    // **2 段目だけ失敗するとヘッダの合計だけ古いまま残る**。承認ルートの判定額は
+    // `GetJudgeAmount()` ＝ ヘッダの合計なので、放置すると**過小額で段が決まる**——
+    // 申請の直前が最後の関門なので、ここで必ず合わせる（不変条件 D05 と同じ式）
+    if ((Amount.Value ?? 0) != total)
+    {
+        RecalcFromLines();
+        if ((Amount.Value ?? 0) != total)
+        {
+            Toaster.Error("合計金額が明細と一致しません。画面を開き直してからもう一度お試しください");
+            return false;
+        }
+    }
+
     // 領収書の未添付警告（U2-6: 申請はブロックしない。添付できない実務ケースを許容）
     if (missingReceipt > 0)
     {
@@ -684,8 +699,10 @@ void OnApprovalFlowStatusChanged(string flowStatus)
             DepartmentRef.Value = CurrentUser.所属部.Value;
         }
         // 見込み額スナップショット: 事前申請は「申請したときの明細合計」を記録し、実費との比較に使う。
-        // 実費確定後の再承認では上書きしない（比較の基準が動いてしまうため）
-        if (RequestType.Value == "advance" && ActualConfirmed.Value != true)
+        // **一度だけ撮る**（＝空のときだけ入れる）。実費確定後の再承認で上書きすると比較の基準が動くし、
+        // 却下されて実費確定をやり直すときに「実費＝見込み」になって超過の再承認が黙って飛ぶ（BUG-0308）。
+        // 撮り直さないぶん見込みが古くなることはあるが、そのときは超過判定が過敏に出るだけで安全側に外れる
+        if (RequestType.Value == "advance" && EstimatedAmount.Value == null)
         {
             EstimatedAmount.Value = Amount.Value;
         }
@@ -698,7 +715,17 @@ void OnApprovalFlowStatusChanged(string flowStatus)
     }
     else if (flowStatus == "Rejected" || flowStatus == "Cancelled")
     {
-        SettlementStatus.Value = "draft";
+        // 経理処理以降へ進んでいる場合は巻き戻さない（Approved 分岐と対称にする・BUG-0315）。
+        // 現行の導線では仕訳生成後に却下へ到達しないが、片側だけ無防備なのは事故のもと
+        var st2 = SettlementStatus.Value;
+        if (st2 == null || st2 == "" || st2 == "draft" || st2 == "applying" || st2 == "approved")
+        {
+            SettlementStatus.Value = "draft";
+            // 事前申請の実費確定フラグも戻す（BUG-0308）。戻さないと再申請・再承認しても
+            // 「実費を確定」の導線が二度と出ず、**見込み額のまま仕訳が立つ**。
+            // 却下されたのは実費そのものなので、直して確定し直すのが正しい筋道
+            if (RequestType.Value == "advance") { ActualConfirmed.Value = false; }
+        }
     }
     UpdateAccountingButtons();
 }
