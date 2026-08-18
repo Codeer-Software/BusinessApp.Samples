@@ -844,9 +844,9 @@ int CreateDeferJournal(object fiscalYearId, object billing, object annualInvId, 
 // 発行済み請求書ごとに入金一覧へ「未確定」の行を作り、経理の消込 ToDo にする
 void CreatePendingReceiptFor(object invoiceId, string invoiceNo)
 {
-    var rs = new ModuleSearcher<Receipt>();
-    rs.AddEquals(e => e.InvoiceRef.Value, invoiceId);
-    if (rs.Execute().Count > 0) { return; }  // 二重作成ガード
+    var rls = new ModuleSearcher<ReceiptLine>();
+    rls.AddEquals(l => l.InvoiceRef.Value, invoiceId);
+    if (rls.Execute().Count > 0) { return; }  // 二重作成ガード（消込明細で見る・ADR-0071）
     var fs = new ModuleSearcher<Invoice>();
     fs.AddEquals(e => e.Id.Value, invoiceId);
     var found = fs.ExecuteFirstOrDefault();

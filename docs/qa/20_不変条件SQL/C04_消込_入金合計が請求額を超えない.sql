@@ -6,12 +6,10 @@
 --       Modules/Sales/ReceivableBalance.Query.sql（消込済み = journal_entries(source_type='receipt', source_id) の存在）
 -- 備考: 請求書発行時に税込全額の「入金予定」が自動作成される（ADR-0032）ため、
 --       消込仕訳の存在で絞らないと全請求書が過入金に見える。この絞りは本チェックの前提。
+--           集計は **v_invoice_received**（ddl/770）から引く。入金は 1 件で複数の請求書に
+--           消し込めるので（ADR-0071）、`receipts.invoice_id` では数えられない。
 WITH settled AS (
-  SELECT r.invoice_id AS inv, SUM(r.amount) AS received
-  FROM receipts r
-  WHERE EXISTS (SELECT 1 FROM journal_entries je
-                WHERE je.source_type = 'receipt' AND je.source_id = r.id)
-  GROUP BY r.invoice_id
+  SELECT invoice_id AS inv, received FROM v_invoice_received
 )
 SELECT
     i.id         AS 請求書id,

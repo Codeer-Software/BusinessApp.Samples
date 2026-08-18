@@ -47,11 +47,7 @@ inv_in AS (
   SELECT max(date(i.due_date, 'start of month'), (SELECT month_first FROM months WHERE idx = 0)) AS m,
          COALESCE(i.amount, 0) + COALESCE(i.tax_amount, 0) - COALESCE(rc.received, 0) AS amt
   FROM invoices i
-  LEFT JOIN (SELECT r.invoice_id AS invoice_id, SUM(r.amount) AS received
-             FROM receipts r
-             WHERE EXISTS (SELECT 1 FROM journal_entries je
-                           WHERE je.source_type = 'receipt' AND je.source_id = r.id)
-             GROUP BY r.invoice_id) rc
+  LEFT JOIN v_invoice_received rc
     ON rc.invoice_id = i.id
   WHERE i.status IN ('issued', 'partial') AND i.due_date IS NOT NULL
 ),

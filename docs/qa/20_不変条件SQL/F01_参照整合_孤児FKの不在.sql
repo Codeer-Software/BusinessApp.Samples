@@ -59,6 +59,8 @@ UNION ALL SELECT 'invoices.department_id', t.id, t.department_id FROM invoices t
 UNION ALL SELECT 'invoice_lines.invoice_id', t.id, t.invoice_id FROM invoice_lines t WHERE t.invoice_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM invoices p WHERE p.id = t.invoice_id)
 UNION ALL SELECT 'invoice_lines.acceptance_line_id', t.id, t.acceptance_line_id FROM invoice_lines t WHERE t.acceptance_line_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM acceptance_lines p WHERE p.id = t.acceptance_line_id)
 UNION ALL SELECT 'receipts.invoice_id', t.id, t.invoice_id FROM receipts t WHERE t.invoice_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM invoices p WHERE p.id = t.invoice_id)
+UNION ALL SELECT 'receipt_lines.receipt_id', t.id, t.receipt_id FROM receipt_lines t WHERE NOT EXISTS (SELECT 1 FROM receipts p WHERE p.id = t.receipt_id)
+UNION ALL SELECT 'receipt_lines.invoice_id', t.id, t.invoice_id FROM receipt_lines t WHERE NOT EXISTS (SELECT 1 FROM invoices p WHERE p.id = t.invoice_id)
 UNION ALL SELECT 'receipts.offset_vendor_invoice_id', t.id, t.offset_vendor_invoice_id FROM receipts t WHERE t.offset_vendor_invoice_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM vendor_invoices p WHERE p.id = t.offset_vendor_invoice_id)
 UNION ALL SELECT 'recurring_billings.partner_id', t.id, t.partner_id FROM recurring_billings t WHERE t.partner_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM partners p WHERE p.id = t.partner_id)
 UNION ALL SELECT 'recurring_billings.project_id', t.id, t.project_id FROM recurring_billings t WHERE t.project_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = t.project_id)

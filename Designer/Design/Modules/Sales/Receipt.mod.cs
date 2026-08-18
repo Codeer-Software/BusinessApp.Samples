@@ -73,6 +73,17 @@ void UpdateButtons()
     ConfirmButton.IsVisible = !confirmed;
     CancelReceiptButton.IsVisible = confirmed && CurrentUser.HasAccountingAccess.Value == true;
     SubmitButton.IsVisible = !confirmed;
+
+    // 合算入金（ADR-0071）。**未確定のときだけ**まとめ直せる（確定後は取消が先）
+    var isAccounting = (CurrentUser.HasAccountingAccess.Value == true);
+    var lineCount = LineCount();
+    var canMerge = !confirmed && isAccounting && !this.IsNewData && Method.Value != "offset";
+    MergeButton.IsVisible = canMerge;
+    if (canMerge) { MergeButton.IsViewOnly = false; }
+    UnmergeButton.IsVisible = canMerge && lineCount > 1;
+    if (UnmergeButton.IsVisible) { UnmergeButton.IsViewOnly = false; }
+    // 合算したら入金額は明細の合計。手で直せると合計と食い違う（不変条件 C05）
+    Amount.IsViewOnly = confirmed || lineCount > 1;
 }
 
 // 仕訳を明細→親の順に物理削除する。子持ちモジュールの検索インスタンス Delete() は
@@ -113,6 +124,7 @@ void CancelReceipt_OnClick()
         Toaster.Error("入金の取り消しは経理のみ実行できます");
         return;
     }
+    if (LineCount() > 1) { CancelMulti(); return; }
     var je = FindReceiptJournal();
     if (je == null) { Toaster.Error("この入金の消込仕訳が見つかりません"); return; }
 
@@ -179,16 +191,11 @@ void CancelReceipt_OnClick()
             var rs = new ModuleSearcher<Receipt>();
             rs.AddEquals(e => e.InvoiceRef.Value, InvoiceRef.Value);
             var rows = rs.Execute();
-            var confirmedTotal = 0;
-            foreach (var row in rows)
-            {
-                var r = (Receipt)row;
-                var js2 = new ModuleSearcher<JournalEntry>();
-                js2.AddEquals(e => e.SourceType.Value, "receipt");
-                js2.AddEquals(e => e.SourceId.Value, r.Id.Value);
-                if (js2.Execute().Count == 0) continue;
-                if (r.Amount.Value != null) { confirmedTotal = confirmedTotal + r.Amount.Value; }
-            }
+            // 消込済みの合計は **SumReceipts（消込明細ベース）** で数える（ADR-0071）。
+            // ヘッダの請求書欄で兄弟を探す旧実装だと、**合算された入金の充当分を取りこぼす**
+            // （合算入金のヘッダは 1 件目の請求書しか指していない）。
+            // ここは仕訳を消した直後なので、自分の分は自然に除外される
+            var confirmedTotal = SumReceipts(InvoiceRef.Value, false);
             var newStatus = "issued";
             if (confirmedTotal >= gross && gross > 0) { newStatus = "paid"; }
             else if (confirmedTotal > 0) { newStatus = "partial"; }
@@ -254,19 +261,20 @@ Invoice FindInvoice(object invoiceId)
 // （請求書発行時の入金予定の自動作成に伴い変更・2026-07-25。含めると残額計算・過入金ガードが狂う）
 int SumReceipts(object invoiceId, bool excludeSelf)
 {
-    var s = new ModuleSearcher<Receipt>();
-    s.AddEquals(e => e.InvoiceRef.Value, invoiceId);
-    var rows = s.Execute();
+    // **消込明細（receipt_lines）で数える。** 入金 1 件が複数の請求書に散るので（ADR-0071）、
+    // `receipts.invoice_id` では数えられない。1 対 1 の入金も移行で明細 1 行を持っている
+    var s = new ModuleSearcher<ReceiptLine>();
+    s.AddEquals(l => l.InvoiceRef.Value, invoiceId);
     var total = 0;
-    foreach (var row in rows)
+    foreach (var row in s.Execute())
     {
-        var r = (Receipt)row;
-        if (excludeSelf && !this.IsNewData && r.Id.Value == this.Id.Value) continue;
+        var rl = (ReceiptLine)row;
+        if (excludeSelf && !this.IsNewData && $"{rl.ReceiptId.Value}" == $"{this.Id.Value}") continue;
         var js = new ModuleSearcher<JournalEntry>();
         js.AddEquals(e => e.SourceType.Value, "receipt");
-        js.AddEquals(e => e.SourceId.Value, r.Id.Value);
+        js.AddEquals(e => e.SourceId.Value, rl.ReceiptId.Value);
         if (js.Execute().Count == 0) continue;
-        if (r.Amount.Value != null) total = total + r.Amount.Value;
+        if (rl.Amount.Value != null) total = total + rl.Amount.Value;
     }
     return total;
 }
@@ -279,6 +287,9 @@ void Confirm_OnClick()
         Toaster.Error("入金の確定（消込）は経理のみ実行できます");
         return;
     }
+    // 合算入金（明細 2 行以上）は専用の経路へ。**既存の 1 対 1 の経路には手を触れない**
+    // ——差額の自動処理・相殺・入金予定の統合はどれも 1 請求書を前提に作り込まれている（ADR-0071）
+    if (LineCount() > 1) { ConfirmMulti(); return; }
     if (InvoiceRef.Value == null) { Toaster.Error("請求書を選択してください"); return; }
     if (Amount.Value == null || Amount.Value <= 0) { Toaster.Error("入金額を入力してください"); return; }
     if (ReceiptDate.Value == null) { Toaster.Error("入金日を入力してください"); return; }
@@ -617,4 +628,443 @@ int GetThresholdAmount(string code)
         limit = th.Amount.Value ?? 0;
     }
     return limit;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 合算入金（ADR-0071・BUG-0012）
+//
+// 取引先は月末に複数の請求をまとめて 1 回で振り込んでくる。受託ソフトハウスでは日常的に起きるのに、
+// 入金は請求書 1 本としか結び付けられなかった。銀行明細は 1 行なのに帳簿では n 行になり、
+// 残高照合で必ず突き合わせに詰まる。
+//
+// **既存の 1:1 の経路には手を触れていない。** 明細が 1 行のときは従来どおりのコードが走る
+// （差額の自動処理・相殺・入金予定の統合はどれも 1 請求書を前提に作り込まれており、
+// そこを作り替える価値より壊す危険のほうが大きい）。明細が 2 行以上のときだけ、
+// この下の専用の経路に分岐する。
+//
+// **まとめられるのは未確定（消込仕訳が無い）どうし・同じ取引先だけ。**
+// 相殺（offset）は仕入先請求と 1:1 で対応する仕組みなので合算できない。
+// ───────────────────────────────────────────────────────────────────────────
+
+// この入金の消込明細（行番号順）
+List<ReceiptLine> GetLines()
+{
+    var result = new List<ReceiptLine>();
+    if (this.Id.Value == null) return result;
+    var s = new ModuleSearcher<ReceiptLine>();
+    s.AddEquals(l => l.ReceiptId.Value, this.Id.Value);
+    s.OrderBy(l => l.LineNo.Value);
+    foreach (var row in s.Execute()) { result.Add((ReceiptLine)row); }
+    return result;
+}
+
+int LineCount()
+{
+    var n = 0;
+    foreach (var l in GetLines()) { n = n + 1; }
+    return n;
+}
+
+// 明細の合計。ヘッダの入金額はこれと一致していなければならない（不変条件 C05）
+int LinesTotal()
+{
+    var total = 0;
+    foreach (var l in GetLines())
+    {
+        if (l.Amount.Value != null) { total = total + l.Amount.Value; }
+    }
+    return total;
+}
+
+// この入金が充当している請求書の取引先（明細の 1 行目から引く）
+object PartnerOfThisReceipt()
+{
+    foreach (var l in GetLines())
+    {
+        var iv = FindInvoice(l.InvoiceRef.Value);
+        if (iv != null) return iv.PartnerRef.Value;
+    }
+    return null;
+}
+
+bool HasSettleJournal(object receiptId)
+{
+    var js = new ModuleSearcher<JournalEntry>();
+    js.AddEquals(e => e.SourceType.Value, "receipt");
+    js.AddEquals(e => e.SourceId.Value, receiptId);
+    return js.Execute().Count > 0;
+}
+
+// 明細を画面に映すための再読込（ボタン操作のあと）
+void ReloadLines()
+{
+    Lines.Reload();
+    UpdateButtons();
+}
+
+void Lines_OnDataChanged()
+{
+    // 明細はボタン操作でしか動かさない（グリッドは読み取り専用）。合計だけ追従させる
+    var t = LinesTotal();
+    if (t > 0 && LineCount() > 1) { Amount.Value = t; }
+}
+
+// 同じ取引先の未確定入金を、この入金にまとめる
+void Merge_OnClick()
+{
+    if (CurrentUser.HasAccountingAccess.Value != true)
+    {
+        Toaster.Error("入金のまとめは経理のみ実行できます");
+        return;
+    }
+    if (this.IsNewData) { Toaster.Error("入金を保存してから実行してください"); return; }
+    if (HasSettleJournal(this.Id.Value))
+    {
+        Toaster.Error("確定済みの入金はまとめられません（先に「入金を取り消す」を実行してください）");
+        return;
+    }
+    if (Method.Value == "offset")
+    {
+        Toaster.Error("相殺入金はまとめられません（相殺は仕入先請求と 1 対 1 で対応します・ADR-0035）");
+        return;
+    }
+    var partner = PartnerOfThisReceipt();
+    if (partner == null) { Toaster.Error("この入金の取引先が特定できません（消込明細がありません）"); return; }
+
+    // 相手候補: 同じ取引先・未確定・相殺でない・自分以外
+    var targets = new List<string>();
+    var names = new List<string>();
+    var amounts = new List<int>();
+    var rs = new ModuleSearcher<Receipt>();
+    foreach (var row in rs.Execute())
+    {
+        var r = (Receipt)row;
+        if ($"{r.Id.Value}" == $"{this.Id.Value}") continue;
+        if (r.Method.Value == "offset") continue;
+        if (HasSettleJournal(r.Id.Value)) continue;
+        var ls = new ModuleSearcher<ReceiptLine>();
+        ls.AddEquals(l => l.ReceiptId.Value, r.Id.Value);
+        var rlines = ls.Execute();
+        if (rlines.Count == 0) continue;
+        var samePartner = true;
+        var label = "";
+        foreach (var lrow in rlines)
+        {
+            var rl = (ReceiptLine)lrow;
+            var iv = FindInvoice(rl.InvoiceRef.Value);
+            if (iv == null || $"{iv.PartnerRef.Value}" != $"{partner}") { samePartner = false; break; }
+            if (label != "") { label = label + " / "; }
+            label = label + $"{iv.InvoiceNo.Value} {rl.Amount.Value:#,0} 円";
+        }
+        if (!samePartner) continue;
+        targets.Add($"{r.Id.Value}");
+        names.Add(label);
+        amounts.Add(r.Amount.Value ?? 0);
+    }
+    if (targets.Count == 0)
+    {
+        Toaster.Info("まとめられる入金がありません（同じ取引先の未確定の入金予定が他にありません）");
+        return;
+    }
+
+    var listText = "";
+    var addTotal = 0;
+    var i = 0;
+    foreach (var n in names)
+    {
+        listText = listText + "／" + n;
+        addTotal = addTotal + amounts[i];
+        i = i + 1;
+    }
+    var answer = MessageBox.Show(
+        $"同じ取引先の未確定入金 {targets.Count} 件をこの入金にまとめます{listText}。"
+        + $"入金額は {Amount.Value:#,0} 円 → {(Amount.Value ?? 0) + addTotal:#,0} 円になります。"
+        + "まとめた入金予定の行は無くなります（「まとめを解除する」で元に戻せます）。よろしいですか？",
+        "まとめる", "キャンセル");
+    if (answer != "まとめる") return;
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    var nextNo = LineCount();
+    foreach (var tid in targets)
+    {
+        var ls = new ModuleSearcher<ReceiptLine>();
+        ls.AddEquals(l => l.ReceiptId.Value, tid);
+        foreach (var lrow in ls.Execute())
+        {
+            var rl = (ReceiptLine)lrow;
+            nextNo = nextNo + 1;
+            rl.ReceiptId.Value = this.Id.Value;
+            rl.LineNo.Value = nextNo;
+            if (rl.Submit() != true) { Toaster.Error("消込明細の付け替えに失敗しました"); return; }
+        }
+        var trs = new ModuleSearcher<Receipt>();
+        trs.AddEquals(e => e.Id.Value, tid);
+        var found = trs.ExecuteFirstOrDefault();
+        if (found != null)
+        {
+            if (((Receipt)found).Delete() != true)
+            {
+                Toaster.Error("まとめ元の入金予定の削除に失敗しました（消込明細は移動済みです。入金一覧を確認してください）");
+                return;
+            }
+        }
+    }
+    Amount.Value = LinesTotal();
+    if (this.Submit() != true) { Toaster.Error("入金額の更新に失敗しました"); return; }
+    ReloadLines();
+    Toaster.Success($"入金 {targets.Count + 1} 件をまとめました（合計 {Amount.Value:#,0} 円）");
+}
+
+// まとめを解除して、明細ごとの入金予定に戻す
+void Unmerge_OnClick()
+{
+    if (CurrentUser.HasAccountingAccess.Value != true)
+    {
+        Toaster.Error("まとめの解除は経理のみ実行できます");
+        return;
+    }
+    if (HasSettleJournal(this.Id.Value))
+    {
+        Toaster.Error("確定済みの入金は解除できません（先に「入金を取り消す」を実行してください）");
+        return;
+    }
+    var lines = GetLines();
+    if (lines.Count < 2) { Toaster.Info("この入金は 1 件の請求書だけを消し込みます（解除するものがありません）"); return; }
+
+    var answer = MessageBox.Show(
+        $"まとめを解除して、消込明細 {lines.Count} 件をそれぞれ別の入金予定に戻します。よろしいですか？",
+        "解除する", "キャンセル");
+    if (answer != "解除する") return;
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    var first = true;
+    var keepAmount = 0;
+    foreach (var rl in lines)
+    {
+        if (first)
+        {
+            first = false;
+            keepAmount = rl.Amount.Value ?? 0;
+            rl.LineNo.Value = 1;
+            // **null は「変更なし」で正常**（既に行番号 1 のことがある）。false だけを失敗として扱う
+            if (rl.Submit() == false) { Toaster.Error("消込明細の更新に失敗しました"); return; }
+            continue;
+        }
+        var nr = new Receipt();
+        nr.ReceiptDate.Value = ReceiptDate.Value;
+        nr.Amount.Value = rl.Amount.Value ?? 0;
+        nr.Method.Value = Method.Value;
+        nr.InvoiceRef.Value = rl.InvoiceRef.Value;   // 移行の名残。1 行の入金では従来経路が読む
+        nr.Note.Value = "合算入金の解除で分割された入金予定";
+        if (nr.Submit() != true) { Toaster.Error("入金予定の作成に失敗しました"); return; }
+        var ns = new ModuleSearcher<Receipt>();
+        ns.AddEquals(e => e.InvoiceRef.Value, rl.InvoiceRef.Value);
+        ns.OrderByDescending(e => e.Id.Value);
+        ns.Limit(1);
+        var created = ns.ExecuteFirstOrDefault();
+        if (created == null) { Toaster.Error("作成した入金予定を取得できませんでした"); return; }
+        // 新しい入金予定にはトリガ（ddl/780）が明細を 1 行作っている。
+        // こちらの行を移すと 2 行になるので、**トリガが作った行を消してから**移す
+        var dupS = new ModuleSearcher<ReceiptLine>();
+        dupS.AddEquals(l => l.ReceiptId.Value, ((Receipt)created).Id.Value);
+        foreach (var drow in dupS.Execute())
+        {
+            var dl = (ReceiptLine)drow;
+            if ($"{dl.Id.Value}" == $"{rl.Id.Value}") continue;
+            if (dl.Delete() != true) { Toaster.Error("重複した消込明細の削除に失敗しました"); return; }
+        }
+        rl.ReceiptId.Value = ((Receipt)created).Id.Value;
+        rl.LineNo.Value = 1;
+        if (rl.Submit() == false) { Toaster.Error("消込明細の付け替えに失敗しました"); return; }
+    }
+    Amount.Value = keepAmount;
+    if (this.Submit() == false) { Toaster.Error("入金額の更新に失敗しました"); return; }
+    ReloadLines();
+    Toaster.Success($"まとめを解除しました（{lines.Count} 件の入金予定に戻しました）");
+}
+
+// 合算入金の確定（明細が 2 行以上のときだけ通る）。
+// 借方は現預金 1 行、貸方は**請求書ごとに 1 行**——銀行明細 1 行に対して帳簿も 1 伝票にする（ADR-0071）
+void ConfirmMulti()
+{
+    var lines = GetLines();
+    if (Method.Value == "offset")
+    {
+        Toaster.Error("相殺入金は合算できません（相殺は仕入先請求と 1 対 1 で対応します）");
+        return;
+    }
+    if (ReceiptDate.Value == null) { Toaster.Error("入金日を入力してください"); return; }
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    // 過入金ガード（請求書ごと）。拒否された金額をレコードに残さないよう保存より前に見る
+    foreach (var rl in lines)
+    {
+        var iv = FindInvoice(rl.InvoiceRef.Value);
+        if (iv == null) { Toaster.Error("消込明細の請求書が見つかりません"); return; }
+        int gross = (iv.Amount.Value ?? 0) + (iv.TaxAmount.Value ?? 0);
+        int others = SumReceipts(rl.InvoiceRef.Value, true);
+        int remain = gross - others;
+        var amt = rl.Amount.Value ?? 0;
+        if (amt <= 0) { Toaster.Error($"{iv.InvoiceNo.Value} の充当額が 0 円以下です"); return; }
+        if (amt > remain)
+        {
+            Toaster.Error($"{iv.InvoiceNo.Value} への充当額 {amt:#,0} 円が請求残額 {remain:#,0} 円を超えています。まとめを解除して金額を直してください");
+            return;
+        }
+    }
+
+    Amount.Value = LinesTotal();
+    if (this.ValidateInput() != true) { Toaster.Error("入力内容を確認してください"); return; }
+    if (this.Submit() == false) { Toaster.Error("入金の保存に失敗しました"); return; }
+
+    if (HasSettleJournal(this.Id.Value)) { Toaster.Error("この入金の消込仕訳は既に生成済みです"); return; }
+
+    var rcpMonthFirst = new DateOnly(ReceiptDate.Value.Year, ReceiptDate.Value.Month, 1);
+    var ys = new ModuleSearcher<FiscalYear>();
+    ys.AddLessThanOrEqual(e => e.StartDate.Value, rcpMonthFirst);
+    ys.AddGreaterThanOrEqual(e => e.EndDate.Value, rcpMonthFirst);
+    var fy = ys.ExecuteFirstOrDefault();
+    if (fy == null) { Toaster.Error("入金日に対応する会計年度がありません"); return; }
+    var typedFy = (FiscalYear)fy;
+    var ps = new ModuleSearcher<FiscalPeriod>();
+    ps.AddLessThanOrEqual(e => e.StartDate.Value, rcpMonthFirst);
+    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, rcpMonthFirst);
+    var period = ps.ExecuteFirstOrDefault();
+    if (period == null) { Toaster.Error("入金日に対応する月次期間がありません"); return; }
+    if (((FiscalPeriod)period).Status.Value == "closed") { Toaster.Error("入金日の期間は締め済みです。仕訳は手動で起票してください"); return; }
+
+    var accS = new ModuleSearcher<Account>();
+    accS.AddIn(e => e.Code.Value, "1020", "1000", "1100");
+    object bankId = null;
+    object cashId = null;
+    object arId = null;
+    foreach (var a in accS.Execute())
+    {
+        var acc = (Account)a;
+        if (acc.Code.Value == "1020") { bankId = acc.Id.Value; }
+        if (acc.Code.Value == "1000") { cashId = acc.Id.Value; }
+        if (acc.Code.Value == "1100") { arId = acc.Id.Value; }
+    }
+    if (arId == null) { Toaster.Error("売掛金(1100)の科目がありません"); return; }
+    object debitId = (Method.Value == "cash") ? cashId : bankId;
+    if (debitId == null) { Toaster.Error("入金先の科目（普通預金 1020 / 現金 1000）がありません"); return; }
+
+    // 行の内容はプリミティブの並行リストに組む（CLB-039・ISSUE-0006）
+    var dcList = new List<string>();
+    var accList = new List<object>();
+    var amtList = new List<int>();
+    var projList = new List<object>();
+    var descList = new List<string>();
+    var invNos = "";
+    dcList.Add("D"); accList.Add(debitId); amtList.Add(LinesTotal());
+    projList.Add(null); descList.Add("入金（合算）");
+    foreach (var rl in lines)
+    {
+        var iv = FindInvoice(rl.InvoiceRef.Value);
+        dcList.Add("C"); accList.Add(arId); amtList.Add(rl.Amount.Value ?? 0);
+        projList.Add(iv == null ? null : iv.ProjectRef.Value);
+        descList.Add($"入金 {(iv == null ? "" : iv.InvoiceNo.Value)}");
+        if (invNos != "") { invNos = invNos + ", "; }
+        invNos = invNos + (iv == null ? "" : iv.InvoiceNo.Value);
+    }
+
+    var nextNo = new JournalEntry().NextJournalNo(typedFy.Id.Value);
+    var je = new JournalEntry();
+    je.EntryDate.Value = ReceiptDate.Value;
+    je.EntryType.Value = "auto";
+    je.Description.Value = $"入金（合算） {invNos}";
+    je.Status.Value = "posted";
+    je.JournalNo.Value = nextNo;
+    je.FiscalYearRef.Value = typedFy.Id.Value;
+    je.SourceType.Value = "receipt";
+    je.SourceId.Value = this.Id.Value;
+    je.Lines.AddRows(dcList.Count);
+    var idx = 0;
+    foreach (var lr in je.Lines.Rows)
+    {
+        var l = (JournalLine)lr;
+        l.LineNo.Value = idx + 1;
+        l.Dc.Value = dcList[idx];
+        l.Account.Value = accList[idx];
+        l.Amount.Value = amtList[idx];
+        l.InputAmount.Value = amtList[idx];
+        l.TaxInputMode.Value = "none";
+        l.Description.Value = descList[idx];
+        if (projList[idx] != null) { l.ProjectRef.Value = projList[idx]; }
+        idx = idx + 1;
+    }
+    je.MarkAllLinesOutOfScope();
+    je.FillMissingDepartments();
+    if (je.Submit() != true) { Toaster.Error("消込仕訳の生成に失敗しました"); return; }
+
+    // 請求書ごとに状態を更新する
+    foreach (var rl in lines)
+    {
+        var iv = FindInvoice(rl.InvoiceRef.Value);
+        if (iv == null) continue;
+        int gross = (iv.Amount.Value ?? 0) + (iv.TaxAmount.Value ?? 0);
+        int received = SumReceipts(rl.InvoiceRef.Value, false);
+        var st = "issued";
+        if (received >= gross && gross > 0) { st = "paid"; }
+        else if (received > 0) { st = "partial"; }
+        iv.Status.Value = st;
+        if (iv.Submit() != true) { Toaster.Warn($"{iv.InvoiceNo.Value} の状態更新に失敗しました（仕訳は生成済みです）"); }
+    }
+
+    UpdateButtons();
+    Toaster.Success($"仕訳 No.{nextNo} を生成しました（合算入金 {LinesTotal():#,0} 円 / 請求書 {lines.Count} 件）");
+}
+
+// 合算入金の取消。**入金予定の統合（1 請求書前提の後始末）はしない**——
+// 合算はもともと「まとめた 1 本の入金」なので、取り消したら未確定の合算入金に戻すのが素直
+void CancelMulti()
+{
+    var je = FindReceiptJournal();
+    if (je == null) { Toaster.Error("この入金の消込仕訳が見つかりません"); return; }
+    var d = je.EntryDate.Value;
+    if (d != null)
+    {
+        var monthFirst = new DateOnly(d.Year, d.Month, 1);
+        var ps = new ModuleSearcher<FiscalPeriod>();
+        ps.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
+        ps.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);
+        var period = ps.ExecuteFirstOrDefault();
+        if (period != null && ((FiscalPeriod)period).Status.Value == "closed")
+        {
+            Toaster.Error("消込仕訳の期間が締め済みのため取り消せません（決算修正仕訳（赤伝）で対応してください）");
+            return;
+        }
+    }
+    var jeNo = je.JournalNo.Value;
+    var answer = MessageBox.Show(
+        $"消込仕訳 No.{jeNo} を削除して、合算入金を未確定に戻します（まとめた明細はそのまま残ります）。よろしいですか？",
+        "取り消す", "キャンセル");
+    if (answer != "取り消す") return;
+
+    using var loading = LoadingService.StartLoading(0);
+    if (!DeleteJournalEntryWithLines(je))
+    {
+        Toaster.Error("消込仕訳の削除に失敗しました（入金は確定済みのままです）");
+        return;
+    }
+    foreach (var rl in GetLines())
+    {
+        var iv = FindInvoice(rl.InvoiceRef.Value);
+        if (iv == null) continue;
+        int gross = (iv.Amount.Value ?? 0) + (iv.TaxAmount.Value ?? 0);
+        int received = SumReceipts(rl.InvoiceRef.Value, false);
+        var st = "issued";
+        if (received >= gross && gross > 0) { st = "paid"; }
+        else if (received > 0) { st = "partial"; }
+        iv.Status.Value = st;
+        if (iv.Submit() != true) { Toaster.Warn($"{iv.InvoiceNo.Value} の状態更新に失敗しました（仕訳は削除済みです）"); }
+    }
+    UpdateButtons();
+    Toaster.Success($"仕訳 No.{jeNo} を削除し、合算入金を未確定に戻しました");
 }

@@ -11,14 +11,26 @@
 -- 実装メモ: 「消込済み額」は receipts.amount ではなく、消込仕訳が売掛金(1100)を貸方で減らした額で測る。
 --           振込手数料を当社が負担する入金は 入金額 < 請求額 でも債権は全額消えるため、
 --           receipts.amount で判定すると正常な取引が違反に見える（実際に第18期のデータで発生する）。
+-- 入金は 1 件で複数の請求書に消し込める（ADR-0071）。売掛金の貸方行は請求書ごとに分かれて
+-- 立つので、**消込明細の請求書と金額**で按分して数える（合算入金でも請求書単位で測れる）。
 WITH cleared AS (
-  SELECT r.invoice_id AS inv,
-         SUM(COALESCE((SELECT SUM(jl.amount) FROM journal_lines jl
-                       JOIN accounts a ON a.id = jl.account_id
-                       WHERE jl.journal_entry_id = je.id AND jl.dc = 'C' AND a.code = '1100'), 0)) AS cleared
-  FROM receipts r
-  JOIN journal_entries je ON je.source_type = 'receipt' AND je.source_id = r.id
-  GROUP BY r.invoice_id
+  SELECT rl.invoice_id AS inv,
+         SUM(CASE WHEN rtot.total > 0
+                  THEN CAST(jetot.cr * rl.amount / rtot.total AS INTEGER)
+                  ELSE 0 END) AS cleared
+  FROM receipt_lines rl
+  JOIN receipts r ON r.id = rl.receipt_id
+  JOIN (SELECT receipt_id, SUM(amount) AS total FROM receipt_lines GROUP BY receipt_id) rtot
+    ON rtot.receipt_id = rl.receipt_id
+  JOIN (SELECT je.source_id AS rid,
+               SUM(COALESCE((SELECT SUM(jl.amount) FROM journal_lines jl
+                             JOIN accounts a ON a.id = jl.account_id
+                             WHERE jl.journal_entry_id = je.id AND jl.dc = 'C' AND a.code = '1100'), 0)) AS cr
+        FROM journal_entries je
+        WHERE je.source_type = 'receipt'
+        GROUP BY je.source_id) jetot
+    ON jetot.rid = r.id
+  GROUP BY rl.invoice_id
 ),
 base AS (
   SELECT i.id, i.invoice_no, i.status, i.issue_date,

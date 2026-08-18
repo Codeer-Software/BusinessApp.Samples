@@ -507,9 +507,10 @@ bool HasConfirmedReceipts()
 // 入金日は支払期限を予定日として仮置き・金額は税込請求額——確定時に経理が実額へ修正する
 void CreatePendingReceipt()
 {
-    var rs = new ModuleSearcher<Receipt>();
-    rs.AddEquals(e => e.InvoiceRef.Value, this.Id.Value);
-    if (rs.Execute().Count > 0) { return; }  // 既に入金記録がある請求書には作らない（二重作成ガード）
+    // 入金の有無は**消込明細**で見る（ADR-0071）。合算されると入金ヘッダの請求書欄では引けない
+    var rls = new ModuleSearcher<ReceiptLine>();
+    rls.AddEquals(l => l.InvoiceRef.Value, this.Id.Value);
+    if (rls.Execute().Count > 0) { return; }  // 既に入金記録がある請求書には作らない（二重作成ガード）
     var r = new Receipt();
     r.InvoiceRef.Value = this.Id.Value;
     r.ReceiptDate.Value = DueDate.Value;
@@ -523,18 +524,42 @@ void CreatePendingReceipt()
 // 未確定（消込仕訳なし）の入金予定を削除する（下書きへの巻き戻し・取消時の後始末）
 void DeletePendingReceipts()
 {
-    var rs = new ModuleSearcher<Receipt>();
-    rs.AddEquals(e => e.InvoiceRef.Value, this.Id.Value);
-    var rows = rs.Execute();
-    foreach (var row in rows)
+    // この請求書を指す**消込明細**から辿る（ADR-0071）。
+    // 合算された入金は他の請求書の分も抱えているので、**入金ごと消さずにこの行だけ外す**
+    var rls = new ModuleSearcher<ReceiptLine>();
+    rls.AddEquals(l => l.InvoiceRef.Value, this.Id.Value);
+    foreach (var lrow in rls.Execute())
     {
-        var r = (Receipt)row;
+        var rl = (ReceiptLine)lrow;
         var js = new ModuleSearcher<JournalEntry>();
         js.AddEquals(e => e.SourceType.Value, "receipt");
-        js.AddEquals(e => e.SourceId.Value, r.Id.Value);
-        if (js.Execute().Count > 0) { continue; }
-        var ok = r.Delete();
-        if (ok != true) { Toaster.Warn("未確定の入金予定の削除に失敗しました（入金一覧から手動で削除してください）"); }
+        js.AddEquals(e => e.SourceId.Value, rl.ReceiptId.Value);
+        if (js.Execute().Count > 0) { continue; }   // 消込済みは触らない
+
+        var sib = new ModuleSearcher<ReceiptLine>();
+        sib.AddEquals(l => l.ReceiptId.Value, rl.ReceiptId.Value);
+        var sibCount = sib.Execute().Count;
+
+        var rs = new ModuleSearcher<Receipt>();
+        rs.AddEquals(e => e.Id.Value, rl.ReceiptId.Value);
+        var found = rs.ExecuteFirstOrDefault();
+        if (found == null) { continue; }
+        var r = (Receipt)found;
+
+        if (sibCount <= 1)
+        {
+            var ok = r.Delete();   // 明細もトリガで消える（ddl/780）
+            if (ok != true) { Toaster.Warn("未確定の入金予定の削除に失敗しました（入金一覧から手動で削除してください）"); }
+            continue;
+        }
+        var restAmount = (r.Amount.Value ?? 0) - (rl.Amount.Value ?? 0);
+        if (rl.Delete() != true)
+        {
+            Toaster.Warn("合算入金から消込明細を外せませんでした（入金一覧から手動で直してください）");
+            continue;
+        }
+        r.Amount.Value = restAmount;
+        if (r.Submit() != true) { Toaster.Warn("合算入金の金額更新に失敗しました（入金一覧から手動で直してください）"); }
     }
 }
 

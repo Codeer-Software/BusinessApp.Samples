@@ -27,11 +27,8 @@ ledger AS (
                   AND date(e.entry_date) >= (SELECT sd FROM origin)), 0) AS bal
 ),
 settled AS (
-  SELECT r.invoice_id AS inv, SUM(r.amount) AS received
-  FROM receipts r
-  WHERE EXISTS (SELECT 1 FROM journal_entries je
-                WHERE je.source_type = 'receipt' AND je.source_id = r.id)
-  GROUP BY r.invoice_id
+  -- 集計はビュー v_invoice_received（ddl/770）。入金は 1 件で複数の請求書に消し込める（ADR-0071）
+  SELECT invoice_id AS inv, received FROM v_invoice_received
 ),
 listed AS (
   SELECT SUM(CASE WHEN i.status = 'paid' THEN 0

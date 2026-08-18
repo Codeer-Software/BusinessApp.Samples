@@ -11,9 +11,34 @@ FROM receipts r
 WHERE r.amount IS NULL OR r.amount <= 0
 
 UNION ALL
-SELECT '請求書が未設定', r.id, r.receipt_date, NULL, r.method, NULL
+-- 消込明細（receipt_lines）が入金の正。ヘッダの invoice_id は移行の名残で使わない（ADR-0071）
+SELECT '消込明細が無い', r.id, r.receipt_date, NULL, r.method, NULL
 FROM receipts r
-WHERE r.invoice_id IS NULL
+WHERE NOT EXISTS (SELECT 1 FROM receipt_lines rl WHERE rl.receipt_id = r.id)
+
+UNION ALL
+SELECT '消込明細の合計が入金額と一致しない', r.id, r.receipt_date, NULL, r.method,
+       CAST(COALESCE(r.amount, 0) - (SELECT SUM(rl.amount) FROM receipt_lines rl
+                                     WHERE rl.receipt_id = r.id) AS TEXT)
+FROM receipts r
+WHERE EXISTS (SELECT 1 FROM receipt_lines rl WHERE rl.receipt_id = r.id)
+  AND COALESCE(r.amount, 0) <> (SELECT SUM(rl.amount) FROM receipt_lines rl WHERE rl.receipt_id = r.id)
+
+UNION ALL
+SELECT '消込明細の金額が正でない', r.id, r.receipt_date, rl.invoice_id, r.method, CAST(rl.amount AS TEXT)
+FROM receipt_lines rl JOIN receipts r ON r.id = rl.receipt_id
+WHERE rl.amount IS NULL OR rl.amount <= 0
+
+UNION ALL
+-- 1 入金の明細は同一取引先の請求書に限る（ADR-0071。売掛金の補助元帳が取引先単位で合わなくなる）
+SELECT '1 入金の明細が複数の取引先にまたがる', r.id, r.receipt_date, NULL, r.method,
+       CAST((SELECT COUNT(DISTINCT i.partner_id) FROM receipt_lines rl2
+             JOIN invoices i ON i.id = rl2.invoice_id
+             WHERE rl2.receipt_id = r.id) AS TEXT)
+FROM receipts r
+WHERE (SELECT COUNT(DISTINCT i.partner_id) FROM receipt_lines rl2
+       JOIN invoices i ON i.id = rl2.invoice_id
+       WHERE rl2.receipt_id = r.id) > 1
 
 UNION ALL
 SELECT '相殺入金に相殺先が無い', r.id, r.receipt_date, r.invoice_id, r.method, NULL

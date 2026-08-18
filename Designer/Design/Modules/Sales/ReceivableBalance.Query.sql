@@ -13,12 +13,11 @@
 -- 未確定入金＝入金予定が自動作成される（ADR-0032）ため、単純合計にすると発行しただけの
 -- 請求書が「入金済・残額 0」に見え、既定フィルタ（入金済を除く）から消える（改善候補 A-2）。
 -- 「確定済み」の表現は journal_entries(source_type='receipt', source_id) の存在（ReceiptList と同じ流儀）
+-- 入金の消込額はビュー **v_invoice_received**（ddl/770）から引く。
+-- 入金は 1 件で複数の請求書に消し込めるので（ADR-0071）、`receipts.invoice_id` は当てにならない。
+-- 同じ式が 6 か所に複製されていたのを 1 本に畳んである。
 WITH rc AS (
-  SELECT r.invoice_id AS invoice_id, SUM(r.amount) AS received
-  FROM receipts r
-  WHERE EXISTS (SELECT 1 FROM journal_entries je
-                WHERE je.source_type = 'receipt' AND je.source_id = r.id)
-  GROUP BY r.invoice_id
+  SELECT invoice_id, received FROM v_invoice_received
 ),
 base AS (
   SELECT
