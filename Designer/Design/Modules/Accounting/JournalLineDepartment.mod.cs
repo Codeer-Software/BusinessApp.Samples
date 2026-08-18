@@ -154,7 +154,10 @@ void BackToEntry()
 {
     if (TargetEntryId.Value == null)
     {
-        NavigationService.NavigateTo(NavigationService.GetModuleUrl("JournalEntryBoard"));
+        // 戻り先は **3 フレームすべてに登録されている `JournalEntry`** にする（BUG-0071）。
+        // `JournalEntryBoard` は会計フレームの着地画面で、購買・営業フレームには登録が無い。
+        // そちらへ飛ばすと URL だけ変わって**中身が空**になる（CLB-013 の典型症状）。
+        NavigationService.NavigateTo(NavigationService.GetModuleUrl("JournalEntry"));
         return;
     }
     NavigationService.NavigateTo(NavigationService.GetModuleDataUrl("JournalEntry", $"{TargetEntryId.Value}"));
