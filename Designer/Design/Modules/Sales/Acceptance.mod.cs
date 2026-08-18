@@ -248,11 +248,24 @@ void DeleteAcceptance_OnClick()
 // 各行の検収金額には「その受注明細の未検収残額（受注明細額 − 確定済み検収額の累計）」を入れる。
 // 初回検収では残額＝受注明細の全額。分割検収の 2 回目以降は残額が入り、うっかり全額の再計上を防ぐ。
 // 摘要・数量・単位・単価・税区分は受注明細のスナップショット（画面では読み取り専用）。
+
+// 明細を全消しする（BUG-0238）。
+// **`Lines.DeleteAllRows()` は使わない**——新規作成中に受注を選び直すと、
+// まだ保存していない行（id が `@temporary:guid`）まで「削除する行」として保存に回り、
+// 保存時に `The input string '@temporary:...' was not in a correct format.` で落ちる。
+// 1 行ずつ `DeleteRow` する形は仕訳の税行削除（`JournalEntry.RestoreInputState`）で実績がある
+void ClearLines()
+{
+    var rows = new List<object>();
+    foreach (var row in Lines.Rows) { rows.Add(row); }
+    foreach (var r in rows) { Lines.DeleteRow(r); }
+}
+
 void SalesOrderRef_OnDataChanged()
 {
     if (SalesOrderRef.Value == null)
     {
-        Lines.DeleteAllRows();
+        ClearLines();
         RecalcFromLines();
         UpdateOrderProgress();
         return;
@@ -263,7 +276,7 @@ void SalesOrderRef_OnDataChanged()
     ls.OrderBy(l => l.LineNo.Value);
     var srcLines = ls.Execute();
 
-    Lines.DeleteAllRows();
+    ClearLines();
     if (srcLines.Count > 0)
     {
         Lines.AddRows(srcLines.Count);
