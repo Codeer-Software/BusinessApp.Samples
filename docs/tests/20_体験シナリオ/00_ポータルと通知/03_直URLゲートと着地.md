@@ -3,8 +3,8 @@ title: 体験シナリオ ポータル-03: 直 URL ゲートと着地（フレ�
 status: current
 scope: ポータル・通知
 audience: [テスト, 開発]
-updated: 2026-08-11
-verified: 2026-08-11
+updated: 2026-08-19
+verified: 2026-08-19
 modules: []
 verifies: [Shell/PortalHome, Shell/NotificationCenter, Expense/MyApplication, Expense/ApprovalInbox, Expense/ExpenseSettlementQueue, Timesheet/TimeEntry, Timesheet/TimeEntryAdmin, Sales/Quote, Sales/Invoice, Accounting/JournalEntryBoard, Purchasing/VendorInvoice, Management/BudgetVsActual, MasterBusiness/Partner, MasterSystem/AppUser]
 screens: []
@@ -56,7 +56,14 @@ related: []
 
 ## ステップ 1: 経理で「入れる URL」を全部叩く（soumu_bucho）
 
-**soumu_bucho** でログインし、上表の 2〜13 のうち**システム管理以外の全 URL**を順に直接入力する（soumu_bucho は経理機能＋承認者＋経費・工数フラグ保有なので 2〜13 全部に入れる）。
+**soumu_bucho** でログインし、上表の 2〜13 を順に直接入力する。
+soumu_bucho は**経理機能＋承認者＋経費・工数フラグ**の保有者なので、
+**`/SalesStaff`（7）と `/MasterAdmin`（14）を除く 11 本**に入れる。
+
+> **`/SalesStaff` に入れないのは正しい。** 営業担当用のフレームで、門番は**営業機能フラグ**。
+> 経理は請求・入金を扱う `/SalesBilling`（8）の側に入る——見積・受注・検収は営業の仕事、
+> という部品の分け方（ADR-0040/0041）がそのまま URL の門番に出ている。
+> **2026-08-19 までこの文書は「2〜13 全部に入れる」と書いていたが、実機で入れないことを確認して直した。**
 
 - **期待結果**: それぞれ上表の「着地する画面」がいきなり開く。「トップ」「ホーム画面」のような中間ページは存在しない。
 - **確認ポイント**: 着地した画面のサイドバーで、該当リンクがアクティブ表示（現在地ハイライト）になっている。
@@ -99,6 +106,8 @@ related: []
 
 1. **通知だけセグメント名が違う**: `/Main/Notification` を直接入力 → 通知センターが開く。画面を実現しているモジュール名は `NotificationCenter` だが、URL セグメントは `Notification`。**モジュール名 = URL とは限らない**唯一の例外。
 2. **旧 /Top 規約の廃止**: `/ExpenseStaff/Top` のような旧形式 URL を入力 → 業務画面には着地しない（該当セグメントはもう存在しない）。古いブックマークやドキュメントの /Top 表記は、すべて素の `/ExpenseStaff` に読み替える。
+   **実機の見え方（2026-08-19）**: サイドバーだけが出て**本文が真っ白**になる。
+   エラーも案内も出ないので、古いブックマークを踏んだ人は理由が分からない（**BUG-0415**）。
 
 ## つまずいたときは
 
