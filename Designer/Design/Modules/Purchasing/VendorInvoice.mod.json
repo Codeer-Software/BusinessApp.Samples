@@ -653,6 +653,16 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
+      "Text": "部門",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "ExpenseAccount",
+      "OnClick": "",
+      "Name": "DepartmentRefLabel",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
       "Text": "税区分",
       "Icon": "",
       "Style": "Default",
@@ -1438,6 +1448,30 @@
                   "RightColor": "",
                   "BottomColor": ""
                 },
+                "CanResize": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "DepartmentRefLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 154,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "VerticalAlignment": "Middle",
                 "CanResize": false,
                 "Border": "None"
               },
