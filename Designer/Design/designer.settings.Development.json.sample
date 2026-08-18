@@ -1,5 +1,6 @@
+// designer.settings.Development.json の雛形（セットアップ: このファイルを designer.settings.Development.json に
+// コピーし、<REPO_ROOT> をリポジトリ絶対パスに置換する。実ファイルは Git 追跡外 — 経緯: docs/decisions/0025）
 {
-  "_README": "この雛形を designer.settings.Development.json にコピーし、<REPO_ROOT> をリポジトリの絶対パスに置換する。実ファイルは Git 追跡外（経緯: docs/decisions/0025）。【重要】このファイルに // コメントを書かないこと——JSON として不正になり、接続が黙って失敗したうえで designcheck が『テーブルが存在しません』を全モジュール分報告する（2026-08-18 実測 73 件）。注意書きはこの _README のような未知キーに書けば無視される。セットアップ手順の正典は LocalData/README.md。",
   "ConnectionStrings": {
     "BusinessAppSQLite": "Data Source=<REPO_ROOT>\\LocalData\\db\\business-app_v1.db;"
   },

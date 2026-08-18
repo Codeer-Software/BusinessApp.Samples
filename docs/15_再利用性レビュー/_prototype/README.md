@@ -16,7 +16,7 @@ related: [../README.md, ../03_改善提案.md]
 
 | ファイル | 用途 |
 |---|---|
-| `check_db_dangling.py <db>` | **検査**: DB のビュー・トリガが存在しないテーブルを参照していないか。部品削除後の必須チェック。現行 DB で 0 件（誤検出なし）を確認済み |
+| `check_db_dangling.py [db]` | **検査**: DB のビュー・トリガが存在しないテーブルを参照していないか。部品削除後の必須チェック。引数を省略すると `LocalData/db/business-app_v1.db` を見る。現行 DB で 0 件（誤検出なし）／テーブルを 1 本落としたコピーで正しく 1 件検出、を確認済み。**このツールだけは正式化を提案している**（[03_改善提案 P7](../03_改善提案.md#p7)） |
 | `deps_json.py` | モジュール JSON の部品間参照（`ModuleName`/`Module`/`TopPageModule`/`ModuleUrlSegment`） |
 | `deps_script.py` | スクリプト `.mod.cs` の部品間**型参照**（`new X()` / `<X>` / `as X` / キャスト） |
 | `deps_sql.py` | クエリ SQL の部品間テーブル参照 |

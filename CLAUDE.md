@@ -114,7 +114,6 @@ Fable が**自分でドキュメントを作成・管理**する。計画・仕�
 | デザイン読込妥当性 | `designcheck` CLI | 作成・編集の都度。`findingCount` が 0 になるまで直す。詳細は `Designer/ClaudeCodeForDesigner/CLAUDE.md` |
 | DB（DDL・投入・確認） | `sql` CLI | モジュールを作ったらテーブルも用意する。主キーは INTEGER 自動採番が原則 |
 | 稼働アプリへの反映（デプロイ） | **`Designer/tools/deploy.ps1` を実行**（`Designer/Design/` 一式を zip 化 → `LocalData\designs\App.zip` に配置） | `FileWatcher` が `*.zip` を検知して hot-reload（GUI「送信」の代替）。zip 内のパス区切りは `\`（デザイナ独自の詰め方・deploy.ps1 が再現） |
-| DB オブジェクトの参照切れ | `python Designer/tools/check_db_dangling.py`（error 0 が期待値） | ビュー・トリガが存在しないテーブルを参照していないか。**designcheck は DB の中を見ない**ため、テーブルを消す／改名する回は必ず流す（部品を外すと基盤マスタのトリガが壊れる実例: `docs/15_再利用性レビュー/`） |
 | ドキュメント規約 | `python Designer/tools/lint_docs.py`（error 0 が期待値）。`--impact HEAD~1` で影響する体験シナリオ、`--stale` で腐った台本、`--stats` で指標 | 文書を触った回・機能を変えた回に流す。規約は `docs/00_ドキュメント規約.md` |
 | 画面・挙動 | サーバ起動（`http://localhost:5085`）→ ブラウザでスクショ／操作 | `designcheck` で拾えない意味的バグ（合計計算・状態による出し分け等）を実際に見て潰す |
 
