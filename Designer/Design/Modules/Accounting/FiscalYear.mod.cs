@@ -1,6 +1,7 @@
 // FiscalYear.mod.cs — 会計年度
 // 責務: 新規年度の既定値設定 / 期首日から12ヶ月の月次期間 (FiscalPeriod) の自動生成 /
-//       翌期繰越の実行と**その陳腐化の表示** / 年度の締めと解除（ADR-0068）。
+//       翌期繰越の実行と**その陳腐化の表示** / 年度の締めと解除（ADR-0068）/
+//       仕掛品（未成業務支出金）の期末振替と翌期首の振戻（ADR-0072）。
 
 void Detail_OnAfterInit()
 {
@@ -10,6 +11,7 @@ void Detail_OnAfterInit()
     }
     UpdateOpeningTotal();
     UpdateCarryOverStatus();
+    UpdateWipStatus();
     UpdateYearButtons();
 }
 
@@ -322,4 +324,304 @@ void GeneratePeriods_OnClick()
         p.Status.Value = "open";
         i = i + 1;
     }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 仕掛品（未成業務支出金）の期末振替（ADR-0072・BUG-0016）
+//
+// 受託開発では、期をまたぐ案件の原価が期末時点で発生済みなのに売上はまだ立っていない
+// （検収が翌期）。この原価を仕掛品へ振り替えないと、当期の損益が過小・翌期が過大になる。
+//
+// 洗い替え方式にする。期末に「借方 仕掛品 / 貸方 仕掛品振替高」を起こし、翌期首に同額を戻す。
+// 残高を積み上げる方式にしないのは、前期にいくら計上したかを持ち続ける必要があり、
+// 翌期繰越（ADR-0068）で問題になった陳腐化と同じ罠を新しく作ってしまうから。
+//
+// 対象の判定と金額はビュー（Designer/ddl/720）に置く。画面・仕訳生成・不変条件検査が
+// 同じものを読む（ADR-0060）。
+// ───────────────────────────────────────────────────────────────────────────
+
+// 期末振替の状態を表示し、ボタンの出し分けを決める
+void UpdateWipStatus()
+{
+    WipStatusLabel.Text = "";
+    WipStatusLabel.Color = "";
+    WipTransferButton.IsVisible = !this.IsNewData;
+    WipCancelButton.IsVisible = false;
+    WipHeaderLabel.IsVisible = !this.IsNewData;
+    if (this.IsNewData || this.Id.Value == null) return;
+
+    var st = FindWipStatus();
+    if (st == null) return;
+
+    var computed = st.ComputedAmount.Value ?? 0;
+    var posted = st.PostedAmount.Value ?? 0;
+    var postedEntries = st.PostedEntries.Value ?? 0;
+    var reversalEntries = st.ReversalEntries.Value ?? 0;
+    var projects = st.ProjectCount.Value ?? 0;
+    WipCancelButton.IsVisible = postedEntries > 0;
+
+    if (postedEntries == 0)
+    {
+        if (computed <= 0)
+        {
+            WipStatusLabel.Text = "仕掛品の振替: 対象なし（当期の原価が付いた未検収の受託案件がありません）";
+            WipStatusLabel.Color = "#6c757d";
+            return;
+        }
+        WipStatusLabel.Text = $"仕掛品の振替: 未実行（対象 {projects} 案件・合計 {computed:#,0} 円）。「仕掛品を期末振替」を押すと決算整理仕訳を起票し、翌期首に振り戻します";
+        WipStatusLabel.Color = "#6c757d";
+        return;
+    }
+    if (posted != computed)
+    {
+        WipStatusLabel.Text = $"⚠ 仕掛品の振替: 起票済み {posted:#,0} 円に対し、いま計算すると {computed:#,0} 円です（振替の後にこの年度の伝票か工数が動きました）。「仕掛品を期末振替」を押し直してください";
+        WipStatusLabel.Color = "#dc3545";
+        return;
+    }
+    var reversalText = (reversalEntries > 0) ? "・翌期首に振戻済み" : "・⚠ 翌期首の振戻がありません";
+    WipStatusLabel.Text = $"仕掛品の振替: 済み（{projects} 案件・{posted:#,0} 円{reversalText}）";
+    WipStatusLabel.Color = (reversalEntries > 0) ? "#198754" : "#dc3545";
+}
+
+WipStatus FindWipStatus()
+{
+    var s = new ModuleSearcher<WipStatus>();
+    var rows = s.Execute();
+    foreach (var r in rows)
+    {
+        var st = (WipStatus)r;
+        if ($"{st.FiscalYearId.Value}" == $"{this.Id.Value}") return st;
+    }
+    return null;
+}
+
+void WipTransfer_OnClick()
+{
+    if (this.IsNewData) { Toaster.Error("年度を保存してから実行してください"); return; }
+    if (CurrentUser.HasAccountingAccess.Value != true)
+    {
+        Toaster.Error("仕掛品の期末振替は経理のみ実行できます");
+        return;
+    }
+
+    var st = FindWipStatus();
+    if (st == null) { Toaster.Error("仕掛品の状態を取得できませんでした"); return; }
+    var computed = st.ComputedAmount.Value ?? 0;
+    var projects = st.ProjectCount.Value ?? 0;
+    if (computed <= 0)
+    {
+        Toaster.Info("仕掛品に振り替える対象がありません（当期の原価が付いた未検収の受託案件がありません）");
+        return;
+    }
+
+    // 翌期が無いと振り戻せない。**期末だけ起こして振戻を忘れる**と翌期の原価が永久に消えるので、
+    // 片方だけ起票することを許さない（翌期繰越と同じ前提条件）
+    var ns = new ModuleSearcher<FiscalYear>();
+    ns.AddGreaterThan(e => e.StartDate.Value, EndDate.Value);
+    ns.OrderBy(e => e.StartDate.Value);
+    ns.Limit(1);
+    var next = ns.ExecuteFirstOrDefault();
+    if (next == null)
+    {
+        Toaster.Error("翌期の会計年度がありません。先に翌期を作成してください（期末の振替と翌期首の振戻は必ず対で起票します）");
+        return;
+    }
+    var typedNext = (FiscalYear)next;
+
+    var already = (st.PostedEntries.Value ?? 0) > 0;
+    var head = already ? "仕掛品の期末振替を打ち直します（既存の振替と振戻を削除して作り直します）。" : "仕掛品の期末振替を起票します。";
+    var answer = MessageBox.Show(
+        head + $"対象 {projects} 案件・合計 {computed:#,0} 円。{Name.Value} の期末に「借方 仕掛品 / 貸方 仕掛品振替高」、{typedNext.Name.Value} の期首に同額の振戻を起票します。よろしいですか？",
+        "実行", "キャンセル");
+    if (answer != "実行") return;
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+
+    // 打ち直しは「消してから作る」。洗い替え方式なので、残っている伝票に足し込まない
+    if (already && !DeleteWipJournals(true)) return;
+
+    if (!PostWipJournals(typedNext)) return;
+    UpdateWipStatus();
+    Toaster.Success($"仕掛品の期末振替を起票しました（{projects} 案件・{computed:#,0} 円）");
+}
+
+void WipCancel_OnClick()
+{
+    if (this.IsNewData) return;
+    if (CurrentUser.HasAccountingAccess.Value != true)
+    {
+        Toaster.Error("仕掛品の期末振替の取消は経理のみ実行できます");
+        return;
+    }
+    var answer = MessageBox.Show(
+        "仕掛品の期末振替を取り消します（期末の振替仕訳と翌期首の振戻仕訳を削除します）。よろしいですか？",
+        "取り消す", "やめる");
+    if (answer != "取り消す") return;
+
+    using var suspend = this.SuspendNotifyStateChanged();
+    using var loading = LoadingService.StartLoading(0);
+    if (!DeleteWipJournals(true)) return;
+    UpdateWipStatus();
+    Toaster.Success("仕掛品の期末振替を取り消しました");
+}
+
+// 期末の振替仕訳と翌期首の振戻仕訳を削除する。
+// 締め済みの期間に入っている伝票は消さない（ADR-0070: 取消の期限は「締め」に置く）
+bool DeleteWipJournals(bool showError)
+{
+    var targets = FindWipJournals();
+    foreach (var je in targets)
+    {
+        if (IsPeriodClosedOn(je.EntryDate.Value))
+        {
+            if (showError)
+            {
+                Toaster.Error($"伝票 No.{je.JournalNo.Value}（{je.EntryDate.Value:yyyy/MM/dd}）の期間は締め済みです。締めを解除してから取り消すか、当期に反対仕訳を起こしてください");
+            }
+            return false;
+        }
+    }
+    foreach (var je in targets)
+    {
+        var ls = new ModuleSearcher<JournalLine>();
+        ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
+        foreach (var row in ls.Execute())
+        {
+            var l = (JournalLine)row;
+            if (l.Delete() != true) { if (showError) { Toaster.Error("仕訳明細の削除に失敗しました"); } return false; }
+        }
+        if (je.Delete() != true) { if (showError) { Toaster.Error("仕訳の削除に失敗しました"); } return false; }
+    }
+    return true;
+}
+
+List<JournalEntry> FindWipJournals()
+{
+    var result = new List<JournalEntry>();
+    var s = new ModuleSearcher<JournalEntry>();
+    s.AddIn(e => e.SourceType.Value, "wip", "wip_reversal");
+    s.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    foreach (var row in s.Execute()) { result.Add((JournalEntry)row); }
+    return result;
+}
+
+// その日付の月次期間が締め済みかどうか（月末日は辞書順比較で外すので月初日で引く）
+bool IsPeriodClosedOn(var d)
+{
+    if (d == null) return false;
+    var monthFirst = new DateOnly(d.Year, d.Month, 1);
+    var ps = new ModuleSearcher<FiscalPeriod>();
+    ps.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
+    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);
+    var period = ps.ExecuteFirstOrDefault();
+    if (period == null) return false;
+    return ((FiscalPeriod)period).Status.Value == "closed";
+}
+
+// 期末の振替と翌期首の振戻を対で起票する
+bool PostWipJournals(FiscalYear next)
+{
+    var wipAcc = FindAccountByRole("wip_asset");
+    if (wipAcc == null) { Toaster.Error("仕掛品の科目が見つかりません（科目マスタの「役割」に wip_asset を設定してください）"); return false; }
+    var transferAcc = FindAccountByRole("wip_transfer");
+    if (transferAcc == null) { Toaster.Error("仕掛品振替高の科目が見つかりません（科目マスタの「役割」に wip_transfer を設定してください）"); return false; }
+
+    var rows = FindWipCandidates();
+    if (rows.Count == 0) { Toaster.Error("仕掛品に振り替える対象がありません"); return false; }
+
+    if (IsPeriodClosedOn(EndDate.Value))
+    {
+        Toaster.Error("期末の月次期間が締め済みです。締めを解除してから実行してください");
+        return false;
+    }
+    if (IsPeriodClosedOn(next.StartDate.Value))
+    {
+        Toaster.Error($"{next.Name.Value} の期首の月次期間が締め済みです。振戻を起票できないため中止しました");
+        return false;
+    }
+
+    if (!PostOneWipJournal(this, EndDate.Value, "wip", $"仕掛品振替（期末）{Name.Value}", wipAcc, transferAcc, rows, false)) return false;
+    if (!PostOneWipJournal(next, next.StartDate.Value, "wip_reversal", $"仕掛品振戻（期首）{Name.Value}分", wipAcc, transferAcc, rows, true)) return false;
+    return true;
+}
+
+// reverse=false: 借方 仕掛品 / 貸方 仕掛品振替高（期末）
+// reverse=true : 借方 仕掛品振替高 / 貸方 仕掛品（翌期首の振戻）
+bool PostOneWipJournal(FiscalYear fy, var entryDate, string sourceType, string description,
+                       Account wipAcc, Account transferAcc, List<WipCandidate> rows, bool reverse)
+{
+    var nextNo = new JournalEntry().NextJournalNo(fy.Id.Value);
+    var je = new JournalEntry();
+    je.EntryDate.Value = entryDate;
+    je.EntryType.Value = "adjust";
+    je.Description.Value = description;
+    je.Status.Value = "posted";
+    je.JournalNo.Value = nextNo;
+    je.FiscalYearRef.Value = fy.Id.Value;
+    je.SourceType.Value = sourceType;
+    // 振戻は翌期の伝票だが、**どの年度の振替に対する戻しか**を指すので source_id は前期の年度 id
+    je.SourceId.Value = this.Id.Value;
+    je.Lines.AddRows(rows.Count * 2);
+
+    var i = 0;
+    var lineNo = 0;
+    foreach (var lr in je.Lines.Rows)
+    {
+        var l = (JournalLine)lr;
+        var c = rows[i / 2];
+        var isFirstOfPair = (i % 2 == 0);
+        lineNo = lineNo + 1;
+        l.LineNo.Value = lineNo;
+        l.Amount.Value = c.WipAmount.Value ?? 0;
+        l.InputAmount.Value = c.WipAmount.Value ?? 0;
+        l.TaxInputMode.Value = "none";
+        l.Description.Value = $"{c.ProjectCode.Value} {c.ProjectName.Value}";
+        l.ProjectRef.Value = c.ProjectId.Value;
+        if (c.DepartmentId.Value != null) { l.Department.Value = c.DepartmentId.Value; }
+        if (isFirstOfPair)
+        {
+            l.Dc.Value = "D";
+            l.Account.Value = reverse ? transferAcc.Id.Value : wipAcc.Id.Value;
+        }
+        else
+        {
+            l.Dc.Value = "C";
+            l.Account.Value = reverse ? wipAcc.Id.Value : transferAcc.Id.Value;
+        }
+        i = i + 1;
+    }
+    // 決算整理なので消費税の対象外（原価の付け替えであって取引ではない）
+    je.MarkAllLinesOutOfScope();
+    je.FillMissingDepartments();
+    if (je.Submit() != true)
+    {
+        Toaster.Error($"{description} の起票に失敗しました");
+        return false;
+    }
+    return true;
+}
+
+List<WipCandidate> FindWipCandidates()
+{
+    var result = new List<WipCandidate>();
+    var s = new ModuleSearcher<WipCandidate>();
+    foreach (var row in s.Execute())
+    {
+        var c = (WipCandidate)row;
+        if ($"{c.FiscalYearId.Value}" != $"{this.Id.Value}") continue;
+        if ((c.WipAmount.Value ?? 0) <= 0) continue;
+        result.Add(c);
+    }
+    return result;
+}
+
+// 科目を役割で引く（コード直書きをしない。固定資産と同じ作法）
+Account FindAccountByRole(string role)
+{
+    var s = new ModuleSearcher<Account>();
+    s.AddEquals(e => e.AccountRole.Value, role);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return (Account)found;
 }
