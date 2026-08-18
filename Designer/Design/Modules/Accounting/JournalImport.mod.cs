@@ -434,7 +434,12 @@ void Import_OnClick()
     ResultLabel.Text = $"取込 {importedEntries} 伝票（{importedLines} 行）{statusNote} / スキップ {skippedGroups} 伝票{reasons} / 保存失敗 {failedGroups} / 解析不能行 {badLines} 行";
     if (importedEntries > 0)
     {
-        Toaster.Success($"{importedEntries} 伝票（{importedLines} 行）を取り込みました{statusNote}");
+        // **貼り付けたテキストを消す**（BUG-0070）。取込は冪等でなく、まとめて取り消す導線も無いので、
+        // 「成功したか確信が持てずもう一度押す」だけで**全伝票が二重計上**される。
+        // 結果ラベルは残すので何件入ったかは読める。もう一度取り込みたいなら貼り直す＝意思表示になる。
+        CsvText.Value = "";
+        Toaster.Success($"{importedEntries} 伝票（{importedLines} 行）を取り込みました{statusNote}。"
+            + "取り消す導線はありません（誤りは伝票ごとに訂正してください）。貼り付け欄は二重取込を防ぐため空にしました");
     }
     else
     {
