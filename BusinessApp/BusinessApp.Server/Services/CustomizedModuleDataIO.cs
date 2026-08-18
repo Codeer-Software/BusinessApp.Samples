@@ -30,6 +30,7 @@ namespace BusinessApp.Server.Services
             var moduleDesign = _designData.Modules.Find(data.Name);
             if (moduleDesign == null) throw LowCodeException.Create("invalid design");
 
+            RequirePasswordOnAdd(moduleDesign, data);
             EnforcePasswordPolicy(moduleDesign, data);
             PasswordHashHelper.ApplyPasswordHash(moduleDesign, data);
             return await base.AddAsync(transactionId, moduleSubmitId, data);
@@ -43,6 +44,7 @@ namespace BusinessApp.Server.Services
 
             foreach (var data in datas)
             {
+                RequirePasswordOnAdd(moduleDesign, data);
                 EnforcePasswordPolicy(moduleDesign, data);
                 PasswordHashHelper.ApplyPasswordHash(moduleDesign, data);
             }
@@ -57,6 +59,27 @@ namespace BusinessApp.Server.Services
             EnforcePasswordPolicy(moduleDesign, data);
             PasswordHashHelper.ApplyPasswordHash(moduleDesign, data);
             await base.UpdateAsync(transactionId, moduleSubmitId, data);
+        }
+
+        /// <summary>
+        /// 新規作成のときだけパスワードを必須にする（BUG-0395）。
+        /// フィールドの `IsRequired` は「新規のときだけ」を表現できず、更新は空欄＝「変更しない」が正しい仕様なので、
+        /// 一律必須にすると既存ユーザーを保存できなくなる。**新規と更新を区別できるのはここ（Add / Update）だけ**なので、
+        /// ポリシー判定と同じ 1 点に置く。
+        /// パスワードを保存する（＝ハッシュ列を持つ）モジュールにだけ効かせる——
+        /// 画面だけのパスワード欄（自分のパスワード変更フォーム等）を巻き込まないため。
+        /// </summary>
+        static void RequirePasswordOnAdd(ModuleDesign moduleDesign, ModuleData data)
+        {
+            var passwordDesign = moduleDesign.Fields.OfType<PasswordFieldDesign>().FirstOrDefault();
+            if (passwordDesign == null) return;
+            if (!moduleDesign.Fields.OfType<Codeer.LowCode.Blazor.Extras.Designs.PasswordHashFieldDesign>()
+                    .Any(x => x.PasswordFieldName == passwordDesign.Name)) return;
+
+            data.Fields.TryGetValue(passwordDesign.Name, out var passwordData);
+            if (!string.IsNullOrEmpty((passwordData as PasswordFieldData)?.Value)) return;
+
+            throw LowCodeException.Create("パスワードを入力してください（新規作成では必須です。空のままだとログインできないユーザーになります）");
         }
 
         /// <summary>
