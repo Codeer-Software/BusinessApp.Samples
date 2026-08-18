@@ -32,17 +32,24 @@ cur_yr AS (
   WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime')
 ),
 cash_now AS (
+  -- 「いまの現預金」の 2 つの約束（2026-08-19）:
+  --   1. **対象科目は `accounts.is_cash_equivalent`**（BUG-0327）。科目コードを直書きしていた頃は
+  --      定期預金(1030) が予測から落ち、C/F 計算書（1000〜1099）と食い違っていた。
+  --      定期預金への振替が**予測では純減・C/F では増減 0**に見える
+  --   2. **今日までの仕訳だけを足す**（BUG-0328）。決算整理（3/31 付）や先日付の支払仕訳が
+  --      「いまの残高」に混ざると、**実在しない額**から予測が始まる
   SELECT
     COALESCE((SELECT SUM(ob.balance)
               FROM opening_balances ob JOIN accounts a ON a.id = ob.account_id
-              WHERE a.code IN ('1000', '1010', '1020')
+              WHERE a.is_cash_equivalent = 1
                 AND ob.fiscal_year_id IN (SELECT id FROM cur_yr)), 0)
     +
     COALESCE((SELECT SUM(CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END)
               FROM journal_lines l
               JOIN journal_entries e ON e.id = l.journal_entry_id
               JOIN accounts a ON a.id = l.account_id
-              WHERE e.status = 'posted' AND a.code IN ('1000', '1010', '1020')
+              WHERE e.status = 'posted' AND a.is_cash_equivalent = 1
+                AND date(e.entry_date) <= date('now', 'localtime')
                 AND e.fiscal_year_id IN (SELECT id FROM cur_yr)), 0) AS cash
 ),
 -- 売上の既定税区分（税制マスタで設定: tax_categories.default_for='sales'）に紐づく税率
@@ -91,6 +98,7 @@ rec_in AS (
                       AND date(iv.billing_month) = mm.month_first)
 ),
 ap_now AS (
+  -- 未払金も「今日まで」（BUG-0328）。先日付の未払計上を含めると当月の出金が水増しされる
   SELECT
     COALESCE((SELECT SUM(-ob.balance)
               FROM opening_balances ob JOIN accounts a ON a.id = ob.account_id
@@ -101,6 +109,7 @@ ap_now AS (
               JOIN journal_entries e ON e.id = l.journal_entry_id
               JOIN accounts a ON a.id = l.account_id
               WHERE e.status = 'posted' AND a.code = '2020'
+                AND date(e.entry_date) <= date('now', 'localtime')
                 AND e.fiscal_year_id IN (SELECT id FROM cur_yr)), 0) AS ap
 ),
 exp_now AS (

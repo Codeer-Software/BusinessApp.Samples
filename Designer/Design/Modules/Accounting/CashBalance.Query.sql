@@ -42,6 +42,9 @@ SELECT
              JOIN journal_entries e ON e.id = l.journal_entry_id
             WHERE l.account_id = a.id
               AND e.status = 'posted'
+              -- **今日までの仕訳だけ**（BUG-0414）。画面は「いま帳簿上いくらあるか」を名乗るので、
+              -- 先日付の支払仕訳を引いた額を出すと、実際より少ない残高で起票の判断をさせてしまう
+              AND date(e.entry_date) <= date('now', 'localtime')
               AND e.fiscal_year_id IN (SELECT id FROM yr)), 0) AS book_balance
 FROM accounts a
 WHERE a.is_cash_equivalent = 1

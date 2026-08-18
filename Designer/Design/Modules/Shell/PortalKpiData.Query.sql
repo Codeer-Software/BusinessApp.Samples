@@ -17,6 +17,9 @@ bs AS (
     + COALESCE((SELECT SUM(CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END)
                 FROM journal_lines l JOIN journal_entries e ON e.id = l.journal_entry_id
                 WHERE e.status = 'posted' AND l.account_id = a.id
+                  -- **今日までの仕訳だけ**（BUG-0414）。先日付の支払仕訳や決算整理（3/31 付）を
+                  -- 含めると「いまの現預金」が実在しない額になる。資金繰り予測（BUG-0328）と同じ約束
+                  AND date(e.entry_date) <= date('now', 'localtime')
                   AND e.fiscal_year_id IN (SELECT id FROM cur)), 0) AS bal
   FROM accounts a
 ),
