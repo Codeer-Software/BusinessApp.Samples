@@ -114,6 +114,10 @@ final AS (
     (SELECT cash FROM cash_now)
       + SUM(cash_in - cash_out) OVER (ORDER BY idx ROWS UNBOUNDED PRECEDING) AS ending
   FROM flows
+),
+-- 危険水域の閾値はマスタから引く（BUG-0249）。行が無い／0 なら従来どおり「マイナスのときだけ」になる
+alert_limit AS (
+  SELECT COALESCE((SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' LIMIT 1), 0) AS v
 )
 SELECT
   idx AS sort_no,
@@ -122,6 +126,11 @@ SELECT
   cash_in,
   cash_out,
   ending AS ending_cash,
-  CASE WHEN ending < 0 THEN '⚠ 資金ショート' ELSE '' END AS alert_mark
+  -- 2 段階にする。ショートしてから鳴る警告は「手を打つ」ために遅すぎる
+  CASE
+    WHEN ending < 0 THEN '⚠ 資金ショート'
+    WHEN (SELECT v FROM alert_limit) > 0 AND ending < (SELECT v FROM alert_limit) THEN '△ 資金が危険水域'
+    ELSE ''
+  END AS alert_mark
 FROM final
 ORDER BY idx

@@ -67,6 +67,7 @@ RULES = {
     "CLB-035": ("低", "LoadingService.StartLoading() が MessageBox.Show() より前にある"),
     "CLB-036": ("低", "自作 SQL の日付比較が date() で正規化されていない（warn 専用）"),
     "CLB-037": ("高", "DataWriteCondition が参照する列がその画面で未ロード（全項目が読み取り専用になる）"),
+    "CLB-038": ("高", "資金繰り SQL の複製（ポータル ⇄ 予測画面）が食い違っている"),
 }
 
 # 実装しなかったルール（黙って落とさず実行時に一覧表示する）
@@ -1675,6 +1676,56 @@ def rule_037(idx, add):
                         mod["name"], kind, lay_name or "(既定)", "/".join(missing)))
 
 
+def rule_038(idx, add):
+    """CLB-038: 資金繰り SQL の複製（PortalAlertData ⇄ CashFlowForecastData）が食い違っている。
+
+    プロジェクト固有の規則。この 2 本は共通 CTE（cash_now / inv_in / rec_in / ap_now / exp_now /
+    vend_out / sal_out / flows / cash_final）を逐語コピーで共有しており、片方だけ直すと
+    ポータルの「今後4ヶ月中 N ヶ月」と画面の警告行数が**黙ってずれる**（BUG-0257・ADR-0060）。
+    tasks/04 でビュー化して 1 か所に畳むまでの保険として、CTE 本文の一致を機械で見る。
+    """
+    import re as _re
+    a = None
+    b = None
+    for path, raw in idx.query_sql_files:
+        p = path.replace("\\", "/")
+        if p.endswith("Shell/PortalAlertData.Query.sql"):
+            a = (path, raw)
+        elif p.endswith("Management/CashFlowForecastData.Query.sql"):
+            b = (path, raw)
+    if a is None or b is None:
+        return
+
+    names = ["cash_now", "inv_in", "rec_in", "ap_now", "exp_now", "vend_out", "sal_out"]
+
+    def cte_body(text, name):
+        # "name AS (" から対応する括弧までを取り出す
+        m = _re.search(r"(?<![\w.])" + _re.escape(name) + r"\s+AS\s*\(", text, _re.I)
+        if not m:
+            return None
+        i = m.end() - 1
+        depth = 0
+        for j in range(i, len(text)):
+            if text[j] == "(":
+                depth += 1
+            elif text[j] == ")":
+                depth -= 1
+                if depth == 0:
+                    return _re.sub(r"\s+", " ", strip_sql_comments(text[i + 1:j])).strip()
+        return None
+
+    for name in names:
+        ba = cte_body(a[1], name)
+        bb = cte_body(b[1], name)
+        if ba is None or bb is None:
+            continue
+        if ba != bb:
+            add("CLB-038", SEV_ERROR, a[0], line_of(a[1], a[1].lower().find(name.lower())),
+                "資金繰り SQL の複製が食い違っている: CTE '{}' が "
+                "CashFlowForecastData.Query.sql と一致しない。"
+                "片方だけ直すとポータルと画面の警告件数が黙ってずれる（BUG-0257）".format(name))
+
+
 RULE_FUNCS = [
     ("CLB-001", rule_001), ("CLB-002", rule_002), ("CLB-003", rule_003), ("CLB-004", rule_004),
     ("CLB-005", rule_005), ("CLB-006", rule_006), ("CLB-007", rule_007), ("CLB-008", rule_008),
@@ -1685,7 +1736,7 @@ RULE_FUNCS = [
     ("CLB-025", rule_025), ("CLB-026", rule_026), ("CLB-027", rule_027), ("CLB-028", rule_028),
     ("CLB-029", rule_029), ("CLB-030", rule_030), ("CLB-031", rule_031), ("CLB-032", rule_032),
     ("CLB-033", rule_033), ("CLB-034", rule_034), ("CLB-035", rule_035), ("CLB-036", rule_036),
-    ("CLB-037", rule_037),
+    ("CLB-037", rule_037), ("CLB-038", rule_038),
 ]
 
 # 仕様書が warn 専用と明記しているルール（群に関わらず error にしない）

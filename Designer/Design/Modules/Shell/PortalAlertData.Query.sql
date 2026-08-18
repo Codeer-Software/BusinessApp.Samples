@@ -167,7 +167,14 @@ SELECT
   (SELECT count(*) FROM pay
     WHERE days_left >= 0 AND days_left <= (SELECT days FROM threshold)) AS pay_soon,
   (SELECT c FROM recv) AS receivable_overdue,
-  (SELECT count(*) FROM cash_final WHERE ending < 0) AS cash_alert_months,
+  -- 危険水域（BUG-0249）も数える。**CashFlowForecastData.Query.sql の alert_mark と同じ条件にすること**
+  -- （この 2 本は同じ計算の複製で、片方だけ直すと画面とポータルの件数が黙ってずれる＝BUG-0257。
+  --  食い違いは不変条件 `H01_資金繰り_予測とポータルの警告月数が一致する` が検出する）
+  (SELECT count(*) FROM cash_final
+    WHERE ending < 0
+       OR (COALESCE((SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' LIMIT 1), 0) > 0
+           AND ending < (SELECT amount FROM system_thresholds WHERE code = 'CASH_ALERT_BALANCE' LIMIT 1))
+  ) AS cash_alert_months,
   (SELECT count(*) FROM budget_alert) AS budget_alert_depts,
   -- 警告が出ている部門の ID リスト（カンマ区切り。非経理ユーザーの「自部門のみ表示」判定用・2026-08-06）
   (SELECT COALESCE(group_concat(department_id), '') FROM budget_alert) AS budget_alert_dept_ids,
