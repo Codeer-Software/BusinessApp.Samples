@@ -32,14 +32,27 @@ void UsedDate_OnDataChanged()
     ApplyAssetSuggestion(FindCategory(ExpenseCategoryRef.Value));
 }
 
-// 税区分を変えたとき: 消費税の対象外にしたなら手入力の「うち消費税」を捨てる
+// 税区分を変えたとき: 消費税の対象外にしたなら手入力の「うち消費税」を捨てる。
+// 税抜金額が変わるので少額資産の判定もやり直す（BUG-0184）
 void TaxCategory_OnDataChanged()
 {
-    if (IsTaxablePurchase()) return;
-    if (TaxAmount.Value == null || TaxAmount.Value <= 0) return;
-    var cleared = TaxAmount.Value;
-    TaxAmount.Value = null;
-    Toaster.Info($"消費税の対象外の税区分のため、「うち消費税」{cleared:#,0} 円をクリアしました");
+    // 人が選び直したら自動セットの痕跡を捨てる。以後この行では費目を変えても税区分を上書きしない
+    // （`ApplyCategoryDefaults` が自分で入れた直後もここを通るので、値が一致するときだけ痕跡を残す）
+    if (TaxCategoryAutoValue.Value != $"{TaxCategoryRef.Value}") { TaxCategoryAutoValue.Value = ""; }
+
+    if (!IsTaxablePurchase() && TaxAmount.Value != null && TaxAmount.Value > 0)
+    {
+        var cleared = TaxAmount.Value;
+        TaxAmount.Value = null;
+        Toaster.Info($"消費税の対象外の税区分のため、「うち消費税」{cleared:#,0} 円をクリアしました");
+    }
+    ApplyAssetSuggestion(FindCategory(ExpenseCategoryRef.Value));
+}
+
+// 「うち消費税」を変えたとき: 税抜金額が動くので少額資産の判定をやり直す（BUG-0184）
+void TaxAmount_OnDataChanged()
+{
+    ApplyAssetSuggestion(FindCategory(ExpenseCategoryRef.Value));
 }
 
 // 費目にひもづく既定の反映（税区分・不課税時のクリア・少額資産）
@@ -47,10 +60,24 @@ void ApplyCategoryDefaults(ExpenseCategory cat)
 {
     if (cat == null) return;
 
-    if (TaxCategoryRef.Value == null)
+    // **税区分は費目に追従する。人が手で選んだ税区分は、その行の費目が変わるまで保持する**（BUG-0182）。
+    // 旧実装は「税区分が空のときだけ既定を入れる」だったので、
+    // 費目「消耗品費」（課税仕入 10%）→ 費目「諸会費」（不課税）に直しても税区分が残り、
+    // **不課税の経費に仮払消費税が立った**（逆向きなら控除もれ）。
+    // 仕訳コアの BUG-0067 と同じ形なので、同じ直し方（自動セットの痕跡を控える）を採る。
+    // 控えは非 DB 項目（`DataOnlyFields` に登録済み——登録し忘れると CLB がロードせず修正が丸ごと無効になる）
+    var catKey = $"{cat.Id.Value}";
+    var autoFrom = TaxCategoryAutoFrom.Value ?? "";
+    var autoValue = TaxCategoryAutoValue.Value ?? "";
+    var current = $"{TaxCategoryRef.Value}";
+    var isUntouched = (TaxCategoryRef.Value == null) || (autoValue != "" && autoValue == current);
+
+    if (isUntouched && autoFrom != catKey)
     {
         TaxCategoryRef.Value = cat.DefaultTaxCategory.Value;
+        TaxCategoryAutoValue.Value = $"{cat.DefaultTaxCategory.Value}";
     }
+    TaxCategoryAutoFrom.Value = catKey;
 
     // 不課税・非課税の費目では手入力の消費税が仕訳に効かないので捨てる（ADR-0051）
     if (!IsTaxablePurchase() && TaxAmount.Value != null && TaxAmount.Value > 0)
@@ -73,11 +100,17 @@ void ApplyAssetSuggestion(ExpenseCategory cat)
         return;
     }
     var limit = GetThresholdAmountAt("SMALL_ASSET_EXPENSE", UsedDate.Value);
-    var amt = Amount.Value ?? 0;
+    // **判定は税抜で行う**（BUG-0184）。このアプリは税抜経理（仮払消費税を分離）なので、
+    // 少額減価償却資産の 10 万円判定も税抜が正しい（消費税法基本通達 11-4-1 の考え方）。
+    // 税込で判定していた頃は、税込 105,000 円（税抜 95,455 円）の備品が自動 ON になったうえで
+    // **台帳には税抜 95,455 円で登録される**——判定と登録の基準が食い違い、
+    // 本来その期に全額損金にできる 1 台が 4 年に分かれて償却されていた。
+    // 台帳登録側（`ExpenseRequestAccounting`）は最初から税抜なので、こちらを合わせる
+    var amt = NetAmountForAssetJudge();
     if (limit > 0 && amt >= limit && IsFixedAsset.Value != true)
     {
         IsFixedAsset.Value = true;
-        Toaster.Info($"金額 {amt:#,0} 円 ≧ 少額基準 {limit:#,0} 円のため固定資産計上対象にしました（承認後に固定資産台帳へ登録されます）");
+        Toaster.Info($"税抜金額 {amt:#,0} 円 ≧ 少額基準 {limit:#,0} 円のため固定資産計上対象にしました（承認後に固定資産台帳へ登録されます）");
     }
     // 金額を下げたときも戻す（BUG-0319）。上げるときだけ動いて下げるときに動かないと、
     // 一度でも基準を超えた行が**そのまま台帳に登録される**。
@@ -86,8 +119,44 @@ void ApplyAssetSuggestion(ExpenseCategory cat)
     else if (limit > 0 && amt < limit && IsFixedAsset.Value == true)
     {
         IsFixedAsset.Value = false;
-        Toaster.Info($"金額 {amt:#,0} 円 < 少額基準 {limit:#,0} 円になったので固定資産の指定を外しました（必要なら手で戻してください）");
+        Toaster.Info($"税抜金額 {amt:#,0} 円 < 少額基準 {limit:#,0} 円になったので固定資産の指定を外しました（必要なら手で戻してください）");
     }
+}
+
+// 少額資産の判定に使う税抜金額（BUG-0184）。
+// レシート記載の税額（手入力）があればそれを優先し、無ければ税区分の税率から内税計算する。
+// 課税仕入でない行は税が乗っていないので税込＝税抜。
+// **台帳へ登録する取得価額（`ExpenseRequestAccounting` の `gross - CalcLineTax`）と同じ式**にしてある
+int NetAmountForAssetJudge()
+{
+    var gross = Amount.Value ?? 0;
+    if (gross <= 0) return 0;
+    if (!IsTaxablePurchase()) return gross;
+
+    var manual = TaxAmount.Value ?? 0;
+    if (manual > 0 && manual < gross) { return gross - manual; }
+
+    decimal pct = FindTaxRatePercent();
+    if (pct == 0) return gross;
+    int tax = gross * pct / (100 + pct);
+    return gross - tax;
+}
+
+// この行の税区分に紐づく税率(%)。未設定・解決不能なら 0
+decimal FindTaxRatePercent()
+{
+    if (TaxCategoryRef.Value == null) return 0;
+    var s = new ModuleSearcher<TaxCategory>();
+    s.AddEquals(c => c.Id.Value, TaxCategoryRef.Value);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return 0;
+    var tcat = (TaxCategory)found;
+    if (tcat.Rate.Value == null) return 0;
+    var rs = new ModuleSearcher<TaxRate>();
+    rs.AddEquals(r => r.Id.Value, tcat.Rate.Value);
+    var foundRate = rs.ExecuteFirstOrDefault();
+    if (foundRate == null) return 0;
+    return ((TaxRate)foundRate).RatePercent.Value ?? 0;
 }
 
 // この行の税区分が課税仕入か

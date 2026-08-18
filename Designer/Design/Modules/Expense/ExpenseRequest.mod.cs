@@ -116,6 +116,19 @@ void ClearEntryFields(ExpenseRequestLine line)
 // 入力中の行を確定する。新規なら行番号を採番し、編集中なら既存の行番号を保つ
 void CommitEntry()
 {
+    // 状態ガード（BUG-0185）。**押せてしまう経路が実在した**——
+    // 入力欄の可視状態を決める `UpdateLineButtons()` は初期化と一覧の操作からしか呼ばれず、
+    // 「申請」や「実費確定」を押しても呼ばれない。画面遷移しない限り入力カードが残るので、
+    // 承認中・実費確定済みの申請に明細を足せてしまい、`RecalcFromLines()` がヘッダ合計を書き換える。
+    // 承認ルートは再解決されないので**承認済みの金額と実際の金額が乖離する**。
+    // 見た目（可視制御）と押せるかどうか（このガード）は別々に守る
+    if (!CanEditLines())
+    {
+        Toaster.Error("この申請はもう明細を編集できません（申請済み・精算処理中・実費確定済み）。画面を開き直して状態を確認してください");
+        UpdateLineButtons();
+        return;
+    }
+
     var line = EditingLine.ChildModule;
     if (line == null) { Toaster.Error("入力欄が用意されていません"); return; }
     if (!ValidateEntry(line)) return;
@@ -776,6 +789,11 @@ void OnApprovalFlowStatusChanged(string flowStatus)
 // ②行フィルタ導入後は「経理が自分の経費を自分で仕訳生成・精算できる」職務分掌の穴になっていた（BUG-0314）
 void UpdateAccountingButtons()
 {
+    // 明細の入力カードもここで出し直す（BUG-0185）。
+    // 申請・実費確定・承認状態の変化はすべてこのメソッドを通るのに、
+    // **入力カードだけが更新されず残っていた**。状態が変わったら見た目も必ず追随させる
+    UpdateLineButtons();
+
     var st = SettlementStatus.Value;
     SettlementStatusLabel.IsVisible = !IsNewData;
     SettlementStatus.IsVisible = !IsNewData;

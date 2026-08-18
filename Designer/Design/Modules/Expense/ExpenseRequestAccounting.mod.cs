@@ -171,6 +171,10 @@ void GenerateJournal_OnClick()
         usedFallback = true;
     }
 
+    // インボイス経過措置の控除割合（仕訳日で期間解決。期間外は 0%）。
+    // 経過措置の税区分を使った行だけがこの割合の影響を受ける（BUG-0183）
+    decimal transitionRate = ResolveTransitionRatePercent(entryDate);
+
     // 貸方科目: 未払金(2020) / 税行科目: 仮払消費税(1900)
     var apS = new ModuleSearcher<Account>();
     apS.AddIn(e => e.Code.Value, "2020", "1900");
@@ -256,7 +260,9 @@ void GenerateJournal_OnClick()
         if (taxCatId == null) { Toaster.Error($"{lineNo + 1} 行目: 税区分が解決できません（費目の既定税区分を確認してください）"); return; }
 
         int gross = l.Amount.Value ?? 0;
-        int tax = CalcLineTax(l);
+        // **控除できる分だけを仮払消費税に立てる**（BUG-0183）。
+        // 経過措置の税区分なら控除割合を掛け、控除できない残りは本体額に含めたままにする
+        int tax = CalcLineDeductibleTax(l, transitionRate);
         int baseAmount = gross - tax;
         total = total + gross;
 
@@ -286,7 +292,9 @@ void GenerateJournal_OnClick()
             taxModeList.Add("none");
             amtList.Add(tax);
             inAmtList.Add(tax);
-            descList.Add($"消費税（行{debitNo}）");
+            var taxDesc = $"消費税（行{debitNo}）";
+            if (tcat.UsesTransitionDeduction.Value == true) { taxDesc = $"消費税（行{debitNo}・経過措置 控除{transitionRate:0.#}%）"; }
+            descList.Add(taxDesc);
             prjList.Add(l.ProjectRef.Value);
             isTaxList.Add(true);
             parentNoList.Add(debitNo);
@@ -383,7 +391,8 @@ void GenerateJournal_OnClick()
         assetNo = assetNo + 1;
         if (l.IsFixedAsset.Value != true) continue;
         int gross = l.Amount.Value ?? 0;
-        int baseAmount = gross - CalcLineTax(l);
+        // 取得価額も**控除できない消費税を含めた**税抜本体額（BUG-0183）。仕訳の借方と 1 円まで一致させる
+        int baseAmount = gross - CalcLineDeductibleTax(l, transitionRate);
         // 取得日は**仕訳と同じ日**を使う（BUG-0318）。行の利用日をそのまま入れると、
         // 計上日が締め済みで仕訳を当日へ逃がしたときに、台帳だけ締めた月を起点に償却が始まる
         if (RegisterFixedAsset(l, assetNo, assetAccountId, baseAmount, creatorDeptId, entryDate)) registered = registered + 1;
@@ -547,6 +556,38 @@ void Complete_OnClick()
 // ============================================================
 // 明細・マスタの解決ヘルパー（申請者用 ExpenseRequest と同じ規約。型だけ経理用に差し替えたもの）
 // ============================================================
+
+// 行の**控除できる**消費税額（BUG-0183）。
+// インボイス経過措置（`tax_categories.uses_transition_deduction = 1`）の税区分では、
+// 免税事業者からの仕入について仕入税額控除できるのは**控除割合の分だけ**である
+// （2026-08 時点は 80%、2026-10-01 以降 50%。割合は `invoice_transition_rates` マスタが持つ）。
+// 控除できない残りは費用の本体額へ寄せる——これは振替伝票側（`JournalEntry.RegenerateTaxLines`）に
+// 既にある正解の実装で、経費側にだけ処理そのものが無かった。
+//
+// 経過措置でない税区分では `CalcLineTax` と同じ値を返す（＝これまでどおり）。
+// ヘッダの「うち消費税」は**レシート記載の額のまま**にしてある（申請書として正しいのはレシートの額）。
+// 仕訳に載るのは控除できる分だけなので、税行の摘要に控除割合を書いて食い違いの理由が分かるようにした。
+int CalcLineDeductibleTax(ExpenseRequestLineAccounting l, decimal transitionRate)
+{
+    int fullTax = CalcLineTax(l);
+    if (fullTax <= 0) return 0;
+    var tcat = ResolveLineTaxCategory(l, FindCategory(l.ExpenseCategoryRef.Value));
+    if (tcat == null) return fullTax;
+    if (tcat.UsesTransitionDeduction.Value != true) return fullTax;
+    return fullTax * transitionRate / 100;
+}
+
+// 仕訳日で解決したインボイス経過措置の控除割合(%)。期間外・未設定は 0（＝1 円も控除できない）
+decimal ResolveTransitionRatePercent(var entryDate)
+{
+    var first = new DateOnly(entryDate.Year, entryDate.Month, 1);
+    var s = new ModuleSearcher<InvoiceTransitionRate>();
+    s.AddLessThanOrEqual(e => e.ValidFrom.Value, first);
+    s.AddGreaterThanOrEqual(e => e.ValidTo.Value, first);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return 0;
+    return ((InvoiceTransitionRate)found).RatePercent.Value ?? 0;
+}
 
 // 行の税額: 行の税区分が課税仕入のときだけ。レシート記載（手入力）を優先し、無ければ内税計算（切り捨て）
 int CalcLineTax(ExpenseRequestLineAccounting l)

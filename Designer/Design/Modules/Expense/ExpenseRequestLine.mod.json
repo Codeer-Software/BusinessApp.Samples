@@ -210,7 +210,7 @@
       "OnSearchDataChanged": "",
       "DisplayName": "うち消費税",
       "IsRequired": false,
-      "OnDataChanged": "",
+      "OnDataChanged": "TaxAmount_OnDataChanged",
       "Name": "TaxAmount",
       "IgnoreModification": false,
       "OnValidateInput": "",
@@ -778,6 +778,52 @@
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "DbColumn": "",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "StringEmpty",
+      "ShouldTrimAfterEdit": false,
+      "AutoTab": false,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "TaxCategoryAutoFrom",
+      "IgnoreModification": true,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "DbColumn": "",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "StringEmpty",
+      "ShouldTrimAfterEdit": false,
+      "AutoTab": false,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "TaxCategoryAutoValue",
+      "IgnoreModification": true,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -832,7 +878,9 @@
       "DataOnlyFields": [
         "LineNo",
         "ExpenseRequestId",
-        "Creator"
+        "Creator",
+        "TaxCategoryAutoFrom",
+        "TaxCategoryAutoValue"
       ],
       "ClassName": "",
       "Color": "",
@@ -2180,7 +2228,9 @@
       "DataOnlyFields": [
         "LineNo",
         "ExpenseRequestId",
-        "Creator"
+        "Creator",
+        "TaxCategoryAutoFrom",
+        "TaxCategoryAutoValue"
       ],
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,
