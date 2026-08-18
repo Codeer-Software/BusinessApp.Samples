@@ -41,14 +41,19 @@ void Generate_OnClick()
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
 
-    // 対象: 未払計上済（未払い）の仕入先請求書を支払期限順に
+    // 対象: 未払計上済（未払い）の仕入先請求書を支払期限順に。
+    // **`received`（未払計上前）も一緒に読む**（BUG-0166）。振込データには入れないが、
+    // 黙って落とすと**支払予定表で「⚠ 期限超過」と警告されている請求書が FB から消える**——
+    // 経理は「全部入っている」と思って銀行に取り込むので、支払漏れが後から発覚する。
+    // 「未払計上前の請求書を振り込んでよいか」は業務ルールの判断なので**対象には入れない**が、
+    // **除外理由として画面に出す**ところまでを先にやる（判断の材料を見せる）。
     var vs = new ModuleSearcher<VendorInvoice>();
-    vs.AddEquals(v => v.Status.Value, "accrued");
+    vs.AddIn(v => v.Status.Value, "accrued", "received");
     vs.OrderBy(v => v.DueDate.Value);
     var invoices = vs.Execute();
     if (invoices.Count == 0)
     {
-        ResultLabel.Text = "対象がありません（未払計上済・未払いの仕入先請求書が 0 件）";
+        ResultLabel.Text = "対象がありません（未払いの仕入先請求書が 0 件）";
         FbText.Value = "";
         Toaster.Warn("対象がありません");
         return;
@@ -87,6 +92,17 @@ void Generate_OnClick()
             if ($"{p.Id.Value}" == $"{inv.Partner.Value}") { partner = p; break; }
         }
         var invNo = inv.InvoiceNo.Value ?? "?";
+
+        // 未払計上前（received）は振込の対象外。**理由を見せて**スキップする（BUG-0166）。
+        // 取引先名は上で引いた `partner` から取る（`List<object>` を引数で持ち回らない＝FB-062）
+        if (inv.Status.Value == "received")
+        {
+            var recvName = "";
+            if (partner != null) { recvName = partner.Name.Value ?? ""; }
+            errors.Add($"{invNo}: {recvName} — 未払計上前のため対象外（仕入先請求書で「未払計上（仕訳生成）」を先に行ってください）");
+            continue;
+        }
+
         if (partner == null)
         {
             errors.Add($"{invNo}: 仕入先が見つかりません");
@@ -183,6 +199,8 @@ string PadC(string s, int n)
 }
 
 // N項目: 右詰・前ゼロ（超過は下位桁優先）
+
+
 string PadN(string s, int n)
 {
     var t = s ?? "";
