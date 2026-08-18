@@ -461,6 +461,13 @@ void Issue_OnClick()
     var hasLine = false;
     foreach (var row in Lines.Rows) { hasLine = true; break; }
     if (!hasLine) { Toaster.Error("明細を入力してから発行してください"); return; }
+    // 金額 0 の請求書を発行させない（BUG-0377）。明細はあるが金額が入っていない、という形で作れてしまい、
+    // **0 円の入金予定**が経理の消込キューに残る（入金の確定は金額 0 を弾くので、消すことも確定することもできない）
+    if ((Amount.Value ?? 0) + (TaxAmount.Value ?? 0) <= 0)
+    {
+        Toaster.Error("請求額が 0 円です。明細の数量・単価を入力してから発行してください");
+        return;
+    }
 
     using var loading = LoadingService.StartLoading(0);
     Status.Value = "issued";
