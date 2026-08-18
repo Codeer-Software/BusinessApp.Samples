@@ -267,6 +267,37 @@ FiscalPeriod ResolvePeriodForDate(var d)
     return (FiscalPeriod)found;
 }
 
+// 売却の税区分を解決する。画面で選ばれていなければ**売上の既定税区分**（tax_categories.default_for='sales'）を使う。
+// 土地のように非課税の売却は画面で「非課税売上」を選ぶ（BUG-0338・開発者判断 2026-08-18）
+TaxCategory ResolveSaleTaxCategory()
+{
+    if (DisposalTaxCategory.Value != null)
+    {
+        var s0 = new ModuleSearcher<TaxCategory>();
+        s0.AddEquals(c => c.Id.Value, DisposalTaxCategory.Value);
+        var f0 = s0.ExecuteFirstOrDefault();
+        if (f0 != null) return (TaxCategory)f0;
+    }
+    var s = new ModuleSearcher<TaxCategory>();
+    s.AddEquals(c => c.DefaultFor.Value, "sales");
+    s.AddEquals(c => c.IsActive.Value, true);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return (TaxCategory)found;
+}
+
+// 税区分に紐づく税率(%)。解決できなければ 0（＝税額を立てない）
+decimal SaleTaxRatePercent(TaxCategory tcat)
+{
+    if (tcat == null) return 0;
+    if (tcat.Rate.Value == null) return 0;
+    var rs = new ModuleSearcher<TaxRate>();
+    rs.AddEquals(r => r.Id.Value, tcat.Rate.Value);
+    var foundRate = rs.ExecuteFirstOrDefault();
+    if (foundRate == null) return 0;
+    return ((TaxRate)foundRate).RatePercent.Value ?? 0;
+}
+
 // account_role（ddl/630）で科目を引く。**科目コードを直書きしない**ための入口
 Account FindAccountByRole(string role)
 {
@@ -320,8 +351,11 @@ void UpdateDisposalUi()
     }
     else
     {
-        DisposalHint.Text = "「除却する」＝ 帳簿価額を固定資産除却損へ振り替えて資産を落とします（売却価額は使いません）。"
-            + "　／　「売却する」＝ 売却価額を未収入金に立て、帳簿価額との差額を固定資産売却益／売却損に振り替えます。"
+        DisposalHint.Text = "「除却する」＝ 帳簿価額を固定資産除却損へ振り替えて資産を落とします（売却価額・税区分は使いません）。"
+            + "　／　「売却する」＝ 売却価額（税抜）を未収入金に立て、帳簿価額との差額を固定資産売却益／売却損に振り替えます。"
+            + "　**売却は課税取引なので、税区分に応じて仮受消費税を立てます**（既定は売上の既定税区分。"
+            + "土地のように非課税の売却は税区分で「非課税売上」を選んでください）。"
+            + "　なお消費税集計表の課税標準には**売却損益の額**が載ります（差額で計上する方式のため、対価総額ではありません）。"
             + "　どちらも処分日は本日で起票します（締め済みの期間には起票できません）。";
     }
     DisposalHint.IsVisible = true;
@@ -414,7 +448,7 @@ void DoDisposal(bool isSale)
     var gainLoss = (diff >= 0) ? "売却益" : "売却損";
     var diffAbs = (diff >= 0) ? diff : (0 - diff);
     var detail = isSale
-        ? $"売却価額 {sale:#,0} 円／帳簿価額 {book:#,0} 円／差額 {diffAbs:#,0} 円（{gainLoss}）"
+        ? $"売却価額 {sale:#,0} 円（税抜）／帳簿価額 {book:#,0} 円／差額 {diffAbs:#,0} 円（{gainLoss}）"
         : $"帳簿価額 {book:#,0} 円を固定資産除却損へ振り替えます";
     var answer = MessageBox.Show(
         $"固定資産「{assetName}」を{what}します。{detail}。処分日は本日（{dispDate:yyyy/MM/dd}）です。よろしいですか？",
@@ -440,21 +474,59 @@ void DoDisposal(bool isSale)
         if (recvAcc == null) { Toaster.Error("売却代金の未収科目が見つかりません（科目マスタの「役割」を確認してください）"); return; }
     }
 
-    // 明細を組み立てる（借方・貸方・科目・金額）
+    // 売却の消費税（BUG-0338）。**対価（売却価額・税抜）に対して**計算する。切り捨て（ADR-0050 と同じ流儀）。
+    // 税区分が課税売上でなければ税率 0 になり、従来どおり税額は立たない（土地の売却など）
+    var saleTaxCat = isSale ? ResolveSaleTaxCategory() : null;
+    var saleTax = 0;
+    object saleTaxCatId = null;
+    object taxAccId = null;
+    if (isSale && saleTaxCat != null)
+    {
+        saleTaxCatId = saleTaxCat.Id.Value;
+        decimal pct = SaleTaxRatePercent(saleTaxCat);
+        if (pct > 0)
+        {
+            saleTax = sale * pct / 100;
+            var ta = FindAccountByRole("consumption_tax_payable");
+            if (ta == null)
+            {
+                var tas = new ModuleSearcher<Account>();
+                tas.AddEquals(e => e.Code.Value, "2200");
+                var taf = tas.ExecuteFirstOrDefault();
+                if (taf != null) { ta = (Account)taf; }
+            }
+            if (ta == null)
+            {
+                Toaster.Error("仮受消費税の科目が見つかりません（科目マスタの「役割」に consumption_tax_payable を設定してください）");
+                return;
+            }
+            taxAccId = ta.Id.Value;
+        }
+    }
+    if (saleTax <= 0) { taxAccId = null; }
+
+    // 明細を組み立てる（借方・貸方・科目・金額・税区分）
     var dcList = new List<string>();
     var accList = new List<object>();
     var amtList = new List<int>();
+    var catList = new List<object>();
+    var taxFlag = new List<bool>();
+    var taxParentNo = 1;
     if (isSale)
     {
-        dcList.Add("D"); accList.Add(recvAcc.Id.Value); amtList.Add(sale);          // 未収入金
-        dcList.Add("C"); accList.Add(AssetAccount.Value); amtList.Add(book);        // 資産を落とす
-        if (diff > 0) { dcList.Add("C"); accList.Add(lossAcc.Id.Value); amtList.Add(diff); }        // 売却益
-        if (diff < 0) { dcList.Add("D"); accList.Add(lossAcc.Id.Value); amtList.Add(0 - diff); }    // 売却損
+        dcList.Add("D"); accList.Add(recvAcc.Id.Value); amtList.Add(sale + saleTax); catList.Add(null); taxFlag.Add(false);   // 未収入金（税込）
+        dcList.Add("C"); accList.Add(AssetAccount.Value); amtList.Add(book); catList.Add(null); taxFlag.Add(false);           // 資産を落とす
+        if (diff > 0) { dcList.Add("C"); accList.Add(lossAcc.Id.Value); amtList.Add(diff); catList.Add(saleTaxCatId); taxFlag.Add(false); }       // 売却益
+        if (diff < 0) { dcList.Add("D"); accList.Add(lossAcc.Id.Value); amtList.Add(0 - diff); catList.Add(saleTaxCatId); taxFlag.Add(false); }   // 売却損
+        // 税行の親は**損益の行**。ただし対価＝簿価で損益が立たないときは損益行そのものが無いので、
+        // 未収入金の行（1 行目）を親にする（親の無い税行を作ると不変条件 A09 が落ちる）
+        taxParentNo = (diff == 0) ? 1 : 3;
+        if (saleTax > 0) { dcList.Add("C"); accList.Add(taxAccId); amtList.Add(saleTax); catList.Add(saleTaxCatId); taxFlag.Add(true); }          // 仮受消費税
     }
     else
     {
-        dcList.Add("D"); accList.Add(lossAcc.Id.Value); amtList.Add(book);          // 除却損
-        dcList.Add("C"); accList.Add(AssetAccount.Value); amtList.Add(book);        // 資産を落とす
+        dcList.Add("D"); accList.Add(lossAcc.Id.Value); amtList.Add(book); catList.Add(null); taxFlag.Add(false);             // 除却損
+        dcList.Add("C"); accList.Add(AssetAccount.Value); amtList.Add(book); catList.Add(null); taxFlag.Add(false);           // 資産を落とす
     }
 
     var nextNo = new JournalEntry().NextJournalNo(typedFy.Id.Value);
@@ -481,10 +553,18 @@ void DoDisposal(bool isSale)
         l.TaxInputMode.Value = "none";
         l.Description.Value = $"固定資産{what} {assetName}";
         if (Department.Value != null) { l.Department.Value = Department.Value; }
+        if (catList[idx] != null) { l.TaxCategory.Value = catList[idx]; }
+        if (taxFlag[idx])
+        {
+            l.IsTaxLine.Value = true;
+            l.ParentLineNo.Value = taxParentNo;
+            l.Description.Value = $"消費税（行{taxParentNo}）";
+        }
     }
-    // 処分は内部振替なので全明細を「対象外」にする（償却と同じ理由・ADR-0053）。
-    // 売却の消費税は現状このアプリでは自動計算しない（ddl/630 の注記）
-    je.MarkAllLinesOutOfScope();
+    // 税区分を明示していない行は「対象外」で埋める（処分は内部振替なので、
+    // 科目の既定＝取得時の「課税仕入 10%」が入ると消費税集計表が狂う・ADR-0053）。
+    // **MarkAllLinesOutOfScope は使えない**——売却では課税売上の行と税行を残す必要がある
+    je.MarkRemainingLinesOutOfScope();
     je.FillMissingDepartments();
     var ret = je.Submit();
     if (ret != true) { Toaster.Error($"{what}仕訳の生成に失敗しました"); return; }
