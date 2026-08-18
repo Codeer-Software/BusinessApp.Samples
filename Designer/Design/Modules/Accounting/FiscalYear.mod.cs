@@ -618,6 +618,31 @@ bool PostWipJournals(FiscalYear next)
 bool PostOneWipJournal(FiscalYear fy, var entryDate, string sourceType, string description,
                        Account wipAcc, Account transferAcc, List<WipCandidate> rows, bool reverse)
 {
+    // **行の内容はプリミティブの並行リストに組んでから確保する。**
+    // モジュールのインスタンス（ここでは WipCandidate）を持ち回ったまま
+    // `AddRows` を呼ぶと `Value cannot be null. (Parameter 'source')` で落ちる——
+    // ISSUE-0006 で 3 回失敗した現象をここで**再現・特定した**（2026-08-18）。
+    // 実績のある形は固定資産の処分・経費の仕訳・検収の売上仕訳と同じ「並行リスト」方式である。
+    var dcList = new List<string>();
+    var accList = new List<object>();
+    var amtList = new List<int>();
+    var projList = new List<object>();
+    var deptList = new List<object>();
+    var descList = new List<string>();
+    foreach (var c in rows)
+    {
+        var amt = c.WipAmount.Value ?? 0;
+        var desc = $"{c.ProjectCode.Value} {c.ProjectName.Value}";
+        object proj = c.ProjectId.Value;
+        object dept = c.DepartmentId.Value;
+        dcList.Add("D");
+        accList.Add(reverse ? transferAcc.Id.Value : wipAcc.Id.Value);
+        amtList.Add(amt); projList.Add(proj); deptList.Add(dept); descList.Add(desc);
+        dcList.Add("C");
+        accList.Add(reverse ? wipAcc.Id.Value : transferAcc.Id.Value);
+        amtList.Add(amt); projList.Add(proj); deptList.Add(dept); descList.Add(desc);
+    }
+
     var nextNo = new JournalEntry().NextJournalNo(fy.Id.Value);
     var je = new JournalEntry();
     je.EntryDate.Value = entryDate;
@@ -629,33 +654,21 @@ bool PostOneWipJournal(FiscalYear fy, var entryDate, string sourceType, string d
     je.SourceType.Value = sourceType;
     // 振戻は翌期の伝票だが、**どの年度の振替に対する戻しか**を指すので source_id は前期の年度 id
     je.SourceId.Value = this.Id.Value;
-    je.Lines.AddRows(rows.Count * 2);
+    je.Lines.AddRows(dcList.Count);
 
     var i = 0;
-    var lineNo = 0;
     foreach (var lr in je.Lines.Rows)
     {
         var l = (JournalLine)lr;
-        var c = rows[i / 2];
-        var isFirstOfPair = (i % 2 == 0);
-        lineNo = lineNo + 1;
-        l.LineNo.Value = lineNo;
-        l.Amount.Value = c.WipAmount.Value ?? 0;
-        l.InputAmount.Value = c.WipAmount.Value ?? 0;
+        l.LineNo.Value = i + 1;
+        l.Dc.Value = dcList[i];
+        l.Account.Value = accList[i];
+        l.Amount.Value = amtList[i];
+        l.InputAmount.Value = amtList[i];
         l.TaxInputMode.Value = "none";
-        l.Description.Value = $"{c.ProjectCode.Value} {c.ProjectName.Value}";
-        l.ProjectRef.Value = c.ProjectId.Value;
-        if (c.DepartmentId.Value != null) { l.Department.Value = c.DepartmentId.Value; }
-        if (isFirstOfPair)
-        {
-            l.Dc.Value = "D";
-            l.Account.Value = reverse ? transferAcc.Id.Value : wipAcc.Id.Value;
-        }
-        else
-        {
-            l.Dc.Value = "C";
-            l.Account.Value = reverse ? wipAcc.Id.Value : transferAcc.Id.Value;
-        }
+        l.Description.Value = descList[i];
+        l.ProjectRef.Value = projList[i];
+        if (deptList[i] != null) { l.Department.Value = deptList[i]; }
         i = i + 1;
     }
     // 決算整理なので消費税の対象外（原価の付け替えであって取引ではない）

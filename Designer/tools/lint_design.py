@@ -68,6 +68,7 @@ RULES = {
     "CLB-036": ("低", "自作 SQL の日付比較が date() で正規化されていない（warn 専用）"),
     "CLB-037": ("高", "DataWriteCondition が参照する列がその画面で未ロード（全項目が読み取り専用になる）"),
     "CLB-038": ("高", "資金繰り SQL の複製（ポータル ⇄ 予測画面）が食い違っている"),
+    "CLB-039": ("高", "AddRows の引数が List<モジュール型> の .Count 由来（多重定義が外れて実行時に落ちる）"),
 }
 
 # 実装しなかったルール（黙って落とさず実行時に一覧表示する）
@@ -1738,6 +1739,75 @@ def rule_038(idx, add):
                 "片方だけ直すとポータルと画面の警告件数が黙ってずれる（BUG-0257）".format(name))
 
 
+def rule_039(idx, add):
+    """CLB-039: `AddRows(...)` の引数が `List<モジュール型>` の `.Count` から作られている。
+
+    **実測（2026-08-18・ISSUE-0006 の真因）**: 同じ画面・同じ行で 3 通り試した結果——
+
+    | 書き方 | 結果 |
+    |---|---|
+    | `AddRows(rows.Count * 2)`（rows は `List<WipCandidate>`） | **落ちる** |
+    | `var n = rows.Count * 2; AddRows(n);` | **落ちる** |
+    | `AddRows(dcList.Count)`（dcList は `List<string>`） | 動く |
+
+    例外は `Value cannot be null. (Parameter 'source')`。
+    `AddRows` には **`AddRows(int count)` と `AddRows(List<Module> src)` の 2 つの多重定義**があり
+    （フィールドカタログ）、引数の静的な型が int と決まらないと**リスト側の多重定義に流れて
+    null が渡る**——パラメータ名が 'source' なのはそのためだと考えられる。
+
+    8/17 に 3 回失敗して撤回した BUG-0127 の真因もこれだった可能性が高い。
+    当時の見立て「AddRows の引数は 1 文で確定させる」は**外れ**である
+    （変数に受けても落ちる。逆に `List<string>` の `.Count` はループで積み上げたものでも動く）。
+
+    **`.Count` そのものは壊れていない。** モジュール型のリストでも比較や表示には普通に使える
+    （このリポジトリの経費・承認まわりで実際に動いている）。問題は **AddRows の多重定義解決**だけなので、
+    このルールも `AddRows(...)` の引数に限って報告する。
+
+    回避: 行の内容をプリミティブの並行リスト（`List<string>` 等）に組み、その `.Count` を渡す。
+    """
+    import re as _re
+    var_decl = _re.compile(r"\bvar\s+(\w+)\s*=\s*new\s+List<\s*(\w+)\s*>\s*\(\s*\)")
+    fn_decl = _re.compile(r"^\s*List<\s*(\w+)\s*>\s+(\w+)\s*\(", _re.M)
+    call_assign = _re.compile(r"\bvar\s+(\w+)\s*=\s*(\w+)\s*\(")
+    addrows = _re.compile(r"\.AddRows\s*\(([^;]*?)\)\s*;")
+    assign = _re.compile(r"\bvar\s+(\w+)\s*=\s*([^;]*?);")
+    for mod in idx.modules.values():
+        cs = mod["cs"]
+        if not cs:
+            continue
+        module_names = set(idx.modules.keys())
+        risky = {}
+        for m in var_decl.finditer(cs):
+            if m.group(2) in module_names:
+                risky[m.group(1)] = m.group(2)
+        fn_ret = {m.group(2): m.group(1) for m in fn_decl.finditer(cs) if m.group(1) in module_names}
+        for m in call_assign.finditer(cs):
+            if m.group(2) in fn_ret:
+                risky[m.group(1)] = fn_ret[m.group(2)]
+        if not risky:
+            continue
+        # 「モジュール型リストの .Count から作った int 変数」も追う（1 段だけ）
+        tainted = {}
+        for m in assign.finditer(cs):
+            rhs = m.group(2)
+            for var, mtype in risky.items():
+                if _re.search(r"\b" + _re.escape(var) + r"\.Count\b", rhs):
+                    tainted[m.group(1)] = mtype
+        for m in addrows.finditer(cs):
+            arg = m.group(1)
+            hit = None
+            for var, mtype in list(risky.items()) + list(tainted.items()):
+                if _re.search(r"\b" + _re.escape(var) + r"(\.Count)?\b", arg):
+                    hit = (var, mtype)
+                    break
+            if hit:
+                add("CLB-039", SEV_ERROR, mod["cs_path"], line_of(cs, m.start()),
+                    "AddRows の引数が {}（List<{}>）由来。モジュール型リストの .Count を渡すと "
+                    "多重定義が AddRows(List<Module>) 側に流れ、実行時に "
+                    "'Value cannot be null. (Parameter \'source\')' で落ちる（ISSUE-0006・実測）。"
+                    "プリミティブの並行リストの .Count を渡すこと".format(hit[0], hit[1]))
+
+
 RULE_FUNCS = [
     ("CLB-001", rule_001), ("CLB-002", rule_002), ("CLB-003", rule_003), ("CLB-004", rule_004),
     ("CLB-005", rule_005), ("CLB-006", rule_006), ("CLB-007", rule_007), ("CLB-008", rule_008),
@@ -1748,7 +1818,7 @@ RULE_FUNCS = [
     ("CLB-025", rule_025), ("CLB-026", rule_026), ("CLB-027", rule_027), ("CLB-028", rule_028),
     ("CLB-029", rule_029), ("CLB-030", rule_030), ("CLB-031", rule_031), ("CLB-032", rule_032),
     ("CLB-033", rule_033), ("CLB-034", rule_034), ("CLB-035", rule_035), ("CLB-036", rule_036),
-    ("CLB-037", rule_037), ("CLB-038", rule_038),
+    ("CLB-037", rule_037), ("CLB-038", rule_038), ("CLB-039", rule_039),
 ]
 
 # 仕様書が warn 専用と明記しているルール（群に関わらず error にしない）
