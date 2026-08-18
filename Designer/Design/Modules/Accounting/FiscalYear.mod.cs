@@ -288,6 +288,9 @@ void CloseYear_OnClick()
         {
             wipText = $"【注意】仕掛品の期末振替が古くなっています（起票 {wipPosted:#,0} 円 / 現在の計算 {wipComputed:#,0} 円）。締めると打ち直せなくなります。";
         }
+        // 人件費コストの未入力も締める前に伝える（BUG-0367。締めたあとでは直せない）
+        var missNote = MissingSalaryNote(wipSt);
+        if (missNote != "") { wipText = wipText + missNote; }
     }
 
     var answer = MessageBox.Show(

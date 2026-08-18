@@ -207,12 +207,22 @@ void End_OnClick()
     var msg = "";
     if (EndMonth.Value == null)
     {
-        msg = $"この契約を終了にします。終了月が未設定のため {thisMonth:yyyy年M月} を終了月として設定します（「定期請求の実行」の対象から外れます）。よろしいですか？";
+        msg = $"この契約を終了にします。終了月が未設定のため {thisMonth:yyyy年M月} を終了月として設定します（「定期請求の実行」の対象から外れます）。";
     }
     else
     {
-        msg = $"この契約を終了にします（終了月: {EndMonth.Value:yyyy年M月}）。「定期請求の実行」の対象から外れます。よろしいですか？";
+        msg = $"この契約を終了にします（終了月: {EndMonth.Value:yyyy年M月}）。「定期請求の実行」の対象から外れます。";
     }
+    // 年額契約は按分の途中で終わるので、**残った前受収益をここで売上に落とす**（BUG-0146）。
+    // 終了してから按分が止まることを利用者は知らないので、金額を見せてから確認を取る
+    var deferred = DeferredBalance();
+    if (deferred > 0)
+    {
+        // MessageBox は素のテキスト。**強調記号は出しても記号のまま表示される**ので使わない
+        msg = msg + $"あわせて、前受収益の未償却残 {deferred:#,0} 円 を終了月の売上に一括計上します"
+            + "（借方 前受収益 / 貸方 SaaS売上高）。終了を解除すればこの仕訳も取り消されます。";
+    }
+    msg = msg + "よろしいですか？";
     var answer = MessageBox.Show(msg, "終了にする", "キャンセル");
     if (answer != "終了にする") return;
 
@@ -230,6 +240,10 @@ void End_OnClick()
         UpdateUi();
         return;
     }
+    // 前受収益の打ち切り。**失敗しても終了自体は戻さない**——終了は業務上の事実で、
+    // 起票できない理由（締め済み等）は利用者に伝えて手動起票してもらうほうが素直
+    if (deferred > 0) { PostDeferredSettlement(deferred, EndMonth.Value); }
+
     UpdateUi();
     Toaster.Success($"契約を終了にしました（終了月: {EndMonth.Value:yyyy年M月}）");
 }
@@ -242,10 +256,17 @@ void Unend_OnClick()
     if (CurrentUser.HasAccountingAccess.Value != true) { Toaster.Error("終了の解除は経理のみ行えます"); return; }
     if (Status.Value != "ended") { Toaster.Error("終了した契約のみ解除できます"); return; }
 
-    var answer = MessageBox.Show("この契約の終了を解除して確定済に戻します（「定期請求の実行」の対象に戻ります。終了していた期間のうち未生成の月も対象になります）。よろしいですか？", "終了を解除", "キャンセル");
+    var settleJe = FindSettleJournal();
+    var settleNote = (settleJe == null) ? ""
+        : $"前受収益の打ち切り仕訳 No.{settleJe.JournalNo.Value} も取り消され、未償却残が元に戻ります。";
+    var answer = MessageBox.Show("この契約の終了を解除して確定済に戻します（「定期請求の実行」の対象に戻ります。終了していた期間のうち未生成の月も対象になります）。"
+        + settleNote + "よろしいですか？", "終了を解除", "キャンセル");
     if (answer != "終了を解除") return;
 
     using var loading = LoadingService.StartLoading(1000);
+    // 打ち切り仕訳を先に戻す。戻せない（締め済み）なら解除自体を中止する——
+    // 解除だけ通すと、按分が再開したうえに打ち切り分も残って**売上が二重に立つ**
+    if (!DeleteSettlementJournal()) { return; }
     Status.Value = "confirmed";
     var ok = this.Submit();
     if (ok != true)
@@ -292,4 +313,182 @@ void DeleteContract_OnClick()
     this.Delete();
     Toaster.Success("定期請求契約を削除しました");
     NavigationService.NavigateTo(NavigationService.GetModuleUrl("RecurringBilling"));
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 前受収益の打ち切り（BUG-0146・ADR-0071 の帰結として開発者が決めた方針）
+//
+// 年額契約は「借方 売掛金 / 貸方 前受収益」で一括計上し、毎月「借方 前受収益 / 貸方 SaaS売上高」で
+// 按分して収益にしていく。ところが**契約が終了した瞬間に按分が止まる**（`RecurringRun` が
+// 対象契約から外すため）ので、**残った前受収益を戻す経路がどこにも無かった**。
+// B/S に前受収益が塩漬けになり、P/L に売上が計上されないまま永久に残る。
+//
+// 方針（開発者決定）: **月単位で打ち切り、残額は解約月の売上に一括計上する。**
+// 終了ボタンで按分の残りを 1 本の仕訳（借方 前受収益 / 貸方 SaaS売上高）にして落とす。
+// 終了を解除したらその仕訳も消して元に戻す（ADR-0070 の「締めるまでは打ち直せる」）。
+// ───────────────────────────────────────────────────────────────────────────
+
+// この契約に紐づく前受収益(2110)の未償却残。
+//   前受計上（recurring_annual の貸方） − 按分振替（recurring_defer の借方） − 打ち切り（recurring_settle の借方）
+int DeferredBalance()
+{
+    if (this.Id.Value == null) return 0;
+    object deferredId = null;
+    var accS = new ModuleSearcher<Account>();
+    accS.AddEquals(e => e.Code.Value, "2110");
+    var accFound = accS.ExecuteFirstOrDefault();
+    if (accFound == null) return 0;
+    deferredId = ((Account)accFound).Id.Value;
+
+    // この契約の請求書 id を集める
+    var invIds = new List<string>();
+    var invS = new ModuleSearcher<Invoice>();
+    invS.AddEquals(e => e.RecurringBillingRef.Value, this.Id.Value);
+    foreach (var row in invS.Execute()) { invIds.Add($"{((Invoice)row).Id.Value}"); }
+
+    var total = 0;
+    var jS = new ModuleSearcher<JournalEntry>();
+    jS.AddIn(e => e.SourceType.Value, "recurring_annual", "recurring_defer", "recurring_settle");
+    jS.AddEquals(e => e.Status.Value, "posted");
+    foreach (var row in jS.Execute())
+    {
+        var je = (JournalEntry)row;
+        var mine = false;
+        if (je.SourceType.Value == "recurring_settle")
+        {
+            mine = ($"{je.SourceId.Value}" == $"{this.Id.Value}");
+        }
+        else
+        {
+            foreach (var iid in invIds) { if (iid == $"{je.SourceId.Value}") { mine = true; break; } }
+        }
+        if (!mine) continue;
+        var ls = new ModuleSearcher<JournalLine>();
+        ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
+        foreach (var lrow in ls.Execute())
+        {
+            var l = (JournalLine)lrow;
+            if ($"{l.Account.Value}" != $"{deferredId}") continue;
+            if (l.Amount.Value == null) continue;
+            if (l.Dc.Value == "C") { total = total + l.Amount.Value; }
+            else { total = total - l.Amount.Value; }
+        }
+    }
+    if (total < 0) return 0;
+    return total;
+}
+
+JournalEntry FindSettleJournal()
+{
+    var s = new ModuleSearcher<JournalEntry>();
+    s.AddEquals(e => e.SourceType.Value, "recurring_settle");
+    s.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return (JournalEntry)found;
+}
+
+// 解約月の月末に「借方 前受収益 / 貸方 SaaS売上高」を 1 本起票する
+bool PostDeferredSettlement(int amount, var endMonthFirst)
+{
+    if (amount <= 0) return true;
+    var monthEnd = endMonthFirst.AddMonths(1).AddDays(-1);
+
+    var ys = new ModuleSearcher<FiscalYear>();
+    ys.AddLessThanOrEqual(e => e.StartDate.Value, endMonthFirst);
+    ys.AddGreaterThanOrEqual(e => e.EndDate.Value, endMonthFirst);
+    var fy = ys.ExecuteFirstOrDefault();
+    if (fy == null) { Toaster.Error("終了月に対応する会計年度がありません。前受収益の打ち切りを起票できません"); return false; }
+    var ps = new ModuleSearcher<FiscalPeriod>();
+    ps.AddLessThanOrEqual(e => e.StartDate.Value, endMonthFirst);
+    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, endMonthFirst);
+    var period = ps.ExecuteFirstOrDefault();
+    if (period == null) { Toaster.Error("終了月に対応する月次期間がありません。前受収益の打ち切りを起票できません"); return false; }
+    if (((FiscalPeriod)period).Status.Value == "closed")
+    {
+        Toaster.Error("終了月の期間が締め済みです。前受収益の打ち切りは振替伝票で手動起票してください（借方 前受収益 / 貸方 SaaS売上高）");
+        return false;
+    }
+
+    var accS = new ModuleSearcher<Account>();
+    accS.AddIn(e => e.Code.Value, "2110", "4020");
+    object deferredId = null;
+    object saasId = null;
+    foreach (var a in accS.Execute())
+    {
+        var acc = (Account)a;
+        if (acc.Code.Value == "2110") { deferredId = acc.Id.Value; }
+        if (acc.Code.Value == "4020") { saasId = acc.Id.Value; }
+    }
+    if (deferredId == null || saasId == null) { Toaster.Error("打ち切りに必要な科目（2110/4020）がありません"); return false; }
+
+    // 行の内容はプリミティブの並行リストで組む（CLB-039・ISSUE-0006）
+    var dcList = new List<string>();
+    var accList = new List<object>();
+    dcList.Add("D"); accList.Add(deferredId);
+    dcList.Add("C"); accList.Add(saasId);
+
+    var nextNo = new JournalEntry().NextJournalNo(((FiscalYear)fy).Id.Value);
+    var je = new JournalEntry();
+    je.EntryDate.Value = monthEnd;
+    je.EntryType.Value = "adjust";
+    je.Description.Value = $"前受収益の打ち切り {Title.Value}（契約終了・{endMonthFirst:yyyy年M月}）";
+    je.Status.Value = "posted";
+    je.JournalNo.Value = nextNo;
+    je.FiscalYearRef.Value = ((FiscalYear)fy).Id.Value;
+    je.SourceType.Value = "recurring_settle";
+    je.SourceId.Value = this.Id.Value;
+    je.Lines.AddRows(dcList.Count);
+    var i = 0;
+    foreach (var lr in je.Lines.Rows)
+    {
+        var l = (JournalLine)lr;
+        l.LineNo.Value = i + 1;
+        l.Dc.Value = dcList[i];
+        l.Account.Value = accList[i];
+        l.Amount.Value = amount;
+        l.InputAmount.Value = amount;
+        l.TaxInputMode.Value = "none";
+        l.Description.Value = $"前受収益の打ち切り {Title.Value}";
+        if (ProjectRef.Value != null) { l.ProjectRef.Value = ProjectRef.Value; }
+        if (DepartmentRef.Value != null) { l.Department.Value = DepartmentRef.Value; }
+        i = i + 1;
+    }
+    // 内部振替なので消費税の対象外（ADR-0053）
+    je.MarkAllLinesOutOfScope();
+    je.FillMissingDepartments();
+    if (je.Submit() != true) { Toaster.Error("前受収益の打ち切り仕訳の生成に失敗しました"); return false; }
+    Toaster.Info($"前受収益の未償却残 {amount:#,0} 円を {endMonthFirst:yyyy年M月} の売上に振り替えました（伝票 No.{nextNo}）");
+    return true;
+}
+
+// 終了の解除で打ち切り仕訳を戻す。締め済みなら戻さず、理由を伝えて終了解除自体を止める
+bool DeleteSettlementJournal()
+{
+    var je = FindSettleJournal();
+    if (je == null) return true;
+    var d = je.EntryDate.Value;
+    if (d != null)
+    {
+        var monthFirst = new DateOnly(d.Year, d.Month, 1);
+        var ps = new ModuleSearcher<FiscalPeriod>();
+        ps.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
+        ps.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);
+        var period = ps.ExecuteFirstOrDefault();
+        if (period != null && ((FiscalPeriod)period).Status.Value == "closed")
+        {
+            Toaster.Error($"前受収益の打ち切り仕訳 No.{je.JournalNo.Value} の期間が締め済みです。終了を解除するとその仕訳だけ残って前受収益が二重に戻るため、中止しました（赤伝で打ち消してから解除してください）");
+            return false;
+        }
+    }
+    var ls = new ModuleSearcher<JournalLine>();
+    ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
+    foreach (var row in ls.Execute())
+    {
+        var l = (JournalLine)row;
+        if (l.Delete() != true) { Toaster.Error("打ち切り仕訳の明細削除に失敗しました"); return false; }
+    }
+    if (je.Delete() != true) { Toaster.Error("打ち切り仕訳の削除に失敗しました"); return false; }
+    Toaster.Info($"前受収益の打ち切り仕訳 No.{je.JournalNo.Value} を削除しました");
+    return true;
 }

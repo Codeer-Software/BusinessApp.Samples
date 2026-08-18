@@ -486,24 +486,26 @@ void Issue_OnClick()
 // この請求書に入金記録があるか（下書き削除のガード。未確定の入金予定も孤児にしないため含める）
 bool HasReceipts()
 {
-    var rs = new ModuleSearcher<Receipt>();
-    rs.AddEquals(e => e.InvoiceRef.Value, this.Id.Value);
-    return rs.Execute().Count > 0;
+    // 同上。入金の有無は消込明細で見る（ADR-0071）
+    var rls = new ModuleSearcher<ReceiptLine>();
+    rls.AddEquals(l => l.InvoiceRef.Value, this.Id.Value);
+    return rls.Execute().Count > 0;
 }
 
 // 消込済み（消込仕訳が存在する）入金があるか（取消・巻き戻しのガード。
 // 発行時に自動作成される未確定の入金予定はブロックしない——それは DeletePendingReceipts で片付ける）
 bool HasConfirmedReceipts()
 {
-    var rs = new ModuleSearcher<Receipt>();
-    rs.AddEquals(e => e.InvoiceRef.Value, this.Id.Value);
-    var rows = rs.Execute();
-    foreach (var row in rows)
+    // **消込明細で見る**（ADR-0071）。合算入金のヘッダは 1 件目の請求書しか指していないので、
+    // ヘッダで探すと「合算で消し込まれた請求書」を取りこぼし、取消・発行取消のガードが素通りする
+    var rls = new ModuleSearcher<ReceiptLine>();
+    rls.AddEquals(l => l.InvoiceRef.Value, this.Id.Value);
+    foreach (var row in rls.Execute())
     {
-        var r = (Receipt)row;
+        var rl = (ReceiptLine)row;
         var js = new ModuleSearcher<JournalEntry>();
         js.AddEquals(e => e.SourceType.Value, "receipt");
-        js.AddEquals(e => e.SourceId.Value, r.Id.Value);
+        js.AddEquals(e => e.SourceId.Value, rl.ReceiptId.Value);
         if (js.Execute().Count > 0) { return true; }
     }
     return false;

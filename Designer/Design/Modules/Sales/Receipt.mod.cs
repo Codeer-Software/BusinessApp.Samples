@@ -206,16 +206,40 @@ void CancelReceipt_OnClick()
             // 入金予定の統合（ADR-0033 追補・2026-07-26）: 取消で未確定に戻った本人の行を
             // 「残額の入金予定」に更新し、他の未確定予定（一部入金の確定時に自動作成した残額予定など）は
             // 削除する。確定・取消をどの順で繰り返しても「未確定はちょうど1行＝残額」に収束させる
-            foreach (var row in rows)
+            // 他の未確定予定の後始末。**合算入金を巻き添えにしない**（BUG-0379）——
+            // ヘッダの請求書で兄弟を探すと、たまたまこの請求書を指している合算入金が丸ごと消え、
+            // **他の請求書ぶんの消込明細まで道連れ**になる（警告も出ない）。
+            // 明細がこの請求書 1 本だけの予定は削除し、合算入金は**その行だけ外して金額を減らす**
+            // （`Invoice.DeletePendingReceipts` と同じ扱い）
+            var rls2 = new ModuleSearcher<ReceiptLine>();
+            rls2.AddEquals(l => l.InvoiceRef.Value, InvoiceRef.Value);
+            foreach (var lrow in rls2.Execute())
             {
-                var r = (Receipt)row;
-                if (r.Id.Value == this.Id.Value) continue;
+                var rl2 = (ReceiptLine)lrow;
+                if ($"{rl2.ReceiptId.Value}" == $"{this.Id.Value}") continue;
                 var js3 = new ModuleSearcher<JournalEntry>();
                 js3.AddEquals(e => e.SourceType.Value, "receipt");
-                js3.AddEquals(e => e.SourceId.Value, r.Id.Value);
-                if (js3.Execute().Count > 0) continue;
-                var okDel = r.Delete();
-                if (okDel != true) { Toaster.Warn("他の未確定の入金予定の削除に失敗しました（入金一覧を確認してください）"); }
+                js3.AddEquals(e => e.SourceId.Value, rl2.ReceiptId.Value);
+                if (js3.Execute().Count > 0) continue;   // 消込済みは触らない
+
+                var sib2 = new ModuleSearcher<ReceiptLine>();
+                sib2.AddEquals(l => l.ReceiptId.Value, rl2.ReceiptId.Value);
+                var sibCount2 = sib2.Execute().Count;
+
+                var rs2 = new ModuleSearcher<Receipt>();
+                rs2.AddEquals(e => e.Id.Value, rl2.ReceiptId.Value);
+                var found2 = rs2.ExecuteFirstOrDefault();
+                if (found2 == null) continue;
+                var other = (Receipt)found2;
+                if (sibCount2 <= 1)
+                {
+                    if (other.Delete() != true) { Toaster.Warn("他の未確定の入金予定の削除に失敗しました（入金一覧を確認してください）"); }
+                    continue;
+                }
+                var rest2 = (other.Amount.Value ?? 0) - (rl2.Amount.Value ?? 0);
+                if (rl2.Delete() != true) { Toaster.Warn("合算入金から消込明細を外せませんでした（入金一覧を確認してください）"); continue; }
+                other.Amount.Value = rest2;
+                if (other.Submit() == false) { Toaster.Warn("合算入金の金額更新に失敗しました（入金一覧を確認してください）"); }
             }
             var remaining = gross - confirmedTotal;
             if (remaining > 0)
@@ -590,15 +614,17 @@ void Confirm_OnClick()
 // 残額分の未確定入金（入金予定）を作成する。未確定行がまだ残っている場合は作らない（二重予定の防止）
 void CreateRemainderPendingReceipt(int remainAmount, Invoice iv)
 {
-    var s = new ModuleSearcher<Receipt>();
-    s.AddEquals(e => e.InvoiceRef.Value, iv.Id.Value);
+    // 二重予定のガードは**消込明細**で見る（ADR-0071）。ヘッダで見ると、合算に取り込まれた
+    // 予定を数え落として同じ請求書に予定が 2 本立つ（BUG-0380）
+    var s = new ModuleSearcher<ReceiptLine>();
+    s.AddEquals(l => l.InvoiceRef.Value, iv.Id.Value);
     var rows = s.Execute();
     foreach (var row in rows)
     {
-        var r = (Receipt)row;
+        var rl = (ReceiptLine)row;
         var js = new ModuleSearcher<JournalEntry>();
         js.AddEquals(e => e.SourceType.Value, "receipt");
-        js.AddEquals(e => e.SourceId.Value, r.Id.Value);
+        js.AddEquals(e => e.SourceId.Value, rl.ReceiptId.Value);
         if (js.Execute().Count == 0) { return; }
     }
     var nr = new Receipt();
@@ -741,6 +767,9 @@ void Merge_OnClick()
         var r = (Receipt)row;
         if ($"{r.Id.Value}" == $"{this.Id.Value}") continue;
         if (r.Method.Value == "offset") continue;
+        // 入金方法が違うものはまとめない（BUG-0382）。合算の借方は 1 行なので、
+        // 現金の予定を銀行振込にまとめると**全額が普通預金**になってしまう
+        if ($"{r.Method.Value}" != $"{Method.Value}") continue;
         if (HasSettleJournal(r.Id.Value)) continue;
         var ls = new ModuleSearcher<ReceiptLine>();
         ls.AddEquals(l => l.ReceiptId.Value, r.Id.Value);
@@ -1015,6 +1044,13 @@ void ConfirmMulti()
         else if (received > 0) { st = "partial"; }
         iv.Status.Value = st;
         if (iv.Submit() != true) { Toaster.Warn($"{iv.InvoiceNo.Value} の状態更新に失敗しました（仕訳は生成済みです）"); }
+        // 一部入金になった請求書には残額の入金予定を作る（BUG-0381）。
+        // 1 対 1 の経路には必ずある処理で、これが無いと**残額が入金一覧から消えて回収漏れに気づけない**
+        if (st == "partial")
+        {
+            var remainAfter = gross - received;
+            if (remainAfter > 0) { CreateRemainderPendingReceipt(remainAfter, iv); }
+        }
     }
 
     UpdateButtons();

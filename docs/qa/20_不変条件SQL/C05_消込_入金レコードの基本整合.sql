@@ -30,6 +30,16 @@ FROM receipt_lines rl JOIN receipts r ON r.id = rl.receipt_id
 WHERE rl.amount IS NULL OR rl.amount <= 0
 
 UNION ALL
+-- 明細が 1 行の入金は、ヘッダの請求書欄と明細の請求書が一致していなければならない（BUG-0378）。
+-- 食い違うと「1 対 1 の従来経路」が**別の請求書に消し込む**（取消済みの請求書が入金済に戻る）。
+-- 同期はトリガ（ddl/780・790）が担っているので、ここが赤くなったらトリガの取りこぼしを疑う
+SELECT '明細 1 行なのにヘッダの請求書と食い違う', r.id, r.receipt_date, r.invoice_id, r.method,
+       CAST((SELECT rl.invoice_id FROM receipt_lines rl WHERE rl.receipt_id = r.id) AS TEXT)
+FROM receipts r
+WHERE (SELECT COUNT(*) FROM receipt_lines rl WHERE rl.receipt_id = r.id) = 1
+  AND COALESCE(r.invoice_id, -1) <> (SELECT rl.invoice_id FROM receipt_lines rl WHERE rl.receipt_id = r.id)
+
+UNION ALL
 -- 1 入金の明細は同一取引先の請求書に限る（ADR-0071。売掛金の補助元帳が取引先単位で合わなくなる）
 SELECT '1 入金の明細が複数の取引先にまたがる', r.id, r.receipt_date, NULL, r.method,
        CAST((SELECT COUNT(DISTINCT i.partner_id) FROM receipt_lines rl2

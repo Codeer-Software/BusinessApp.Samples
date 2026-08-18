@@ -153,49 +153,14 @@
     }
   ],
   "UserWriteCondition": {
-    "ModuleName": "AppUser",
-    "Condition": {
-      "IsOrMatch": true,
-      "IsNot": false,
-      "Children": [
-        {
-          "SearchTargetVariable": "HasSalesAccess.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": true,
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
-        },
-        {
-          "SearchTargetVariable": "HasAccountingAccess.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": true,
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
-        }
-      ],
-      "Name": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
-    }
+    "ModuleName": ""
   },
   "UserReadCondition": {
     "ModuleName": "AppUser",
     "Condition": {
-      "IsOrMatch": true,
+      "IsOrMatch": false,
       "IsNot": false,
       "Children": [
-        {
-          "SearchTargetVariable": "HasSalesAccess.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": true,
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
-        },
         {
           "SearchTargetVariable": "HasAccountingAccess.Value",
           "Comparison": "Equal",
