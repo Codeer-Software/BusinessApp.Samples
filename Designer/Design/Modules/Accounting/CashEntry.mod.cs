@@ -298,7 +298,13 @@ string ValidateDraft(CashEntryDraft draft)
     var ys = new ModuleSearcher<FiscalYear>();
     ys.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
     ys.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);
-    if (ys.ExecuteFirstOrDefault() == null) { return "会計年度なし"; }
+    var year = ys.ExecuteFirstOrDefault();
+    if (year == null) { return "会計年度なし"; }
+    // **年度の締めも見る**（BUG-0100）。期間だけを見ていると、年次決算を終えて年度を締めたあとに
+    // 1 か月だけ期間を再オープンした隙に、その年度へ確定仕訳を作れてしまう。
+    // すると翌期の期首残高は古いまま残り、貸借が翌期にずれ込む。
+    // 締めガードの粒度は `FixedAsset.GenerateDep_OnClick` の先例（年度 closed を明示的に止める）に揃える
+    if (((FiscalYear)year).Status.Value == "closed") { return "会計年度が締め済み"; }
     var ps = new ModuleSearcher<FiscalPeriod>();
     ps.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
     ps.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);

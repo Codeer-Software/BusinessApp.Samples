@@ -453,6 +453,18 @@ void SaveEntry(bool post)
         EntryDate.SetError("取引日に対応する会計年度がありません");
         return;
     }
+    // **年度の締めも見る**（BUG-0100）。期間だけを見ていると、年次決算を終えて年度を締めたあとに
+    // 1 か月だけ期間を再オープンした隙に、その年度へ確定仕訳を作れてしまう。
+    // 締めガードの粒度は `FixedAsset` の先例（年度 closed を明示的に止める）に揃える
+    var yrS = new ModuleSearcher<FiscalYear>();
+    yrS.AddEquals(e => e.Id.Value, FiscalYearRef.Value);
+    var yr = yrS.ExecuteFirstOrDefault();
+    if (yr != null && ((FiscalYear)yr).Status.Value == "closed")
+    {
+        EntryDate.SetError("取引日の会計年度は締め済みです（期間を再オープンしても年度が締まっていれば起票できません）");
+        return;
+    }
+
     var entryFirstDay = new DateTime(EntryDate.Value.Year, EntryDate.Value.Month, 1);
     var ps = new ModuleSearcher<FiscalPeriod>();
     ps.AddLessThanOrEqual(e => e.StartDate.Value, entryFirstDay);
