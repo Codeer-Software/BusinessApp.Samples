@@ -70,6 +70,17 @@ void UpdateMethodHint()
     {
         MethodHint.Value = "通常償却（定額法または200%定率法）の対象です";
     }
+
+    // 200%定率法は**簡易版**であることを画面に出す（BUG-0096）。
+    // 「制度どおりだと信じて別表十六（二）に転記する」事故を防ぐのが目的で、
+    // 黙って近い数字を出すより、限界を先に言うほうが安全である
+    if (DepreciationMethod.Value == "declining_200")
+    {
+        MethodHint.Value = MethodHint.Value
+            + " ／ ⚠ 200%定率法は簡易計算です（償却率は 2÷耐用年数、切替は残存年数の均等償却）。"
+            + "耐用年数省令 別表十の償却率・改定償却率・保証率は未実装のため、"
+            + "税務申告書（別表十六（二））の金額とは数百円単位で差が出ることがあります";
+    }
 }
 
 
@@ -114,6 +125,7 @@ bool NeedsUsefulLife(string method)
 void DepreciationMethod_OnDataChanged()
 {
     WarnMissingUsefulLife();
+    UpdateMethodHint();   // 200%定率法の簡易計算ヒントを出し分ける（BUG-0096）
 }
 
 void UsefulLife_OnDataChanged()
@@ -183,21 +195,49 @@ int CalcDepreciationForYear(var yearStart, var yearEnd)
 
     if (method == "declining_200")
     {
-        // 200%定率法（簡易: 保証率・改定償却率は未対応）。年次で簿価×(2/耐用年数)
+        // 200%定率法（**簡易版**。保証率・改定償却率のマスタは未実装＝BUG-0096）。
+        //
+        // 制度どおりの定率法は、
+        //   調整前償却額 =（取得価額 − 既償却額）× 定率法の償却率
+        //   償却保証額   = 取得価額 × 保証率（耐用年数省令 別表十）
+        // で、調整前償却額が償却保証額を下回った年度から
+        //   改定取得価額（その年度の期首未償却残高）× 改定償却率
+        // の均等償却へ切り替える（国税庁 タックスアンサー No.5410）。
+        //
+        // 保証率・改定償却率は**別表十の定数表**なのでマスタ化が要る（BUG-0096 に設計を記載）。
+        // それまでの暫定として、**「残りの年数で均等に割った額」を下回ったら均等償却へ切り替える**。
+        // official な切替年と 1 年ずれることはあるが、
+        //   ①耐用年数の最終年に簿価 1 円へ必ず到達する
+        //   ②償却額が 0 円に潰れて**永久に償却が終わらない**現象が起きない
+        // という 2 点で、掛け続けるだけの旧実装より確実に制度に近い。
+        // 旧実装は簿価が小さくなると `簿価 × 率` が切り捨てで 0 円になり、そこで止まっていた。
         decimal rate = 2;
         rate = rate / life;
         var k2 = YearIndex(acq, yearStart, yearEnd);
         if (k2 < 1) return 0;
+        if (k2 > life) return 0;   // 耐用年数を過ぎたら償却しない（制度どおり最終年で終わる）
         int book = cost;
         int amount2 = 0;
         for (var i = 1; i <= k2; i++)
         {
-            amount2 = book * rate;
+            // 調整前償却額（定率）
+            int declining = book * rate;
+            // 残存年数で均等に割った額（改定償却率による均等償却の代用）
+            var remainYears = life - i + 1;
+            int evenly = (book - 1) / remainYears;
+            if (evenly < 0) { evenly = 0; }
+
+            amount2 = declining;
+            if (declining < evenly) { amount2 = evenly; }
+
             if (i == 1)
             {
+                // 取得年度だけ月割（均等側に切り替わることは無いが、式は共通にしておく）
                 amount2 = amount2 * MonthsFromAcqToYearEnd(acq, yearStart) / 12;
             }
+            if (i == life) { amount2 = book - 1; }   // 最終年は簿価 1 円まで落とし切る
             if (amount2 > book - 1) { amount2 = book - 1; }
+            if (amount2 < 0) { amount2 = 0; }
             if (i < k2) { book = book - amount2; }
         }
         if (amount2 <= 0) return 0;
