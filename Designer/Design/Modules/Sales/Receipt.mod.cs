@@ -6,6 +6,15 @@
 // 消込仕訳の借方は入金方法で切替 (ADR-0035): bank→普通預金1020 / cash→現金1000 / offset→買掛金2000。
 // 相殺 (offset) は同一取引先の仕入先請求 (未払計上済み) を全額消込し、買掛側も paid に連動させる。
 // 仕訳生成の正典: ExpenseRequest.GenerateJournal_OnClick / Acceptance.Confirm_OnClick
+//
+// **請求書（InvoiceRef）は読み取り専用**（BUG-0299）。入金レコードの正体は請求書の発行時・
+// 一部入金の確定時に自動作成される「入金予定」であり、請求書と 1 対 1 で対応している
+// （ADR-0032／手動新規作成は ADR-0033 で廃止済み＝この画面に「手で作った入金」は存在しない）。
+// 付け替えられると ①元の請求書が入金予定を失って回収漏れの検知から消え ②付け替え先が
+// 入金予定 2 件になり ③資金繰り予測の入金見込みが両方向に狂い ④取引先すら跨げてしまう。
+// 直したいときは「入金を取り消す」→ 請求書側で下書きに戻す／取消にする、で作り直す。
+// レイアウトの IsViewOnly（新規・更新の両方に効く）＋ IsUpdateProtected（サーバ側の保険）の
+// 二段構えにするのは ADR-0062 の規約どおり。
 
 void Detail_OnAfterInit()
 {
@@ -223,19 +232,6 @@ void CancelReceipt_OnClick()
     {
         Toaster.Success($"仕訳 No.{jeNo} を削除し、入金を未確定に戻しました");
     }
-}
-
-// 請求書選択: 請求税込額 − 既存入金合計 (自分以外) を入金額に自動セット (手修正可)
-void InvoiceRef_OnDataChanged()
-{
-    if (InvoiceRef.Value == null) return;
-    var iv = FindInvoice(InvoiceRef.Value);
-    if (iv == null) return;
-    int gross = (iv.Amount.Value ?? 0) + (iv.TaxAmount.Value ?? 0);
-    int received = SumReceipts(InvoiceRef.Value, true);
-    var remain = gross - received;
-    if (remain < 0) remain = 0;
-    Amount.Value = remain;
 }
 
 Invoice FindInvoice(object invoiceId)

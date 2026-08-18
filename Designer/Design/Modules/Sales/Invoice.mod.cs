@@ -59,52 +59,386 @@ void UpdateButtons()
         PrintExcelButton.IsViewOnly = false;
         PrintPdfButton.IsViewOnly = false;
     }
+
+    UpdateStateActionHint();  // 状態遷移ボタンの効き方の説明は、ボタンの出し分けと必ず対で更新する
 }
 
-// 請求書の取消（issued→void）: 貸倒れ・二重発行などで請求を無効化し、売掛残高の対象から外す。
-// 入金記録がある請求書は不可（先に入金の取消を）。売上仕訳は消さない——貸倒れは貸倒損失の
-// 振替伝票（07_特殊取引の手順）で別途処理する
+// 請求書の取消（issued→void）: 二重発行・宛先ミス・貸倒れなどで請求を無効化し、
+// 売掛残高の対象から外す。入金記録がある請求書は不可（先に入金の取消を）。
+//
+// **この請求書自身が起票した売上仕訳は赤伝（反対仕訳）で必ず打ち消す**（BUG-0129）。
+// 売掛残高一覧は void を除外する（ReceivableBalance.Query.sql）ので、仕訳を残すと
+// GL の売掛金にだけ残高が残り、補助簿と恒久的に食い違う。二重発行・宛先ミスは貸倒れではないので
+// 「別途振替伝票で処理してください」と案内しても誰も起票せず、実際にそのまま残っていた。
+//
+// 元仕訳を削除せず赤伝を起票するのは、**「取消を戻す」で元に戻せる必要がある**ため。
+// 定期請求は void を恒久的な「再生成しない」印にしているので（RecurringRun.BuildMonthlyPlanRow）、
+// 元仕訳を消すと売上を復元する手段が無くなる。赤伝方式なら締め済み・締め前を同じ規則で扱え、
+// 「締めた期の数字は動かさない」も自動的に満たせる（赤伝の日付は下の CreateReversalJournal 参照）。
+//
+// **検収由来の売上仕訳（source_type='acceptance'）は触らない。** 収益は検収の確定で認識しており、
+// 請求書はその写しにすぎない。ここで消すと「確定済みなのに売上仕訳が無い検収」＝BUG-0128 の形を
+// 作ってしまう。代わりに、売上が検収側に残ることを確認ダイアログと画面の警告で必ず知らせる
+// （取消後は検収のロックが外れる〔BUG-0130〕ので、再請求するか検収の確定を取り消すかを選べる）。
 void Void_OnClick()
 {
     if (Status.Value != "issued") { Toaster.Error("発行済の請求書のみ取消にできます"); return; }
     if (HasConfirmedReceipts()) { Toaster.Error("消込済みの入金記録があるため取消にできません（先に入金の取消を行ってください）"); return; }
-    var result = MessageBox.Show($"請求書「{InvoiceNo.Value}」を取消にしますか？（入金消込・売掛残高の対象から外れます。計上済みの売上仕訳はそのまま残るため、貸倒れ等は別途振替伝票で処理してください）", "取消にする", "キャンセル");
+
+    // この請求書「自身」が起票した仕訳。定期請求（月額・年額・按分振替）と SES 精算だけが該当する
+    // （journal_entries.source_id に請求書 id を入れる source_type 群）。検収由来はここに入らない
+    var ownJs = new ModuleSearcher<JournalEntry>();
+    ownJs.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    ownJs.AddIn(e => e.SourceType.Value, "ses", "recurring", "recurring_annual", "recurring_defer");
+    var journals = ownJs.Execute();
+
+    // 起票できるかを**先に全件**確かめる。途中まで起票して止まると、原因を直して押し直したときに
+    // 済んだ分の赤伝がもう一度作られる（赤伝には「どの仕訳を打ち消したか」を辿る列が無いため）
+    foreach (var row in journals)
+    {
+        var je = (JournalEntry)row;
+        if (!CanReverseJournal(je)) return;
+    }
+
+    var msg = $"請求書「{InvoiceNo.Value}」を取消にしますか？（入金消込・売掛残高の対象から外れます）";
+    if (journals.Count > 0)
+    {
+        msg = msg + $" この請求書が起票した仕訳 {journals.Count} 本は、赤伝（反対仕訳）を起票して打ち消します。";
+    }
+    var accNote = BuildAcceptanceSalesNote();
+    if (accNote != null)
+    {
+        msg = msg + $" なお、この請求書の売上は {accNote} で計上済みです——取消にしても売上と売掛金は帳簿に残ります。請求しないなら検収の「確定を取り消す」で売上ごと取り消してください。";
+    }
+    var result = MessageBox.Show(msg, "取消にする", "キャンセル");
     if (result != "取消にする") return;
 
     using var loading = LoadingService.StartLoading(0);
+
+    // 仕訳を先に片付けてから状態を動かす。逆順にすると、赤伝の起票に失敗した瞬間に
+    // 「void なのに売上仕訳が残っている」＝いま直そうとしている状態そのものが出来上がる。
+    // この順序なら失敗しても請求書は発行済のままなので、原因を直して押し直せる
+    var reversedNos = new List<string>();
+    foreach (var row in journals)
+    {
+        var je = (JournalEntry)row;
+        var newNo = CreateReversalJournal(je, "invoice_void", "売上取消");
+        if (newNo == 0)
+        {
+            Toaster.Error($"仕訳 No.{je.JournalNo.Value} の赤伝を起票できなかったため取消にできませんでした（請求書は発行済のままです）");
+            return;
+        }
+        reversedNos.Add($"No.{newNo}");
+    }
+
     this.IsViewOnly = false;  // 発行済ロック中でも状態遷移は許可（UpdateButtons が再ロックする）
     Status.Value = "void";
     var ret = this.Submit();
     if (ret != true)
     {
         Status.Value = "issued";
-        Toaster.Error("取消に失敗しました");
+        Toaster.Error("取消に失敗しました（起票した赤伝は残っています。仕訳一覧を確認してください）");
         UpdateButtons();
         return;
     }
     DeletePendingReceipts();  // 未確定の入金予定は取消と同時に片付ける（消込対象から外す）
-    Toaster.Success($"請求書 {InvoiceNo.Value} を取消にしました");
     UpdateButtons();
+    if (reversedNos.Count > 0)
+    {
+        Toaster.Success($"請求書 {InvoiceNo.Value} を取消にし、赤伝 {string.Join("・", reversedNos)} で売上を打ち消しました");
+    }
+    else
+    {
+        Toaster.Success($"請求書 {InvoiceNo.Value} を取消にしました");
+    }
 }
 
-// 取消の取り消し（void→issued）: 誤って取消にした場合のリカバリ
+// 取消の取り消し（void→issued）: 誤って取消にした場合のリカバリ。
+// 取消で起票した赤伝を打ち消して売上を帳簿に戻す（取消と対称にする）。
+// 赤伝が開いている期間にあれば赤伝そのものを削除し（帳簿に赤黒のゴミを残さない）、
+// 締め済みなら赤伝の反対仕訳を当期に起票する
 void Unvoid_OnClick()
 {
     if (Status.Value != "void") { Toaster.Error("取消状態の請求書のみ戻せます"); return; }
     using var loading = LoadingService.StartLoading(0);
+
+    var js = new ModuleSearcher<JournalEntry>();
+    js.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    js.AddEquals(e => e.SourceType.Value, "invoice_void");
+    var reversals = js.Execute();
+
+    // 取消と同じく、締め済みの赤伝を打ち消す反対仕訳が全部起票できるかを先に確かめる
+    foreach (var row in reversals)
+    {
+        var je = (JournalEntry)row;
+        if (!IsClosedPeriodAt(je.EntryDate.Value)) continue;
+        if (!CanReverseJournal(je)) return;
+    }
+
+    var restored = 0;
+    foreach (var row in reversals)
+    {
+        var je = (JournalEntry)row;
+        if (IsClosedPeriodAt(je.EntryDate.Value))
+        {
+            var newNo = CreateReversalJournal(je, "invoice_unvoid", "取消の取り消し");
+            if (newNo == 0)
+            {
+                Toaster.Error($"赤伝 No.{je.JournalNo.Value} を打ち消せなかったため発行済に戻せませんでした");
+                return;
+            }
+        }
+        else
+        {
+            if (!DeleteJournalEntryWithLines(je))
+            {
+                Toaster.Error($"赤伝 No.{je.JournalNo.Value} の削除に失敗したため発行済に戻せませんでした");
+                return;
+            }
+        }
+        restored = restored + 1;
+    }
+
     this.IsViewOnly = false;  // 取消ロック中でも状態遷移は許可（UpdateButtons が再ロックする）
     Status.Value = "issued";
     var ret = this.Submit();
     if (ret != true)
     {
         Status.Value = "void";
-        Toaster.Error("発行済への変更に失敗しました");
+        Toaster.Error("発行済への変更に失敗しました（赤伝の取り消しは済んでいます。仕訳一覧を確認してください）");
         UpdateButtons();
         return;
     }
     CreatePendingReceipt();  // 取消の取り消しで消込対象に復帰するため、入金予定も作り直す
-    Toaster.Success($"請求書 {InvoiceNo.Value} を発行済に戻しました");
     UpdateButtons();
+    if (restored > 0)
+    {
+        Toaster.Success($"請求書 {InvoiceNo.Value} を発行済に戻し、赤伝 {restored} 本を取り消して売上を戻しました");
+    }
+    else
+    {
+        Toaster.Success($"請求書 {InvoiceNo.Value} を発行済に戻しました");
+    }
+}
+
+// 指定日が属する月次期間（無ければ null）。
+// 境界日知見: 月末日は辞書順比較で失敗するため月初日で解決する
+FiscalPeriod FindPeriodAt(DateOnly? d)
+{
+    if (d == null) return null;
+    var monthFirst = new DateOnly(d.Year, d.Month, 1);
+    var ps = new ModuleSearcher<FiscalPeriod>();
+    ps.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
+    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);
+    var found = ps.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return (FiscalPeriod)found;
+}
+
+bool IsClosedPeriodAt(DateOnly? d)
+{
+    var p = FindPeriodAt(d);
+    if (p == null) return false;
+    return p.Status.Value == "closed";
+}
+
+// 反対仕訳を起票する日付: 元仕訳の期間が開いていれば元と同じ日／締まっていれば今日。
+// 締め済み期間に新しい伝票を足すのも「締めた期の数字を動かす」ことなので、その場合だけ当期に打つ。
+// 元の期間が開いているなら同じ月に赤伝を置く方が正しい——その月の損益が発行と取消で相殺され、
+// 月次推移に「請求していない売上」が残らない
+DateOnly? ResolveReversalDate(JournalEntry src)
+{
+    DateOnly? d = src.EntryDate.Value;
+    if (d == null || IsClosedPeriodAt(d)) { return DateOnly.FromDateTime(DateTime.Today); }
+    return d;
+}
+
+// 反対仕訳を起票できるか（起票先の会計年度・月次期間・元仕訳の明細）。
+// 理由は Toaster に出すので、呼び出し側は false なら黙って戻ってよい
+bool CanReverseJournal(JournalEntry src)
+{
+    var useDate = ResolveReversalDate(src);
+    var typedFy = FindFiscalYearAt(useDate);
+    if (typedFy == null)
+    {
+        Toaster.Error($"{useDate:yyyy/MM/dd} に対応する会計年度がありません（会計期間マスタを確認してください）");
+        return false;
+    }
+    var period = FindPeriodAt(useDate);
+    if (period == null)
+    {
+        Toaster.Error($"{useDate:yyyy/MM/dd} に対応する月次期間がありません（会計期間マスタを確認してください）");
+        return false;
+    }
+    if (period.Status.Value == "closed")
+    {
+        Toaster.Error($"仕訳 No.{src.JournalNo.Value} を打ち消す反対仕訳の起票先（{useDate:yyyy/MM/dd}）も締め済みです。当月の月次締めを開いてから実行してください");
+        return false;
+    }
+    var ls = new ModuleSearcher<JournalLine>();
+    ls.AddEquals(l => l.JournalEntryId.Value, src.Id.Value);
+    if (ls.Execute().Count == 0)
+    {
+        Toaster.Error($"仕訳 No.{src.JournalNo.Value} に明細がありません（仕訳一覧で内容を確認してください）");
+        return false;
+    }
+    return true;
+}
+
+// 指定日が属する会計年度（無ければ null）。境界日知見は FindPeriodAt と同じ
+FiscalYear FindFiscalYearAt(DateOnly? d)
+{
+    if (d == null) return null;
+    var monthFirst = new DateOnly(d.Year, d.Month, 1);
+    var ys = new ModuleSearcher<FiscalYear>();
+    ys.AddLessThanOrEqual(e => e.StartDate.Value, monthFirst);
+    ys.AddGreaterThanOrEqual(e => e.EndDate.Value, monthFirst);
+    var found = ys.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return (FiscalYear)found;
+}
+
+// 元仕訳の借方貸方を入れ替えた反対仕訳を起票する。成功したら新しい伝票番号、失敗したら 0 を返す。
+// 金額は元仕訳の確定値をそのまま写し、TaxInputMode は none にして再計算させない
+// （税行も IsTaxLine / ParentLineNo ごと写すので、消費税集計表は貸借の向きで正しく減算される）
+int CreateReversalJournal(JournalEntry src, string sourceType, string kind)
+{
+    if (!CanReverseJournal(src)) { return 0; }
+    var useDate = ResolveReversalDate(src);
+    var typedFy = FindFiscalYearAt(useDate);
+
+    var ls = new ModuleSearcher<JournalLine>();
+    ls.AddEquals(l => l.JournalEntryId.Value, src.Id.Value);
+    ls.OrderBy(l => l.LineNo.Value);
+    var srcLines = ls.Execute();
+
+    // 伝票採番（正典: JournalEntry.NextJournalNo。BUG-0069 で一本化）
+    var nextNo = new JournalEntry().NextJournalNo(typedFy.Id.Value);
+
+    var je = new JournalEntry();
+    je.EntryDate.Value = useDate;
+    je.EntryType.Value = "auto";
+    je.Description.Value = $"{kind}（{InvoiceNo.Value}）: 仕訳 No.{src.JournalNo.Value} の反対仕訳";
+    je.Status.Value = "posted";
+    je.JournalNo.Value = nextNo;
+    je.FiscalYearRef.Value = typedFy.Id.Value;
+    je.SourceType.Value = sourceType;
+    je.SourceId.Value = this.Id.Value;
+    je.Lines.AddRows(srcLines.Count);   // 引数は 1 文で確定させる（ISSUE-0006）
+    var idx = 0;
+    foreach (var row in je.Lines.Rows)
+    {
+        var dst = (JournalLine)row;
+        var s = (JournalLine)srcLines[idx];
+        idx = idx + 1;
+        // 行番号は元のまま写す（税行の ParentLineNo が元の行番号を指しているため）
+        dst.LineNo.Value = (s.LineNo.Value == null) ? idx : s.LineNo.Value;
+        dst.Dc.Value = (s.Dc.Value == "D") ? "C" : "D";
+        dst.Account.Value = s.Account.Value;
+        dst.SubAccount.Value = s.SubAccount.Value;
+        dst.Department.Value = s.Department.Value;
+        dst.ProjectRef.Value = s.ProjectRef.Value;
+        dst.TaxCategory.Value = s.TaxCategory.Value;
+        dst.TaxInputMode.Value = "none";
+        dst.IsTaxLine.Value = s.IsTaxLine.Value;
+        dst.ParentLineNo.Value = s.ParentLineNo.Value;
+        dst.Amount.Value = s.Amount.Value;
+        dst.InputAmount.Value = s.Amount.Value;
+        dst.Description.Value = s.Description.Value;
+    }
+    je.MarkRemainingLinesOutOfScope();
+    je.FillMissingDepartments();  // 部門は NOT NULL。元仕訳から写しているので通常は素通り（ADR-0056）
+    var ret = je.Submit();
+    if (ret != true) { return 0; }
+    return nextNo;
+}
+
+// この請求書の売上を裏付けている「検収の売上仕訳」の案内文（無ければ null）。
+// 直接請求（acceptance_id）と合算請求（acceptances.billed_invoice_id）の両方を見る。
+// 売上仕訳は検収のものなので請求書側からは動かさない——だからこそ、どこに残るのかを画面で言う
+string BuildAcceptanceSalesNote()
+{
+    if (this.IsNewData) return null;
+    var acceptanceIds = new List<object>();
+    if (AcceptanceRef.Value != null) { acceptanceIds.Add(AcceptanceRef.Value); }
+    var accs = new ModuleSearcher<Acceptance>();
+    accs.AddEquals(e => e.BilledInvoiceRef.Value, this.Id.Value);
+    foreach (var row in accs.Execute())
+    {
+        var a = (Acceptance)row;
+        if ($"{a.Id.Value}" == $"{AcceptanceRef.Value}") continue;
+        acceptanceIds.Add(a.Id.Value);
+    }
+    if (acceptanceIds.Count == 0) return null;
+
+    var parts = new List<string>();
+    foreach (var acceptanceId in acceptanceIds)
+    {
+        var js = new ModuleSearcher<JournalEntry>();
+        js.AddEquals(e => e.SourceType.Value, "acceptance");
+        js.AddEquals(e => e.SourceId.Value, acceptanceId);
+        var found = js.ExecuteFirstOrDefault();
+        if (found == null) continue;
+        var je = (JournalEntry)found;
+        parts.Add($"検収 {FindAcceptanceNo(acceptanceId)} の売上仕訳 No.{je.JournalNo.Value}");
+    }
+    if (parts.Count == 0) return null;
+    return string.Join(" ／ ", parts);
+}
+
+string FindAcceptanceNo(object acceptanceId)
+{
+    var s = new ModuleSearcher<Acceptance>();
+    s.AddEquals(e => e.Id.Value, acceptanceId);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return "";
+    return ((Acceptance)found).AcceptanceNo.Value ?? "";
+}
+
+// 「発行を取り消す」「下書きに戻す」「取消にする」は名前だけでは帳簿への効き方が読めない
+// （2026-08-17 ユーザー指摘）。どのボタンが何を消すのかを画面に常時書いておく。
+// 取消済みの請求書には、売上が検収側に残っていないかも赤字で出す（BUG-0129 の再発検知）
+void UpdateStateActionHint()
+{
+    StateActionHint.IsVisible = false;
+    StateActionHint.Text = "";
+    VoidSalesWarning.IsVisible = false;
+    VoidSalesWarning.Text = "";
+    if (this.IsNewData) return;
+
+    var st = Status.Value;
+    if (st == "issued")
+    {
+        var lines = new List<string>();
+        if (RevertToDraftButton.IsVisible == true)
+        {
+            lines.Add("「下書きに戻す」＝ 発行前に戻して内容を直す（帳簿は動きません。入金予定だけ取り消します）");
+        }
+        if (CancelIssueButton.IsVisible == true)
+        {
+            lines.Add("「発行を取り消す」＝ 生成そのものを無かったことにする（この請求書・起票した仕訳・入金予定をまとめて削除し、定期請求の実行／SES精算・請求でやり直せる状態に戻します）");
+        }
+        lines.Add("「取消にする」＝ 請求書を記録として残したまま無効にする（売掛残高一覧から外れ、この請求書が起票した売上仕訳は赤伝で打ち消します）。二重発行・宛先ミス・貸倒れはこちら");
+        StateActionHint.Text = string.Join("　／　", lines);
+        StateActionHint.IsVisible = true;
+    }
+    else if (st == "void")
+    {
+        StateActionHint.Text = "この請求書は取消済みです（売掛残高一覧・入金消込の対象外）。「取消を戻す」で発行済に戻すと、取消時の赤伝も取り消して売上を帳簿に戻します";
+        StateActionHint.IsVisible = true;
+    }
+
+    if (st == "void")
+    {
+        var accNote = BuildAcceptanceSalesNote();
+        if (accNote != null)
+        {
+            VoidSalesWarning.Text = $"⚠ 取消済みですが、売上は {accNote} として帳簿に残っています（売掛金も計上されたままです）。"
+                + "この検収をあらためて請求するなら検収画面から請求書を作り直してください。請求しないなら検収の「確定を取り消す」で売上ごと取り消してください。"
+                + "どちらもしないと、総勘定元帳の売掛金だけが売掛残高一覧より多い状態が続きます。";
+            VoidSalesWarning.IsVisible = true;
+        }
+    }
 }
 
 void Issue_OnClick()
@@ -208,9 +542,12 @@ void CancelIssue_OnClick()
     if (HasConfirmedReceipts()) { Toaster.Error("消込済みの入金記録があるため取り消せません（先に入金の取消を行ってください）"); return; }
 
     // 関連仕訳の収集（月額/SES=売上仕訳、年額=前受計上＋全按分振替）と締め済みチェック
+    // 取消（void）で起票した赤伝・その取り消しの反対仕訳も一緒に消す。
+    // 残すと削除済み請求書を source に持つ孤児になる（金額としては赤黒で相殺されているが、
+    // 出どころを辿れない伝票を帳簿に置かない）
     var js = new ModuleSearcher<JournalEntry>();
     js.AddEquals(e => e.SourceId.Value, this.Id.Value);
-    js.AddIn(e => e.SourceType.Value, "ses", "recurring", "recurring_annual", "recurring_defer");
+    js.AddIn(e => e.SourceType.Value, "ses", "recurring", "recurring_annual", "recurring_defer", "invoice_void", "invoice_unvoid");
     var journals = js.Execute();
     foreach (var row in journals)
     {
@@ -224,7 +561,7 @@ void CancelIssue_OnClick()
         var period = ps.ExecuteFirstOrDefault();
         if (period != null && ((FiscalPeriod)period).Status.Value == "closed")
         {
-            Toaster.Error($"仕訳 No.{je.JournalNo.Value}（{d:yyyy/MM/dd}）の期間が締め済みのため発行を取り消せません。過去分は赤黒訂正で修正し、以後の按分振替を止めたい場合は「取消にする」を使ってください");
+            Toaster.Error($"仕訳 No.{je.JournalNo.Value}（{d:yyyy/MM/dd}）の期間が締め済みのため発行を取り消せません（締めた期の仕訳は削除できません）。「取消にする」を使ってください——締め済み分は当期に赤伝を起票して打ち消し、以後の按分振替も止まります");
             return;
         }
     }
