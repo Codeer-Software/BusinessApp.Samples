@@ -95,11 +95,46 @@ void Save_OnClick()
 
     using var loading = LoadingService.StartLoading(0);
 
+    // **失敗を握り潰さない**（BUG-0072）。`Submit()` が false を返すのは実際に起きる——
+    // 画面の部門は空候補を選べるのに DB は `department_id NOT NULL` なので、
+    // 空に戻した行の保存は必ず失敗する。旧実装は false を数えずに常に成功トーストを出しており、
+    // **保存されたと信じて離脱する**という一番まずい壊れ方をしていた。
+    // なお `Submit()` が null を返すのは「変更が無い」＝失敗ではない（この repo の既知の作法）。
+    // 空の部門は DB が受け付けない（`department_id NOT NULL`）ので、**押す前に止めて場所を教える**
+    var emptyLines = new List<string>();
+    foreach (var row in LineList.Rows)
+    {
+        var l0 = (JournalLine)row;
+        if (l0.Department.Value == null) { emptyLines.Add($"{l0.LineNo.Value}"); }
+    }
+    if (emptyLines.Count > 0)
+    {
+        Toaster.Error($"明細 {string.Join("・", emptyLines)} 行目の部門が空です。"
+            + "部門は必須なので、選んでから保存してください（共通費なら「全社共通」）");
+        return;
+    }
+
     var saved = 0;
+    var failed = 0;
+    var failedLines = new List<string>();
     foreach (var row in LineList.Rows)
     {
         var l = (JournalLine)row;
-        if (l.Submit() == true) { saved = saved + 1; }
+        var ok = l.Submit();
+        if (ok == true) { saved = saved + 1; }
+        else if (ok == false)
+        {
+            failed = failed + 1;
+            failedLines.Add($"{l.LineNo.Value}");
+        }
+    }
+
+    if (failed > 0)
+    {
+        // 画面に留まる（BackToEntry しない）。直して押し直せるようにする
+        Toaster.Error($"{failed} 行を保存できませんでした（明細 {string.Join("・", failedLines)} 行目）。"
+            + "部門が空になっていないか確認してください（部門は必須です）");
+        return;
     }
 
     // 伝票ヘッダの更新者・更新日時を動かす（ADR-0056 決定 4 の監査証跡）。
