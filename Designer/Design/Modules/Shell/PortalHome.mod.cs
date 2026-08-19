@@ -146,7 +146,19 @@ void Detail_OnAfterInit()
             }
             // 資金の警告は 2 段階（BUG-0249）。**ショートと危険水域を 1 つの件数に混ぜない**——
             // 混ぜると黒字の月まで「ショート」と表示され、予測画面の「△ 危険水域」と重大度が食い違う
-            if ((isApprover || hasAccounting) && (cashMonths > 0 || cashWarnMonths > 0))
+            // **起点が作れていないなら件数を出さない**（BUG-0246）。
+            // 会計年度が無い／繰越が未実施だと期首資金が 0 円になり、`ending < 0` が全月で立つ。
+            // そのまま「⚠ 資金ショート予測: 4 ヶ月」と叫ぶと、一度の空振りで
+            // **本当にショートする月が来てもアラートが信用されなくなる**。
+            // 件数の代わりに「起点が作れていない」ことを言い、予測画面へ誘導する
+            var cashBaseOk = ((int)(a.CashBaseOk.Value ?? 1)) == 1;
+            if ((isApprover || hasAccounting) && !cashBaseOk)
+            {
+                CashAlertLink.IsVisible = true;
+                CashAlertLink.Text = "⚠ 資金繰り予測の起点が作れていません"
+                    + "（会計年度が未作成、または翌期繰越が未実施）。予測の金額は当てになりません";
+            }
+            else if ((isApprover || hasAccounting) && (cashMonths > 0 || cashWarnMonths > 0))
             {
                 CashAlertLink.IsVisible = true;
                 if (cashMonths > 0)

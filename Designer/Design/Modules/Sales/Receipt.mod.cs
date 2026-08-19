@@ -104,20 +104,15 @@ void UpdateButtons()
 
 // 仕訳を明細→親の順に物理削除する。子持ちモジュールの検索インスタンス Delete() は
 // 親単独では静かに失敗する（実測）ため、行ごとに削除し全戻り値を検証する
+// 正典は JournalEntry.DeleteWithLines（BUG-0148）。**ここに書き写さない**——
+// 書き写した結果、入金と銀行で同じ部分失敗を 2 回作っていた。
+// 失敗理由は呼び元でそのままトーストに出す（伝票番号と残った状態が入っている）
+string lastDeleteError = "";
+
 bool DeleteJournalEntryWithLines(JournalEntry je)
 {
-    var ls = new ModuleSearcher<JournalLine>();
-    ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
-    var lines = ls.Execute();
-    foreach (var row in lines)
-    {
-        var l = (JournalLine)row;
-        var okLine = l.Delete();
-        if (okLine != true) { return false; }
-    }
-    var ok = je.Delete();
-    if (ok != true) { return false; }
-    return true;
+    lastDeleteError = je.DeleteWithLines();
+    return lastDeleteError == "";
 }
 
 // この入金の消込仕訳（無ければ null）
@@ -187,14 +182,29 @@ void CancelReceipt_OnClick()
                 Toaster.Error("仕入先請求の巻き戻しに失敗したため取り消せません（入金は確定済みのままです）");
                 return;
             }
+            // 巻き戻した仕入先請求を控えておく。**仕訳削除が失敗したら戻す**（BUG-0147）
+            rolledBackVendorInvoiceId = vi.Id.Value;
         }
     }
 
     if (!DeleteJournalEntryWithLines(je))
     {
-        Toaster.Error("消込仕訳の削除に失敗しました（入金は確定済みのままです）");
+        // **買掛だけ未払に戻った状態を残さない**（BUG-0147）。
+        // FK（vendor_invoices.payment_entry_id → journal_entries.id）の都合で
+        // 「参照を外す → 仕訳を消す」の順は変えられないので、後半が失敗したら前半を戻す。
+        // 戻さないと `D 買掛金 / C 売掛金` の消込仕訳が残ったまま買掛が「未払」で復活し、
+        // **ADR-0035 が防ごうとした「相殺済みの買掛を二重に振り込む」状態そのもの**になる
+        var restored = RestoreOffsetVendorInvoice(je);
+        if (restored) { Toaster.Error(lastDeleteError); }
+        else
+        {
+            Toaster.Error(lastDeleteError
+                + " さらに**仕入先請求を支払済みに戻せませんでした**。"
+                + "このままだと相殺済みの買掛が支払予定・FB 振込データに現れます。至急、経理に連絡してください");
+        }
         return;
     }
+    rolledBackVendorInvoiceId = null;
 
     // 差額の記録を消す（BUG-0422）。取り消した入金は「まだ消し込んでいない」状態に戻るので、
     // 差額も無かったことにする。残しておくと、次に差額なしで確定し直したときに二重に数える
@@ -286,6 +296,20 @@ void CancelReceipt_OnClick()
     {
         Toaster.Success($"仕訳 No.{jeNo} を削除し、入金を未確定に戻しました");
     }
+}
+
+// 相殺の巻き戻しをさらに巻き戻す（BUG-0147）。戻せたら true
+object rolledBackVendorInvoiceId = null;
+
+bool RestoreOffsetVendorInvoice(JournalEntry je)
+{
+    if (rolledBackVendorInvoiceId == null) return true;   // 相殺ではない＝戻すものが無い
+    var vi = FindVendorInvoice(rolledBackVendorInvoiceId);
+    if (vi == null) return false;
+    vi.PaymentEntryId.Value = je.Id.Value;
+    vi.PaidDate.Value = ReceiptDate.Value;
+    vi.Status.Value = "paid";
+    return vi.Submit() == true;
 }
 
 // この入金の消込明細から差額の記録を落とす（BUG-0422）
@@ -1164,7 +1188,7 @@ void CancelMulti()
     using var loading = LoadingService.StartLoading(0);
     if (!DeleteJournalEntryWithLines(je))
     {
-        Toaster.Error("消込仕訳の削除に失敗しました（入金は確定済みのままです）");
+        Toaster.Error(lastDeleteError);
         return;
     }
     foreach (var rl in GetLines())

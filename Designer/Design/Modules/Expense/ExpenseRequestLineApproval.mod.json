@@ -521,11 +521,20 @@
   "UserWriteCondition": {
     "ModuleName": "AppUser",
     "Condition": {
-      "IsOrMatch": false,
+      "IsOrMatch": true,
       "IsNot": false,
       "Children": [
         {
           "SearchTargetVariable": "IsApprover.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": true,
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+        },
+        {
+          "SearchTargetVariable": "HasAccountingAccess.Value",
           "Comparison": "Equal",
           "Value": {
             "Value": true,
@@ -541,11 +550,20 @@
   "UserReadCondition": {
     "ModuleName": "AppUser",
     "Condition": {
-      "IsOrMatch": false,
+      "IsOrMatch": true,
       "IsNot": false,
       "Children": [
         {
           "SearchTargetVariable": "IsApprover.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": true,
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+        },
+        {
+          "SearchTargetVariable": "HasAccountingAccess.Value",
           "Comparison": "Equal",
           "Value": {
             "Value": true,

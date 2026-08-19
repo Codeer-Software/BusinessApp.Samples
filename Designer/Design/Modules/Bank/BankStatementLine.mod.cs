@@ -172,7 +172,7 @@ void Unpost_OnClick()
         Status.Value = "journalized";
         this.Submit();
         UpdateButtons();
-        Toaster.Error("仕訳の削除に失敗しました（明細は起票済みのままです）");
+        Toaster.Error($"{lastDeleteError}（明細は起票済みのままです）");
         return;
     }
 
@@ -181,20 +181,15 @@ void Unpost_OnClick()
 }
 
 // 仕訳の削除: 明細行を1行ずつ削除してから親を削除する（検収・入金の取消と同じパターン）
+// 正典は JournalEntry.DeleteWithLines（BUG-0148）。**ここに書き写さない**——
+// 書き写した結果、入金と銀行で同じ部分失敗を 2 回作っていた。
+// 失敗理由は呼び元でそのままトーストに出す（伝票番号と残った状態が入っている）
+string lastDeleteError = "";
+
 bool DeleteJournalEntryWithLines(JournalEntry je)
 {
-    var ls = new ModuleSearcher<JournalLine>();
-    ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
-    var lines = ls.Execute();
-    foreach (var row in lines)
-    {
-        var l = (JournalLine)row;
-        var okLine = l.Delete();
-        if (okLine != true) { return false; }
-    }
-    var ok = je.Delete();
-    if (ok != true) { return false; }
-    return true;
+    lastDeleteError = je.DeleteWithLines();
+    return lastDeleteError == "";
 }
 
 // ============ pending / excluded → 削除 ============

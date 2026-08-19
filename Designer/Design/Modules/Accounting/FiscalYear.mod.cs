@@ -660,31 +660,15 @@ bool DeleteWipJournals(bool showError)
     foreach (var je in targets)
     {
         var no = je.JournalNo.Value;
-        var ls = new ModuleSearcher<JournalLine>();
-        ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
-        var lineTotal = ls.Execute().Count;
-        var lineDone = 0;
-        foreach (var row in ls.Execute())
-        {
-            var l = (JournalLine)row;
-            if (l.Delete() != true)
-            {
-                if (showError)
-                {
-                    Toaster.Error($"伝票 No.{no} の明細を削除できませんでした（{lineTotal} 行中 {lineDone} 行を削除済み）。"
-                        + $"この伝票は**貸借が合っていない状態**で帳簿に残っています。仕訳画面で No.{no} を直接直してください"
-                        + ((doneCount > 0) ? $"（すでに {doneCount} 本の伝票は削除済みです）" : ""));
-                }
-                return false;
-            }
-            lineDone = lineDone + 1;
-        }
-        if (je.Delete() != true)
+        // 削除は正典に任せる（BUG-0148）。ここは複数伝票をまとめて消すので、
+        // 「すでに何本消したか」だけを文脈として足す
+        var delErr = je.DeleteWithLines();
+        if (delErr != "")
         {
             if (showError)
             {
-                Toaster.Error($"伝票 No.{no} を削除できませんでした（明細は削除済み）。"
-                    + $"**明細の無い伝票が帳簿に残っています**。仕訳画面で No.{no} を削除してください");
+                Toaster.Error(delErr
+                    + ((doneCount > 0) ? $"（すでに {doneCount} 本の伝票は削除済みです）" : ""));
             }
             return false;
         }

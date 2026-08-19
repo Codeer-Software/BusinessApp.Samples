@@ -62,6 +62,12 @@
             "Name": "due_soon_days",
             "DbType": "integer",
             "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "cash_base_ok",
+            "DbType": "integer",
+            "DbParameterDirection": "Input"
           }
         ]
       },
@@ -236,6 +242,27 @@
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "DbColumn": "cash_alert_months",
+      "Placeholder": "",
+      "Format": "",
+      "IsSlider": false,
+      "OnInput": "",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "資金の起点",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "CashBaseOk",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -289,7 +316,9 @@
   "ListLayouts": {
     "": {
       "HeaderTitle": "",
-      "DataOnlyFields": [],
+      "DataOnlyFields": [
+        "CashBaseOk"
+      ],
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,
       "OnBeforeInitialization": "",

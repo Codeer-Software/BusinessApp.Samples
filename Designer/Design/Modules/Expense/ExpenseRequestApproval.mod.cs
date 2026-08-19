@@ -37,7 +37,39 @@
 
 void OnAfterInitialization()
 {
+    LockHeader();
     UpdateVisibility();
+}
+
+// ヘッダは**読取専用**（BUG-0451）。
+// このモジュールの役割は「ヘッダ読取＋明細読取＋承認欄」だと冒頭で宣言しているのに、
+// 読取専用にする指定がどこにも無く、承認者は書込条件を満たすので**全項目を書き換えられた**。
+// しかも `Approve_OnClick` は最後に `GetParentModule().Submit()` を呼ぶので、
+// **「承認」ボタンがその改変を保存する**。
+//
+// 実際の壊れ方: 承認者が合計金額 32,000 → 320,000 に直し、精算対象者を自分にしてから承認する。
+// 明細（`ExpenseRequestLineApproval` は `CanUpdate:false`）は 32,000 のままなので、
+// 経理の未払計上は**明細合計 32,000**、支払仕訳は**ヘッダ 320,000**（BUG-0190 の増幅）。
+// 288,000 円が承認証跡なしに支払われる。承認履歴に金額は残らないので `updated_at` 以外に痕跡が無い。
+//
+// **`this.IsViewOnly = true` にはしない**——承認欄（ApprovalFlow の ModuleField）まで
+// 巻き添えで読取専用になり、承認できなくなる恐れがある。項目ごとに落とす
+void LockHeader()
+{
+    Title.IsViewOnly = true;
+    Purpose.IsViewOnly = true;
+    Amount.IsViewOnly = true;
+    EstimatedAmount.IsViewOnly = true;
+    TaxAmount.IsViewOnly = true;
+    ExpenseDate.IsViewOnly = true;
+    RequestType.IsViewOnly = true;
+    PayeeType.IsViewOnly = true;
+    PayeeUser.IsViewOnly = true;
+    PayeePartner.IsViewOnly = true;
+    Creator.IsViewOnly = true;
+    DepartmentRef.IsViewOnly = true;
+    SettlementStatus.IsViewOnly = true;
+    ActualConfirmed.IsViewOnly = true;
 }
 
 // 支払先区分に応じて「精算対象者」か「支払取引先」の片方だけ出す（経理用と同じ規約）

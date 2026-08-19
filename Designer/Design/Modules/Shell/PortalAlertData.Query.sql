@@ -230,4 +230,20 @@ SELECT
   (SELECT count(*) FROM budget_alert) AS budget_alert_depts,
   -- 警告が出ている部門の ID リスト（カンマ区切り。非経理ユーザーの「自部門のみ表示」判定用・2026-08-06）
   (SELECT COALESCE(group_concat(department_id), '') FROM budget_alert) AS budget_alert_dept_ids,
-  (SELECT days FROM threshold) AS due_soon_days
+  (SELECT days FROM threshold) AS due_soon_days,
+  -- 資金繰り予測の**起点が作れているか**（BUG-0246）。0 なら期首資金は信用できない。
+  --   ① 今日を含む会計年度が無い → cur_yr が空 → 期首資金 0 円・未払金 0 円
+  --   ② 当年度の期首残高がまだ無い（前期の繰越を走らせていない。期首から 2〜3 ヶ月ふつうに続く）
+  --      → 前期末の現預金がまるごと欠落する
+  -- どちらも `ending < 0` が全月で立ち、「⚠ 資金ショート予測: 4 ヶ月」と叫ぶ。
+  -- **一度でも空振りすると、本当にショートする月が来てもアラートが信用されない。**
+  -- 前期そのものが無い（初年度）なら期首残高が無いのは正常なので、そこは 1 とみなす
+  CASE
+    WHEN NOT EXISTS (SELECT 1 FROM cur_yr) THEN 0
+    WHEN EXISTS (SELECT 1 FROM opening_balances ob
+                  WHERE ob.fiscal_year_id IN (SELECT id FROM cur_yr)) THEN 1
+    WHEN NOT EXISTS (SELECT 1 FROM fiscal_years fy
+                      WHERE date(fy.end_date) < (SELECT date(start_date) FROM fiscal_years
+                                                  WHERE id IN (SELECT id FROM cur_yr))) THEN 1
+    ELSE 0
+  END AS cash_base_ok

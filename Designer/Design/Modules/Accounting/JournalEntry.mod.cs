@@ -1036,6 +1036,64 @@ object ResolveTaxAccountId(string role)
     return ((Account)found).Id.Value;
 }
 
+// 仕訳を明細ごと削除する（正典・BUG-0148）。成功なら ""、失敗ならユーザーに出すメッセージを返す。
+//
+// **CLB のスクリプトにトランザクション境界は無い。** 明細を 1 行ずつ消している途中で失敗すると、
+// 借方だけ／貸方だけの伝票が posted のまま帳簿に残り、試算表・総勘定元帳の貸借が合わなくなる。
+// 親単独の `Delete()` は子がいると静かに失敗する（実測）ので、行ごと削除は避けられない。
+//
+// 方針（ADR-0077）: **消し始める前に「消せるか」を確かめる。**
+//   `journal_lines` を参照している表は無い（`Designer/ddl/` を全数確認）。
+//   したがって削除が途中で落ちる現実的な原因は **この伝票を指している他の表**——
+//   銀行明細（`bank_statement_lines.journal_entry_id`）と
+//   仕入先請求の支払リンク（`vendor_invoices.payment_entry_id`）の 2 つだけ。
+//   呼び元はどちらも「先に参照を外してから」呼ぶ約束なので、ここで残っていたら**呼び元の順序が誤り**。
+//   先に断れば、貸借の欠けた伝票を作らずに済む。
+//
+//   それでも途中で失敗したら（DB エラー等）、**伝票番号と残った状態を名指しで伝える**。
+//   この状態は不変条件 `A01_仕訳_伝票ごとの貸借一致` が拾うので、気づかないまま流れることはない。
+string DeleteWithLines()
+{
+    var no = JournalNo.Value;
+
+    var bs = new ModuleSearcher<BankStatementLine>();
+    bs.AddEquals(e => e.JournalEntryId.Value, this.Id.Value);
+    if (bs.Execute().Count > 0)
+    {
+        return $"伝票 No.{no} は銀行明細から参照されているため削除できません（先に明細側の起票を取り消してください）";
+    }
+
+    var vs = new ModuleSearcher<VendorInvoice>();
+    vs.AddEquals(e => e.PaymentEntryId.Value, this.Id.Value);
+    if (vs.Execute().Count > 0)
+    {
+        return $"伝票 No.{no} は仕入先請求の支払リンクから参照されているため削除できません（先に支払を取り消してください）";
+    }
+
+    var ls = new ModuleSearcher<JournalLine>();
+    ls.AddEquals(l => l.JournalEntryId.Value, this.Id.Value);
+    var lines = ls.Execute();
+    var removed = 0;
+    foreach (var row in lines)
+    {
+        var l = (JournalLine)row;
+        if (l.Delete() != true)
+        {
+            return $"伝票 No.{no} の明細削除が {removed} 行目までで失敗しました。"
+                + $"**この伝票は貸借が合っていない状態で帳簿に残っています**（残り {lines.Count - removed} 行）。"
+                + "経理に連絡し、この伝票番号を伝えてください";
+        }
+        removed = removed + 1;
+    }
+
+    if (this.Delete() != true)
+    {
+        return $"伝票 No.{no} の明細はすべて削除しましたが、伝票本体を削除できませんでした。"
+            + "**明細の無い空の伝票が残っています**。経理に連絡し、この伝票番号を伝えてください";
+    }
+    return "";
+}
+
 bool IsFiscalYearClosed(object fiscalYearId)
 {
     if (fiscalYearId == null) return false;

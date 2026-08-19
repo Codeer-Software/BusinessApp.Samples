@@ -491,14 +491,9 @@ bool DeleteSettlementJournal()
             return false;
         }
     }
-    var ls = new ModuleSearcher<JournalLine>();
-    ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
-    foreach (var row in ls.Execute())
-    {
-        var l = (JournalLine)row;
-        if (l.Delete() != true) { Toaster.Error("打ち切り仕訳の明細削除に失敗しました"); return false; }
-    }
-    if (je.Delete() != true) { Toaster.Error("打ち切り仕訳の削除に失敗しました"); return false; }
+    // 削除は正典に任せる（BUG-0148）。書き写すと部分失敗の扱いが場所ごとにばらける
+    var delErr = je.DeleteWithLines();
+    if (delErr != "") { Toaster.Error(delErr); return false; }
     Toaster.Info($"前受収益の打ち切り仕訳 No.{je.JournalNo.Value} を削除しました");
     return true;
 }

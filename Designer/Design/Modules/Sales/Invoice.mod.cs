@@ -704,20 +704,15 @@ void CancelIssue_OnClick()
 
 // 仕訳を明細→親の順に物理削除する。子持ちモジュールの検索インスタンス Delete() は
 // 親単独では静かに失敗する（実測）ため、行ごとに削除し全戻り値を検証する（Receipt と同型）
+// 正典は JournalEntry.DeleteWithLines（BUG-0148）。**ここに書き写さない**——
+// 書き写した結果、同じ部分失敗が 5 か所に増えていた。
+// 失敗理由は呼び元でそのままトーストに出す（伝票番号と残った状態が入っている）
+string lastDeleteError = "";
+
 bool DeleteJournalEntryWithLines(JournalEntry je)
 {
-    var ls = new ModuleSearcher<JournalLine>();
-    ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
-    var lines = ls.Execute();
-    foreach (var row in lines)
-    {
-        var l = (JournalLine)row;
-        var okLine = l.Delete();
-        if (okLine != true) { return false; }
-    }
-    var okJe = je.Delete();
-    if (okJe != true) { return false; }
-    return true;
+    lastDeleteError = je.DeleteWithLines();
+    return lastDeleteError == "";
 }
 
 // 定期請求・SES など「生成と同時に売上仕訳が起票される」請求書か
@@ -847,6 +842,41 @@ void RecalcTotal()
 // 請求明細が、元になった検収明細の金額を超えていないかを行単位で突き合わせ、
 // 超過していれば画面に赤字で即時警告する（発行前に気づけるようにするのが狙い）。
 // 検収に紐づく請求書だけが対象。合算請求書（手動作成）は acceptance_id が NULL なので自然に外れる。
+// 検収を選んだら、その受注の取引先が請求先と一致するかを確かめる（BUG-0452）。
+//
+// 検収選択の候補は `Status = 'confirmed'` でしか絞っていない（`Invoice.mod.json`）。
+// つまり**別会社の検収を選べる**。選ぶと売上・売掛は検収から立つので、
+// **帳簿上の債権は A 社、請求書と入金は B 社**という状態になり、取引先別売掛が両側で合わなくなる。
+// 実データにも 1 件あった（INV-26-010 は アルタイル商事 宛なのに、A-26-005 の受注先は グランメゾン印刷）。
+//
+// 逆方向（検収から合算先の請求書を選ぶ）は `Acceptance.BilledInvoiceRef_OnDataChanged` で
+// 既に同じ検査をしている。**片方向にしか無かった**のがこの穴の正体
+void AcceptanceRef_OnDataChanged()
+{
+    if (AcceptanceRef.Value == null) return;
+    if (PartnerRef.Value == null) return;
+
+    var acs = new ModuleSearcher<Acceptance>();
+    acs.AddEquals(a => a.Id.Value, AcceptanceRef.Value);
+    var ac = acs.ExecuteFirstOrDefault();
+    if (ac == null) return;
+    var soId = ((Acceptance)ac).SalesOrderRef.Value;
+    if (soId == null) return;
+
+    var sos = new ModuleSearcher<SalesOrder>();
+    sos.AddEquals(o => o.Id.Value, soId);
+    var so = sos.ExecuteFirstOrDefault();
+    if (so == null) return;
+    var orderPartner = ((SalesOrder)so).PartnerRef.Value;
+    if (orderPartner == null) return;
+    if ($"{orderPartner}" == $"{PartnerRef.Value}") return;
+
+    var badNo = ((Acceptance)ac).AcceptanceNo.Value;
+    AcceptanceRef.Value = null;
+    Toaster.Error($"検収 {badNo} は取引先が違うため紐づけられません"
+        + "（請求先と検収の受注先が同じでなければなりません）");
+}
+
 // ブロックはしない——検収後の増額は「変更契約として新しい受注を起こす」のが本アプリの運用規約
 // （ISSUE-0002）なので、止めるのではなく「それは変更契約の話ですよ」と気づかせる役割。
 void UpdateOverAcceptanceWarning()

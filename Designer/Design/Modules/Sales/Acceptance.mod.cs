@@ -127,20 +127,27 @@ void UpdateButtons()
 
 // 仕訳を明細→親の順に物理削除する。子持ちモジュールの検索インスタンス Delete() は
 // 親単独では静かに失敗する（実測）ため、行ごとに削除し全戻り値を検証する
+// この検収の売上仕訳（無ければ null）。二重生成ガードと補償の両方で使う
+JournalEntry FindConfirmedJournal()
+{
+    if (this.IsNewData) return null;
+    var js = new ModuleSearcher<JournalEntry>();
+    js.AddEquals(e => e.SourceType.Value, "acceptance");
+    js.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    var found = js.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return (JournalEntry)found;
+}
+
+// 正典は JournalEntry.DeleteWithLines（BUG-0148）。**ここに書き写さない**——
+// 書き写した結果、同じ部分失敗が 5 か所に増えていた。
+// 失敗理由は呼び元でそのままトーストに出す（伝票番号と残った状態が入っている）
+string lastDeleteError = "";
+
 bool DeleteJournalEntryWithLines(JournalEntry je)
 {
-    var ls = new ModuleSearcher<JournalLine>();
-    ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
-    var lines = ls.Execute();
-    foreach (var row in lines)
-    {
-        var l = (JournalLine)row;
-        var okLine = l.Delete();
-        if (okLine != true) { return false; }
-    }
-    var ok = je.Delete();
-    if (ok != true) { return false; }
-    return true;
+    lastDeleteError = je.DeleteWithLines();
+    return lastDeleteError == "";
 }
 
 // この検収から作成済みの請求書番号（無ければ null）。
@@ -813,7 +820,25 @@ void Confirm_OnClick()
 
     Status.Value = "confirmed";
     var ret2 = this.Submit();
-    if (ret2 != true) { Toaster.Error("検収ステータスの更新に失敗しました（仕訳は生成済みです）"); return; }
+    if (ret2 != true)
+    {
+        // **生成した仕訳を消して元に戻す**（BUG-0131）。
+        // 放置すると仕訳は posted・検収は draft のまま残り、
+        // 「確定」は二重生成ガードに拒否され、「確定を取り消す」は `confirmed` でないと拒否される——
+        // **画面からどちらにも動かせない孤児**になる。
+        // 消してしまえば「まだ確定していない」状態に戻り、もう一度確定を押せばよい
+        var undo = FindConfirmedJournal();
+        if (undo != null && undo.DeleteWithLines() == "")
+        {
+            Toaster.Error("検収ステータスの更新に失敗したため、生成した売上仕訳を取り消しました。もう一度「確定」を押してください");
+        }
+        else
+        {
+            Toaster.Error($"検収ステータスの更新に失敗しました。**売上仕訳 No.{je.JournalNo.Value} は生成済みのまま残っています**。"
+                + "この伝票番号を経理に伝えてください（検収は下書きのままです）");
+        }
+        return;
+    }
     UpdateButtons();
     UpdateOrderProgress();
     Toaster.Success($"仕訳 No.{nextNo} を生成し検収を確定しました（売掛金 {gross:#,0} 円 / 売上 {amount:#,0} 円）");

@@ -74,20 +74,15 @@ void UpdateButtons()
 
 // 仕訳を明細→親の順に物理削除する。子持ちモジュールの検索インスタンス Delete() は
 // 親単独では静かに失敗する（実測）ため、行ごとに削除し全戻り値を検証する
+// 正典は JournalEntry.DeleteWithLines（BUG-0148）。**ここに書き写さない**——
+// 書き写した結果、同じ部分失敗が 5 か所に増えていた。
+// 失敗理由は呼び元でそのままトーストに出す（伝票番号と残った状態が入っている）
+string lastDeleteError = "";
+
 bool DeleteJournalEntryWithLines(JournalEntry je)
 {
-    var ls = new ModuleSearcher<JournalLine>();
-    ls.AddEquals(l => l.JournalEntryId.Value, je.Id.Value);
-    var lines = ls.Execute();
-    foreach (var row in lines)
-    {
-        var l = (JournalLine)row;
-        var okLine = l.Delete();
-        if (okLine != true) { return false; }
-    }
-    var ok = je.Delete();
-    if (ok != true) { return false; }
-    return true;
+    lastDeleteError = je.DeleteWithLines();
+    return lastDeleteError == "";
 }
 
 // source_type + source_id で自動仕訳を1件取得（無ければ null）

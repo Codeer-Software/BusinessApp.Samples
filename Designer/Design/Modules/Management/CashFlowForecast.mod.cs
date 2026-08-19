@@ -7,10 +7,15 @@
 // 期末資金が実態より多く見える（＝資金ショートも危険水域も鳴らない）。金額を勝手に補うことはできないので、
 // 気づけるようにする。配賦画面の「⚠未配賦」と同じ考え方。
 //
-// 判定の粒度は `v_missing_salary`（工数はあるのに人件費が無い**人×月**）に合わせる（BUG-0432）。
-// 「その月に 1 行でもあれば登録済み」にすると、社員 30 名中 1 名だけ登録された月を見逃す。
-// 仕掛品（v_wip_status）・案件別損益（ProjectProfit）と**同じ定義**であることが要点で、
-// ここだけ粗いと「片方は警告、片方は無言」になる。
+// 判定は「**その月の人件費が何人分登録されているか**」（BUG-0432）。
+// 「1 行でもあれば登録済み」だと、社員 30 名中 1 名だけの月を「登録済み」と判定して見逃す。
+//
+// **配賦（案件損益・仕掛品）とは判定が違う**ので注意。あちらは `v_missing_salary`＝
+// 「工数はあるのに人件費が無い**人×月**」で、工数が無ければ配賦する先も無いから警告不要。
+// こちらは**出金**の話で、給与は工数の有無に関わらず払う。
+// 工数を条件にすると、誰も工数を入れていない先の月で警告が消える（実測で気づいた）。
+// 基準人数は「直近で登録がある月の人数」を使う——社員数をどこかに持っているわけではないので、
+// 「先月は 9 人だったのに今月は 1 人」を異常として拾う形にする。
 
 void Detail_OnAfterInit()
 {
@@ -18,7 +23,9 @@ void Detail_OnAfterInit()
     SalaryWarnLabel.Color = "";
 
     var today = DateTime.Today;
-    var missing = "";       // 人件費が一部でも欠けている月
+    var baseWarn = CashBaseWarning();   // 期首資金の起点そのものが作れていないか（BUG-0246）
+    var baseRows = ReferenceSalaryRowCount();   // 直近で登録がある月の人数（基準）
+    var missing = "";       // 人件費が未登録／人数が足りない月
     var noPeriod = "";      // 月次期間そのものが未作成の月
     var i = 0;
     while (i < 4)
@@ -43,16 +50,18 @@ void Detail_OnAfterInit()
         }
         var fp = (FiscalPeriod)period;
 
-        var lack = MissingSalaryUserCount(fp);
-        if (lack == 0) continue;
+        var rows = SalaryRowCount(fp.FiscalYearId.Value, fp.PeriodNo.Value);
+        if (rows >= baseRows) continue;
         if (missing != "") { missing = missing + "・"; }
-        missing = missing + $"{target:yyyy年M月}（{lack} 名分）";
+        if (rows == 0) { missing = missing + $"{target:yyyy年M月}（未登録）"; }
+        else { missing = missing + $"{target:yyyy年M月}（{baseRows} 名中 {rows} 名のみ）"; }
     }
 
-    var text = "";
+    var text = baseWarn;
     if (missing != "")
     {
-        text = $"⚠ 人件費コストが未登録の社員がいる月があります（{missing}）。"
+        if (text != "") { text = text + "  "; }
+        text = text + $"⚠ 人件費コストの登録が足りない月があります（{missing}）。"
             + "その分の出金に人件費が乗らないため、期末資金が実態より多く見えます"
             + "（資金ショート・危険水域の警告も鳴りません）。"
             + "経営管理 > 人件費コスト で登録してください";
@@ -70,37 +79,67 @@ void Detail_OnAfterInit()
     SalaryWarnLabel.Color = "#dc3545";
 }
 
-// その月に工数を入れているのに人件費コストが登録されていない社員の人数。
-// 正典の定義は SQL ビュー `v_missing_salary`（ddl/760）。ここはその script 版で、
-// **同じ粒度（人×月）**でなければならない。片方だけ緩めると警告が食い違う
-int MissingSalaryUserCount(FiscalPeriod fp)
+// 期首資金の**起点**が作れているか（BUG-0246）。作れていなければ理由を返す（作れていれば ""）。
+//
+// `cash_now` は「当年度の期首残高 ＋ 当年度の posted 仕訳」しか足さない。だから:
+//   ① 今日がどの会計年度にも入らない（次年度の作り忘れ）→ 期首資金 0 円・未払金 0 円
+//   ② 当年度の期首残高がまだ無い（前期の決算確定・繰越を走らせていない。**期首から 2〜3 ヶ月ふつうに続く**）
+//      → 前期末の現預金がまるごと欠落し、期首資金が当年度の増減分だけ（多くはマイナス）になる
+// どちらも例外にならず、4 行すべてが「⚠ 資金ショート」になる。
+// **一度でも空振りすると、本当にショートする月が来てもアラートが信用されない。**
+// 金額を勝手に補うことはできないので、「この数字は当てにならない」と先に言う。
+// ポータル側も同じ判定で件数を出さないようにしてある（`PortalAlertData.cash_base_ok`・ADR-0060）
+string CashBaseWarning()
 {
-    var ts = new ModuleSearcher<TimeEntry>();
-    ts.AddGreaterThanOrEqual(e => e.WorkDate.Value, fp.StartDate.Value);
-    ts.AddLessThanOrEqual(e => e.WorkDate.Value, fp.EndDate.Value);
-    var worked = new List<string>();
-    foreach (var r in ts.Execute())
+    var today = DateOnly.FromDateTime(DateTime.Today);
+    var ys = new ModuleSearcher<FiscalYear>();
+    ys.AddLessThanOrEqual(e => e.StartDate.Value, today);
+    ys.AddGreaterThanOrEqual(e => e.EndDate.Value, today);
+    var fy = ys.ExecuteFirstOrDefault();
+    if (fy == null)
     {
-        var t = (TimeEntry)r;
-        if (t.UserRef.Value == null) continue;
-        var key = $"{t.UserRef.Value}";
-        if (!worked.Contains(key)) { worked.Add(key); }
+        return "⚠ 今日を含む会計年度がありません。**期首資金が 0 円として計算されている**ため、"
+            + "以下の金額と警告は当てになりません。業務マスタ > 会計年度 で当年度を作成してください。  ";
     }
-    if (worked.Count == 0) return 0;
+    var typedFy = (FiscalYear)fy;
 
+    var obs = new ModuleSearcher<OpeningBalance>();
+    obs.AddEquals(o => o.FiscalYearId.Value, typedFy.Id.Value);
+    obs.Limit(1);
+    if (obs.ExecuteFirstOrDefault() != null) return "";
+
+    // 前期が無い（初年度）なら期首残高が無いのは正常
+    var ps = new ModuleSearcher<FiscalYear>();
+    ps.AddLessThan(e => e.EndDate.Value, typedFy.StartDate.Value);
+    ps.Limit(1);
+    if (ps.ExecuteFirstOrDefault() == null) return "";
+
+    return $"⚠ {typedFy.Name.Value} の期首残高がまだありません（前期の翌期繰越が未実施）。"
+        + "**前期末の現預金が期首資金に入っていない**ため、以下の金額と警告は当てになりません。"
+        + "会計業務 > 設定 > 会計年度 で前期を開き「翌期繰越を実行」してください。  ";
+}
+
+// その年度×月に登録されている人件費コストの行数（＝人数）
+int SalaryRowCount(object fiscalYearId, object periodNo)
+{
     var ms = new ModuleSearcher<MonthlySalary>();
-    ms.AddEquals(e => e.FiscalYearRef.Value, fp.FiscalYearId.Value);
-    ms.AddEquals(e => e.PeriodNo.Value, fp.PeriodNo.Value);
-    var registered = new List<string>();
-    foreach (var r in ms.Execute())
-    {
-        registered.Add($"{((MonthlySalary)r).UserRef.Value}");
-    }
+    ms.AddEquals(e => e.FiscalYearRef.Value, fiscalYearId);
+    ms.AddEquals(e => e.PeriodNo.Value, periodNo);
+    return ms.Execute().Count;
+}
 
-    var lack = 0;
-    foreach (var k in worked)
-    {
-        if (!registered.Contains(k)) { lack = lack + 1; }
-    }
-    return lack;
+// 基準人数＝**直近で登録がある月の人数**。
+// 社員数をどこかに持っているわけではないので、これを「本来あるべき人数」の代わりに使う。
+// 登録が 1 件も無ければ 0 を返し、その場合は警告を出さない
+// （まだ一度も人件費を登録していない導入直後に、毎月 4 行の警告を出しても意味が無い）
+int ReferenceSalaryRowCount()
+{
+    var ms = new ModuleSearcher<MonthlySalary>();
+    ms.OrderByDescending(e => e.FiscalYearRef.Value);
+    ms.OrderByDescending(e => e.PeriodNo.Value);
+    ms.Limit(1);
+    var last = ms.ExecuteFirstOrDefault();
+    if (last == null) return 0;
+    var typed = (MonthlySalary)last;
+    return SalaryRowCount(typed.FiscalYearRef.Value, typed.PeriodNo.Value);
 }

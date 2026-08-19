@@ -1016,7 +1016,7 @@
       "OnSearchDataChanged": "",
       "DisplayName": "検収",
       "IsRequired": false,
-      "OnDataChanged": "",
+      "OnDataChanged": "AcceptanceRef_OnDataChanged",
       "Name": "AcceptanceRef",
       "IgnoreModification": false,
       "OnValidateInput": "",

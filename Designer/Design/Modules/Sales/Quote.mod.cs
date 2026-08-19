@@ -576,7 +576,22 @@ void ConvertToOrder_OnClick()
     var retSelf = this.Submit();
     if (retSelf != true)
     {
-        Toaster.Error("見積の状態更新に失敗しました（受注は作成済みです）");
+        // **作った受注を消して元に戻す**（BUG-0131 の家族）。
+        // 放置すると「受注は存在するのに見積は送付済のまま」になり、
+        // 再変換は `FindDownstreamLabel()` に拒否され、下書きに戻すのも下流ありで拒否される——
+        // 画面からどちらにも動かせない。作りたてで誰も参照していないので、消して元に戻すのが安全
+        var undoS = new ModuleSearcher<SalesOrder>();
+        undoS.AddEquals(e => e.OrderNo.Value, orderNo);
+        var undo = undoS.ExecuteFirstOrDefault();
+        if (undo != null && ((SalesOrder)undo).Delete() == true)
+        {
+            Toaster.Error("見積の状態更新に失敗したため、作成した受注を取り消しました。もう一度「受注にする」を押してください");
+        }
+        else
+        {
+            Toaster.Error($"見積の状態更新に失敗しました。**受注 {orderNo} は作成済みのまま残っています**。"
+                + "受注一覧から内容を確認してください（見積は送付済のままです）");
+        }
         return;
     }
 
@@ -655,7 +670,19 @@ void ConvertToRecurring_OnClick()
     var retSelf = this.Submit();
     if (retSelf != true)
     {
-        Toaster.Error("見積の状態更新に失敗しました（契約は作成済みです）");
+        // 作った契約を消して元に戻す（BUG-0131 の家族）。理由は受注化と同じ
+        var undoS = new ModuleSearcher<RecurringBilling>();
+        undoS.AddEquals(e => e.QuoteRef.Value, this.Id.Value);
+        var undo = undoS.ExecuteFirstOrDefault();
+        if (undo != null && ((RecurringBilling)undo).Delete() == true)
+        {
+            Toaster.Error("見積の状態更新に失敗したため、作成した定期請求契約を取り消しました。もう一度お試しください");
+        }
+        else
+        {
+            Toaster.Error("見積の状態更新に失敗しました。**定期請求契約は作成済みのまま残っています**。"
+                + "契約一覧から内容を確認してください（見積は送付済のままです）");
+        }
         return;
     }
 

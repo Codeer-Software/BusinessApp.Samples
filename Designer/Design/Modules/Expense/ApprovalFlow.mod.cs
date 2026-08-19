@@ -1069,8 +1069,17 @@ void Approve_OnClick()
     UpdateFlowSummary();
     NotifyParentStatusChanged();
 
+    // **失敗を無言にしない**（BUG-0454）。直前に `RecalculateCurrentApproverDisplay()` と
+    // `UpdateFlowSummary()` を走らせているので、保存が失敗しても**画面のフロー要約は「✓承認済」に
+    // 書き換わったまま残る**。トーストも出なければ、承認者は完了したと思って離席する。
+    // DB は Pending のままで、申請者にも通知は飛ばない（通知は ret == true の中にある）
     var ret = GetParentModule().Submit();
-    if (ret == true) Toaster.Success("承認しました");
+    if (ret != true)
+    {
+        Toaster.Error("承認の保存に失敗しました。画面を開き直して、承認されていないことを確かめてください");
+        return;
+    }
+    Toaster.Success("承認しました");
 
     // 承認成功後の通知: 最終承認なら申請者へ、次段へ進んだなら次の承認者へ
     if (ret == true)
@@ -1229,7 +1238,12 @@ void Reject_OnClick()
     NotifyParentStatusChanged();
 
     var ret = GetParentModule().Submit();
-    if (ret == true) Toaster.Info("却下しました");
+    if (ret != true)
+    {
+        Toaster.Error("却下の保存に失敗しました。画面を開き直して、却下されていないことを確かめてください");
+        return;
+    }
+    Toaster.Info("却下しました");
 
     // 却下成功後: 申請者へ通知
     if (ret == true)
@@ -1363,5 +1377,10 @@ void Cancel_OnClick()
     NotifyParentStatusChanged();
 
     var ret = parent.Submit();
-    if (ret == true) Toaster.Success("キャンセルしました");
+    if (ret != true)
+    {
+        Toaster.Error("取り下げの保存に失敗しました。画面を開き直して、取り下げられていないことを確かめてください");
+        return;
+    }
+    Toaster.Success("キャンセルしました");
 }

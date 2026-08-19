@@ -644,15 +644,7 @@ bool ValidateForApply()
     // **2 段目だけ失敗するとヘッダの合計だけ古いまま残る**。承認ルートの判定額は
     // `GetJudgeAmount()` ＝ ヘッダの合計なので、放置すると**過小額で段が決まる**——
     // 申請の直前が最後の関門なので、ここで必ず合わせる（不変条件 D05 と同じ式）
-    if ((Amount.Value ?? 0) != total)
-    {
-        RecalcFromLines();
-        if ((Amount.Value ?? 0) != total)
-        {
-            Toaster.Error("合計金額が明細と一致しません。画面を開き直してからもう一度お試しください");
-            return false;
-        }
-    }
+    if (!SyncHeaderTotalWithLines()) { return false; }
 
     // 領収書の未添付警告（U2-6: 申請はブロックしない。添付できない実務ケースを許容）
     if (missingReceipt > 0)
@@ -923,6 +915,31 @@ void DeleteDraft_OnClick()
 }
 
 // 事前申請の実費確定: 明細を実費に直したうえで押す。
+// ヘッダの合計を明細合計に合わせ直す（BUG-0307 / BUG-0453 の共通ガード）。
+// 合わせられなければ false（呼び元は進まない）。
+//
+// 明細を足す `CommitEntry` は「行を親に付ける Submit」と「合計を保存する Submit」の 2 段構えで、
+// **2 段目だけ失敗するとヘッダの合計だけ古いまま残る**。
+// 承認ルートの判定額（`GetJudgeAmount()`）も超過判定もヘッダの合計を見るので、
+// 放置すると**過小額で段が決まる**。
+// **承認ルートを決める入口は 2 つある**（申請＝ValidateForApply／事前申請の実費確定＝ConfirmActual）ので、
+// 判定はここ 1 本にまとめる（不変条件 D05 と同じ式）
+bool SyncHeaderTotalWithLines()
+{
+    var total = 0;
+    foreach (var l in GetLines())
+    {
+        if (l.Amount.Value != null) { total = total + l.Amount.Value; }
+    }
+    if ((Amount.Value ?? 0) == total) return true;
+
+    RecalcFromLines();
+    if ((Amount.Value ?? 0) == total) return true;
+
+    Toaster.Error("合計金額が明細と一致しません。画面を開き直してからもう一度お試しください");
+    return false;
+}
+
 // 見込みとの乖離が大きければ再承認、問題なければそのまま経理処理へ。
 // 超過判定: (a) 承認ルートが変わる (b) 実費 > 見込み × EXP_OVERRUN_RATE(%)
 void ConfirmActual_OnClick()
@@ -949,6 +966,17 @@ void ConfirmActual_OnClick()
         }
         if (!ValidateLineTax(l, FindCategory(l.ExpenseCategoryRef.Value), no)) return;
     }
+
+    // **ヘッダの合計を明細と突き合わせる**（BUG-0453）。
+    // BUG-0307 は「申請の直前が最後の関門」として `ValidateForApply` にこの突合を入れたが、
+    // **承認ルートを決める入口はもう 1 つある**——事前申請の実費確定がそれで、ここには無かった。
+    // 実費確定を待つあいだは明細を編集できるので、`CommitEntry` の 2 段目の Submit が失敗すると
+    // 明細合計 180,000／ヘッダ 50,000 のまま実費確定に進み、
+    //   ・超過判定（`actual * 100 > estimated * overRate`）が 50,000 対 50,000 で**通ってしまう**
+    //   ・`SelectTemplateIds()` の判定額も 50,000 なので**部長段が付かない**
+    //   ・経理の仕訳生成は**明細合計 180,000** で未払計上
+    // となり、130,000 円が誰の承認も通らずに計上される
+    if (!SyncHeaderTotalWithLines()) { return; }
 
     var actual = Amount.Value ?? 0;
     if (actual <= 0) { Toaster.Error("実費（税込）を入力してください"); return; }
