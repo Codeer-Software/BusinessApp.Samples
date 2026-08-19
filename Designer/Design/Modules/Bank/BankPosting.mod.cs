@@ -100,6 +100,13 @@ void ApplyRules_OnClick()
     var rs = new ModuleSearcher<MatchingRule>();
     rs.AddEquals(r => r.IsActive.Value, true);
     rs.OrderBy(r => r.Priority.Value);
+    // **同順位の勝者を Id 昇順で固定する**（BUG-0167）。`matching_rules.priority` に一意制約は無く、
+    // 実データでも 20 が 3 件・30 が 2 件・40 が 2 件と重複している。摘要が複数ルールに当たったとき、
+    // 旧実装は「最初の一致で break」するので **どのルールの科目が入るかは DB の返す順まかせ**だった
+    // （同じ明細を取り込み直すたびに違う科目が入りうるのに、警告も出ない）。
+    // 取込時適用（BankImport）と一括起票（BankPosting）で**必ず同じ規則**にすること——
+    // 片方だけ直すと「取込で入った科目」と「起票で入れ直した科目」が食い違う
+    rs.ThenBy(r => r.Id.Value);
     var rules = rs.Execute();
     if (rules.Count == 0) { Toaster.Info("有効な仕訳ルールがありません"); return; }
 

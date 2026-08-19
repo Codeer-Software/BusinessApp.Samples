@@ -257,8 +257,11 @@ void PostAll_OnClick()
 
     var s = new ModuleSearcher<CashEntryDraft>();
     s.AddEquals(e => e.Creator.Value, CurrentUser.Id.Value);
+    // **2 本目は ThenBy**（BUG-0167 の同型）。CLB の `OrderBy` / `OrderByDescending` は内部で
+    // `SortConditions.Clear()` を呼んでから積むので、**2 回書くと 1 本目が黙って捨てられる**。
+    // ここは伝票番号を日付順に採番するための並び。日付が落ちると**採番が入力順**になる
     s.OrderBy(e => e.EntryDate.Value);
-    s.OrderBy(e => e.Id.Value);
+    s.ThenBy(e => e.Id.Value);
     var drafts = s.Execute();
     if (drafts.Count == 0) { Toaster.Info("起票する下書きがありません"); return; }
 

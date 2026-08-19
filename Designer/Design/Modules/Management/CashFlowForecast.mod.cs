@@ -135,8 +135,12 @@ int SalaryRowCount(object fiscalYearId, object periodNo)
 int ReferenceSalaryRowCount()
 {
     var ms = new ModuleSearcher<MonthlySalary>();
+    // **2 本目は ThenByDescending**（BUG-0167 の同型）。CLB の `OrderBy` / `OrderByDescending` は内部で
+    // `SortConditions.Clear()` を呼んでから積むので、**2 回書くと 1 本目が黙って捨てられる**。
+    // 旧実装は年度の並びが消えて**期だけの降順**だった。年度をまたいだ瞬間に
+    // 「古い年度の第 12 期」が最新扱いになり、人件費の未登録警告が誤る
     ms.OrderByDescending(e => e.FiscalYearRef.Value);
-    ms.OrderByDescending(e => e.PeriodNo.Value);
+    ms.ThenByDescending(e => e.PeriodNo.Value);
     ms.Limit(1);
     var last = ms.ExecuteFirstOrDefault();
     if (last == null) return 0;

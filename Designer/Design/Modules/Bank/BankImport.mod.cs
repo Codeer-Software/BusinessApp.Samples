@@ -166,8 +166,12 @@ void WarnBalanceGap()
 {
     var s = new ModuleSearcher<BankStatementPreview>();
     s.AddEquals(e => e.BankAccount.Value, BankAccountSel.Value);
+    // **2 本目は ThenBy**（BUG-0167 の同型）。CLB の `OrderBy` / `OrderByDescending` は内部で
+    // `SortConditions.Clear()` を呼んでから積むので、**2 回書くと 1 本目が黙って捨てられる**。
+    // 旧実装は日付の並びが消えて Id 順＝取込順で残高の連続性を見ていた。
+    // 日付順でない CSV（月をまたいで貼り付けた等）で誤警告が出る
     s.OrderBy(e => e.LineDate.Value);
-    s.OrderBy(e => e.Id.Value);
+    s.ThenBy(e => e.Id.Value);
     var rows = s.Execute();
 
     object prevBal = null;
@@ -308,6 +312,13 @@ void ConfirmImport_OnClick()
     var rs = new ModuleSearcher<MatchingRule>();
     rs.AddEquals(r => r.IsActive.Value, true);
     rs.OrderBy(r => r.Priority.Value);
+    // **同順位の勝者を Id 昇順で固定する**（BUG-0167）。`matching_rules.priority` に一意制約は無く、
+    // 実データでも 20 が 3 件・30 が 2 件・40 が 2 件と重複している。摘要が複数ルールに当たったとき、
+    // 旧実装は「最初の一致で break」するので **どのルールの科目が入るかは DB の返す順まかせ**だった
+    // （同じ明細を取り込み直すたびに違う科目が入りうるのに、警告も出ない）。
+    // 取込時適用（BankImport）と一括起票（BankPosting）で**必ず同じ規則**にすること——
+    // 片方だけ直すと「取込で入った科目」と「起票で入れ直した科目」が食い違う
+    rs.ThenBy(r => r.Id.Value);
     var rules = rs.Execute();
 
     // 本番側の既存キー（二重登録の最終ガード）
