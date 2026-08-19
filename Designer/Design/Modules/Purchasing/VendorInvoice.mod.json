@@ -847,6 +847,36 @@
       "Name": "SearchLblInvoiceNo",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "IsUpdateProtected": false,
+      "DisplayName": "証憑（受領した請求書）",
+      "ShowPreview": true,
+      "StorageName": "Local",
+      "DbColumnFileName": "evidence_file_name",
+      "DbColumnFileSize": "evidence_file_size",
+      "DbColumnFileGuid": "evidence_file_guid",
+      "DbColumnFileContent": "",
+      "ObjectFit": "Contain",
+      "OnDataChanged": "",
+      "OnSearchDataChanged": "",
+      "Name": "EvidenceFile",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FileFieldDesign"
+    },
+    {
+      "Text": "証憑（受領した請求書）",
+      "Icon": "",
+      "Style": "Default",
+      "RelativeField": "Description",
+      "OnClick": "",
+      "Name": "EvidenceFileLabel",
+      "IgnoreModification": false,
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -1810,6 +1840,62 @@
               {
                 "Layout": {
                   "FieldName": "Description",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "Border": "None"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "EvidenceFileLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "BackgroundColor": "",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 154,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "VerticalAlignment": "Middle",
+                "CanResize": false,
+                "Border": "None"
+              },
+              {
+                "Layout": {
+                  "FieldName": "EvidenceFile",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",
