@@ -60,7 +60,16 @@ void OffsetVendorInvoiceRef_OnDataChanged()
     if (LineCount() > 1) { return; }
     var vi = FindVendorInvoice(OffsetVendorInvoiceRef.Value);
     if (vi == null) return;
-    if (vi.Amount.Value != null) { Amount.Value = vi.Amount.Value; }
+    if (vi.Amount.Value == null) return;
+    // **上書きしたことを言う**（BUG-0153）。相殺は仕入請求の全額消込しか扱わない（ADR-0035）ので
+    // 入金額が仕入請求の税込額になるのは正しいが、**手で入れた額が黙って変わる**のは驚く
+    var before = Amount.Value;
+    Amount.Value = vi.Amount.Value;
+    if (before != null && before != vi.Amount.Value)
+    {
+        Toaster.Info($"入金額を相殺元の税込額 {vi.Amount.Value:#,0} 円に合わせました"
+            + $"（相殺は全額消込のみ・入力されていた {before:#,0} 円は使いません）");
+    }
 }
 
 VendorInvoice FindVendorInvoice(object viId)
@@ -510,6 +519,27 @@ void Confirm_OnClick()
     var diffMax = GetThresholdAmount("RECEIPT_DIFF_MAX");
     // 「振込手数料等」の差額自動処理は銀行振込のみ（現金・相殺の不足額は振込手数料ではない・ADR-0035）
     var useDiff = (Method.Value == "bank" && diff >= 1 && diff <= diffMax && feeAccount != null);
+    // **なぜ差額処理しなかったのかを言う**（BUG-0156）。
+    // 黙って「一部入金＋残額の入金予定」に落ちると、閾値マスタを消したことが原因だと誰も気づけない
+    if (Method.Value == "bank" && diff >= 1 && !useDiff)
+    {
+        if (diffMax < 0)
+        {
+            Toaster.Warn($"差額 {diff:#,0} 円を自動処理しませんでした——閾値 RECEIPT_DIFF_MAX が"
+                + "入金日時点で見つかりません（業務マスタ > 税制 > 制度閾値 を確認してください）。"
+                + "一部入金として残額の入金予定を作ります");
+        }
+        else if (feeAccount == null)
+        {
+            Toaster.Warn($"差額 {diff:#,0} 円を自動処理しませんでした——支払手数料の科目がありません。"
+                + "一部入金として残額の入金予定を作ります");
+        }
+        else if (diff > diffMax)
+        {
+            Toaster.Info($"差額 {diff:#,0} 円は自動処理の上限（{diffMax:#,0} 円）を超えています。"
+                + "一部入金として残額の入金予定を作ります");
+        }
+    }
 
     // 差額の内税分解（支払手数料の既定税区分が課税仕入のとき）。
     // **`int` で受ける**（CLB-040）。`var` のままだと動的値との演算で小数に化け、
@@ -731,18 +761,29 @@ void CreateRemainderPendingReceipt(int remainAmount, Invoice iv)
 }
 
 // system_thresholds から指定コードの閾値を期間解決して取得（該当なしは 0。ExpenseRequest と同型）
+// 閾値マスタから入金日時点の値を引く。**見つからなければ 0 ではなく -1 を返す**（BUG-0156）。
+// 0 を返すと呼び元の `diff <= diffMax` が常に偽になり、
+// **振込手数料の差額処理が消えて全部「一部入金＋残額の入金予定」に落ちる**——
+// しかも何のメッセージも出ないので、閾値を消したことが原因だと誰も気づけない。
+//
+// 有効期間が重なる行が複数あるときは **`valid_from` が新しいほう**を採る。
+// 旧実装は `OrderBy` が無く、最後にループで当たった行が勝つ＝**取得順で値が決まっていた**
+// （SQL 側の `v_system_threshold_current` は同じ規則で 1 行に決めている。判定を揃える）
 int GetThresholdAmount(string code)
 {
     var s = new ModuleSearcher<SystemThreshold>();
     var thresholds = s.Execute();
     var d = ReceiptDate.Value;
-    var limit = 0;
+    var limit = -1;
+    object bestFrom = null;
     foreach (var t in thresholds)
     {
         var th = (SystemThreshold)t;
         if (th.Code.Value != code) continue;
         if (d != null && th.ValidFrom.Value != null && d < th.ValidFrom.Value) continue;
         if (d != null && th.ValidTo.Value != null && d > th.ValidTo.Value) continue;
+        if (bestFrom != null && th.ValidFrom.Value != null && th.ValidFrom.Value < bestFrom) continue;
+        bestFrom = th.ValidFrom.Value;
         limit = th.Amount.Value ?? 0;
     }
     return limit;
