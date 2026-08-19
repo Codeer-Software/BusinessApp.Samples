@@ -34,6 +34,18 @@ per AS (
   FROM fiscal_periods
   WHERE fiscal_year_id IN (SELECT id FROM yr)
 ),
+-- 【変則決算期に耐える・BUG-0111】
+--   画面の月列は m01〜m12 の **12 本固定**（CLB のフィールドは可変にできない）。ところが
+--   `fiscal_periods` に 12 本という制約は無く、決算期変更に伴う 13〜18 ヶ月の変則決算期がありうる。
+--   旧実装は月列も期末列も `period_no = 12` の決め打ちで、
+--     ・PL は第 13 月以降が Total には入るが列には出ない → **12 列を足しても Total に合わない**
+--     ・BS は「期末残高」ではなく「第 12 月末残高」を出す（列名は「合計/期末」なのに）
+--   という壊れ方をした。
+--   対処は **PL は 12 列目に第 12 月以降を畳む／BS は最終期間の残高を出す**。
+--   12 列に収まらないことは画面側（`MonthlyTrend.mod.cs`）が警告する
+lastp AS (
+  SELECT COALESCE(MAX(period_no), 12) AS n FROM per
+),
 -- 【期間に載らない仕訳を落とさない・BUG-0110】
 --   対象は他 6 帳票と同じく `e.fiscal_year_id`。期間の JOIN は**月列への割り当てだけ**に使う。
 --   旧実装は INNER JOIN だったため、`fiscal_periods` の隙間に落ちた日付の仕訳が
@@ -145,7 +157,7 @@ SELECT '00-0-0000' AS sort_key, '' AS section, '月（暦月）' AS item,
   SUM(CASE WHEN period_no = 9  THEN cal_month END) AS m09,
   SUM(CASE WHEN period_no = 10 THEN cal_month END) AS m10,
   SUM(CASE WHEN period_no = 11 THEN cal_month END) AS m11,
-  SUM(CASE WHEN period_no = 12 THEN cal_month END) AS m12,
+  SUM(CASE WHEN period_no = (SELECT n FROM lastp) THEN cal_month END) AS m12,
   NULL AS total
 FROM per
 
@@ -163,7 +175,7 @@ SELECT printf('%02d', r.section_order) || '-1-' || r.code, r.cat_name, r.name,
   SUM(CASE WHEN r.period_no = 9  THEN r.amt END),
   SUM(CASE WHEN r.period_no = 10 THEN r.amt END),
   SUM(CASE WHEN r.period_no = 11 THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 12 THEN r.amt END),
+  SUM(CASE WHEN r.period_no >= 12 THEN r.amt END),
   SUM(r.amt)
 FROM plrow r
 WHERE (SELECT s FROM stmt) = 'PL'
@@ -183,7 +195,7 @@ SELECT printf('%02d', r.section_order) || '-2-ZZZZ', r.cat_name, r.cat_name || '
   SUM(CASE WHEN r.period_no = 9  THEN r.amt END),
   SUM(CASE WHEN r.period_no = 10 THEN r.amt END),
   SUM(CASE WHEN r.period_no = 11 THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 12 THEN r.amt END),
+  SUM(CASE WHEN r.period_no >= 12 THEN r.amt END),
   SUM(r.amt)
 FROM plrow r
 WHERE (SELECT s FROM stmt) = 'PL'
@@ -203,7 +215,7 @@ SELECT '51-9-ZZZZ', '段階利益', '売上総利益',
   SUM(CASE WHEN period_no = 9  THEN rev - cogs END),
   SUM(CASE WHEN period_no = 10 THEN rev - cogs END),
   SUM(CASE WHEN period_no = 11 THEN rev - cogs END),
-  SUM(CASE WHEN period_no = 12 THEN rev - cogs END),
+  SUM(CASE WHEN period_no >= 12 THEN rev - cogs END),
   SUM(rev - cogs)
 FROM plm HAVING (SELECT s FROM stmt) = 'PL'
 
@@ -221,7 +233,7 @@ SELECT '52-9-ZZZZ', '段階利益', '営業利益',
   SUM(CASE WHEN period_no = 9  THEN rev - cogs - sga END),
   SUM(CASE WHEN period_no = 10 THEN rev - cogs - sga END),
   SUM(CASE WHEN period_no = 11 THEN rev - cogs - sga END),
-  SUM(CASE WHEN period_no = 12 THEN rev - cogs - sga END),
+  SUM(CASE WHEN period_no >= 12 THEN rev - cogs - sga END),
   SUM(rev - cogs - sga)
 FROM plm HAVING (SELECT s FROM stmt) = 'PL'
 
@@ -239,7 +251,7 @@ SELECT '54-9-ZZZZ', '段階利益', '経常利益',
   SUM(CASE WHEN period_no = 9  THEN rev - cogs - sga + noi - noe END),
   SUM(CASE WHEN period_no = 10 THEN rev - cogs - sga + noi - noe END),
   SUM(CASE WHEN period_no = 11 THEN rev - cogs - sga + noi - noe END),
-  SUM(CASE WHEN period_no = 12 THEN rev - cogs - sga + noi - noe END),
+  SUM(CASE WHEN period_no >= 12 THEN rev - cogs - sga + noi - noe END),
   SUM(rev - cogs - sga + noi - noe)
 FROM plm HAVING (SELECT s FROM stmt) = 'PL'
 
@@ -257,7 +269,7 @@ SELECT '56-9-ZZZZ', '段階利益', '税引前当期純利益',
   SUM(CASE WHEN period_no = 9  THEN rev - cogs - sga + noi - noe + ei - el END),
   SUM(CASE WHEN period_no = 10 THEN rev - cogs - sga + noi - noe + ei - el END),
   SUM(CASE WHEN period_no = 11 THEN rev - cogs - sga + noi - noe + ei - el END),
-  SUM(CASE WHEN period_no = 12 THEN rev - cogs - sga + noi - noe + ei - el END),
+  SUM(CASE WHEN period_no >= 12 THEN rev - cogs - sga + noi - noe + ei - el END),
   SUM(rev - cogs - sga + noi - noe + ei - el)
 FROM plm HAVING (SELECT s FROM stmt) = 'PL'
 
@@ -275,7 +287,7 @@ SELECT '57-9-ZZZZ', '段階利益', '当期純利益',
   SUM(CASE WHEN period_no = 9  THEN rev - cogs - sga + noi - noe + ei - el - tax END),
   SUM(CASE WHEN period_no = 10 THEN rev - cogs - sga + noi - noe + ei - el - tax END),
   SUM(CASE WHEN period_no = 11 THEN rev - cogs - sga + noi - noe + ei - el - tax END),
-  SUM(CASE WHEN period_no = 12 THEN rev - cogs - sga + noi - noe + ei - el - tax END),
+  SUM(CASE WHEN period_no >= 12 THEN rev - cogs - sga + noi - noe + ei - el - tax END),
   SUM(rev - cogs - sga + noi - noe + ei - el - tax)
 FROM plm HAVING (SELECT s FROM stmt) = 'PL'
 
@@ -293,8 +305,8 @@ SELECT printf('%02d', b.section_order) || '-1-' || b.code, b.cat_name, b.name,
   SUM(CASE WHEN b.period_no = 9  THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END),
   SUM(CASE WHEN b.period_no = 10 THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END),
   SUM(CASE WHEN b.period_no = 11 THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END),
-  SUM(CASE WHEN b.period_no = 12 THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END),
-  SUM(CASE WHEN b.period_no = 12 THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END)
+  SUM(CASE WHEN b.period_no = (SELECT n FROM lastp) THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END),
+  SUM(CASE WHEN b.period_no = (SELECT n FROM lastp) THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END)
 FROM bscum b
 WHERE (SELECT s FROM stmt) = 'BS'
 GROUP BY b.section_order, b.code, b.name, b.cat_name
@@ -313,8 +325,8 @@ SELECT printf('%02d', b.section_order) || '-2-ZZZZ', b.cat_name, b.cat_name || '
   SUM(CASE WHEN b.period_no = 9  THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END),
   SUM(CASE WHEN b.period_no = 10 THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END),
   SUM(CASE WHEN b.period_no = 11 THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END),
-  SUM(CASE WHEN b.period_no = 12 THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END),
-  SUM(CASE WHEN b.period_no = 12 THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END)
+  SUM(CASE WHEN b.period_no = (SELECT n FROM lastp) THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END),
+  SUM(CASE WHEN b.period_no = (SELECT n FROM lastp) THEN CASE WHEN b.account_type = 'asset' THEN b.dmc ELSE -b.dmc END END)
 FROM bscum b
 WHERE (SELECT s FROM stmt) = 'BS'
 GROUP BY b.section_order, b.cat_name
@@ -333,8 +345,8 @@ SELECT '29-9-ZZZZ', '資産', '資産合計',
   SUM(CASE WHEN period_no = 9  THEN ast END),
   SUM(CASE WHEN period_no = 10 THEN ast END),
   SUM(CASE WHEN period_no = 11 THEN ast END),
-  SUM(CASE WHEN period_no = 12 THEN ast END),
-  SUM(CASE WHEN period_no = 12 THEN ast END)
+  SUM(CASE WHEN period_no = (SELECT n FROM lastp) THEN ast END),
+  SUM(CASE WHEN period_no = (SELECT n FROM lastp) THEN ast END)
 FROM bsvn HAVING (SELECT s FROM stmt) = 'BS'
 
 UNION ALL
@@ -351,8 +363,8 @@ SELECT '39-9-ZZZZ', '負債', '負債合計',
   SUM(CASE WHEN period_no = 9  THEN lia END),
   SUM(CASE WHEN period_no = 10 THEN lia END),
   SUM(CASE WHEN period_no = 11 THEN lia END),
-  SUM(CASE WHEN period_no = 12 THEN lia END),
-  SUM(CASE WHEN period_no = 12 THEN lia END)
+  SUM(CASE WHEN period_no = (SELECT n FROM lastp) THEN lia END),
+  SUM(CASE WHEN period_no = (SELECT n FROM lastp) THEN lia END)
 FROM bsvn HAVING (SELECT s FROM stmt) = 'BS'
 
 UNION ALL
@@ -369,8 +381,8 @@ SELECT '48-1-ZZZZ', '純資産', '当期純利益',
   SUM(CASE WHEN period_no = 9  THEN ni END),
   SUM(CASE WHEN period_no = 10 THEN ni END),
   SUM(CASE WHEN period_no = 11 THEN ni END),
-  SUM(CASE WHEN period_no = 12 THEN ni END),
-  SUM(CASE WHEN period_no = 12 THEN ni END)
+  SUM(CASE WHEN period_no = (SELECT n FROM lastp) THEN ni END),
+  SUM(CASE WHEN period_no = (SELECT n FROM lastp) THEN ni END)
 FROM bsvn HAVING (SELECT s FROM stmt) = 'BS'
 
 UNION ALL
@@ -387,8 +399,8 @@ SELECT '48-9-ZZZZ', '純資産', '純資産合計',
   SUM(CASE WHEN period_no = 9  THEN eq + ni END),
   SUM(CASE WHEN period_no = 10 THEN eq + ni END),
   SUM(CASE WHEN period_no = 11 THEN eq + ni END),
-  SUM(CASE WHEN period_no = 12 THEN eq + ni END),
-  SUM(CASE WHEN period_no = 12 THEN eq + ni END)
+  SUM(CASE WHEN period_no = (SELECT n FROM lastp) THEN eq + ni END),
+  SUM(CASE WHEN period_no = (SELECT n FROM lastp) THEN eq + ni END)
 FROM bsvn HAVING (SELECT s FROM stmt) = 'BS'
 
 UNION ALL
@@ -405,8 +417,8 @@ SELECT '59-9-ZZZZ', '検算', '負債・純資産合計',
   SUM(CASE WHEN period_no = 9  THEN lia + eq + ni END),
   SUM(CASE WHEN period_no = 10 THEN lia + eq + ni END),
   SUM(CASE WHEN period_no = 11 THEN lia + eq + ni END),
-  SUM(CASE WHEN period_no = 12 THEN lia + eq + ni END),
-  SUM(CASE WHEN period_no = 12 THEN lia + eq + ni END)
+  SUM(CASE WHEN period_no = (SELECT n FROM lastp) THEN lia + eq + ni END),
+  SUM(CASE WHEN period_no = (SELECT n FROM lastp) THEN lia + eq + ni END)
 FROM bsvn HAVING (SELECT s FROM stmt) = 'BS'
 
 ORDER BY sort_key

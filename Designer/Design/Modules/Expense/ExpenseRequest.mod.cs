@@ -862,6 +862,14 @@ void UpdateAccountingButtons()
     // **入力カードだけが更新されず残っていた**。状態が変わったら見た目も必ず追随させる
     UpdateLineButtons();
 
+    // **ヘッダの入力欄も閉じる**（BUG-0455）。BUG-0185 で入力カードは移したが、
+    // ヘッダを閉じる処理が `Detail_OnAfterInit` に残ったままだった。
+    // 申請ボタンは画面遷移もリロードもしないので、`applying` に変わっても
+    // 件名・目的・計上日・申請区分・支払先が入力可能なまま残る。
+    // その状態で書き換えて「取り下げ」「実費を確定」「明細を 1 行足す」のどれかを押すと
+    // （どれも親の Submit を通る）**改変が保存され、承認者が見た内容と食い違う**
+    EditableGrid.IsEnabled = (SettlementStatus.Value == "draft");
+
     var st = SettlementStatus.Value;
     SettlementStatusLabel.IsVisible = !IsNewData;
     SettlementStatus.IsVisible = !IsNewData;
@@ -909,7 +917,15 @@ void DeleteDraft_OnClick()
     // 承認フロー（子）の行はスクリプトから物理削除できない（実測 2026-07-16）ので、
     // **DB 側のトリガで片付ける**（`ddl/810_expense_delete_cleans_flow.sql`・BUG-0413）。
     // 明細は ListField の DeleteTogether で親と一緒に消える
-    this.Delete();
+    // **戻り値を検査する**（BUG-0459）。`expense_request.editing_line_id` は明細への FK なので、
+    // 直前の「FK を外す Submit」が失敗していると、ここも FK 違反で false になる。
+    // 無条件に成功トーストを出して一覧へ遷移すると、**利用者にも開発者にも失敗が見えない**
+    // （一覧へ抜けるので、残っていても目に入らない）
+    if (this.Delete() != true)
+    {
+        Toaster.Error("下書きを削除できませんでした。画面を開き直してからもう一度お試しください");
+        return;
+    }
     Toaster.Success("下書きを削除しました");
     NavigationService.NavigateTo(NavigationService.GetModuleUrl("ExpenseRequest"));
 }
@@ -1045,6 +1061,7 @@ void Duplicate_OnClick()
     // 明細を複製（領収書の添付は引き継がない＝レシートは都度の実物が正）
     var today = DateOnly.FromDateTime(DateTime.Today);
     var n = 0;
+    var copied = 0;
     foreach (var l in srcLines)
     {
         n = n + 1;
@@ -1063,7 +1080,13 @@ void Duplicate_OnClick()
         nl.EntertainmentCount.Value = l.EntertainmentCount.Value;
         nl.EntertainmentPurpose.Value = l.EntertainmentPurpose.Value;
         nl.IsFixedAsset.Value = l.IsFixedAsset.Value;
-        nl.Submit();
+        // **入った行だけを数える**（BUG-0462）。戻り値を捨てると、
+        // 成功トーストの「明細 n 行」が**試行回数**を表示してしまう
+        if (nl.Submit() == true) { copied = copied + 1; }
+    }
+    if (copied < n)
+    {
+        Toaster.Warn($"明細 {n} 行のうち {copied} 行しか複製できませんでした。複製先を開いて確認してください");
     }
 
     // 承認フローの行を Draft で作成し、FK（approval_flow_id）を複製に張る。
@@ -1076,17 +1099,36 @@ void Duplicate_OnClick()
     var retFlow = flow.Submit();
     if (retFlow != true) { Toaster.Error("承認フローの初期化に失敗しました"); return; }
 
+    // **自分が作った行だけを探す**（BUG-0457）。絞り込みが無いと、
+    // `flow.Submit()` と この検索の間に別の人が下書きを作った瞬間、
+    // **その人の承認フローに紐づく**（`ApprovalFlow` の読取条件は人ゲートのみで行フィルタが無い）。
+    // 同じ用途の `ApprovalFlow.FetchLatestOwnFlowFromDb()` は Creator を付けており、こちらだけ抜けていた
     var fs = new ModuleSearcher<ApprovalFlow>();
+    fs.AddEquals(f => f.Creator.Value, CurrentUser.Id.Value);
+    fs.AddEquals(f => f.ParentId.Value, $"{typedCreated.Id.Value}");
     fs.OrderByDescending(f => f.Id.Value);
     fs.Limit(1);
     var newFlow = fs.ExecuteFirstOrDefault();
-    if (newFlow != null)
+    // **紐づけられなかったら成功と言わない**（BUG-0457）。
+    // approval_flow_id が付いていない複製は CLB が子モジュールを実体化しないので、
+    // **申請ボタンが二度と出ない下書き**になる（このメソッド自身の 1 つ上のコメントがその依存を述べている）
+    if (newFlow == null)
     {
-        typedCreated.ApprovalFlowIdRaw.Value = ((ApprovalFlow)newFlow).Id.Value;
-        typedCreated.Submit();
+        Toaster.Error("複製は作成しましたが、承認フローを紐づけられませんでした。"
+            + "この複製からは申請できないので、削除してもう一度複製してください");
+        NavigationService.NavigateTo(NavigationService.GetModuleDataUrl("ExpenseRequest", $"{typedCreated.Id.Value}"));
+        return;
+    }
+    typedCreated.ApprovalFlowIdRaw.Value = ((ApprovalFlow)newFlow).Id.Value;
+    if (typedCreated.Submit() != true)
+    {
+        Toaster.Error("複製は作成しましたが、承認フローの紐づけを保存できませんでした。"
+            + "この複製からは申請できないので、削除してもう一度複製してください");
+        NavigationService.NavigateTo(NavigationService.GetModuleDataUrl("ExpenseRequest", $"{typedCreated.Id.Value}"));
+        return;
     }
 
-    Toaster.Success($"申請を複製しました（明細 {n} 行）。利用日・金額を確認して申請してください");
+    Toaster.Success($"申請を複製しました（明細 {copied} 行）。利用日・金額を確認して申請してください");
     NavigationService.NavigateTo(NavigationService.GetModuleDataUrl("ExpenseRequest", $"{typedCreated.Id.Value}"));
 }
 
