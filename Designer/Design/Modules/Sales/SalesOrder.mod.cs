@@ -8,6 +8,10 @@ bool inLinesHandler = false;
 
 void Detail_OnAfterInit()
 {
+    // 採番は機械が決める。**人に触らせない**（BUG-0426）——
+    // 番号を手で直されると採番の Substring/Parse が壊れ、新規作成が全社で止まる
+    OrderNo.IsViewOnly = true;
+
     if (this.IsNewData)
     {
         Status.Value = "open";
@@ -16,6 +20,7 @@ void Detail_OnAfterInit()
         // 部門の初期値: 作成者の所属部（主所属が課でも伝票部門は部・ADR-0044。見積からの変換時は変換側が上書き）
         if (DepartmentRef.Value == null) { DepartmentRef.Value = CurrentUser.所属部.Value; }
     }
+    SeedAmountTrace();   // 保存済み明細を「自動で入れた値」とみなせるようにする（BUG-0423）
     RecalcTotal();
     UpdateButtons();
 }
@@ -117,11 +122,38 @@ void Lines_OnDataChanged()
         if (l.TaxCategoryRef.Value == null) l.TaxCategoryRef.Value = DefaultSalesTaxCategoryId();
         if (l.UnitPrice.Value != null)
         {
-            l.Amount.Value = l.Qty.Value * l.UnitPrice.Value;
+            // **手入力した金額を上書きしない**（BUG-0423）。
+            // 「一式 900,000 円（単価 1,000,000 から値引き）」のように金額を直接打つのは受託見積の常套手段で、
+            // 明細の金額欄は入力可のまま置いてある。無条件に数量×単価を書き戻すと、
+            // フォーカスを外した瞬間に戻るどころか、**他行を編集しただけで先に入れた値引きが消える**。
+            // 自動で入れた値を痕跡に控え、**金額が痕跡と一致している間だけ**追随させる
+            // （請求書 Invoice が BUG-0182 で確立した型をそのまま使う）
+            int auto = l.Qty.Value * l.UnitPrice.Value;
+            var trace = l.AmountAutoValue.Value ?? "";
+            var isUntouched = (l.Amount.Value == null) || (trace != "" && trace == $"{l.Amount.Value}");
+            if (isUntouched)
+            {
+                l.Amount.Value = auto;
+                l.AmountAutoValue.Value = $"{auto}";
+            }
         }
     }
     RecalcTotal();
     inLinesHandler = false;
+}
+
+// 既存明細を開いたとき、いまの金額が数量×単価と一致していれば「自動で入れた値」とみなして痕跡を置く。
+// これが無いと、保存済みの明細はすべて「手入力扱い」になり、単価を直しても金額が追随しない（BUG-0423）
+void SeedAmountTrace()
+{
+    foreach (var row in Lines.Rows)
+    {
+        var l = (SalesOrderLine)row;
+        if (l.Amount.Value == null) continue;
+        if (l.Qty.Value == null || l.UnitPrice.Value == null) continue;
+        int auto = l.Qty.Value * l.UnitPrice.Value;
+        if (auto == l.Amount.Value) { l.AmountAutoValue.Value = $"{auto}"; }
+    }
 }
 
 void RecalcTotal()
@@ -167,7 +199,17 @@ string NextOrderNo()
         var lastNo = ((SalesOrder)last).OrderNo.Value;
         if (lastNo != null && lastNo.StartsWith(prefix))
         {
-            seq = int.Parse(lastNo.Substring(prefix.Length)) + 1;
+            // **落ちない採番**（BUG-0426）。番号を手で `Q-26-001改` のように直されると
+
+            // 文字列降順の最大がその行になり（`'改'` は `'9'` より大きい）、
+
+            // 以後**新規作成を開くたびに FormatException で落ちる**。番号を直すまで全社で新規が作れない。
+
+            // 数字として読めない番号は「無かったこと」にして採番を続ける
+
+            var tail = 0;
+
+            if (int.TryParse(lastNo.Substring(prefix.Length), out tail)) { seq = tail + 1; }
         }
     }
     return $"{prefix}{seq:000}";

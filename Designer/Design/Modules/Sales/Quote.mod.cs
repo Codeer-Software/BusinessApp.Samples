@@ -11,6 +11,10 @@ bool inLinesHandler = false;
 
 void Detail_OnAfterInit()
 {
+    // 採番は機械が決める。**人に触らせない**（BUG-0426）——
+    // 番号を手で直されると採番の Substring/Parse が壊れ、新規作成が全社で止まる
+    QuoteNo.IsViewOnly = true;
+
     if (this.IsNewData)
     {
         Status.Value = "draft";
@@ -19,6 +23,7 @@ void Detail_OnAfterInit()
         IssueDate.Value = DateOnly.FromDateTime(DateTime.Today);
         QuoteNo.Value = NextQuoteNo();
     }
+    SeedAmountTrace();   // 保存済み明細を「自動で入れた値」とみなせるようにする（BUG-0423）
     RecalcTotal();
     UpdateButtons();
 }
@@ -84,11 +89,38 @@ void Lines_OnDataChanged()
         if (l.TaxCategoryRef.Value == null) l.TaxCategoryRef.Value = DefaultSalesTaxCategoryId();
         if (l.UnitPrice.Value != null)
         {
-            l.Amount.Value = l.Qty.Value * l.UnitPrice.Value;
+            // **手入力した金額を上書きしない**（BUG-0423）。
+            // 「一式 900,000 円（単価 1,000,000 から値引き）」のように金額を直接打つのは受託見積の常套手段で、
+            // 明細の金額欄は入力可のまま置いてある。無条件に数量×単価を書き戻すと、
+            // フォーカスを外した瞬間に戻るどころか、**他行を編集しただけで先に入れた値引きが消える**。
+            // 自動で入れた値を痕跡に控え、**金額が痕跡と一致している間だけ**追随させる
+            // （請求書 Invoice が BUG-0182 で確立した型をそのまま使う）
+            int auto = l.Qty.Value * l.UnitPrice.Value;
+            var trace = l.AmountAutoValue.Value ?? "";
+            var isUntouched = (l.Amount.Value == null) || (trace != "" && trace == $"{l.Amount.Value}");
+            if (isUntouched)
+            {
+                l.Amount.Value = auto;
+                l.AmountAutoValue.Value = $"{auto}";
+            }
         }
     }
     RecalcTotal();
     inLinesHandler = false;
+}
+
+// 既存明細を開いたとき、いまの金額が数量×単価と一致していれば「自動で入れた値」とみなして痕跡を置く。
+// これが無いと、保存済みの明細はすべて「手入力扱い」になり、単価を直しても金額が追随しない（BUG-0423）
+void SeedAmountTrace()
+{
+    foreach (var row in Lines.Rows)
+    {
+        var l = (QuoteLine)row;
+        if (l.Amount.Value == null) continue;
+        if (l.Qty.Value == null || l.UnitPrice.Value == null) continue;
+        int auto = l.Qty.Value * l.UnitPrice.Value;
+        if (auto == l.Amount.Value) { l.AmountAutoValue.Value = $"{auto}"; }
+    }
 }
 
 void RecalcTotal()
@@ -116,7 +148,17 @@ string NextQuoteNo()
         var lastNo = ((Quote)last).QuoteNo.Value;
         if (lastNo != null && lastNo.StartsWith(prefix))
         {
-            seq = int.Parse(lastNo.Substring(prefix.Length)) + 1;
+            // **落ちない採番**（BUG-0426）。番号を手で `Q-26-001改` のように直されると
+
+            // 文字列降順の最大がその行になり（`'改'` は `'9'` より大きい）、
+
+            // 以後**新規作成を開くたびに FormatException で落ちる**。番号を直すまで全社で新規が作れない。
+
+            // 数字として読めない番号は「無かったこと」にして採番を続ける
+
+            var tail = 0;
+
+            if (int.TryParse(lastNo.Substring(prefix.Length), out tail)) { seq = tail + 1; }
         }
     }
     return $"{prefix}{seq:000}";
@@ -136,7 +178,17 @@ string NextOrderNoForConvert()
         var lastNo = ((SalesOrder)last).OrderNo.Value;
         if (lastNo != null && lastNo.StartsWith(prefix))
         {
-            seq = int.Parse(lastNo.Substring(prefix.Length)) + 1;
+            // **落ちない採番**（BUG-0426）。番号を手で `Q-26-001改` のように直されると
+
+            // 文字列降順の最大がその行になり（`'改'` は `'9'` より大きい）、
+
+            // 以後**新規作成を開くたびに FormatException で落ちる**。番号を直すまで全社で新規が作れない。
+
+            // 数字として読めない番号は「無かったこと」にして採番を続ける
+
+            var tail = 0;
+
+            if (int.TryParse(lastNo.Substring(prefix.Length), out tail)) { seq = tail + 1; }
         }
     }
     return $"{prefix}{seq:000}";
@@ -423,7 +475,15 @@ void DeleteQuote_OnClick()
     var result = MessageBox.Show($"見積「{QuoteNo.Value} {Title.Value}」を削除しますか？（元に戻せません）", "削除する", "キャンセル");
     if (result != "削除する") return;
     using var loading = LoadingService.StartLoading(0);
-    this.Delete();
+    // **戻り値を検査する**（BUG-0425）。`sales_orders.quote_id` / `recurring_billings.quote_id` が
+    // この見積を参照していると FK 違反で false が返る。すぐ下の `RevertToDraft_OnClick` のコメントが
+    // 「過去に片側ガードをすり抜けて draft のまま下流を持つ見積が存在しうる」と明記しているとおり、
+    // その組み合わせは実在しうる。検査しないと、生の SQLite エラーと成功トーストが同時に出て一覧へ飛ぶ
+    if (this.Delete() != true)
+    {
+        Toaster.Error("見積を削除できませんでした。この見積から作られた受注・定期請求契約が無いか確認してください");
+        return;
+    }
     Toaster.Success("見積を削除しました");
     NavigationService.NavigateTo(NavigationService.GetModuleUrl("Quote"));
 }
@@ -471,24 +531,38 @@ void ConvertToOrder_OnClick()
     so.Status.Value = "open";
     so.Note.Value = Note.Value;
 
-    var count = Lines.Rows.Count;
-    if (count > 0)
+    // **明細は DB から取り直す**（BUG-0427）。同じファイルの `PrintQuote` と `CalcTaxByLine` は
+    // 「メモリ行の遅延ロード対策」として既に `ModuleSearcher` を使っており、
+    // 危険な側の作法がここだけに残っていた。`Lines.Rows` が未ロードだと `count == 0` になり、
+    // **明細ゼロの受注が黙って作られたうえで見積が accepted に遷移する**（`so.Submit()` は成功する）。
+    // 復旧には受注を削除して見積を下書きに戻す手順が要る
+    var ls2 = new ModuleSearcher<QuoteLine>();
+    ls2.AddEquals(e => e.QuoteId.Value, this.Id.Value);
+    ls2.OrderBy(e => e.LineNo.Value);
+    var srcLines = ls2.Execute();
+
+    // **0 件なら止める**。検収側の同型（Confirm_OnClick）は「検収明細がありません」で安全側に倒れるのに、
+    // ここだけ止まらなかった
+    if (srcLines.Count == 0)
     {
-        so.Lines.AddRows(count);
-        var idx = 0;
-        foreach (var row in so.Lines.Rows)
-        {
-            var dst = (SalesOrderLine)row;
-            var src = (QuoteLine)Lines.Rows[idx];
-            idx = idx + 1;
-            dst.LineNo.Value = src.LineNo.Value;
-            dst.Description.Value = src.Description.Value;
-            dst.Qty.Value = src.Qty.Value;
-            dst.Unit.Value = src.Unit.Value;
-            dst.UnitPrice.Value = src.UnitPrice.Value;
-            dst.Amount.Value = src.Amount.Value;
-            dst.TaxCategoryRef.Value = src.TaxCategoryRef.Value;
-        }
+        Toaster.Error("この見積には明細がありません。明細を入れてから受注にしてください");
+        return;
+    }
+
+    so.Lines.AddRows(srcLines.Count);   // 引数は 1 文で確定させる（ISSUE-0006）
+    var idx = 0;
+    foreach (var row in so.Lines.Rows)
+    {
+        var dst = (SalesOrderLine)row;
+        var src = (QuoteLine)srcLines[idx];
+        idx = idx + 1;
+        dst.LineNo.Value = src.LineNo.Value;
+        dst.Description.Value = src.Description.Value;
+        dst.Qty.Value = src.Qty.Value;
+        dst.Unit.Value = src.Unit.Value;
+        dst.UnitPrice.Value = src.UnitPrice.Value;
+        dst.Amount.Value = src.Amount.Value;
+        dst.TaxCategoryRef.Value = src.TaxCategoryRef.Value;
     }
 
     var retSo = so.Submit();

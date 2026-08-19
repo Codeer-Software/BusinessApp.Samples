@@ -761,7 +761,7 @@
   },
   "SearchLayouts": {
     "": {
-      "OnSearchInitialization": "",
+      "OnSearchInitialization": "Search_OnInitialization",
       "ShowDefaultSearchButtons": true,
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,

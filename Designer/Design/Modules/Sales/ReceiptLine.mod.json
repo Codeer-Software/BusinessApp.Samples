@@ -150,6 +150,27 @@
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "DbColumn": "diff_amount",
+      "Placeholder": "今回検収する金額",
+      "Format": "#,0",
+      "IsSlider": false,
+      "OnInput": "",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "差額消込",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "DiffAmount",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -203,7 +224,8 @@
     "": {
       "HeaderTitle": "",
       "DataOnlyFields": [
-        "LineNo"
+        "LineNo",
+        "DiffAmount"
       ],
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "",

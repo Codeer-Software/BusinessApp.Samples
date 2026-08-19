@@ -285,7 +285,10 @@ void BankPending_OnClick()
 
 void JournalDrafts_OnClick()
 {
-    NavigationService.NavigateTo("/Accounting/JournalEntryBoard");
+    // 件数は status='draft' の数なので、着地画面も同じ条件で絞る（BUG-0440・ADR-0060）。
+    // initialize_search=true が JournalEntryList の Search_OnInitialization を発火させ、
+    // status パラメータを状態の検索条件へ移す
+    NavigationService.NavigateTo("/Accounting/JournalEntryBoard?initialize_search=true&status=draft");
 }
 
 void BillingPending_OnClick()

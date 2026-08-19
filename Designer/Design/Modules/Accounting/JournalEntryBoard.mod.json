@@ -28,7 +28,7 @@
       "UserUrlParameter": true,
       "SearchUrlParameterKey": "",
       "PageIndexUrlParameterKey": "",
-      "SearchInitializationTriggerUrlParameter": "",
+      "SearchInitializationTriggerUrlParameter": "initialize_search",
       "Name": "Search",
       "IgnoreModification": false,
       "OnValidateInput": "",

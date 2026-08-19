@@ -6,6 +6,10 @@
 
 void Detail_OnAfterInit()
 {
+    // 採番は機械が決める。**人に触らせない**（BUG-0426）——
+    // 番号を手で直されると採番の Substring/Parse が壊れ、新規作成が全社で止まる
+    AcceptanceNo.IsViewOnly = true;
+
     if (this.IsNewData)
     {
         Status.Value = "draft";
@@ -239,7 +243,14 @@ void DeleteAcceptance_OnClick()
     var result = MessageBox.Show($"検収「{AcceptanceNo.Value}」を削除しますか？（元に戻せません）", "削除する", "キャンセル");
     if (result != "削除する") return;
     using var loading = LoadingService.StartLoading(0);
-    this.Delete();
+    // **戻り値を検査する**（BUG-0425）。`Delete()` は FK 違反で false を返して静かに失敗し、
+    // 生の `SQLite Error 19: FOREIGN KEY constraint failed` と成功トーストが**同時に出て**一覧へ飛ぶ。
+    // ユーザーは消えたと思うが、レコードは残っている（FB-028/029）
+    if (this.Delete() != true)
+    {
+        Toaster.Error("検収を削除できませんでした。この検収を参照している請求書などが無いか確認してください");
+        return;
+    }
     Toaster.Success("検収を削除しました");
     NavigationService.NavigateTo(NavigationService.GetModuleUrl("Acceptance"));
 }
@@ -473,7 +484,20 @@ void BilledInvoiceRef_OnDataChanged()
                 var badNo = ((Invoice)inv2).InvoiceNo.Value;
                 BilledInvoiceRef.Value = null;
                 this.IsViewOnly = false;
-                this.Submit();
+                // **戻り値を検査する**（BUG-0424）。ここが失敗すると、画面の合算先は空・
+                // トーストは「取引先が違う」なのに **DB には別取引先の請求書 ID が残る**。
+                // その状態では FindBilledInvoiceNo() が値を返すので「請求書を作成」ボタンが二度と出ず、
+                // 確定取消も「合算済み」で拒否される。画面には請求書番号すら出ないので誰も気づけない。
+                // すぐ上のコメントが「その場で保存まで確定させる」と宣言している当の処理なので、
+                // 失敗を検知しないのは宣言と矛盾している
+                if (this.Submit() != true)
+                {
+                    UpdateButtons();
+                    Toaster.Error($"請求書 {badNo} は取引先が違うため合算先にできません。"
+                        + "**画面から外しましたが保存に失敗しました**。"
+                        + "この画面を保存し直すか、開き直して合算先が空になっていることを確認してください");
+                    return;
+                }
                 UpdateButtons();
                 Toaster.Error($"請求書 {badNo} は取引先が違うため合算先にできません"
                     + "（合算できるのは同じ取引先の請求書だけです）");
@@ -541,7 +565,17 @@ string NextAcceptanceNo()
         var lastNo = ((Acceptance)last).AcceptanceNo.Value;
         if (lastNo != null && lastNo.StartsWith(prefix))
         {
-            seq = int.Parse(lastNo.Substring(prefix.Length)) + 1;
+            // **落ちない採番**（BUG-0426）。番号を手で `Q-26-001改` のように直されると
+
+            // 文字列降順の最大がその行になり（`'改'` は `'9'` より大きい）、
+
+            // 以後**新規作成を開くたびに FormatException で落ちる**。番号を直すまで全社で新規が作れない。
+
+            // 数字として読めない番号は「無かったこと」にして採番を続ける
+
+            var tail = 0;
+
+            if (int.TryParse(lastNo.Substring(prefix.Length), out tail)) { seq = tail + 1; }
         }
     }
     return $"{prefix}{seq:000}";

@@ -40,6 +40,14 @@ void UpdateOffsetVisibility()
 
 void Method_OnDataChanged()
 {
+    // 合算済みの入金を「相殺」にはできない（ConfirmMulti が拒否する）。
+    // **選んだ時点で言う**（BUG-0428）——確定を押すまで気づけないと、
+    // その間に相殺元の選択でヘッダ額が明細合計と食い違う（不変条件 C05）
+    if (Method.Value == "offset" && LineCount() > 1)
+    {
+        Method.Value = "bank";
+        Toaster.Error("合算した入金は相殺にできません（先に「まとめを解除する」を押してください）");
+    }
     UpdateOffsetVisibility();
 }
 
@@ -47,6 +55,9 @@ void Method_OnDataChanged()
 void OffsetVendorInvoiceRef_OnDataChanged()
 {
     if (OffsetVendorInvoiceRef.Value == null) return;
+    // **合算済みならヘッダ額を触らない**（BUG-0428）。明細合計と食い違ったまま
+    // 標準の「登録」で保存されると、不変条件 C05（入金レコードの基本整合）が DB に残る
+    if (LineCount() > 1) { return; }
     var vi = FindVendorInvoice(OffsetVendorInvoiceRef.Value);
     if (vi == null) return;
     if (vi.Amount.Value != null) { Amount.Value = vi.Amount.Value; }
@@ -80,7 +91,12 @@ void UpdateButtons()
     var canMerge = !confirmed && isAccounting && !this.IsNewData && Method.Value != "offset";
     MergeButton.IsVisible = canMerge;
     if (canMerge) { MergeButton.IsViewOnly = false; }
-    UnmergeButton.IsVisible = canMerge && lineCount > 1;
+    // **解除ボタンは相殺でも出す**（BUG-0428）。`canMerge` に相乗りさせていたため、
+    // 合算した入金の入金方法を「相殺」に変えると出口が消えていた——
+    // 確定は `ConfirmMulti` が「相殺入金は合算できません」と拒否し、解除ボタンは消え、
+    // まとめ直しもできない。入金方法を銀行振込に戻せば復帰できるが、画面にその手掛かりが無い。
+    // **詰ませないことが先**。まとめ直せない（Merge が出ない）のは仕様のままでよい
+    UnmergeButton.IsVisible = !confirmed && isAccounting && !this.IsNewData && lineCount > 1;
     if (UnmergeButton.IsVisible) { UnmergeButton.IsViewOnly = false; }
     // 合算したら入金額は明細の合計。手で直せると合計と食い違う（不変条件 C05）
     Amount.IsViewOnly = confirmed || lineCount > 1;
@@ -180,6 +196,10 @@ void CancelReceipt_OnClick()
         return;
     }
 
+    // 差額の記録を消す（BUG-0422）。取り消した入金は「まだ消し込んでいない」状態に戻るので、
+    // 差額も無かったことにする。残しておくと、次に差額なしで確定し直したときに二重に数える
+    ClearDiffAmounts();
+
     // 請求書ステータスの再計算: 消込仕訳が残っている入金の合計で判定
     var mergedRemaining = 0;
     if (InvoiceRef.Value != null)
@@ -268,6 +288,20 @@ void CancelReceipt_OnClick()
     }
 }
 
+// この入金の消込明細から差額の記録を落とす（BUG-0422）
+void ClearDiffAmounts()
+{
+    var s = new ModuleSearcher<ReceiptLine>();
+    s.AddEquals(l => l.ReceiptId.Value, this.Id.Value);
+    foreach (var row in s.Execute())
+    {
+        var rl = (ReceiptLine)row;
+        if ((rl.DiffAmount.Value ?? 0) == 0) continue;
+        rl.DiffAmount.Value = 0;
+        if (rl.Submit() != true) { Toaster.Warn("差額記録の解除に失敗しました（入金明細を確認してください）"); }
+    }
+}
+
 Invoice FindInvoice(object invoiceId)
 {
     var s = new ModuleSearcher<Invoice>();
@@ -296,6 +330,10 @@ int SumReceipts(object invoiceId, bool excludeSelf)
         js.AddEquals(e => e.SourceId.Value, rl.ReceiptId.Value);
         if (js.Execute().Count == 0) continue;
         if (rl.Amount.Value != null) total = total + rl.Amount.Value;
+        // **差額で消し込んだ分も「消込済み」**（BUG-0422）。振込手数料を当社負担で処理すると
+        // 売掛は入金額＋差額だけ落ちるのに、明細には入金額しか入らない。
+        // ここを数え落とすと、取消 → 再入金で手数料が二重に立ち、売掛がマイナスになる
+        if (rl.DiffAmount.Value != null) total = total + rl.DiffAmount.Value;
     }
     return total;
 }
@@ -579,6 +617,26 @@ void Confirm_OnClick()
         if (retVi != true)
         {
             Toaster.Error("仕入先請求の支払済み更新に失敗しました（消込仕訳は生成済みです。購買＞仕入先請求の状態を確認してください）");
+        }
+    }
+
+    // 差額で消し込んだ分を消込明細に控える（BUG-0422）。
+    // **`SumReceipts` を呼ぶ前**に書く——直後の残額判定がこの値を含む必要があるため。
+    // 明細はトリガ 780 が作っているので、ここでは更新するだけ
+    if (useDiff && diff > 0)
+    {
+        var dls = new ModuleSearcher<ReceiptLine>();
+        dls.AddEquals(l => l.ReceiptId.Value, this.Id.Value);
+        var dlRows = dls.Execute();
+        if (dlRows.Count == 1)
+        {
+            var dl = (ReceiptLine)dlRows[0];
+            dl.DiffAmount.Value = diff;
+            if (dl.Submit() != true)
+            {
+                Toaster.Error("差額の記録に失敗しました（消込仕訳は生成済みです）。"
+                    + "この入金を取り消すと残額の計算がずれるので、先に経理へ連絡してください");
+            }
         }
     }
 

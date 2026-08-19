@@ -550,7 +550,11 @@ int ParseAmount(string s)
     var neg = false;
     if (t.StartsWith("-")) { neg = true; t = t.Substring(1); }
     if (!IsNumeric(t)) return 0;
-    var v = int.Parse(t);
+    // 桁あふれで落ちないように TryParse で受ける（BUG-0426 の家族）。
+    // IsNumeric は「数字だけか」しか見ないので、21 桁の数字列は int.Parse で
+    // OverflowException になり、**CSV 取込全体が生の英語例外で止まる**
+    var v = 0;
+    if (!int.TryParse(t, out v)) return 0;
     if (neg) v = -v;
     return v;
 }

@@ -7,6 +7,9 @@ bool inLinesHandler = false;
 
 void Detail_OnAfterInit()
 {
+    // 採番は機械が決める。人に触らせない（BUG-0426）
+    InvoiceNo.IsViewOnly = true;
+
     if (this.IsNewData)
     {
         // 手作成の請求書は「下書き」始まり（U4-5・2026-07-16 ユーザー決定。見積と対称にする）。
@@ -973,7 +976,9 @@ string NextInvoiceNo()
         var lastNo = ((Invoice)last).InvoiceNo.Value;
         if (lastNo != null && lastNo.StartsWith(prefix))
         {
-            seq = int.Parse(lastNo.Substring(prefix.Length)) + 1;
+            // **落ちない採番**（BUG-0426）。数字として読めない番号は「無かったこと」にして続ける
+            var tail = 0;
+            if (int.TryParse(lastNo.Substring(prefix.Length), out tail)) { seq = tail + 1; }
         }
     }
     return $"{prefix}{seq:000}";
