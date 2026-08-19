@@ -490,10 +490,7 @@ void SaveEntry(bool post)
     // **年度の締めも見る**（BUG-0100）。期間だけを見ていると、年次決算を終えて年度を締めたあとに
     // 1 か月だけ期間を再オープンした隙に、その年度へ確定仕訳を作れてしまう。
     // 締めガードの粒度は `FixedAsset` の先例（年度 closed を明示的に止める）に揃える
-    var yrS = new ModuleSearcher<FiscalYear>();
-    yrS.AddEquals(e => e.Id.Value, FiscalYearRef.Value);
-    var yr = yrS.ExecuteFirstOrDefault();
-    if (yr != null && ((FiscalYear)yr).Status.Value == "closed")
+    if (IsFiscalYearClosed(FiscalYearRef.Value))
     {
         EntryDate.SetError("取引日の会計年度は締め済みです（期間を再オープンしても年度が締まっていれば起票できません）");
         return;
@@ -850,19 +847,26 @@ void RegenerateTaxLines()
     var catSearch = new ModuleSearcher<TaxCategory>();
     var rateSearch = new ModuleSearcher<TaxRate>();
     var accSearch = new ModuleSearcher<Account>();
+    // 科目は**役割で引き、無ければコードで拾う**（BUG-0446）。
+    // ddl/820 で仮払消費税に `consumption_tax_receivable`、ddl/700 で仮受消費税に
+    // `consumption_tax_payable` を割り当てている。科目体系を組み替えた導入先
+    // （＝「テンプレートに少し手を加えて使う」という本アプリの売り文句そのもの）でコードが変わると、
+    // 税行の Account が null のまま NOT NULL に当たって Submit が false になり、
+    // ユーザーには「ほかの人が同時に伝票を確定した可能性があります」という**無関係な文言**しか出ない。
+    // AddIn を消さずコードも併記するのは、役割が未設定の環境でも従来どおり動かすため
     accSearch.AddIn(e => e.Code.Value, "1900", "2200");
     var batch = BatchSearcher.Execute(catSearch, rateSearch, accSearch);
     var cats = batch.GetAt(0);
     var rates = batch.GetAt(1);
     var taxAccounts = batch.GetAt(2);
 
-    object purchaseTaxAccountId = null;
-    object salesTaxAccountId = null;
+    object purchaseTaxAccountId = ResolveTaxAccountId("consumption_tax_receivable");
+    object salesTaxAccountId = ResolveTaxAccountId("consumption_tax_payable");
     foreach (var a in taxAccounts)
     {
         var acc = (Account)a;
-        if (acc.Code.Value == "1900") { purchaseTaxAccountId = acc.Id.Value; }
-        if (acc.Code.Value == "2200") { salesTaxAccountId = acc.Id.Value; }
+        if (purchaseTaxAccountId == null && acc.Code.Value == "1900") { purchaseTaxAccountId = acc.Id.Value; }
+        if (salesTaxAccountId == null && acc.Code.Value == "2200") { salesTaxAccountId = acc.Id.Value; }
     }
 
     // 4. 経過措置の控除割合（取引日で期間解決。期間外は 0%）
@@ -1015,6 +1019,33 @@ void RegenerateTaxLines()
 //
 // 引数で年度を受けるのは、他モジュールが「まだ FiscalYearRef を入れていない新しい伝票」に
 // 番号を振るため。自伝票の採番は NextJournalNo(FiscalYearRef.Value) と書く。
+// 会計年度が締まっているか（BUG-0100 の規則の正典）。
+// **年度が正・期間はその下位**。決算修正のために 1 か月だけ期間を再オープンしても、
+// 年度が closed なら起票させない。年度を締めた時点で翌期の期首残高が確定しているので、
+// あとから当期に仕訳を足すと翌期の期首とずれる（BUG-0060）。
+//
+// 確定仕訳を作る経路は**すべてここを通す**（BUG-0442）。
+// 仕訳インポート・固定資産の処分／処分取消・仕掛品の期末振替が素通りしていた
+// 消費税科目を役割で引く（BUG-0446）。未設定なら null を返し、呼び元がコードで拾い直す
+object ResolveTaxAccountId(string role)
+{
+    var s = new ModuleSearcher<Account>();
+    s.AddEquals(e => e.AccountRole.Value, role);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return ((Account)found).Id.Value;
+}
+
+bool IsFiscalYearClosed(object fiscalYearId)
+{
+    if (fiscalYearId == null) return false;
+    var s = new ModuleSearcher<FiscalYear>();
+    s.AddEquals(e => e.Id.Value, fiscalYearId);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return false;
+    return ((FiscalYear)found).Status.Value == "closed";
+}
+
 int NextJournalNo(object fiscalYearId)
 {
     var s = new ModuleSearcher<JournalEntry>();

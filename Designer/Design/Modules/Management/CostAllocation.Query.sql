@@ -45,7 +45,10 @@ unalloc AS (
   FROM monthly_salaries ms
   JOIN app_users u ON u.id = ms.user_id
   WHERE ms.fiscal_year_id = @fiscal_year_id AND ms.period_no = @period_no
-    AND ms.user_id NOT IN (SELECT user_id FROM tot)
+    -- `NOT IN` は `tot` に NULL が 1 つでも混じると全行 NULL 評価になり、
+    -- この⚠未配賦ブロックが**丸ごと静かに消える**（time_entries.user_id は DDL 上 NULL 可）。
+    -- 合計行は合ったままなので気づけない。`NOT EXISTS` なら NULL 行は単に一致しないだけで済む（BUG-0436）
+    AND NOT EXISTS (SELECT 1 FROM tot WHERE tot.user_id = ms.user_id)
 ),
 frac AS (
   -- 円未満切捨てで消える端数（コスト合計との突合を成立させる調整行）

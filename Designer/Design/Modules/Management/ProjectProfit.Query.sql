@@ -43,20 +43,49 @@ alloc AS (
   LEFT JOIN monthly_salaries ms ON ms.user_id = te.user_id
     AND ms.fiscal_year_id = @fiscal_year_id AND ms.period_no = te.period_no
   GROUP BY te.project_id
+),
+-- 人件費コストが未登録の月があるかを先頭行で言う（BUG-0430）。
+-- alloc は `LEFT JOIN monthly_salaries` ＋ `COALESCE(ms.cost, 0)` なので、登録の無い月の工数は
+-- **0 円で配賦される**。その分だけ配賦人件費が過少＝**粗利が過大**に出る。
+-- 数字を勝手に補うことはできないので、「この数字を信用してよいか」を画面で言う。
+-- 判定は `v_missing_salary`（工数はあるのに人件費が無い**人×月**）に寄せる——
+-- 仕掛品・資金繰りと**同じ粒度**で判定するため。ここだけ「月に 1 行でもあれば登録済み」にすると
+-- 部分登録の月を見逃す（BUG-0432 と同じ穴）
+warn AS (
+  SELECT
+    0 AS sort_key,
+    '⚠' AS project_code,
+    '人件費コストが未登録の月があります（' || m.missing_count || ' 人月分）。'
+      || 'その分の配賦人件費が 0 円で計算されているため、粗利が実態より大きく出ています。'
+      || '経営管理 > 人件費コスト で登録してください' AS project_name,
+    '' AS project_type,
+    0 AS revenue, 0 AS direct_cost, 0 AS labor_cost, 0 AS gross_profit,
+    NULL AS profit_rate
+  FROM v_missing_salary m
+  WHERE m.fiscal_year_id = @fiscal_year_id AND m.missing_count > 0
+),
+main AS (
+  SELECT
+    1 AS sort_key,
+    p.code AS project_code,
+    p.name AS project_name,
+    -- internal（社内案件）が抜けていて生の英字が画面に出ていた
+    CASE p.project_type
+      WHEN 'contract' THEN '受託' WHEN 'ses' THEN 'SES' WHEN 'saas' THEN 'SaaS'
+      WHEN 'internal' THEN '社内' ELSE COALESCE(p.project_type, '') END AS project_type,
+    COALESCE(rev.revenue, 0) AS revenue,
+    COALESCE(exp.direct_cost, 0) AS direct_cost,
+    COALESCE(alloc.labor_cost, 0) AS labor_cost,
+    COALESCE(rev.revenue, 0) - COALESCE(exp.direct_cost, 0) - COALESCE(alloc.labor_cost, 0) AS gross_profit,
+    CASE WHEN COALESCE(rev.revenue, 0) > 0
+         THEN (COALESCE(rev.revenue, 0) - COALESCE(exp.direct_cost, 0) - COALESCE(alloc.labor_cost, 0)) * 100 / rev.revenue
+         ELSE NULL END AS profit_rate
+  FROM projects p
+  LEFT JOIN rev ON rev.project_id = p.id
+  LEFT JOIN exp ON exp.project_id = p.id
+  LEFT JOIN alloc ON alloc.project_id = p.id
 )
-SELECT
-  p.code AS project_code,
-  p.name AS project_name,
-  CASE p.project_type WHEN 'contract' THEN '受託' WHEN 'ses' THEN 'SES' WHEN 'saas' THEN 'SaaS' ELSE p.project_type END AS project_type,
-  COALESCE(rev.revenue, 0) AS revenue,
-  COALESCE(exp.direct_cost, 0) AS direct_cost,
-  COALESCE(alloc.labor_cost, 0) AS labor_cost,
-  COALESCE(rev.revenue, 0) - COALESCE(exp.direct_cost, 0) - COALESCE(alloc.labor_cost, 0) AS gross_profit,
-  CASE WHEN COALESCE(rev.revenue, 0) > 0
-       THEN (COALESCE(rev.revenue, 0) - COALESCE(exp.direct_cost, 0) - COALESCE(alloc.labor_cost, 0)) * 100 / rev.revenue
-       ELSE NULL END AS profit_rate
-FROM projects p
-LEFT JOIN rev ON rev.project_id = p.id
-LEFT JOIN exp ON exp.project_id = p.id
-LEFT JOIN alloc ON alloc.project_id = p.id
-ORDER BY p.code
+SELECT project_code, project_name, project_type,
+       revenue, direct_cost, labor_cost, gross_profit, profit_rate
+FROM (SELECT * FROM warn UNION ALL SELECT * FROM main)
+ORDER BY sort_key, project_code

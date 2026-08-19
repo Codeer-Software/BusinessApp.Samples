@@ -11,7 +11,7 @@ per AS (
     AND date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime')
 ),
 bs AS (
-  SELECT a.code,
+  SELECT a.code, a.is_cash_equivalent, a.account_role,
     COALESCE((SELECT SUM(ob.balance) FROM opening_balances ob
               WHERE ob.account_id = a.id AND ob.fiscal_year_id IN (SELECT id FROM cur)), 0)
     + COALESCE((SELECT SUM(CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END)
@@ -41,9 +41,16 @@ pl AS (
   GROUP BY a.account_type
 )
 SELECT
-  COALESCE((SELECT SUM(bal) FROM bs WHERE code >= '1000' AND code < '1100'), 0) AS cash_balance,
-  COALESCE((SELECT bal FROM bs WHERE code = '1100'), 0) AS ar_balance,
-  COALESCE((SELECT -bal FROM bs WHERE code = '2000'), 0) AS ap_balance,
+  -- **科目はフラグ／役割で引く。コードで引かない**（BUG-0439）。
+  -- 同じファイルの :25 は既に is_cash_equivalent で「今日で切る対象」を決めているのに、
+  -- ここだけコード範囲の直書きだった＝「今日で切る集合」と「現預金として足す集合」が別定義。
+  -- is_cash_equivalent の科目を 1100 以降（例: 別口座 1150）に作ると、
+  -- **今日で切る対象にはなるのに合計には入らない**——BUG-0414 で 3 画面を揃えた整合が
+  -- 科目を 1 本足しただけで静かに崩れる。
+  -- 売掛金・買掛金も同様に account_role（ddl/819）で引く
+  COALESCE((SELECT SUM(bal) FROM bs WHERE is_cash_equivalent = 1), 0) AS cash_balance,
+  COALESCE((SELECT bal FROM bs WHERE account_role = 'accounts_receivable'), 0) AS ar_balance,
+  COALESCE((SELECT -bal FROM bs WHERE account_role = 'trade_payable'), 0) AS ap_balance,
   COALESCE((SELECT -dmc FROM pl WHERE account_type = 'revenue'), 0) AS month_sales,
   COALESCE((SELECT SUM(dmc) FROM pl WHERE account_type <> 'revenue'), 0) AS month_expense,
   COALESCE((SELECT -dmc FROM pl WHERE account_type = 'revenue'), 0)

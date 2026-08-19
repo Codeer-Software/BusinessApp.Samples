@@ -336,7 +336,10 @@ void Accrue_OnClick()
 
     // 税額（税区分が課税仕入のとき内税計算）
     int gross = Amount.Value;
-    var tax = 0;
+    // **`int` で受ける**（CLB-040）。`var` のままだと動的値との演算で小数に化け、
+    // 費用 90,909.0909… ／ 仮払消費税 9,090.9090… が仕訳金額として保存される。
+    // 貸借は合うので検査は全部緑（BUG-0421 と同型・BUG-0437）
+    int tax = 0;
     object taxCatId = TaxCategoryRef.Value;
     if (taxCatId != null)
     {

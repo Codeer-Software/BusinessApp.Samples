@@ -581,7 +581,12 @@ int CalcPartialYearDepreciation(FiscalYear fy, var dispDate)
     if (full <= 0) return 0;
 
     var method = DepreciationMethod.Value;
-    var amount = full;
+    // **`int` で受ける**（CLB-040）。下で `amount = full * used / denom;` と月割するが、
+    // `var` のままだと 333,333 × 7 ÷ 12 = 194,444.25 が小数のまま `journal_lines.amount` に入る。
+    // 借方・貸方とも同額なので `ValidateBalanced()` を通り、BS・PL に小数円が出るまで気づけない。
+    // 同ファイルの `CalcDepreciationForYear` は `int annual3 = cost / 3;` と型で受けており、
+    // ここだけ作法が崩れていた（BUG-0437）
+    int amount = full;
     // **即時償却と一括償却(3年均等)は月割しない。** 即時償却は取得年度に全額が正で、
     // 一括償却も制度上は月割しない（`CalcDepreciationForYear` も月割していない）
     if (method != "immediate" && method != "lump_sum_3yr")
@@ -754,6 +759,14 @@ void DoDisposal(bool isSale)
     var dispDate = DateOnly.FromDateTime(DateTime.Today);
     var typedFy = ResolveYearForDate(dispDate);
     if (typedFy == null) { Toaster.Error("本日の日付に対応する会計年度がありません"); return; }
+    // **年度が締まっていれば期間の状態に関係なく止める**（BUG-0100 の規則・BUG-0442）。
+    // 判定の正典は JournalEntry.IsFiscalYearClosed。同じファイルの償却生成（GenerateDep）は
+    // 年度を見ているのに、処分だけが期間しか見ておらず粒度が割れていた
+    if (new JournalEntry().IsFiscalYearClosed(typedFy.Id.Value))
+    {
+        Toaster.Error("本日の会計年度は締め済みです（期間を再オープンしても年度が締まっていれば処分できません）");
+        return;
+    }
     var typedPeriod = ResolvePeriodForDate(dispDate);
     if (typedPeriod == null) { Toaster.Error("本日の日付に対応する月次期間がありません"); return; }
     if (typedPeriod.Status.Value == "closed")
@@ -994,6 +1007,13 @@ void CancelDisposal_OnClick()
     var je = FindDisposalJournal();
     if (je != null)
     {
+        // 年度が締まっていれば取り消せない（BUG-0442）。締めた期の数字は動かさない（ADR-0070）
+        if (new JournalEntry().IsFiscalYearClosed(je.FiscalYearRef.Value))
+        {
+            Toaster.Error($"処分仕訳 No.{je.JournalNo.Value} の会計年度は締め済みのため取り消せません。"
+                + "当期に反対仕訳（赤伝）を起票して打ち消してください");
+            return;
+        }
         var pd = ResolvePeriodForDate(je.EntryDate.Value);
         if (pd == null) { Toaster.Error("処分仕訳の日付に対応する月次期間がありません"); return; }
         if (pd.Status.Value == "closed")
@@ -1134,7 +1154,9 @@ void GenerateDep_OnClick()
         return;
     }
 
-    var amount = CalcDepreciationForYear(typedFy.StartDate.Value, typedFy.EndDate.Value);
+    // 戻り値は int だが、変数名 amount は同ファイルの月割計算でも使う。
+    // 型で受けておくと CLB-040 の検査（ファイル単位で var 変数を追う）が素通りしない
+    int amount = CalcDepreciationForYear(typedFy.StartDate.Value, typedFy.EndDate.Value);
     if (amount <= 0)
     {
         // **原因を分けて伝える**（BUG-0099）。旧実装は「対象外または償却済み」の 1 文で、

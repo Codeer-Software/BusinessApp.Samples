@@ -263,7 +263,7 @@
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
       "DisplayName": "税入力",
-      "IsRequired": false,
+      "IsRequired": true,
       "OnDataChanged": "",
       "Name": "TaxInputMode",
       "IgnoreModification": false,

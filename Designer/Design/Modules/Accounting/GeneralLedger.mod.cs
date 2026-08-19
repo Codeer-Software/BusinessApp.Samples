@@ -15,12 +15,7 @@ void Search_OnInitialization()
     var applied = ApplyDrillDownParameters();
 
     // ② 期間の既定（当年度の期首〜期末）。ドリルダウンで期間が来ていれば上書きしない
-    var today = DateTime.Today;
-    var firstDay = new DateTime(today.Year, today.Month, 1);
-    var s = new ModuleSearcher<FiscalYear>();
-    s.AddLessThanOrEqual(e => e.StartDate.Value, firstDay);
-    s.AddGreaterThanOrEqual(e => e.EndDate.Value, firstDay);
-    var fy = s.ExecuteFirstOrDefault();
+    var fy = new FiscalYear().ResolveDisplayYear();
     if (fy == null) return;
     var typed = (FiscalYear)fy;
     if (DateFrom.SearchMin == null) { DateFrom.SearchMin = typed.StartDate.Value; }

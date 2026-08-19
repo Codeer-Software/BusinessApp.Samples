@@ -104,13 +104,16 @@ ap_now AS (
   SELECT
     COALESCE((SELECT SUM(-ob.balance)
               FROM opening_balances ob JOIN accounts a ON a.id = ob.account_id
-              WHERE a.code = '2020' AND ob.fiscal_year_id IN (SELECT id FROM cur_yr)), 0)
+              -- 科目は account_role で引く（BUG-0434）。コード直書きは導入先の体系が違うと
+              -- **無言で 0 円**になり、資金ショート警告が鳴らなくなる方向に倒れる
+              WHERE a.account_role = 'accounts_payable'
+                AND ob.fiscal_year_id IN (SELECT id FROM cur_yr)), 0)
     +
     COALESCE((SELECT SUM(CASE WHEN l.dc = 'C' THEN l.amount ELSE -l.amount END)
               FROM journal_lines l
               JOIN journal_entries e ON e.id = l.journal_entry_id
               JOIN accounts a ON a.id = l.account_id
-              WHERE e.status = 'posted' AND a.code = '2020'
+              WHERE e.status = 'posted' AND a.account_role = 'accounts_payable'
                 AND e.fiscal_year_id IN (SELECT id FROM cur_yr)), 0) AS ap
 ),
 exp_now AS (
@@ -127,10 +130,28 @@ vend_out AS (
   WHERE v.status IN ('received', 'accrued')
 ),
 sal_out AS (
+  -- **もう払った月の給与は積まない**（BUG-0429）。
+  -- 出金源のうち ap_now は残高・vend_out は未払ステータス・exp_now は未仕訳分と、
+  -- いずれも「残っている債務」だけを見ている。sal_out だけが monthly_salaries を無条件に積んでいたため、
+  -- 給与の定型仕訳（T02: D 給料手当 / C 普通預金・毎月25日）を切った瞬間から
+  -- **同じ給与が現預金残高でも減り、当月の出金予定でも減る**——月末まで期末資金が丸 1 ヶ月分過少に出て、
+  -- 「⚠ 資金ショート」が誤発報する。
+  -- 判定は「その月に、今日までの日付で、給与科目を借方に立てた確定仕訳があるか」。
+  -- **今日までで切る**のが要点——cash_now が今日までしか足さないので、
+  -- 先日付で起票済みの給与仕訳（例: 今日が10日で25日付）はまだ現預金に反映されていない。
+  -- そこを落とすと逆に出金が消える
   SELECT mm.month_first AS m, SUM(ms.cost) AS amt
   FROM months mm
   JOIN fiscal_periods fp ON date(fp.start_date) = mm.month_first
   JOIN monthly_salaries ms ON ms.fiscal_year_id = fp.fiscal_year_id AND ms.period_no = fp.period_no
+  WHERE NOT EXISTS (
+    SELECT 1 FROM journal_lines l
+    JOIN journal_entries e ON e.id = l.journal_entry_id
+    JOIN accounts a ON a.id = l.account_id
+    WHERE e.status = 'posted' AND l.dc = 'D' AND a.account_role = 'salary_expense'
+      AND date(e.entry_date) >= mm.month_first
+      AND date(e.entry_date) < date(mm.month_first, '+1 month')
+      AND date(e.entry_date) <= date('now', 'localtime'))
   GROUP BY mm.month_first
 ),
 flows AS (
@@ -155,11 +176,23 @@ alert_rate AS (
   -- 既に COALESCE を持っており、作法が割れていた（既定 80% は投入値と同じ）
   SELECT COALESCE((SELECT amount FROM v_system_threshold_current WHERE code = 'BUDGET_ALERT_RATE'), 80) AS rate
 ),
+budget_elapsed AS (
+  -- 経過月数。**予実対比（BudgetVsActual）と同一の定義に保つ**（BUG-0433・ADR-0060）。
+  -- 月次期間が 1 つも無い年度は 12 とみなす（0 だと警告が永久に鳴らない）
+  SELECT CASE
+    WHEN (SELECT COUNT(*) FROM fiscal_periods WHERE fiscal_year_id IN (SELECT id FROM cur_yr)) = 0 THEN 12
+    ELSE (SELECT COUNT(*) FROM fiscal_periods
+           WHERE fiscal_year_id IN (SELECT id FROM cur_yr)
+             AND date(start_date) <= date('now', 'localtime'))
+  END AS n
+),
 budget_alert AS (
+  -- 判定の分母は**経過月までの予算**（年間予算ではない）。年間で割ると年度末近くまで ⚠ が鳴らない
   SELECT b.department_id AS department_id
   FROM (SELECT department_id, account_id, SUM(amount) AS budget
         FROM budget_lines
         WHERE fiscal_year_id IN (SELECT id FROM cur_yr)
+          AND period_no <= (SELECT n FROM budget_elapsed)
         GROUP BY department_id, account_id) b
   LEFT JOIN (SELECT l.department_id, l.account_id,
                     SUM(CASE WHEN l.dc = 'D' THEN l.amount ELSE -l.amount END) AS actual

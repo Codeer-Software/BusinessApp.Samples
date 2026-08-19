@@ -284,17 +284,6 @@ void PostAll_OnClick()
     var trS = new ModuleSearcher<TaxRate>();
     var taxRates = trS.Execute();
 
-    // インボイス経過措置の控除割合（本日基準で期間解決。期間外は 0%・BUG-0419）。
-    // 明細ごとの仕訳日は明細の日付だが、控除割合は年単位でしか変わらないので
-    // 一括起票の実行日で 1 回だけ引く（ループ内 I/O の削減）
-    decimal transitionRate = 0;
-    var trFirst = new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1);
-    var itS = new ModuleSearcher<InvoiceTransitionRate>();
-    itS.AddLessThanOrEqual(e => e.ValidFrom.Value, trFirst);
-    itS.AddGreaterThanOrEqual(e => e.ValidTo.Value, trFirst);
-    var itFound = itS.ExecuteFirstOrDefault();
-    if (itFound != null) { transitionRate = ((InvoiceTransitionRate)itFound).RatePercent.Value ?? 0; }
-
     object purchaseTaxId = null;
     object salesTaxId = null;
     foreach (var am in accounts)
@@ -374,7 +363,10 @@ void PostAll_OnClick()
         if (gross <= 0) { failed = failed + 1; continue; }
 
         // 税額: 相手科目の既定税区分が課税（出金=課税仕入 / 入金=課税売上）のときのみ内税で算出
-        var tax = 0;
+        // **`int` で受ける**（CLB-040）。`var` のままだと動的値との演算で小数に化け、
+        // 費用 90,909.0909… ／ 仮払消費税 9,090.9090… が仕訳金額として保存される。
+        // 貸借は合うので検査は全部緑（BUG-0421 と同型・BUG-0437）
+        int tax = 0;
         object taxCatId = counter.DefaultTaxCategory.Value;
         if (taxCatId != null)
         {
@@ -401,7 +393,14 @@ void PostAll_OnClick()
                         // 購買（BUG-0417）と同じ規則。**`int` で受けて切り捨てる**（CLB-040）
                         if (c.UsesTransitionDeduction.Value == true)
                         {
-                            int deductible = tax * transitionRate / 100;
+                            // **控除割合は明細の日付で引く**（BUG-0438）。
+                            // 以前は「年単位でしか変わらないから」と一括起票の**実行日**で 1 回だけ
+                            // 引いていたが、経過措置の区切りは年度でも暦年でもなく **9/30〜10/1**。
+                            // 銀行明細は前月分をまとめて取り込むのが通常運用なので、
+                            // 10 月に 9 月分を起票すると 80% であるべき控除が 70% になる
+                            // （165,000 円の明細 1 本あたり控除が 1,500 円過少）。
+                            // 振替伝票・購買・経費と同じく**仕訳日基準**に揃える
+                            int deductible = tax * ResolveTransitionRatePercent(d) / 100;
                             tax = deductible;
                         }
                         break;
@@ -411,6 +410,23 @@ void PostAll_OnClick()
             }
         }
         var baseAmount = gross - tax;
+
+        // 税行の摘要（経過措置なら控除割合を書いて、通帳の税額と食い違う理由が分かるようにする。
+        // VendorInvoice と同じ規律に揃える・BUG-0438 の補足）
+        var taxLineDesc = "消費税（行1）";
+        if (taxCatId != null)
+        {
+            foreach (var cm2 in taxCats)
+            {
+                var c2 = (TaxCategory)cm2;
+                if ($"{c2.Id.Value}" != $"{taxCatId}") continue;
+                if (c2.UsesTransitionDeduction.Value == true)
+                {
+                    taxLineDesc = $"消費税（行1・経過措置 控除{ResolveTransitionRatePercent(d):0.#}%）";
+                }
+                break;
+            }
+        }
 
         // 伝票採番（年度内連番。正典: JournalEntry.NextJournalNo。BUG-0069 で一本化）
         var nextNo = new JournalEntry().NextJournalNo(typedFy.Id.Value);
@@ -463,7 +479,7 @@ void PostAll_OnClick()
                     l.ParentLineNo.Value = 1;
                     l.Amount.Value = tax;
                     l.InputAmount.Value = tax;
-                    l.Description.Value = "消費税（行1）";
+                    l.Description.Value = taxLineDesc;
                 }
                 else
                 {
@@ -543,4 +559,18 @@ void PostAll_OnClick()
     if (posted > 0) Toaster.Success($"{posted} 件を仕訳として起票しました{nosText}");
     else Toaster.Warn("起票できた明細がありませんでした");
     if (skippedNoDept > 0) { Toaster.Warn($"{skippedNoDept} 件は部門が未選択のため起票していません（損益科目の行には部門が要ります）"); }
+}
+
+// インボイス経過措置の控除割合を**仕訳日**で引く（BUG-0438）。
+// 区切りは 9/30〜10/1 なので、実行日で引くと月をまたいだ取り込みで割合がずれる。
+// 実装は VendorInvoice / ExpenseRequestAccounting と同一
+decimal ResolveTransitionRatePercent(var entryDate)
+{
+    var first = new DateOnly(entryDate.Year, entryDate.Month, 1);
+    var s = new ModuleSearcher<InvoiceTransitionRate>();
+    s.AddLessThanOrEqual(e => e.ValidFrom.Value, first);
+    s.AddGreaterThanOrEqual(e => e.ValidTo.Value, first);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return 0;
+    return ((InvoiceTransitionRate)found).RatePercent.Value ?? 0;
 }

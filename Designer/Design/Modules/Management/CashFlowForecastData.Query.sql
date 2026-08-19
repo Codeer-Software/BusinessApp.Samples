@@ -85,16 +85,22 @@ ap_now AS (
   -- **未払金は今日で切らない**（BUG-0414 の見直し）。負債は「すでに確定した債務」なので、
   -- 月末付の未払計上も当月の出金予定に含める。ここで切ると**確定済みの支払いが予測から消え**、
   -- 資金ショートの警告が鈍る（保守主義の原則。現預金＝資産の側だけ「今日まで」で切る）
+  -- **科目は `accounts.account_role` で引く**（BUG-0434）。`a.code = '2020'` の直書きだと、
+  -- 導入先が別の科目コード体系を使った瞬間に**無言で 0 円**になり、当月の出金予定が消える。
+  -- スクリプト側（ExpenseRequestAccounting 等）は「未払金の科目がありません」とトーストで落ちるのに、
+  -- SQL は黙って 0 を返すぶん危ない。同じファイルの cash_now は既に is_cash_equivalent に是正済みで、
+  -- ここだけ作法が割れていた
   SELECT
     COALESCE((SELECT SUM(-ob.balance)
               FROM opening_balances ob JOIN accounts a ON a.id = ob.account_id
-              WHERE a.code = '2020' AND ob.fiscal_year_id IN (SELECT id FROM cur_yr)), 0)
+              WHERE a.account_role = 'accounts_payable'
+                AND ob.fiscal_year_id IN (SELECT id FROM cur_yr)), 0)
     +
     COALESCE((SELECT SUM(CASE WHEN l.dc = 'C' THEN l.amount ELSE -l.amount END)
               FROM journal_lines l
               JOIN journal_entries e ON e.id = l.journal_entry_id
               JOIN accounts a ON a.id = l.account_id
-              WHERE e.status = 'posted' AND a.code = '2020'
+              WHERE e.status = 'posted' AND a.account_role = 'accounts_payable'
                 AND e.fiscal_year_id IN (SELECT id FROM cur_yr)), 0) AS ap
 ),
 exp_now AS (
@@ -111,10 +117,28 @@ vend_out AS (
   WHERE v.status IN ('received', 'accrued')
 ),
 sal_out AS (
+  -- **もう払った月の給与は積まない**（BUG-0429）。
+  -- 出金源のうち ap_now は残高・vend_out は未払ステータス・exp_now は未仕訳分と、
+  -- いずれも「残っている債務」だけを見ている。sal_out だけが monthly_salaries を無条件に積んでいたため、
+  -- 給与の定型仕訳（T02: D 給料手当 / C 普通預金・毎月25日）を切った瞬間から
+  -- **同じ給与が現預金残高でも減り、当月の出金予定でも減る**——月末まで期末資金が丸 1 ヶ月分過少に出て、
+  -- 「⚠ 資金ショート」が誤発報する。
+  -- 判定は「その月に、今日までの日付で、給与科目を借方に立てた確定仕訳があるか」。
+  -- **今日までで切る**のが要点——cash_now が今日までしか足さないので、
+  -- 先日付で起票済みの給与仕訳（例: 今日が10日で25日付）はまだ現預金に反映されていない。
+  -- そこを落とすと逆に出金が消える
   SELECT mm.month_first AS m, SUM(ms.cost) AS amt
   FROM months mm
   JOIN fiscal_periods fp ON date(fp.start_date) = mm.month_first
   JOIN monthly_salaries ms ON ms.fiscal_year_id = fp.fiscal_year_id AND ms.period_no = fp.period_no
+  WHERE NOT EXISTS (
+    SELECT 1 FROM journal_lines l
+    JOIN journal_entries e ON e.id = l.journal_entry_id
+    JOIN accounts a ON a.id = l.account_id
+    WHERE e.status = 'posted' AND l.dc = 'D' AND a.account_role = 'salary_expense'
+      AND date(e.entry_date) >= mm.month_first
+      AND date(e.entry_date) < date(mm.month_first, '+1 month')
+      AND date(e.entry_date) <= date('now', 'localtime'))
   GROUP BY mm.month_first
 ),
 flows AS (

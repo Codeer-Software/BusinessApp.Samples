@@ -1841,18 +1841,27 @@ def rule_040(idx, add):
     import re as _re
     # var x = <式> / <式>;
     decl = _re.compile(r"\bvar\s+(\w+)\s*=\s*([^;=]*?/[^;]*?);")
-    # var x = 0; ... と宣言しておいて、後から x = <式> / <式>; と代入する形。
-    # 宣言行には割り算が無いので decl では拾えないが、変数の型は var で決まっており小数に化ける
-    # （BUG-0421・入金差額の内税分解が 454.5454… として仕訳に載った）
-    zero_decl = _re.compile(r"\bvar\s+(\w+)\s*=\s*-?\d+\s*;")
-    assign = _re.compile(r"(?:^|[;{}])\s*(\w+)\s*=\s*([^;=<>!+\-*/][^;=]*?/[^;]*?);", _re.M)
+    # var で宣言しておいて、後から x = <式> / <式>; と代入する形。
+    # 宣言行には割り算が無いので decl では拾えないが、変数の型は var で決まっており小数に化ける。
+    # **初期値の形は問わない**——リテラル（`var tax = 0;`＝BUG-0421）だけでなく
+    # 別の変数（`var amount = full;`＝BUG-0437）でも同じことが起きる。
+    # CLB のスクリプトでは値がすべて動的なので、「var で受けた変数に割り算を代入する」こと自体が罠
+    var_any_decl = _re.compile(r"\bvar\s+(\w+)\s*=\s*[^;]*;")
+    # 代入の検出は「文の先頭」に限る。行頭から見ないと `int tax = a / b;` の後半にマッチして、
+    # 正しく int で受けている側を誤検知する。ただし**波括弧なしの単文 if / else の中も文の先頭**——
+    # `if (pct > 0) tax = gross * pct / (100 + pct);` を取りこぼすと、
+    # 内税分解でいちばん多い書き方が丸ごと盲点になる（BUG-0437。実際に 2 件生き残っていた）
+    assign = _re.compile(r"(?:^|[;{})]|\belse)\s*(\w+)\s*=\s*([^;=<>!+\-*/][^;=]*?/[^;]*?);", _re.M)
 
     def _plain_arithmetic(rhs):
         """関数呼び出し・キャスト・文字列を含まない素の四則演算か。
         `(100 + pct)` のような**grouping だけの括弧は対象に含める**——
         BUG-0421 の `diff * pct / (100 + pct)` は「括弧がある」だけの理由で素通りしていた
         （内税分解の定番の形なので、取りこぼすと痛い）"""
-        if '"' in rhs:
+        # 素の四則演算だけを対象にする**ホワイトリスト**。
+        # 文字列補間（`$" ... / ..."`）は正規表現の都合で引用符の手前まで切り出されることがあり、
+        # `"` の有無だけでは弾けない（CashEntry の `$" ［{string.Join(" / ", …)}］"` で誤検知した）
+        if not _re.fullmatch(r"[\w\s.()*/+\-]+", rhs):
             return False
         if _re.search(r"[\w\]]\s*\(", rhs):   # 識別子の直後の ( ＝ メソッド呼び出し
             return False
@@ -1874,7 +1883,7 @@ def rule_040(idx, add):
                 continue
             add("CLB-040", SEV_ERROR, mod["cs_path"], line_of(cs, m.start()),
                 ("`var {} = {};` — " + _tail).format(m.group(1), rhs.strip(), m.group(1)))
-        varnames = set(zero_decl.findall(cs))
+        varnames = set(var_any_decl.findall(cs))
         for m in assign.finditer(cs):
             name = m.group(1)
             if name not in varnames:
@@ -1883,7 +1892,7 @@ def rule_040(idx, add):
             if not _plain_arithmetic(rhs):
                 continue
             add("CLB-040", SEV_ERROR, mod["cs_path"], line_of(cs, m.start()),
-                ("`{} = {};` — 宣言が `var {} = 0;` なので小数を受け取れてしまう。" + _tail)
+                ("`{} = {};` — `var` で宣言した変数なので小数を受け取れてしまう。" + _tail)
                 .format(name, rhs.strip(), name, name))
 
 

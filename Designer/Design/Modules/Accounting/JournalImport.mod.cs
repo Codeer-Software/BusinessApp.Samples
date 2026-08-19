@@ -280,14 +280,27 @@ void Import_OnClick()
             var gd = ToDate(gDate[gi]);
             var firstDay = DateOnly.FromDateTime(new DateTime(gd.Year, gd.Month, 1));
             var yearFound = false;
+            var yearClosed = false;
             foreach (var ym in years)
             {
                 var y = (FiscalYear)ym;
-                if (y.StartDate.Value <= firstDay && y.EndDate.Value >= firstDay) { yearFound = true; break; }
+                if (y.StartDate.Value <= firstDay && y.EndDate.Value >= firstDay)
+                {
+                    yearFound = true;
+                    // **年度が締まっていれば期間の状態に関係なく取り込まない**（BUG-0100 の規則・BUG-0442）。
+                    // 決算修正で 1 か月だけ期間を再オープンした状態が通常運用なので、
+                    // 期間だけ見ていると確定仕訳がそのまま入り、翌期の期首残高とずれる
+                    yearClosed = (y.Status.Value == "closed");
+                    break;
+                }
             }
             if (!yearFound)
             {
                 groupErr = $"{gDate[gi]} に対応する会計年度がありません";
+            }
+            else if (yearClosed)
+            {
+                groupErr = $"{gDate[gi]} の会計年度は締め済みです（期間を再オープンしても年度が締まっていれば取り込めません）";
             }
             else
             {

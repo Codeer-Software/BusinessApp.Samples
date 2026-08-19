@@ -90,20 +90,43 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.QueryFieldDesign"
     },
     {
-      "Candidates": [
-        "現金,1000",
-        "小口現金,1010",
-        "普通預金,1020"
-      ],
+      "Candidates": [],
       "SearchCondition": {
+        "LimitCount": 100,
         "SelectFields": [],
         "SortConditions": [],
-        "SortFieldVariable": "",
+        "SortFieldVariable": "Code.Value",
         "SortDescending": false,
-        "ModuleName": ""
+        "ModuleName": "Account",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [
+            {
+              "SearchTargetVariable": "IsActive.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": true,
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            },
+            {
+              "SearchTargetVariable": "IsCashEquivalent.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": true,
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            }
+          ],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
-      "ValueVariable": "",
-      "DisplayTextVariable": "",
+      "ValueVariable": "Code.Value",
+      "DisplayTextVariable": "Name.Value",
       "DbColumn": "account_code",
       "EmptyCandidateType": "Null",
       "AllowOrSearch": false,

@@ -157,6 +157,70 @@ void CarryOver_OnClick()
 // 翌期繰越の実処理。confirm=false のときは確認ダイアログを出さない
 // （年度の締めから呼ぶときは、締めの確認ダイアログで一度了解を取っているため）。
 // 戻り値: 繰り越したら true / 対象が無くて何もしなかったら false（呼び出し側が続行を判断する）
+// 帳票の既定期間に使う「表示すべき年度」（BUG-0097／0288／0444 の正典）。
+// ① 今日を含む年度 → ② 直前に終わった年度 → ③ 最も早く始まる年度 の順に縮退する。
+//
+// 縮退が要るのは、**期初に翌期の年度マスタを作り忘れている日**（中小企業では期首から
+// 2〜3 ヶ月ふつうに続く）に「今日を含む年度」が引けないから。そこで諦めると期間が空のまま開き、
+// SQL の日付比較が NULL になって**全期間**または**0 行**になる——どちらも「取引が無い」と区別できない。
+//
+// ②で「降順の最新」ではなく「直前に**終わった**年度」を採るのが要点。
+// 翌期を先に作ってあると、単純な降順ではまだ始まっていない年度が選ばれて結局ゼロになる。
+//
+// **帳票ごとに書き写さない**こと。書き写した結果、元帳と仕訳帳だけ縮退が無く、
+// 同じ日に同じ科目を見ても帳票ごとに違う残高が出ていた（BUG-0444）
+object ResolveDisplayYear()
+{
+    var today = DateTime.Today;
+    var firstDay = new DateTime(today.Year, today.Month, 1);
+    var s = new ModuleSearcher<FiscalYear>();
+    s.AddLessThanOrEqual(e => e.StartDate.Value, firstDay);
+    s.AddGreaterThanOrEqual(e => e.EndDate.Value, firstDay);
+    var fy = s.ExecuteFirstOrDefault();
+    if (fy != null) return fy;
+
+    var s2 = new ModuleSearcher<FiscalYear>();
+    s2.AddLessThan(e => e.EndDate.Value, today);
+    s2.OrderByDescending(e => e.EndDate.Value);
+    fy = s2.ExecuteFirstOrDefault();
+    if (fy != null) return fy;
+
+    var s3 = new ModuleSearcher<FiscalYear>();
+    s3.OrderBy(e => e.StartDate.Value);
+    return s3.ExecuteFirstOrDefault();
+}
+
+// 締めから呼ぶ繰越（BUG-0443）。
+// `RunCarryOver` の false は「繰り越す先／中身が無い＝正常にスキップ」と
+// 「繰越 SQL の失敗・繰越フラグ解除の失敗・期首の貸借不一致」が混ざっている。
+// **前者だけを成功として通し、後者は締めを止める**——
+// 繰越に失敗したまま年度を閉じると、翌期の期首残高が古いスナップショットのまま固定される。
+// 赤トーストの直後に「締めました」の緑トーストが重なって出るので、気づく手立てが無い
+bool RunCarryOverForClose()
+{
+    // 繰り越す先が無い＝最終年度を締めるだけ。正常
+    var ns = new ModuleSearcher<FiscalYear>();
+    ns.AddGreaterThan(e => e.StartDate.Value, EndDate.Value);
+    ns.OrderBy(e => e.StartDate.Value);
+    ns.Limit(1);
+    if (ns.ExecuteFirstOrDefault() == null) return true;
+
+    // 繰り越す中身が無い年度も締めさせる（移行初年度の空データ保護は RunCarryOver 側の判断）
+    var obs = new ModuleSearcher<OpeningBalance>();
+    obs.AddEquals(o => o.FiscalYearId.Value, this.Id.Value);
+    obs.Limit(1);
+    var js = new ModuleSearcher<JournalEntry>();
+    js.AddEquals(e => e.FiscalYearRef.Value, this.Id.Value);
+    js.AddEquals(e => e.Status.Value, "posted");
+    js.Limit(1);
+    if (obs.ExecuteFirstOrDefault() == null && js.ExecuteFirstOrDefault() == null) return true;
+
+    if (RunCarryOver(false)) return true;
+    Toaster.Error("翌期への繰越に失敗したため、年度は締めていません。"
+        + "上のエラーを解消してから、もう一度「この年度を締める」を押してください");
+    return false;
+}
+
 bool RunCarryOver(bool confirm)
 {
     var s = new ModuleSearcher<FiscalYear>();
@@ -299,7 +363,12 @@ void CloseYear_OnClick()
     if (answer != "締める") return;
 
     // 先に繰越を確定させる（この中で Submit が 2 回走る）。翌期が無ければ何もしないで続行する
-    RunCarryOver(false);
+    // **繰越の失敗を握り潰さない**（BUG-0443）。RunCarryOver が false を返すのは
+    // 「翌期が無い＝正常にスキップ」だけでなく、繰越 SQL の Submit 失敗・繰越フラグ解除の失敗も含む。
+    // 失敗したまま年度を閉じると、翌期の期首残高が古いスナップショットのまま固定される。
+    // 赤トーストの直後に「締めました」の緑トーストが出る（CLB のトーストは同時に複数出る）ので、
+    // 気づけないのが怖い。**戻り値を見て、失敗したら締めない**
+    if (!RunCarryOverForClose()) { return; }
 
     using var suspend = this.SuspendNotifyStateChanged();
     using var loading = LoadingService.StartLoading(0);
@@ -658,6 +727,19 @@ bool PostWipJournals(FiscalYear next)
     var rows = FindWipCandidates();
     if (rows.Count == 0) { Toaster.Error("仕掛品に振り替える対象がありません"); return false; }
 
+    // **年度が締まっていれば期間の状態に関係なく止める**（BUG-0100 の規則・BUG-0442）。
+    // 仕掛品の期末振替は当期の損益を動かすので、年度を締めたあとに打つと
+    // 翌期の期首残高（繰越スナップショット）とずれる
+    if (new JournalEntry().IsFiscalYearClosed(this.Id.Value))
+    {
+        Toaster.Error($"{Name.Value} は締め済みです。年度の締めを解除してから実行してください");
+        return false;
+    }
+    if (new JournalEntry().IsFiscalYearClosed(next.Id.Value))
+    {
+        Toaster.Error($"{next.Name.Value} が締め済みのため、翌期首の振戻を起票できません");
+        return false;
+    }
     if (IsPeriodClosedOn(EndDate.Value))
     {
         Toaster.Error("期末の月次期間が締め済みです。締めを解除してから実行してください");

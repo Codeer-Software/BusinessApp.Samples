@@ -119,6 +119,12 @@ void Save_OnClick()
     var removed = SaveListEdits();
     DraftList.Reload();
     RefreshSummary();
+    if (lastSaveHadFailure)
+    {
+        Toaster.Error("保存できなかった行があります。画面の入力内容を確認してください"
+            + "（保存できた行だけが反映されています。行の削除は見送りました）");
+        return;
+    }
     if (removed < 0)
     {
         Toaster.Warn($"編集内容は保存しましたが、行の削除は反映していません。"
@@ -147,15 +153,26 @@ int DraftPageLimit()
 // **ロードしていない行は消さない。** 収まらないときは削除を行わず -1 を返す（呼び元が知らせる）。
 //
 // 戻り値: 削除した行数。-1 = ページが割れているため削除を見送った。
+// 戻り値の 2 つ目の意味: 保存に失敗した行があれば false（呼び元は先へ進まない）。
+// **`Submit()` の戻り値を捨てない**（BUG-0445）。ここを黙って通すと、一括起票の直前に走る経路で
+// **DB に残っている古い金額のまま確定仕訳が起票される**——このメソッドが防ぐはずだったことそのもの。
+// 同型は `JournalLineDepartment` が「保存されたと信じて離脱するのが一番まずい壊れ方」として
+// 既に対処済みで、こちらだけ作法が割れていた
+bool lastSaveHadFailure = false;
+
 int SaveListEdits()
 {
+    lastSaveHadFailure = false;
     var aliveIds = new List<string>();
     foreach (var row in DraftList.Rows)
     {
         var t = (CashEntryDraft)row;
-        t.Submit();
+        if (t.Submit() != true) { lastSaveHadFailure = true; continue; }
         aliveIds.Add($"{t.Id.Value}");
     }
+    // 失敗した行を aliveIds に入れないと「画面から消えた行」と誤認して削除してしまう。
+    // 失敗があったら削除自体を見送る（下書きに履歴は無く、消すと復旧できない）
+    if (lastSaveHadFailure) { return -1; }
 
     var s = new ModuleSearcher<CashEntryDraft>();
     s.AddEquals(e => e.Creator.Value, CurrentUser.Id.Value);
@@ -229,6 +246,14 @@ void PostAll_OnClick()
     // 画面の編集内容（と削除）を先に確定させてから起票する。
     // そうしないと「直したつもりの金額」で起票されたり、消したはずの行が起票される
     SaveListEdits();
+    // **保存に失敗したまま起票しない**（BUG-0445）。ここから先は DB を読み直して起票するので、
+    // 画面で直した金額が保存できていないと**古い金額で確定仕訳が立つ**
+    if (lastSaveHadFailure)
+    {
+        Toaster.Error("保存できなかった行があるため、起票を中止しました。"
+            + "画面の入力内容を確認してから、もう一度実行してください");
+        return;
+    }
 
     var s = new ModuleSearcher<CashEntryDraft>();
     s.AddEquals(e => e.Creator.Value, CurrentUser.Id.Value);

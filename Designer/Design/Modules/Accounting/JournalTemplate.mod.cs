@@ -82,7 +82,12 @@ void CreateEntry_OnClick()
         l.Account.Value = t.Account.Value;
         l.Amount.Value = t.Amount.Value;
         l.TaxCategory.Value = t.TaxCategoryRef.Value;
-        l.TaxInputMode.Value = t.TaxInputMode.Value;
+        // **空なら上書きしない**（BUG-0441）。1 つ上の `l.Account.Value = ...` が
+        // `Lines_OnDataChanged → ApplyLineDefaults()` を発火させ、既定の税計算（inclusive）が入る。
+        // ここで定型側の NULL をそのまま書くとそれを消してしまい、確定時の `RegenerateTaxLines` が
+        // 「税計算しない」と解釈して**税行を 1 本も立てない**——
+        // 貸借は合うので検査は全部緑のまま、仕入税額控除だけが毎月消える
+        if (t.TaxInputMode.Value != null) { l.TaxInputMode.Value = t.TaxInputMode.Value; }
         l.Description.Value = t.Description.Value;
         // 定型の明細が部門を持っていれば下書きに引き継ぐ（ADR-0056）。
         // 家賃→全社共通のように毎月同じ部門になる仕訳を、起票のたびに選び直さずに済む
