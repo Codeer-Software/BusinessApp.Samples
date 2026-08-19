@@ -480,6 +480,25 @@ void SaveEntry(bool post)
         return;
     }
 
+    // **確定の直前に DB の状態を読み直す**（BUG-0081）。
+    // 確定の可否は「画面を読み込んだ時点の `Status.Value`」だけで判定していたので、
+    // 同じ下書きを 2 つのタブ／2 人で開いて両方で確定すると **2 回目も通る**。
+    // 2 回目は自分のメモリ上の行（税行なし）に対して `RegenerateTaxLines` が走るので、
+    // **税行が二重に残る**うえ伝票番号も 2 つ消費する。
+    // 楽観ロック列は持っていないが、直前に読み直すだけで窓はほぼ閉じる
+    if (post && !this.IsNewData)
+    {
+        var fresh = new ModuleSearcher<JournalEntry>();
+        fresh.AddEquals(e => e.Id.Value, this.Id.Value);
+        var cur = fresh.ExecuteFirstOrDefault();
+        if (cur != null && ((JournalEntry)cur).Status.Value == "posted")
+        {
+            Toaster.Error($"この伝票はほかで確定済みです（伝票 No.{((JournalEntry)cur).JournalNo.Value}）。"
+                + "画面を開き直してください");
+            return;
+        }
+    }
+
     // 会計年度の解決と締め済み期間ガード
     ResolveFiscalYear();
     if (FiscalYearRef.Value == null)
@@ -609,6 +628,12 @@ void SaveEntry(bool post)
         if (post)
         {
             Status.Value = "draft";
+            // **伝票番号も巻き戻す**（BUG-0077）。状態と税行だけ戻して番号を残すと、
+            //   ① 復旧後に「下書き保存」を押すと**伝票番号を持った下書き**が保存される
+            //   ② 復旧後に再度「確定」すると `if (JournalNo.Value == null)` が偽になり、
+            //      **採番し直さないので他の伝票と番号が衝突しうる**
+            // 番号は確定のときに採るもので、下書きに残しておく意味は無い
+            JournalNo.Value = null;
             if (!isRawImport)
             {
                 inLinesHandler = true;
@@ -1328,5 +1353,8 @@ void DeleteDraft_OnClick()
         return;
     }
     Toaster.Success("下書き伝票を削除しました");
-    NavigationService.NavigateTo(NavigationService.GetModuleUrl("JournalEntry"));
+    // **軽量一覧へ戻す**（BUG-0083）。振替伝票の一覧は `JournalEntryBoard`（クエリ一覧）に
+    // 置き換え済みで、サイドバーも TopPageModule もそちらを指している。
+    // 削除後だけ素の `JournalEntry` 一覧に着地すると、行ごとに重量級モジュールを組むので約 4 秒かかる
+    NavigationService.NavigateTo("/Accounting/JournalEntryBoard");
 }

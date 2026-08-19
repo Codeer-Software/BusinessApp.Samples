@@ -555,7 +555,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "この伝票は確定済みのため、編集・削除はできません。訂正するときは、反対仕訳（赤黒訂正）を新しく起票して消し込んでください。",
+      "Text": "この伝票は確定済みです。金額・科目・日付は変えられません——訂正するときは「この伝票の取消（赤伝）を作る」で反対仕訳を起こしてください。なお**部門・案件だけは後から直せます**（帳簿の数字は動かないため）。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
