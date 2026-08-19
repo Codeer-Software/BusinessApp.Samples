@@ -4,7 +4,7 @@
   "DbTable": "bank_accounts",
   "CanCreate": true,
   "CanUpdate": true,
-  "CanDelete": true,
+  "CanDelete": false,
   "Fields": [
     {
       "DbColumn": "id",

@@ -1293,10 +1293,40 @@ void DeleteDraft_OnClick()
 {
     if (this.IsNewData) { Toaster.Error("保存されていない伝票です"); return; }
     if (Status.Value != "draft") { Toaster.Error("下書きの伝票のみ削除できます（確定済みは赤黒訂正で対応してください）"); return; }
+
+    // **締めのガードは削除にも要る**（BUG-0074）。保存側（`SaveEntry`）には年度・期間の
+    // チェックがあり、`JournalLineDepartment` も締め済みを見ているのに、**この経路だけ抜けていた**。
+    // 締めた期間に残っている下書きを消せると、締め時点で数えた「未確定の伝票」が後から変わる
+    if (IsFiscalYearClosed(FiscalYearRef.Value))
+    {
+        Toaster.Error("この伝票の会計年度は締め済みです（年度の締めを解除してから削除してください）");
+        return;
+    }
+    if (EntryDate.Value != null)
+    {
+        var dMonth = new DateOnly(EntryDate.Value.Year, EntryDate.Value.Month, 1);
+        var dps = new ModuleSearcher<FiscalPeriod>();
+        dps.AddLessThanOrEqual(e => e.StartDate.Value, dMonth);
+        dps.AddGreaterThanOrEqual(e => e.EndDate.Value, dMonth);
+        var dp = dps.ExecuteFirstOrDefault();
+        if (dp != null && ((FiscalPeriod)dp).Status.Value == "closed")
+        {
+            Toaster.Error("取引日の期間は締め済みです（期間を再オープンしてから削除してください）");
+            return;
+        }
+    }
+
     var result = MessageBox.Show("この下書き伝票を削除しますか？（元に戻せません）", "削除する", "キャンセル");
     if (result != "削除する") return;
     using var loading = LoadingService.StartLoading(0);
-    this.Delete();
+    // **戻り値を検査する**（BUG-0082）。`Lines` は `DeleteTogether: true` の子を持つので、
+    // 子側の削除が失敗すると `Delete()` は false を返して静かに終わる。
+    // 無条件に成功トーストを出して一覧へ遷移すると、**残っていても目に入らない**
+    if (this.Delete() != true)
+    {
+        Toaster.Error("下書き伝票を削除できませんでした。画面を開き直してからもう一度お試しください");
+        return;
+    }
     Toaster.Success("下書き伝票を削除しました");
     NavigationService.NavigateTo(NavigationService.GetModuleUrl("JournalEntry"));
 }

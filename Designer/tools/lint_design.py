@@ -1192,6 +1192,12 @@ def rule_017(idx, add):
         table = (mod["json"].get("DbTable") or "").strip()
         if not table or table not in idx.tables:
             continue
+        # **新規作成できないモジュールは対象外**（2026-08-19）。
+        # 参照専用のピッカー／ビュー（AccountLookup・PartnerView など）は
+        # 同じテーブルを指していても行を作らないので、「新規時に未チェック」が起こらない。
+        # 実体を作る側のモジュール（Account・Partner）で別途検査される
+        if mod["json"].get("CanCreate") is False:
+            continue
         lines = idx.module_lines(mod)
         for i, f in enumerate(mod["fields"]):
             if short_type(f) != "BooleanFieldDesign":

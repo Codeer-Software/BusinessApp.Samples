@@ -4,7 +4,7 @@
   "DbTable": "projects",
   "CanCreate": true,
   "CanUpdate": true,
-  "CanDelete": true,
+  "CanDelete": false,
   "Fields": [
     {
       "DbColumn": "id",

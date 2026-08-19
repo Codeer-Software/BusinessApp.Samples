@@ -8,6 +8,11 @@
 
 void Detail_OnAfterInit()
 {
+    if (this.IsNewData) { ForbidReuseCurrent.Value = true; }
+    // CLB の Boolean は**新規時が常に未チェック**で、明示的に 0 が送られるため
+    // DDL の `DEFAULT 1` は効かない（ADR-0054 の既知の静かな失敗）。
+    // 入れ忘れると「登録したのに一覧・ピッカーに出てこない」になる
+
     UpdatePreview();
 }
 

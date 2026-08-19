@@ -4,7 +4,7 @@
   "DbTable": "sub_accounts",
   "CanCreate": true,
   "CanUpdate": true,
-  "CanDelete": true,
+  "CanDelete": false,
   "Fields": [
     {
       "DbColumn": "id",
@@ -137,7 +137,11 @@
   "DataReadCondition": {
     "ModuleName": ""
   },
-  "DetailLayouts": {},
+  "DetailLayouts": {
+    "": {
+      "OnAfterInitialization": "Detail_OnAfterInit"
+    }
+  },
   "ListLayouts": {
     "": {
       "HeaderTitle": "",
