@@ -611,3 +611,99 @@ int NextJournalNo(object fiscalYearId)
 {
     return new JournalEntry().NextJournalNo(fiscalYearId);
 }
+
+// 仕入先を選んだら、免税事業者かどうかで税区分を入れ替える（BUG-0463・2026-08-19 開発者判断）。
+//
+// **`partners.is_tax_exempt` はそれまで完全な死列だった**——画面にチェック欄があるのに
+// スクリプトからも SQL からも一度も読まれておらず、立てても経過措置は一切効かなかった。
+// 経過措置を効かせているのは税区分（`PUR_10_TR` / `PUR_8_TR`）だけなので、
+// 「チェックを入れたのだから効いているはず」と思って運用すると**控除過大＝申告漏れ**になる。
+// 設定できるのに効かない、は会計ソフトとして最も出してはいけない型。
+//
+// ペルソナ（IT 受託）では免税事業者のフリーランスへの外注が日常的にあるので、
+// **取引先を選べば正しい税区分が入る**ほうが、毎回税区分を選び直させるより誤りが減る。
+//
+// 入れ替えるのは**素の課税仕入と経過措置区分の間だけ**。
+// 非課税・不課税・対象外や、人が意図して選んだ別の区分には触らない（驚き最小）。
+// 入れ替えたことは必ずトーストで言う——黙って税区分が変わるほうが怖い
+// **税区分を選んだときにも同じ規則を通す**。
+// 仕入先 → 費用科目 → 税区分 の順に入れる人が多く、仕入先を選んだ時点では税区分が空なので、
+// 片方だけに置くと**入力順によって効いたり効かなかったり**する（いちばん困る形）。
+//
+// スクリプトからの代入も `OnDataChanged` を再発火させる（ADR-0053）ので、
+// **再入ガードが要る**——無いと `TaxCategoryRef.Value = ...` が自分を呼び続ける
+bool inTaxSwap = false;
+
+void TaxCategoryRef_OnDataChanged()
+{
+    ApplyTaxExemptRule();
+}
+
+void Partner_OnDataChanged()
+{
+    ApplyTaxExemptRule();
+}
+
+void ApplyTaxExemptRule()
+{
+    if (inTaxSwap) return;
+    if (Partner.Value == null) return;
+
+    var ps = new ModuleSearcher<Partner>();
+    ps.AddEquals(e => e.Id.Value, Partner.Value);
+    var found = ps.ExecuteFirstOrDefault();
+    if (found == null) return;
+    var exempt = ((Partner)found).IsTaxExempt.Value == true;
+
+    var cur = FindTaxCategoryCode(TaxCategoryRef.Value);
+    if (cur == "") return;
+
+    var want = cur;
+    if (exempt)
+    {
+        if (cur == "PUR_10") { want = "PUR_10_TR"; }
+        if (cur == "PUR_8")  { want = "PUR_8_TR"; }
+    }
+    else
+    {
+        if (cur == "PUR_10_TR") { want = "PUR_10"; }
+        if (cur == "PUR_8_TR")  { want = "PUR_8"; }
+    }
+    if (want == cur) return;
+
+    var wantId = FindTaxCategoryId(want);
+    if (wantId == null) return;
+    inTaxSwap = true;
+    TaxCategoryRef.Value = wantId;
+    inTaxSwap = false;
+
+    if (exempt)
+    {
+        Toaster.Info($"{((Partner)found).Name.Value} は免税事業者のため、税区分を「課税仕入（経過措置）」に変えました"
+            + "（仕入税額控除は経過措置の割合分だけになります）");
+    }
+    else
+    {
+        Toaster.Info("インボイス発行事業者のため、税区分を通常の「課税仕入」に戻しました");
+    }
+}
+
+string FindTaxCategoryCode(object id)
+{
+    if (id == null) return "";
+    var s = new ModuleSearcher<TaxCategory>();
+    s.AddEquals(c => c.Id.Value, id);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return "";
+    return ((TaxCategory)found).Code.Value ?? "";
+}
+
+object FindTaxCategoryId(string code)
+{
+    var s = new ModuleSearcher<TaxCategory>();
+    s.AddEquals(c => c.Code.Value, code);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return null;
+    return ((TaxCategory)found).Id.Value;
+}
+
