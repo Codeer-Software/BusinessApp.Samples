@@ -10,31 +10,10 @@
 void InitFiscalYearSearch()
 {
     if (FiscalYearRef.SearchValue != null) return;
-
-    var today = DateTime.Today;
-    var s = new ModuleSearcher<FiscalYear>();
-    s.AddLessThanOrEqual(e => e.StartDate.Value, today);
-    s.AddGreaterThanOrEqual(e => e.EndDate.Value, today);
-    var fy = s.ExecuteFirstOrDefault();
-
-    if (fy == null)
-    {
-        // 今日がどの年度にも入らない日。**黙ってゼロを出さず、直近の年度を見せる**
-        // 「直近」は**直前に終わった年度**を指す（翌期を先に作ってあると、単純な降順では
-        // まだ始まっていない年度が選ばれて結局ゼロになる）。無ければ最も早く始まる年度
-        var s2 = new ModuleSearcher<FiscalYear>();
-        s2.AddLessThan(e => e.EndDate.Value, today);
-        s2.OrderByDescending(e => e.EndDate.Value);
-        fy = s2.ExecuteFirstOrDefault();
-        if (fy == null)
-        {
-            var s3 = new ModuleSearcher<FiscalYear>();
-            s3.OrderBy(e => e.StartDate.Value);
-            fy = s3.ExecuteFirstOrDefault();
-        }
-    }
+    // 縮退の判定は `FiscalYear.ResolveDisplayYear()` に寄せる（BUG-0444 の正典）——
+    // 帳票ごとに書き写した結果、元帳と仕訳帳だけ縮退が無い状態になっていた
+    var fy = new FiscalYear().ResolveDisplayYear();
     if (fy == null) return;
-
     FiscalYearRef.SearchValue = ((FiscalYear)fy).Id.Value;
 }
 
