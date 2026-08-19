@@ -148,6 +148,58 @@ void Import_OnClick()
     }
     ResultLabel.Text = $"プレビュー {added} 件 / 重複スキップ {skipped} 件 / スキップ行（ヘッダ・明細以外） {badLines} 行 — 内容を確認して「この内容で登録」を押してください";
     Toaster.Success($"{added} 件をプレビューに読み込みました");
+    WarnBalanceGap();
+}
+
+// 残高列の連続性を見る（BUG-0225）。
+//
+// 「前行の残高 ＋ 入金 − 出金 ＝ 当行の残高」が崩れていたら、その CSV は
+//   ① 行が抜けている（期間を指定し損ねた・途中でコピーが切れた）
+//   ② 別口座の明細が混ざっている
+//   ③ 並び順が日付順でない
+// のいずれか。**どれも「取り込んだのに残高が合わない」で後から気づく**類で、
+// 残高照合まで進んでから戻るのは高くつく。市販ソフトは取込時に警告するので、それに揃える。
+//
+// **止めない**——銀行によっては残高列が無い／途中から始まる CSV があり、
+// 正当なケースを弾くほうが害が大きい。気づける形にするだけにする
+void WarnBalanceGap()
+{
+    var s = new ModuleSearcher<BankStatementPreview>();
+    s.AddEquals(e => e.BankAccount.Value, BankAccountSel.Value);
+    s.OrderBy(e => e.LineDate.Value);
+    s.OrderBy(e => e.Id.Value);
+    var rows = s.Execute();
+
+    object prevBal = null;
+    var gaps = 0;
+    var firstGap = "";
+    foreach (var r in rows)
+    {
+        var row = (BankStatementPreview)r;
+        var bal = row.Balance.Value;
+        if (bal == null) { prevBal = null; continue; }   // 残高欄が無い行は判定できない
+        if (prevBal != null)
+        {
+            int expected = prevBal + (row.AmountIn.Value ?? 0) - (row.AmountOut.Value ?? 0);
+            if (expected != bal)
+            {
+                gaps = gaps + 1;
+                if (firstGap == "")
+                {
+                    firstGap = $"{row.LineDate.Value:yyyy/MM/dd}「{row.Description.Value}」"
+                        + $"（前残高 {prevBal:#,0} ＋入 {row.AmountIn.Value ?? 0:#,0} −出 {row.AmountOut.Value ?? 0:#,0}"
+                        + $" ＝ {expected:#,0} のはずが {bal:#,0}）";
+                }
+            }
+        }
+        prevBal = bal;
+    }
+
+    if (gaps == 0) return;
+    var more = (gaps > 1) ? $"（ほか {gaps - 1} 箇所）" : "";
+    Toaster.Warn($"⚠ 残高の連続性が崩れています: {firstGap}{more}。"
+        + "行の抜け・別口座の混入・並び順のどれかを疑ってください"
+        + "（このまま登録もできますが、残高照合で合わなくなります）");
 }
 
 // ============ プレビューの保存（差分同期） ============
