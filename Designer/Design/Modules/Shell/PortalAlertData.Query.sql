@@ -14,7 +14,14 @@ threshold AS (
   SELECT COALESCE((SELECT amount FROM v_system_threshold_current WHERE code = 'PAY_DUE_SOON_DAYS'), 7) AS days
 ),
 pay AS (
-  SELECT CAST(julianday(date(v.due_date)) - julianday(date('now', 'localtime')) AS INTEGER) AS days_left
+  -- **支払期限が無い請求も数える**（BUG-0254）。旧実装は `julianday(date(v.due_date))` を直に計算しており、
+  -- `due_date` が NULL だと `days_left` も NULL になって
+  -- `days_left < 0`（超過）にも `>= 0 AND <= days`（N日以内）にも**どちらにも入らず、
+  -- アラートから静かに消えていた**。
+  -- 資金繰り予測の `vend_out` は期限なしを**当月扱い**にしているので、そちらに揃えて
+  -- 「今日が期限」とみなす（＝「N日以内」に入る）。数えないより、当月として見せるほうが安全側
+  SELECT CAST(julianday(COALESCE(date(v.due_date), date('now', 'localtime')))
+              - julianday(date('now', 'localtime')) AS INTEGER) AS days_left
   FROM vendor_invoices v
   WHERE v.status IN ('received', 'accrued')
 ),
@@ -23,7 +30,12 @@ recv AS (
   FROM invoices i
   LEFT JOIN v_invoice_received rc
     ON rc.invoice_id = i.id
-  WHERE i.status <> 'void' AND i.status <> 'draft' AND i.status <> 'paid'
+  -- **未回収の母集団は `IN ('issued', 'partial')` に統一する**（BUG-0255）。
+  -- 旧実装はここだけ除外リスト（void/draft/paid 以外）で、同じファイルの `inv_in` は包含リストだった。
+  -- いまの status の値では結果が一致するが、**状態値を 1 つ増やした瞬間に片方だけが拾う**——
+  -- 「期限超過 N 件」に数えられるのに入金予定には載らない行（またはその逆）ができる。
+  -- 同じテーブルの同じ意味の絞り込みが 1 ファイル内に 2 種類あるのは、片方を直し忘れる事故の温床
+  WHERE i.status IN ('issued', 'partial')
     AND COALESCE(rc.received, 0) < COALESCE(i.amount, 0) + COALESCE(i.tax_amount, 0)
     AND i.due_date IS NOT NULL AND date(i.due_date) < date('now', 'localtime')
 ),

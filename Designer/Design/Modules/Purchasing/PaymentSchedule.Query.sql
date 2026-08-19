@@ -11,7 +11,11 @@ pend AS (
     v.invoice_no,
     v.amount,
     CASE v.status WHEN 'received' THEN '受領' WHEN 'accrued' THEN '未払計上済' ELSE v.status END AS status_disp,
-    CAST(julianday(date(v.due_date)) - julianday(date('now', 'localtime')) AS INTEGER) AS days_left
+    -- **支払期限が無い請求も「まもなく」に入れる**（BUG-0254 の家族）。
+    -- NULL のままだと警告列が空になり、ポータルの件数（期限なしを当月扱いで数える）と食い違う。
+    -- 期限の欄そのものは NULL のまま——**日付を捏造しない**。数えるかどうかだけを決める
+    CAST(julianday(COALESCE(date(v.due_date), date('now', 'localtime')))
+         - julianday(date('now', 'localtime')) AS INTEGER) AS days_left
   FROM vendor_invoices v
   LEFT JOIN partners p ON p.id = v.partner_id
   WHERE v.status IN ('received', 'accrued')

@@ -327,7 +327,10 @@ void PayDue_OnClick()
 
 void ReceivableOverdue_OnClick()
 {
-    NavigationService.NavigateTo($"/{ResolveSalesFrame()}/ReceivableBalance");
+    // 件数は「期限超過」の数なので、着地画面も同じ条件で絞る（BUG-0256・ADR-0060）。
+    // 素で遷移していた頃は「入金済を除く」の既定で開き、期限超過も期限内も混ざって並んでいた——
+    // **N 件と言われた画面で N 件を特定できない**
+    NavigationService.NavigateTo($"/{ResolveSalesFrame()}/ReceivableBalance?initialize_search=true&state=%E6%9C%9F%E9%99%90%E8%B6%85%E9%81%8E");
 }
 
 void CashAlert_OnClick()
