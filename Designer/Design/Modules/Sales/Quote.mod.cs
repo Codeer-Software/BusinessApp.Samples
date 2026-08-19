@@ -74,9 +74,30 @@ void UpdateButtons()
     }
 }
 
+// 明細の変更 → 行番号・既定値の書き戻しと合計の再計算。
+//
+// **再入ガードの内側では DB を触らない**（BUG-0135）。CLB スクリプトは try/finally を書けないため、
+// ガードの内側で例外が出ると `inLinesHandler` が true のまま固着し、
+// **以後この画面では明細を何行いじっても合計が二度と再計算されなくなる**（開き直すまで直らない）。
+// しかも合計が古いまま保存できるので、静かに金額の合わない見積が残る。
+// そこで DB を引く処理はガードの前後へ追い出す:
+//   - 既定税区分の解決 … ガードに入る前に **1 回だけ**引く
+//     （旧実装は明細 1 行ごとに `DefaultSalesTaxCategoryId()` を呼んでいた＝N+1 クエリ）
+//   - RecalcTotal      … ガードを外してから呼ぶ（ヘッダしか書かないので再入しない）
+// 正解の形は `Acceptance.Lines_OnDataChanged`（検収だけが正しく、こちらが旧いままだった）。
 void Lines_OnDataChanged()
 {
     if (inLinesHandler) return;
+
+    // 税区分が空の行が 1 行でもあるときだけマスタを引く。
+    // ここは読み取りだけ・ガードの外なので、例外が出てもフラグは立っていない
+    long? defaultTaxCategoryId = null;
+    foreach (var row in Lines.Rows)
+    {
+        var l = (QuoteLine)row;
+        if (l.TaxCategoryRef.Value == null) { defaultTaxCategoryId = DefaultSalesTaxCategoryId(); break; }
+    }
+
     inLinesHandler = true;
     var no = 0;
     foreach (var row in Lines.Rows)
@@ -86,7 +107,7 @@ void Lines_OnDataChanged()
         l.LineNo.Value = no;
         if (l.Qty.Value == null) l.Qty.Value = 1;
         // 税区分は必須（ADR-0050）。新しい行には既定として課税売上 10% を入れる
-        if (l.TaxCategoryRef.Value == null) l.TaxCategoryRef.Value = DefaultSalesTaxCategoryId();
+        if (l.TaxCategoryRef.Value == null) l.TaxCategoryRef.Value = defaultTaxCategoryId;   // 事前に 1 回だけ解決済み（BUG-0135）
         if (l.UnitPrice.Value != null)
         {
             // **手入力した金額を上書きしない**（BUG-0423）。
@@ -105,8 +126,9 @@ void Lines_OnDataChanged()
             }
         }
     }
-    RecalcTotal();
+    // **ガードを外してから合計を取り直す**（BUG-0135）。RecalcTotal は Lines を書き換えないので再入しない
     inLinesHandler = false;
+    RecalcTotal();
 }
 
 // 既存明細を開いたとき、いまの金額が数量×単価と一致していれば「自動で入れた値」とみなして痕跡を置く。

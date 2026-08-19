@@ -57,4 +57,7 @@ WHERE (@partner_id IS NULL OR partner_id = @partner_id)
        OR state = @state_filter)
   AND (@due_from IS NULL OR date(due_date) >= date(@due_from))
   AND (@due_to IS NULL OR date(due_date) <= date(@due_to))
-ORDER BY date(due_date), invoice_no
+-- 支払期限が NULL の行を先頭に押し上げない（BUG-0139）。SQLite は NULL を最小として並べるため、
+-- 旧実装では「期限が無い＝督促のしようがない請求」が一覧の一番上を占めていた。
+-- 入口（`Invoice.DueDate`）は必須にしたが、移行データが混じっても並びが壊れないようにしておく
+ORDER BY (due_date IS NULL), date(due_date), invoice_no

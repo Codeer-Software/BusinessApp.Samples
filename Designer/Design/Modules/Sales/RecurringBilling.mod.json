@@ -266,7 +266,7 @@
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
       "DisplayName": "課金サイクル",
-      "IsRequired": false,
+      "IsRequired": true,
       "OnDataChanged": "BillingCycle_OnDataChanged",
       "Name": "BillingCycle",
       "IgnoreModification": false,

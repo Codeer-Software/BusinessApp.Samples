@@ -60,12 +60,20 @@ sales_rate AS (
            0) AS pct
 ),
 inv_in AS (
-  SELECT max(date(i.due_date, 'start of month'), (SELECT month_first FROM months WHERE idx = 0)) AS m,
+  -- **支払期限が無い請求も入金見込みに数える**（BUG-0139。BUG-0254 の売掛版）。
+  -- 旧実装は `AND i.due_date IS NOT NULL` で落としており、期限を空にした請求書の債権が
+  -- 資金繰り予測の入金から**丸ごと消えていた**（売掛残には残るのに入金は立たない＝予測が過小）。
+  -- 同じファイルの買掛側 `vend_out` は BUG-0254 で `COALESCE` 済みで、**売掛側だけが取り残されていた**。
+  -- 期限なしは買掛側と同じく**当月扱い**にする（外側の max(..., 当月) が下限を当月に丸めるので、
+  -- 過去日の期限も当月に寄る＝「まだ入っていない金は当月以降に入る」という予測の約束と揃う）
+  SELECT max(COALESCE(date(i.due_date, 'start of month'),
+                      (SELECT month_first FROM months WHERE idx = 0)),
+             (SELECT month_first FROM months WHERE idx = 0)) AS m,
          COALESCE(i.amount, 0) + COALESCE(i.tax_amount, 0) - COALESCE(rc.received, 0) AS amt
   FROM invoices i
   LEFT JOIN v_invoice_received rc
     ON rc.invoice_id = i.id
-  WHERE i.status IN ('issued', 'partial') AND i.due_date IS NOT NULL
+  WHERE i.status IN ('issued', 'partial')
 ),
 rec_in AS (
   -- 【周期で金額と月が変わる・BUG-0412】月額契約は毎月 monthly_amount、

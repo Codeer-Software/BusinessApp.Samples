@@ -134,7 +134,23 @@ void Confirm_OnClick()
     if (CurrentUser.HasAccountingAccess.Value != true) { Toaster.Error("契約の確定は経理のみ行えます"); return; }
     if (Status.Value != "draft") { Toaster.Error("下書きの契約のみ確定できます"); return; }
 
-    // 確定時の入力チェック（確定後は実行対象になるため、金額の欠落をここで止める）
+    // 確定時の入力チェック（確定後は実行対象になるため、欠落をここで止める）。
+    //
+    // **課金サイクルが空のまま確定させない**（BUG-0155）。旧実装は金額チェックを
+    // `== "monthly"` / `== "yearly"` のときだけ走らせていたので、サイクルが空だと
+    // **どちらの分岐にも入らず素通り**していた。素通りした契約は `RecurringRun.BuildPlan` の
+    // else 分岐で月額扱いになるが、月額金額が空なので毎月「月額金額が未設定（0円）のため対象外」の
+    // 行が立つだけ——**確定済み・有効なのに永久に請求されない契約**ができ、
+    // 実行画面には「対象外」としか出ないので請求漏れに気づけない。
+    //
+    // フィールド側も `IsRequired: true` にしたが、それは画面入力しか縛れない
+    // （移行データ・他モジュールのスクリプト経由は素通りする）。
+    // 確定は「ここから毎月お金を請求し始める」操作なので、その手前でも必ず弾く
+    if (BillingCycle.Value == null || BillingCycle.Value == "")
+    {
+        Toaster.Error("課金サイクル（月額／年額）を選んでから確定してください");
+        return;
+    }
     if (BillingCycle.Value == "monthly" && (MonthlyAmount.Value == null || MonthlyAmount.Value <= 0))
     {
         Toaster.Error("月額（税抜）を入力してから確定してください");

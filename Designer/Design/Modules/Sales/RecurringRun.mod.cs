@@ -121,6 +121,20 @@ void BuildPlan()
             continue;
         }
 
+        // **課金サイクルが空の契約を「月額」に丸めない**（BUG-0155）。
+        // 旧実装は else で月額扱いにしていたため、サイクル未設定の契約は月額金額も空 → 毎月
+        // 「月額金額が未設定（0円）のため対象外」という**別の理由**で除外され続けていた。
+        // 表示された理由が真因と違うと、経理は「金額を入れれば直る」と思って金額を入れ、
+        // それでも請求されない（サイクルが空のままなので）という迷路にはまる。理由は正確に出す
+        if (b.BillingCycle.Value == null || b.BillingCycle.Value == "")
+        {
+            var pc = (RecurringRunPlan)NewPlanRow(monthFirst, b);
+            pc.PlanKind.Value = "none";
+            pc.Status.Value = "excluded";
+            pc.Detail.Value = "課金サイクル（月額／年額）が未設定のため対象外";
+            pc.Submit();
+            continue;
+        }
         if (b.BillingCycle.Value == "yearly")
         {
             BuildYearlyPlanRow(monthFirst, b, taxPct);

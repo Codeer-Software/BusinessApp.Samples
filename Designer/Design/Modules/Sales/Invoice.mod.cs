@@ -785,9 +785,33 @@ void DeleteInvoice_OnClick()
     NavigationService.NavigateTo(NavigationService.GetModuleUrl("Invoice"));
 }
 
+// 明細の変更 → 行番号・既定値の書き戻しと合計の再計算。
+//
+// **再入ガードの内側では DB を触らない**（BUG-0135）。CLB スクリプトは try/finally を書けないため、
+// ガードの内側で例外が出ると `inLinesHandler` が true のまま固着し、
+// **以後この画面では明細を何行いじっても合計が二度と再計算されなくなる**（開き直すまで直らない）。
+// しかも合計が古いまま保存できるので、静かに金額の合わない請求書が残る。
+// そこで DB を引く処理はガードの前後へ追い出す:
+//   - 既定税区分の解決 … ガードに入る前に **1 回だけ**引く
+//     （旧実装は明細 1 行ごとに `DefaultSalesTaxCategoryId()` を呼んでいた＝N+1 クエリ）
+//   - RecalcTotal      … ガードを外してから呼ぶ（ヘッダしか書かないので再入しない）
+//     **請求書ではここが最も例外を出しやすい**——`CalcTaxByLine` が行ごとに税区分・税率を、
+//     `UpdateOverAcceptanceWarning` が行ごとに検収明細を引くため、明細 10 行で 30 クエリを超える。
+//     旧実装はこれが全部ガードの内側にあった
+// 正解の形は `Acceptance.Lines_OnDataChanged`（検収だけが正しく、こちらが旧いままだった）。
 void Lines_OnDataChanged()
 {
     if (inLinesHandler) return;
+
+    // 税区分が空の行が 1 行でもあるときだけマスタを引く。
+    // ここは読み取りだけ・ガードの外なので、例外が出てもフラグは立っていない
+    long? defaultTaxCategoryId = null;
+    foreach (var row in Lines.Rows)
+    {
+        var l = (InvoiceLine)row;
+        if (l.TaxCategoryRef.Value == null) { defaultTaxCategoryId = DefaultSalesTaxCategoryId(); break; }
+    }
+
     inLinesHandler = true;
     var no = 0;
     foreach (var row in Lines.Rows)
@@ -797,7 +821,7 @@ void Lines_OnDataChanged()
         l.LineNo.Value = no;
         if (l.Qty.Value == null) l.Qty.Value = 1;
         // 税区分は必須（ADR-0050）。新しい行には既定として課税売上 10% を入れる
-        if (l.TaxCategoryRef.Value == null) l.TaxCategoryRef.Value = DefaultSalesTaxCategoryId();
+        if (l.TaxCategoryRef.Value == null) l.TaxCategoryRef.Value = defaultTaxCategoryId;   // 事前に 1 回だけ解決済み（BUG-0135）
         // 検収明細から写した行の金額は「検収金額」そのもの。数量×単価で再計算してはならない
         // （分割検収では 検収金額 < 数量×単価 になるため。ADR-0049 / 改善候補 A-1 の真因）。
         // 手で足した行だけ、入力の手間を省くために 数量×単価 を自動で入れる。
@@ -820,8 +844,9 @@ void Lines_OnDataChanged()
             }
         }
     }
-    RecalcTotal();
+    // **ガードを外してから合計を取り直す**（BUG-0135）。RecalcTotal は Lines を書き換えないので再入しない
     inLinesHandler = false;
+    RecalcTotal();
 }
 
 // 明細合計 → 表示用合計・請求額(税抜)・消費税額 (SALES_10 税率で切り捨て) を更新
