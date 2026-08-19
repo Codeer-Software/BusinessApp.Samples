@@ -265,6 +265,8 @@ void PostAll_OnClick()
     var posted = 0;
     var skipped = 0;
     var failed = 0;
+    var leftovers = 0;
+    var leftoverNos = new List<string>();
     var reasons = new List<string>();
     var postedNos = new List<string>();
     var totalTax = 0;
@@ -287,11 +289,30 @@ void PostAll_OnClick()
         posted = posted + 1;
         totalTax = totalTax + lastPostedTax;
         postedNos.Add($"{no}");
-        draft.Delete();
+        // **削除の失敗を見逃さない**（BUG-0102）。仕訳の Submit は成功したのに Delete が失敗すると、
+        // 下書きが残ったまま結果表示は「起票 N 件」になる。利用者は残った行を見て
+        // **もう一度「一括起票」を押す**——同じ入出金が 2 本の確定仕訳になり、
+        // `source_type='cashbook'` は `source_id` を持たない（ADR-0055）ので
+        // **機械的に重複を検出する手掛かりが無い**
+        if (draft.Delete() != true)
+        {
+            leftovers = leftovers + 1;
+            leftoverNos.Add($"{no}");
+        }
     }
 
     DraftList.Reload();
     RefreshSummary();
+
+    // 起票できたのに下書きが消えなかった行は、**必ず名指しで伝える**（BUG-0102）。
+    // 黙っていると「まだ残っている＝起票されていない」と読まれて二重起票になる
+    if (leftovers > 0)
+    {
+        Toaster.Error($"仕訳は作れましたが、下書きが {leftovers} 行残りました"
+            + $"（伝票 No.{string.Join(", ", leftoverNos)}）。"
+            + "この行はもう起票済みです。「一括起票」を押し直さないでください——"
+            + "残った行は行の削除で片付けてから「変更を保存」してください");
+    }
 
     var noText = "";
     if (postedNos.Count > 0) { noText = $"（No.{postedNos[0]}〜{postedNos[postedNos.Count - 1]}）"; }
@@ -424,6 +445,26 @@ int PostOne(CashEntryDraft draft)
             l.TaxCategory.Value = counterTaxCat;
             if (isTaxable) { l.TaxInputMode.Value = "inclusive"; }
             if (isPl) { l.Department.Value = draft.DepartmentRef.Value; }
+        }
+    }
+
+    // **現預金行の税区分を明示的に「対象外」にする**（BUG-0105・ADR-0053 の教訓）。
+    // `l.Account.Value` を入れると `Lines_OnDataChanged → ApplyLineDefaults()` が発火し、
+    // **科目マスタの既定税区分が勝手に入る**。「セットしない」は「既定が入らない」ではない。
+    // `MarkRemainingLinesOutOfScope()` は `TaxCategory == null` の行しか埋めないので、
+    // 既定が入った現預金行は素通りしてしまう
+    var oos = new ModuleSearcher<TaxCategory>();
+    oos.AddEquals(e => e.TaxationType.Value, "out_of_scope");
+    var oosCat = oos.ExecuteFirstOrDefault();
+    if (oosCat != null)
+    {
+        foreach (var row in je.Lines.Rows)
+        {
+            var l = (JournalLine)row;
+            if (l.IsTaxLine.Value == true) continue;
+            if ($"{l.Account.Value}" == $"{draft.CounterAccount.Value}") continue;
+            l.TaxCategory.Value = ((TaxCategory)oosCat).Id.Value;
+            l.TaxInputMode.Value = "none";
         }
     }
 
