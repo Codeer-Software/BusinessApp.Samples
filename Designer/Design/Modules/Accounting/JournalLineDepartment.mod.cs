@@ -80,6 +80,62 @@ void ShowEntry(JournalEntry je)
 
 // ============ 保存して伝票に戻る ============
 
+// 損益科目の行に「全社共通」を入れたら**言う**（BUG-0079）。
+//
+// 止めはしない——共通費（本社家賃・全社の通信費）を全社共通に置くのは正しい運用で、
+// エラーにすると正当な入力を弾いてしまう。問題は**売上**のほうで、収益行が全社共通に入ると
+// 部門別 P/L にも案件損益にも一切乗らない（BUG-0266・BUG-0061）。しかもこの画面は
+// 確定済み伝票の部門を後から直すためのもの＝**帳簿が出来上がったあとに静かに崩せる**位置にある。
+//
+// 起票時の `JournalEntry.TryFillMissingDepartments` は「収益行だけは全社共通で埋めない」という
+// 規則を持っている。**同じ規則を後編集にも効かせる**（あちらは埋めない・こちらは気づかせる）
+void WarnCommonDepartmentOnProfitLines()
+{
+    var accountIds = new List<object>();
+    var deptIds = new List<object>();
+    foreach (var row in LineList.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.Account.Value != null && !accountIds.Contains(l.Account.Value)) { accountIds.Add(l.Account.Value); }
+        if (l.Department.Value != null && !deptIds.Contains(l.Department.Value)) { deptIds.Add(l.Department.Value); }
+    }
+    if (accountIds.Count == 0 || deptIds.Count == 0) return;
+
+    var accSearch = new ModuleSearcher<Account>();
+    accSearch.AddIn(e => e.Id.Value, accountIds);
+    var deptSearch = new ModuleSearcher<Department>();
+    deptSearch.AddIn(e => e.Id.Value, deptIds);
+    var batch = BatchSearcher.Execute(accSearch, deptSearch);
+    var accounts = batch.GetAt(0);
+    var depts = batch.GetAt(1);
+
+    var commonIds = new List<string>();
+    foreach (var d in depts)
+    {
+        var dept = (Department)d;
+        if (dept.IsCommon.Value == true) { commonIds.Add($"{dept.Id.Value}"); }
+    }
+    if (commonIds.Count == 0) return;
+
+    var hit = new List<string>();
+    foreach (var row in LineList.Rows)
+    {
+        var l = (JournalLine)row;
+        if (l.IsTaxLine.Value == true) continue;
+        if (l.Department.Value == null || !commonIds.Contains($"{l.Department.Value}")) continue;
+        foreach (var a in accounts)
+        {
+            var acc = (Account)a;
+            if ($"{acc.Id.Value}" != $"{l.Account.Value}") continue;
+            if (acc.AccountType.Value == "revenue") { hit.Add($"{l.LineNo.Value} 行目（{acc.Name.Value}）"); }
+            break;
+        }
+    }
+    if (hit.Count == 0) return;
+    Toaster.Warn($"{string.Join("・", hit)} を「全社共通」にしました。"
+        + "収益を全社共通に置くと部門別損益にも案件損益にも乗りません（共通費なら問題ありません）");
+}
+
 void Save_OnClick()
 {
     if (!IsAccounting()) { return; }
@@ -113,6 +169,8 @@ void Save_OnClick()
             + "部門は必須なので、選んでから保存してください（共通費なら「全社共通」）");
         return;
     }
+
+    WarnCommonDepartmentOnProfitLines();
 
     var saved = 0;
     var failed = 0;

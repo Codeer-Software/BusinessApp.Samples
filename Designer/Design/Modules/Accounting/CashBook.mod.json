@@ -37,6 +37,18 @@
           },
           {
             "IsParameter": false,
+            "Name": "entry_id",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
+            "Name": "open_label",
+            "DbType": "text",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
             "Name": "entry_date",
             "DbType": "DATE",
             "DbParameterDirection": "Input"
@@ -361,6 +373,67 @@
       "Name": "SearchLblDateTo",
       "IgnoreModification": false,
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "DbColumn": "entry_id",
+      "Placeholder": "",
+      "Format": "",
+      "IsSlider": false,
+      "OnInput": "",
+      "IsUpdateProtected": true,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "伝票ID",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "EntryIdRaw",
+      "IgnoreModification": true,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "DbColumn": "open_label",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "StringEmpty",
+      "ShouldTrimAfterEdit": false,
+      "AutoTab": false,
+      "IsUpdateProtected": true,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "リンク文言",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "OpenLabel",
+      "IgnoreModification": true,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "Style": "Text",
+      "Target": "Url",
+      "ShouldOpenInNewTab": false,
+      "Icon": "",
+      "TitleText": "",
+      "TitleVariable": "OpenLabel.Value",
+      "ImageResourcePath": "",
+      "PageFrame": "",
+      "Module": "JournalEntry",
+      "ModuleVariable": "",
+      "IdVariable": "EntryIdRaw.Value",
+      "Url": "",
+      "OnClick": "",
+      "IsHtml": false,
+      "Name": "OpenAnchor",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -398,7 +471,9 @@
       "HeaderTitle": "",
       "DataOnlyFields": [
         "LineNo",
-        "SortSeq"
+        "SortSeq",
+        "EntryIdRaw",
+        "OpenLabel"
       ],
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "",
@@ -511,6 +586,23 @@
             "CanResize": false,
             "CanUserSort": false,
             "ClassName": "amount-cell",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "OpenAnchor",
+            "ContextMenu": "",
+            "Label": " ",
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "Width": 70,
+            "TextWrap": "Unset",
+            "CanResize": false,
+            "CanUserSort": false,
+            "ClassName": "",
             "FontFamily": "",
             "Color": "",
             "BackgroundColor": "",

@@ -5,6 +5,8 @@
 // 設計: docs/04_会計ドメイン設計.md §3 / docs/decisions/0002・0003
 
 bool inLinesHandler = false;
+// 経過措置の控除割合を期間外で解決したときの説明（BUG-0089）。ResolveTransitionRate が書き、確定時に一度だけ出す
+string transitionNote = "";
 
 void Detail_OnAfterInit()
 {
@@ -386,6 +388,115 @@ void UpdateTotals()
 // 税額分だけ残り続ける。内税に慣れた利用者には「差額が 0 にならないのに確定は通る」が
 // 大きな驚きなので、追加される見込み額を差額欄の横に出す（改善候補 B-3）。
 // マスタ検索は外税の行があるときだけ行う（Lines_OnDataChanged から毎回呼ばれるため）。
+// 税率を**取引日で解決する**（BUG-0080）。
+//
+// `tax_categories.tax_rate_id` は「STD10（標準10%）」という**行**を指している。
+// 旧実装はその行の `rate_percent` をそのまま読んでいたので、税率改正の際に
+// `tax_rates` へ行を足しても仕訳には一切反映されず、**新しい税区分を作って
+// 利用者に選び直させる**しかなかった（docs/04 §4 は「レコード追加だけで対応」と規定している）。
+//
+// 正しい引き方は制度閾値（`v_system_threshold_current`）と同じで、
+// **同じ `code` の行のうち取引日に有効なもの**を採る:
+//   ① `valid_from <= 取引日` かつ（`valid_to` が空 または `valid_to >= 取引日`）
+//   ② 複数該当したら `valid_from` が新しいほう
+// 取引日に有効な行が 1 つも無いときは**税区分が指す行にそのまま縮退する**——
+// 0% に落とすと税額が黙って消えるので、それよりは旧税率で計算して人が気づくほうがよい。
+decimal ResolveRatePercent(object rates, object rateId, string onIso)
+{
+    // 税区分が指している行（＝縮退先）と、その code を先に押さえる
+    decimal fallback = 0;
+    var code = "";
+    foreach (var rItem in (IEnumerable<ModuleBase>)rates)
+    {
+        var r = (TaxRate)rItem;
+        if ($"{r.Id.Value}" != $"{rateId}") continue;
+        fallback = r.RatePercent.Value ?? 0;
+        code = $"{r.Code.Value}";
+        break;
+    }
+    if (code == "" || onIso == "") return fallback;
+
+    // 日付は `yyyy-MM-dd` の文字列で比べる。**フィールド値の型（DateOnly?/DateTime?）を
+    // スクリプト側で混ぜると比較演算子が解決できない**（designcheck が拾う）ので、
+    // この repo では ISO 文字列に寄せるのが安全な作法
+    decimal best = -1;
+    var bestFrom = "";
+    foreach (var rItem in (IEnumerable<ModuleBase>)rates)
+    {
+        var r = (TaxRate)rItem;
+        if ($"{r.Code.Value}" != code) continue;
+        var from = $"{r.ValidFrom.Value:yyyy-MM-dd}";
+        var to = $"{r.ValidTo.Value:yyyy-MM-dd}";
+        if (from != "" && string.CompareOrdinal(from, onIso) > 0) continue;
+        if (to != "" && string.CompareOrdinal(to, onIso) < 0) continue;
+        if (bestFrom != "" && from != "" && string.CompareOrdinal(from, bestFrom) < 0) continue;
+        bestFrom = from;
+        best = r.RatePercent.Value ?? 0;
+    }
+    if (best < 0) return fallback;
+    return best;
+}
+
+// インボイス経過措置の控除割合を取引日で引く。**引けなければ -1 を返す**（BUG-0089）。
+//
+// 旧実装は「該当なし」を 0 として扱っていたので、控除割合マスタの期間外
+// （たとえば 2023-10-01 より前の遡及入力、あるいは 2031-10-01 以降の入力）に
+// 経過措置の税区分を使うと **控除率 0%＝全額本体計上・税行なし**になり、
+// エラーも警告も出なかった。「該当なし」と「控除ゼロ」は意味が違うので分ける。
+//
+// `valid_to` が空（無期限）の行も拾う——マスタに無期限行を足したときに
+// 静かに外れるのを避ける（旧実装は `AddGreaterThanOrEqual` だけで NULL を落としていた）
+decimal ResolveTransitionRate(string onIso)
+{
+    transitionNote = "";
+    if (onIso == "") return -1;
+    var firstIso = onIso.Substring(0, 8) + "01";
+    var rows = new ModuleSearcher<InvoiceTransitionRate>().Execute();
+
+    decimal best = -1;
+    var bestFrom = "";
+    var earliestFrom = "";
+    var latestTo = "";
+    var hasOpenEnd = false;
+    foreach (var item in rows)
+    {
+        var tr = (InvoiceTransitionRate)item;
+        var from = $"{tr.ValidFrom.Value:yyyy-MM-dd}";
+        var to = $"{tr.ValidTo.Value:yyyy-MM-dd}";
+        if (from != "" && (earliestFrom == "" || string.CompareOrdinal(from, earliestFrom) < 0)) { earliestFrom = from; }
+        if (to == "") { hasOpenEnd = true; }
+        if (to != "" && (latestTo == "" || string.CompareOrdinal(to, latestTo) > 0)) { latestTo = to; }
+
+        if (from != "" && string.CompareOrdinal(from, firstIso) > 0) continue;
+        if (to != "" && string.CompareOrdinal(to, firstIso) < 0) continue;
+        if (bestFrom != "" && from != "" && string.CompareOrdinal(from, bestFrom) < 0) continue;
+        bestFrom = from;
+        best = tr.RatePercent.Value ?? 0;
+    }
+    if (best >= 0) return best;
+
+    // 該当期間が無いときの意味は**日付でふたつに割れる**。どちらもマスタから導ける:
+    //   ① 制度開始前（いちばん早い valid_from より前）＝インボイス制度そのものが無かった時期。
+    //      免税事業者からの仕入も全額控除できたので **100%**
+    //   ② 経過措置の終了後（いちばん遅い valid_to より後）＝控除できない。**0%**
+    // どちらも「経過措置の税区分を選んだのに経過措置期間の外」なので**必ず言う**——
+    // 旧実装はどちらも 0% に潰し、①では控除できるはずの税額が黙って消えていた（BUG-0089）
+    if (earliestFrom == "" && latestTo == "") return -1;
+    if (earliestFrom != "" && string.CompareOrdinal(firstIso, earliestFrom) < 0)
+    {
+        transitionNote = $"取引日はインボイス制度の開始（{earliestFrom}）より前です。"
+            + "経過措置ではなく全額控除（100%）として計算しました";
+        return 100;
+    }
+    if (!hasOpenEnd && latestTo != "" && string.CompareOrdinal(firstIso, latestTo) > 0)
+    {
+        transitionNote = $"経過措置は {latestTo} で終了しています。"
+            + "控除割合 0%（全額を本体に計上）として計算しました";
+        return 0;
+    }
+    return -1;
+}
+
 void UpdateTaxHint()
 {
     var hasExclusive = false;
@@ -406,17 +517,10 @@ void UpdateTaxHint()
     var cats = batch.GetAt(0);
     var rates = batch.GetAt(1);
 
-    // 経過措置の控除割合（税行に載るのは控除できる分だけ。RegenerateTaxLines と同じ解決）
-    decimal transitionRate = 0;
-    if (EntryDate.Value != null)
-    {
-        var trFirstDay = new DateTime(EntryDate.Value.Year, EntryDate.Value.Month, 1);
-        var trSearch = new ModuleSearcher<InvoiceTransitionRate>();
-        trSearch.AddLessThanOrEqual(e => e.ValidFrom.Value, trFirstDay);
-        trSearch.AddGreaterThanOrEqual(e => e.ValidTo.Value, trFirstDay);
-        var tr = trSearch.ExecuteFirstOrDefault();
-        if (tr != null) { transitionRate = ((InvoiceTransitionRate)tr).RatePercent.Value ?? 0; }
-    }
+    // 経過措置の控除割合（税行に載るのは控除できる分だけ。RegenerateTaxLines と同じ解決）。
+    // 見込み表示なので、引けないとき（-1）は控除 0 として出す——止めるのは確定時の役目
+    decimal transitionRate = ResolveTransitionRate($"{EntryDate.Value:yyyy-MM-dd}");
+    if (transitionRate < 0) { transitionRate = 0; }
 
     var hint = 0;
     foreach (var row in Lines.Rows)
@@ -436,7 +540,7 @@ void UpdateTaxHint()
             {
                 var rate = (TaxRate)rItem;
                 if ($"{rate.Id.Value}" != $"{cat.Rate.Value}") continue;
-                decimal ratePercent = rate.RatePercent.Value ?? 0;
+                decimal ratePercent = ResolveRatePercent(rates, cat.Rate.Value, $"{EntryDate.Value:yyyy-MM-dd}");
                 int input = l.Amount.Value;
                 int fullTax = input * ratePercent / 100;
                 if (cat.UsesTransitionDeduction.Value == true) { fullTax = fullTax * transitionRate / 100; }
@@ -523,29 +627,14 @@ void SaveEntry(bool post)
         EntryDate.SetError("取引日に対応する会計年度がありません");
         return;
     }
-    // **年度の締めも見る**（BUG-0100）。期間だけを見ていると、年次決算を終えて年度を締めたあとに
-    // 1 か月だけ期間を再オープンした隙に、その年度へ確定仕訳を作れてしまう。
-    // 締めガードの粒度は `FixedAsset` の先例（年度 closed を明示的に止める）に揃える
-    if (IsFiscalYearClosed(FiscalYearRef.Value))
-    {
-        EntryDate.SetError("取引日の会計年度は締め済みです（期間を再オープンしても年度が締まっていれば起票できません）");
-        return;
-    }
-
+    // 年度の締め・期間の存在・期間の締めは `DescribePostingBlock` 1 か所で見る（BUG-0075）。
+    // **年度の締めも見る**（BUG-0100）——期間だけを見ていると、年次決算を終えて年度を締めたあとに
+    // 1 か月だけ期間を再オープンした隙に、その年度へ確定仕訳を作れてしまう
     var entryFirstDay = new DateTime(EntryDate.Value.Year, EntryDate.Value.Month, 1);
-    var ps = new ModuleSearcher<FiscalPeriod>();
-    ps.AddLessThanOrEqual(e => e.StartDate.Value, entryFirstDay);
-    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, entryFirstDay);
-    var period = ps.ExecuteFirstOrDefault();
-    if (period == null)
+    var blocked = DescribePostingBlock(entryFirstDay, FiscalYearRef.Value);
+    if (blocked != "")
     {
-        EntryDate.SetError("取引日に対応する月次期間がありません");
-        return;
-    }
-    var typedPeriod = (FiscalPeriod)period;
-    if (typedPeriod.Status.Value == "closed")
-    {
-        EntryDate.SetError("取引日の期間は締め済みです");
+        EntryDate.SetError(blocked);
         return;
     }
 
@@ -911,18 +1000,11 @@ void RegenerateTaxLines()
         if (salesTaxAccountId == null && acc.Code.Value == "2200") { salesTaxAccountId = acc.Id.Value; }
     }
 
-    // 4. 経過措置の控除割合（取引日で期間解決。期間外は 0%）
-    decimal transitionRate = 0;
-    var trFirstDay = new DateTime(EntryDate.Value.Year, EntryDate.Value.Month, 1);
-    var trSearch = new ModuleSearcher<InvoiceTransitionRate>();
-    trSearch.AddLessThanOrEqual(e => e.ValidFrom.Value, trFirstDay);
-    trSearch.AddGreaterThanOrEqual(e => e.ValidTo.Value, trFirstDay);
-    var tr = trSearch.ExecuteFirstOrDefault();
-    if (tr != null)
-    {
-        var typedTr = (InvoiceTransitionRate)tr;
-        transitionRate = typedTr.RatePercent.Value ?? 0;
-    }
+    // 4. 経過措置の控除割合（取引日で期間解決）。**引けなければ -1**（BUG-0089）。
+    //    「該当なし」と「控除 0%」は意味が違うので、黙って 0 にはしない
+    decimal transitionRate = ResolveTransitionRate($"{EntryDate.Value:yyyy-MM-dd}");
+    var transitionUnresolved = (transitionRate < 0);
+    if (transitionUnresolved) { transitionRate = 0; }
 
     // 5. 本体行ごとに税額計算（追加する税行の情報を先に集める）
     var parentNos = new List<int>();
@@ -955,15 +1037,8 @@ void RegenerateTaxLines()
                 if (cat.UsesTransitionDeduction.Value == true) { isTransition = true; }
                 if (cat.Rate.Value != null)
                 {
-                    foreach (var rItem in rates)
-                    {
-                        var rate = (TaxRate)rItem;
-                        if ($"{rate.Id.Value}" == $"{cat.Rate.Value}")
-                        {
-                            ratePercent = rate.RatePercent.Value ?? 0;
-                            break;
-                        }
-                    }
+                    // 税率は取引日で解決する（BUG-0080）
+                    ratePercent = ResolveRatePercent(rates, cat.Rate.Value, $"{EntryDate.Value:yyyy-MM-dd}");
                 }
                 break;
             }
@@ -992,6 +1067,17 @@ void RegenerateTaxLines()
         int deductible = fullTax;
         if (isTransition)
         {
+            // 期間外・マスタ未整備で割合が引けないときは、控除 0 のまま**必ず理由を言う**（BUG-0089）
+            if (transitionUnresolved)
+            {
+                Toaster.Error($"「{l.Description.Value}」の税区分は経過措置対象ですが、"
+                    + $"取引日 {EntryDate.Value:yyyy/MM/dd} に有効な控除割合がマスタにありません"
+                    + "（業務マスタ > 税制 > 経過措置控除割合）。控除 0% として計算しています");
+            }
+            else if (transitionNote != "")
+            {
+                Toaster.Warn($"「{l.Description.Value}」: {transitionNote}");
+            }
             deductible = fullTax * transitionRate / 100;
         }
 
@@ -1133,6 +1219,42 @@ string DeleteWithLines()
         return $"伝票 No.{no} の明細はすべて削除しましたが、伝票本体を削除できませんでした。"
             + "**明細の無い空の伝票が残っています**。経理に連絡し、この伝票番号を伝えてください";
     }
+    return "";
+}
+
+// 取引日に起票できない理由を 1 文で返す（空文字＝起票できる）。BUG-0075。
+//
+// **締めガードの正典はここ 1 か所**。同じ判定が確定（SaveEntry）・削除・仕訳 CSV 取込に散っていて、
+// 定型仕訳からの起票だけが**年度も期間も見ていなかった**——本日が締め済みでも下書きは作られ、
+// `JournalEntry` 画面へ遷移してから「取引日の期間は締め済みです」と言われる。
+// **確定できない下書きだけが残る**ので、起票のたびに手で消す羽目になる。
+//
+// 年度と期間の**両方**を見る（BUG-0100 の規則）。決算修正で 1 か月だけ期間を再オープンした状態が
+// 通常運用なので、期間だけ見ていると締め済み年度へ確定仕訳が入り、翌期の期首残高とずれる。
+// `firstDay` は月初日を渡すこと（境界日の罠を避けるため、年度・期間の突き合わせは月初で行う）
+string DescribePostingBlock(DateTime firstDay, object fiscalYearId)
+{
+    var yearId = fiscalYearId;
+    if (yearId == null)
+    {
+        var ys = new ModuleSearcher<FiscalYear>();
+        ys.AddLessThanOrEqual(e => e.StartDate.Value, firstDay);
+        ys.AddGreaterThanOrEqual(e => e.EndDate.Value, firstDay);
+        var fy = ys.ExecuteFirstOrDefault();
+        if (fy == null) { return $"{firstDay:yyyy/MM} に対応する会計年度がありません"; }
+        yearId = ((FiscalYear)fy).Id.Value;
+    }
+    if (IsFiscalYearClosed(yearId))
+    {
+        return "取引日の会計年度は締め済みです（期間を再オープンしても年度が締まっていれば起票できません）";
+    }
+
+    var ps = new ModuleSearcher<FiscalPeriod>();
+    ps.AddLessThanOrEqual(e => e.StartDate.Value, firstDay);
+    ps.AddGreaterThanOrEqual(e => e.EndDate.Value, firstDay);
+    var period = ps.ExecuteFirstOrDefault();
+    if (period == null) { return "取引日に対応する月次期間がありません"; }
+    if (((FiscalPeriod)period).Status.Value == "closed") { return "取引日の期間は締め済みです"; }
     return "";
 }
 

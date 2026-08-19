@@ -543,6 +543,8 @@ void UpdateDisposalUi()
     RetireButton.IsVisible = saved && !disposed;
     SellButton.IsVisible = saved && !disposed;
     CancelDisposalButton.IsVisible = saved && disposed;
+    // 削除は保存済みの資産に対する操作。一覧からの削除は塞いである（BUG-0106）
+    DeleteAssetButton.IsVisible = saved;
     DisposalAmountLabel.IsVisible = saved;
     DisposalAmount.IsVisible = saved;
     DisposalAmount.IsViewOnly = disposed;
@@ -1269,4 +1271,47 @@ void GenerateDep_OnClick()
         return;
     }
     Toaster.Success($"償却仕訳 No.{nextNo}（{amount:#,0} 円）を生成しました");
+}
+
+// 台帳の削除（BUG-0106）。
+//
+// 償却仕訳は `source_type='depreciation'` / `source_id = fixed_assets.id` だけで台帳と紐づいている
+// （DB の外部キーではない＝BUG-0065）。台帳を消しても仕訳は残るので:
+//   ① 確定済みの償却仕訳が**どの資産のものか辿れなくなる**（確定伝票は削除できない＝ADR-0026）
+//   ② 同じコードで資産を作り直すと新しい id が振られ、**二重生成ガードが効かず**
+//      同じ年度の償却仕訳をもう一度作れてしまう
+// どちらも帳簿側に静かに残る壊れ方なので、**償却仕訳がある資産は消させない**。
+// 一覧ページの削除（`ListPageFieldDesign.CanDelete`）は塞いで、このボタン 1 本に集約した
+// （受注の削除ガード＝`SalesOrder.DeleteOrder_OnClick` と同じ作り）。
+//
+// 「使わなくなった資産」は削除ではなく**除却・売却**で落とす——それが台帳の正しい閉じ方で、
+// 除却仕訳が残るぶん監査にも耐える
+void DeleteAsset_OnClick()
+{
+    if (this.Id.Value == null) { return; }
+
+    var js = new ModuleSearcher<JournalEntry>();
+    js.AddEquals(e => e.SourceType.Value, "depreciation");
+    js.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    var journals = js.Execute();
+    if (journals.Count > 0)
+    {
+        Toaster.Error($"この資産には償却仕訳が {journals.Count} 件あるため削除できません。"
+            + "使わなくなった資産は「除却」または「売却」で落としてください"
+            + "（削除すると仕訳だけが残り、どの資産の償却か辿れなくなります）");
+        return;
+    }
+
+    var result = MessageBox.Show($"固定資産「{Name.Value}」を削除しますか？（元に戻せません）",
+                                 "削除する", "キャンセル");
+    if (result != "削除する") return;
+    using var loading = LoadingService.StartLoading(0);
+
+    if (this.Delete() != true)
+    {
+        Toaster.Error("削除できませんでした（ほかの人が同時に更新した可能性があります）");
+        return;
+    }
+    Toaster.Success("固定資産を削除しました");
+    NavigationService.NavigateTo(NavigationService.GetModuleUrl("FixedAsset"));
 }

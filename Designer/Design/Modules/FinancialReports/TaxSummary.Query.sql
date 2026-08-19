@@ -50,12 +50,26 @@ lines AS (
     l.amount                       AS amount,
     -- 科目の正残側に立っていれば +、逆側（赤伝・返品・値引）なら −
     CASE WHEN l.dc = a.dc_normal THEN 1 ELSE -1 END AS sgn,
-    -- 経過措置の控除割合は取引日で期間解決する。経過措置でない課税仕入は 100%
-    CASE WHEN tc.uses_transition_deduction = 1
-         THEN COALESCE((SELECT r.rate_percent FROM invoice_transition_rates r
-                         WHERE date(e.entry_date) >= date(r.valid_from)
-                           AND date(e.entry_date) <= date(r.valid_to)), 0)
-         ELSE 100
+    -- 経過措置の控除割合は取引日で期間解決する。経過措置でない課税仕入は 100%。
+    --
+    -- 期間の外・マスタ未整備で引けないとき、旧実装は `COALESCE(…, 0)` で **0%（控除なし）**に潰していた。
+    -- 「該当なし」と「控除ゼロ」は意味が違ううえ、**2023-10-01 より前の遡及入力**は本来 100% 控除できる
+    -- （インボイス制度そのものが無かった時期）ので、控除できる税額が黙って消えていた（BUG-0089）。
+    -- 制度の開始・終了は**マスタから導く**（コードに日付を書かない）:
+    --   ・いちばん早い valid_from より前 → 100%（制度開始前）
+    --   ・いちばん遅い valid_to より後（無期限行が無い場合）→ 0%（経過措置の終了後）
+    -- また `valid_to` が空（無期限）の行も拾い、重なったときは `valid_from` が新しいほうを採る
+    -- （旧実装は並び順も LIMIT も無く、重複登録時にどちらが当たるか不定だった）
+    CASE WHEN tc.uses_transition_deduction <> 1 THEN 100
+         ELSE COALESCE(
+           (SELECT r.rate_percent FROM invoice_transition_rates r
+             WHERE date(e.entry_date) >= date(r.valid_from)
+               AND (r.valid_to IS NULL OR date(e.entry_date) <= date(r.valid_to))
+             ORDER BY date(r.valid_from) DESC LIMIT 1),
+           CASE WHEN date(e.entry_date)
+                     < (SELECT MIN(date(valid_from)) FROM invoice_transition_rates) THEN 100
+                ELSE 0
+           END)
     END AS deduct_rate
   FROM journal_lines l
   JOIN journal_entries e ON e.id  = l.journal_entry_id

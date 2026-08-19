@@ -58,6 +58,24 @@
                 "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
               },
               "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            },
+            {
+              "SearchTargetVariable": "AccountType.Value",
+              "Comparison": "NotEqual",
+              "Value": {
+                "Value": "revenue",
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+            },
+            {
+              "SearchTargetVariable": "AccountType.Value",
+              "Comparison": "NotEqual",
+              "Value": {
+                "Value": "expense",
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
             }
           ],
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"

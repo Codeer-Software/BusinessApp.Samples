@@ -50,6 +50,11 @@ carry AS (
 -- 繰越行（必ず 1 行目）
 SELECT
   0 AS sort_seq,
+  -- 伝票へのドリルダウン（BUG-0295）。総勘定元帳と同じ作り（ADR-0065）——
+  -- `entry_id` は表示せず `OpenAnchor` の IdVariable が読み、`open_label` が空の行はリンクが消える
+  -- （リスト内のアンカーは IsVisible では消えない）。繰越行には伝票が無いので空にする
+  NULL AS entry_id,
+  '' AS open_label,
   c.carry_date AS entry_date,
   NULL AS journal_no,
   NULL AS line_no,
@@ -68,6 +73,8 @@ UNION ALL
 -- 明細行
 SELECT
   1 AS sort_seq,
+  e.id AS entry_id,
+  '開く' AS open_label,
   e.entry_date,
   e.journal_no,
   l.line_no,

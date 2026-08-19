@@ -62,7 +62,18 @@ void CreateEntry_OnClick()
     }
     var typedFy = (FiscalYear)fy;
 
+    // **起票する前に締めを見る**（BUG-0075）。旧実装は年度を解決するだけで
+    // `FiscalYear.Status` も `FiscalPeriod` も見ておらず、締め済みでも下書きを作って
+    // `JournalEntry` へ遷移し、そこで初めて弾かれていた——**確定できない下書きだけが残る**。
+    // 判定は伝票側の正典（`DescribePostingBlock`）を呼ぶ。文言も確定時と揃う
     var je = new JournalEntry();
+    var blocked = je.DescribePostingBlock(firstDay, typedFy.Id.Value);
+    if (blocked != "")
+    {
+        Toaster.Error($"本日（{DateTime.Today:yyyy/MM/dd}）では起票できません——{blocked}");
+        return;
+    }
+
     je.EntryDate.Value = today;
     je.EntryType.Value = "transfer";
     je.Status.Value = "draft";
@@ -80,7 +91,12 @@ void CreateEntry_OnClick()
         l.LineNo.Value = idx;
         l.Dc.Value = t.Dc.Value;
         l.Account.Value = t.Account.Value;
-        l.Amount.Value = t.Amount.Value;
+        // 金額は**空でもよい**（毎月額が変わる仕訳のテンプレート）。
+        // `journal_lines.amount` は NOT NULL なので、NULL のまま渡すと `Submit()` が false になり
+        // 「伝票の作成に失敗しました」しか出ない——原因が分からない（BUG-0076）。
+        // 0 円の下書きを作って、金額を入れてもらってから確定させる
+        // （確定時の「金額は 1 円以上」検証が必ず止めるので、0 円が確定することはない）
+        l.Amount.Value = t.Amount.Value ?? 0;
         l.TaxCategory.Value = t.TaxCategoryRef.Value;
         // **空なら上書きしない**（BUG-0441）。1 つ上の `l.Account.Value = ...` が
         // `Lines_OnDataChanged → ApplyLineDefaults()` を発火させ、既定の税計算（inclusive）が入る。
