@@ -46,7 +46,21 @@ lines AS (
   FROM journal_lines l
   JOIN journal_entries e ON e.id  = l.journal_entry_id
   JOIN tax_categories tc ON tc.id = l.tax_category_id
-  JOIN accounts a        ON a.id  = l.account_id
+  -- **税行は「本体行の科目」に寄せる**（BUG-0115）。
+  -- 消費税は `is_tax_line = 1` の別行として仮払消費税(1900) / 仮受消費税(2200) の科目に立つ（ADR-0052）。
+  -- 素直に `l.account_id` で科目に割り当てると、本表は科目 × 税区分でグループ化するので
+  -- **費用・収益科目の行には税行が 1 本も入らない**——「消費税額 0」「税込対価 ＝ 本体金額」になり、
+  -- 税額だけが 1900 / 2200 の行に独立して並ぶ。列名が示す意味と中身が食い違う。
+  -- 税行は `parent_line_no` で本体行を指しているので、**その本体行の科目に付け替える**。
+  -- こうすると「旅費交通費 / 課税仕入 10%：本体 10,000・税 1,000・税込 11,000」と読める
+  -- （税区分の付け間違いを探すという本表の目的にも、こちらのほうが合う）。
+  -- 消費税集計表（TaxSummary）は税区分単位なのでもともと税行も同じ区分に入り、影響を受けない。
+  -- `parent_line_no` が解決できない税行は自分の科目のまま残す（黙って消さない）
+  LEFT JOIN journal_lines pl
+         ON pl.journal_entry_id = l.journal_entry_id
+        AND pl.line_no          = l.parent_line_no
+        AND l.is_tax_line       = 1
+  JOIN accounts a        ON a.id  = COALESCE(pl.account_id, l.account_id)
   WHERE e.status = 'posted'
     AND date(e.entry_date) >= (SELECT d_from FROM rng)
     AND date(e.entry_date) <= (SELECT d_to   FROM rng)

@@ -28,9 +28,16 @@ void Drill_OnClick()
     var accountId = AccountIdRaw.Value;
     if (accountId == null) { return; }
 
+    // 期間・部門・案件は **SQL の出力列（DataOnlyFields）から**受け取る（BUG-0002）。
+    // 行アクションは行ごとの別インスタンスで動くので、ここから検索インスタンスの
+    // `DateFrom.SearchMin` / `DepartmentSel.SearchValue` を読んでも必ず null になる——
+    // 旧実装はそれをやっていて、**期間が一度も引き継がれていなかった**（実測で確認）。
+    // 絞り込んだ試算表から元帳へ飛ぶと当年度全期間の元帳が開き、金額が合わずに驚く
     var url = NavigationService.GetModuleUrl("GeneralLedger")
         + $"?initialize_search=true&drill_account={accountId}";
-    if (DateFrom.SearchMin != null) { url = url + $"&drill_from={DateFrom.SearchMin:yyyy-MM-dd}"; }
-    if (DateTo.SearchMin != null) { url = url + $"&drill_to={DateTo.SearchMin:yyyy-MM-dd}"; }
+    if (!string.IsNullOrEmpty(DrillFrom.Value)) { url = url + $"&drill_from={DrillFrom.Value}"; }
+    if (!string.IsNullOrEmpty(DrillTo.Value)) { url = url + $"&drill_to={DrillTo.Value}"; }
+    if (!string.IsNullOrEmpty(DrillDept.Value)) { url = url + $"&drill_dept={DrillDept.Value}"; }
+    if (!string.IsNullOrEmpty(DrillProject.Value)) { url = url + $"&drill_project={DrillProject.Value}"; }
     NavigationService.NavigateTo(url);
 }

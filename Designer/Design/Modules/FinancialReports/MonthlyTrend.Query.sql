@@ -163,19 +163,26 @@ FROM per
 
 UNION ALL
 -- PL 科目行
+--
+-- **月セルは 0 埋めする**（BUG-0114）。`plrow` はその月に取引のある科目 × 期間しか行を持たないので、
+-- 素の `SUM(CASE WHEN … END)` は取引の無い月が NULL＝空白セルになる。
+-- 一方、段階利益行（売上総利益〜当期純利益）は `plm` を通り、`plm` は `per LEFT JOIN plrow` ＋
+-- `COALESCE(…, 0)` で全期間を 0 埋めしているので **0 と表示される**。
+-- 結果、**同じ表の中で「空白」と「0」が混ざり、意味の違いがあるように見えてしまう**。
+-- 月次推移表で 0 と空白に意味の差は無い（どちらも「その月に動きが無い」）ので、**0 に揃える**
 SELECT printf('%02d', r.section_order) || '-1-' || r.code, r.cat_name, r.name,
-  SUM(CASE WHEN r.period_no = 1  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 2  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 3  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 4  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 5  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 6  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 7  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 8  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 9  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 10 THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 11 THEN r.amt END),
-  SUM(CASE WHEN r.period_no >= 12 THEN r.amt END),
+  COALESCE(SUM(CASE WHEN r.period_no = 1  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 2  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 3  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 4  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 5  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 6  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 7  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 8  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 9  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 10 THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 11 THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no >= 12 THEN r.amt END), 0),
   SUM(r.amt)
 FROM plrow r
 WHERE (SELECT s FROM stmt) = 'PL'
@@ -184,18 +191,18 @@ GROUP BY r.section_order, r.code, r.name, r.cat_name
 UNION ALL
 -- PL 区分小計
 SELECT printf('%02d', r.section_order) || '-2-ZZZZ', r.cat_name, r.cat_name || ' 計',
-  SUM(CASE WHEN r.period_no = 1  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 2  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 3  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 4  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 5  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 6  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 7  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 8  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 9  THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 10 THEN r.amt END),
-  SUM(CASE WHEN r.period_no = 11 THEN r.amt END),
-  SUM(CASE WHEN r.period_no >= 12 THEN r.amt END),
+  COALESCE(SUM(CASE WHEN r.period_no = 1  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 2  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 3  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 4  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 5  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 6  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 7  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 8  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 9  THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 10 THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no = 11 THEN r.amt END), 0),
+  COALESCE(SUM(CASE WHEN r.period_no >= 12 THEN r.amt END), 0),
   SUM(r.amt)
 FROM plrow r
 WHERE (SELECT s FROM stmt) = 'PL'

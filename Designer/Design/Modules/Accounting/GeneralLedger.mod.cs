@@ -51,6 +51,17 @@ bool ApplyDrillDownParameters()
         var d = ParseDate(qs["drill_to"]);
         if (d != null) { DateTo.SearchMin = d; }
     }
+    // 試算表側の部門・案件の絞り込みを引き継ぐ（BUG-0002）
+    if (qs.ContainsKey("drill_dept"))
+    {
+        var raw = qs["drill_dept"];
+        if (!string.IsNullOrEmpty(raw)) { DepartmentSel.SearchValue = raw; }
+    }
+    if (qs.ContainsKey("drill_project"))
+    {
+        var raw = qs["drill_project"];
+        if (!string.IsNullOrEmpty(raw)) { ProjectSel.SearchValue = raw; }
+    }
     return applied;
 }
 

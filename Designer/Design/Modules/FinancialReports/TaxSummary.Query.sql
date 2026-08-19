@@ -132,7 +132,15 @@ SELECT * FROM (
     CASE WHEN (s.taxable + s.tax_exempt) = 0 THEN '売上がありません'
          ELSE printf('%.2f%%', CAST(s.taxable * 10000.0 / (s.taxable + s.tax_exempt) AS INTEGER) / 100.0)
               || '（'
-              || CASE WHEN s.taxable * 100.0 / (s.taxable + s.tax_exempt) >= th.ratio_min
+              -- **閾値が引けないときは断定しない**（BUG-0119）。
+              -- `th` は制度閾値マスタからスカラサブクエリで引くので、行が無い／有効期間が切れていると
+              -- `ratio_min` / `sales_cap` が NULL になる。SQL の三値論理では `x >= NULL` は真にならないので
+              -- 旧実装は**必ず ELSE 側に落ち、課税売上割合 100% の会社にも「個別対応方式が必要です」と
+              -- 断定して見せていた**。エラーにも警告にもならないので、閾値を消したことが原因だと気づけない
+              || CASE WHEN th.ratio_min IS NULL OR th.sales_cap IS NULL
+                      THEN '控除方式は判定できません——制度閾値 FULL_DEDUCT_RATIO_MIN / FULL_DEDUCT_SALES_CAP が'
+                           || '表示期間に有効ではありません。業務マスタ > 税制 > 制度閾値 を確認してください'
+                      WHEN s.taxable * 100.0 / (s.taxable + s.tax_exempt) >= th.ratio_min
                        AND s.taxable <= th.sales_cap
                       THEN '全額控除できます'
                       ELSE '個別対応方式または一括比例配分方式が必要です'

@@ -33,7 +33,15 @@ bal AS (
     c.name AS cat_name,
     c.section_order,
     c.statement,
-    COALESCE(o.bal, 0) + COALESCE(j.dmc, 0) AS dmc
+    -- **期首残高を足すのは BS 科目だけ**（BUG-0116）。
+    -- 損益計算書（`ProfitLoss.Query.sql`）は `journal_lines` しか見ないので、
+    -- 損益科目に期首残高が 1 行でも入ると **BS の当期純利益と PL の当期純利益がずれる**。
+    -- BS 側は貸借が合ったまま（利益剰余金に吸われる）ので検算行では検出できず、
+    -- 「2 枚並べると純利益が違う」という形でしか気づけない。
+    -- そもそも損益科目の期首残高は不正データ（不変条件 B02 が赤で出す）だが、
+    -- **帳票は PL と同じものを見る**——2 枚が食い違わないことのほうが大事
+    CASE WHEN c.statement = 'BS' THEN COALESCE(o.bal, 0) ELSE 0 END
+      + COALESCE(j.dmc, 0) AS dmc
   FROM accounts a
   JOIN account_categories c ON c.id = a.category_id
   LEFT JOIN (
@@ -50,7 +58,7 @@ bal AS (
       AND e.fiscal_year_id IN (SELECT id FROM yr)
     GROUP BY l.account_id
   ) j ON j.account_id = a.id
-  WHERE COALESCE(o.bal, 0) <> 0 OR COALESCE(j.dmc, 0) <> 0
+  WHERE (c.statement = 'BS' AND COALESCE(o.bal, 0) <> 0) OR COALESCE(j.dmc, 0) <> 0
 ),
 bs AS (SELECT * FROM bal WHERE statement = 'BS'),
 pl AS (SELECT * FROM bal WHERE statement = 'PL'),
