@@ -114,6 +114,38 @@ string ExplainZeroDepreciation(var yearStart, var yearEnd)
     return "この年度の償却額はありません（既に簿価が残存 1 円まで償却されています）";
 }
 
+// 登録（BUG-0465）。
+//
+// **標準の「登録」ボタン（`SubmitButtonFieldDesign`）は `OnClick` を持たず、
+// 押すとスクリプトを一切通らずに保存される**（FB-063）。だから検証を書いても呼ばれない。
+// 保存前に見たいものがある画面は `ButtonFieldDesign` に置き換えて自分で `Submit()` を呼ぶ——
+// このリポジトリの作法（`lint_design.py` の CLB-041 が「書いたのに呼ばれないハンドラ」を検査している）。
+//
+// ここで止めたいのは「耐用年数が空のまま定額法・200%定率法の資産を保存する」こと。
+// 空だと `CalcDepreciationForYear()` が 0 を返して**その資産は永久に償却されない**。
+// 減価償却費が計上されず利益が過大になるのに、台帳では
+// 「取得価額あり・簿価そのまま」の**正常に見える行**として残る。
+// E01/E02/E03 は「存在する償却仕訳」しか見ないので、「1 本も無い」は検出できなかった（E04 を新設）。
+//
+// 従来は `WarnMissingUsefulLife()` が Toaster.Warn を出すだけで保存を止めていなかった。
+// **警告は見落とされる**——償却できない資産を作ってしまうと、後の処分・売却で必ず詰まる
+void Register_OnClick()
+{
+    if (NeedsUsefulLife(DepreciationMethod.Value)
+        && (UsefulLife.Value == null || UsefulLife.Value <= 0))
+    {
+        UsefulLife.SetError("この償却方法では耐用年数が必須です（空のままだと償却額が 0 円になり、償却仕訳を生成できません）");
+        Toaster.Error("耐用年数を入れてから登録してください");
+        return;
+    }
+    if (this.Submit() != true)
+    {
+        Toaster.Error("保存に失敗しました。入力内容を確認してください");
+        return;
+    }
+    Toaster.Success("登録しました");
+}
+
 // この償却方法は耐用年数を必要とするか
 bool NeedsUsefulLife(string method)
 {

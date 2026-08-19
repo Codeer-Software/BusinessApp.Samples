@@ -709,6 +709,9 @@
     },
     {
       "Text": "登録",
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "Register_OnClick",
       "ImageResourcePath": "",
       "ImageResourceSet": {
         "Default": "",
@@ -717,12 +720,10 @@
         "Hover": "",
         "Disabled": ""
       },
-      "Icon": "",
-      "Variant": "Primary",
-      "IsBlock": true,
+      "ShowTextInToolTip": false,
       "Name": "SubmitButton",
       "IgnoreModification": false,
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SubmitButtonFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
     },
     {
       "Style": "Text",
