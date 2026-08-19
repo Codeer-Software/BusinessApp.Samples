@@ -222,11 +222,28 @@ void ApplyLineDefaults()
         l.TaxCategory.Value = defaultTaxCategory;
         if (l.TaxInputMode.Value == null || l.TaxInputMode.Value == "")
         {
-            l.TaxInputMode.Value = "inclusive";
+            // **課税区分のときだけ「内税」**（BUG-0267）。
+            // 旧実装は税区分に関係なく `inclusive` を入れていたので、
+            // 「対象外」や「不課税」の行にも税入力『内税』が付いた。
+            // 税額は出ないので金額は狂わないが、**画面が矛盾したことを言う**し、
+            // 「この行は税を計算する」と読めてしまう
+            l.TaxInputMode.Value = IsTaxableCategory(defaultTaxCategory) ? "inclusive" : "none";
         }
         l.TaxCategoryAutoFrom.Value = accountKey;
         l.TaxCategoryAutoValue.Value = $"{defaultTaxCategory}";
     }
+}
+
+// その税区分は課税（売上・仕入）か（BUG-0267）
+bool IsTaxableCategory(object taxCategoryId)
+{
+    if (taxCategoryId == null) return false;
+    var s = new ModuleSearcher<TaxCategory>();
+    s.AddEquals(c => c.Id.Value, taxCategoryId);
+    var found = s.ExecuteFirstOrDefault();
+    if (found == null) return false;
+    var t = ((TaxCategory)found).TaxationType.Value ?? "";
+    return (t == "taxable_sales") || (t == "taxable_purchase");
 }
 
 // 保存済み伝票を開いたときの控えの初期化。現在の「科目と税区分の組」をそのまま控えに写す。

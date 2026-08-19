@@ -26,8 +26,11 @@ UNION ALL
 SELECT 'fiscal_periods.status', id, status FROM fiscal_periods
 WHERE status IS NOT NULL AND status NOT IN ('open', 'closed')
 UNION ALL
-SELECT 'invoices.status', id, status FROM invoices
-WHERE status IS NOT NULL AND status NOT IN ('draft', 'issued', 'partial', 'paid', 'void')
+-- 請求書の状態だけは **NULL も違反**（BUG-0331）。`invoices.status` は NOT NULL でも DEFAULT でもなく、
+-- NULL の請求書は入金見込み（`IN ('issued','partial')`）からも期限超過（`<> 'void'` 等）からも
+-- **どちらの絞り込みからも黙って外れる**——売掛には残るのに予測にも催促にも出てこない
+SELECT 'invoices.status', id, COALESCE(status, '(NULL)') FROM invoices
+WHERE status IS NULL OR status NOT IN ('draft', 'issued', 'partial', 'paid', 'void')
 UNION ALL
 SELECT 'quotes.status', id, status FROM quotes
 WHERE status IS NOT NULL AND status NOT IN ('draft', 'sent', 'accepted', 'rejected')

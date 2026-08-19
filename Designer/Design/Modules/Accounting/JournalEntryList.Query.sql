@@ -11,7 +11,14 @@ SELECT
     WHEN 'adjust' THEN '決算整理'
     ELSE COALESCE(je.entry_type, '')
   END AS entry_type_label,
-  COALESCE(je.description, '') AS description,
+  -- ヘッダ摘要が空なら**明細の摘要にフォールバックする**（BUG-0268）。
+  -- 空だと行が識別できない——とくに下書きは伝票番号も未採番なので、
+  -- 一覧に「日付と金額だけの行」が並んで**どれがどれか分からなくなる**
+  COALESCE(NULLIF(je.description, ''),
+           (SELECT COALESCE(l2.description, '') FROM journal_lines l2
+             WHERE l2.journal_entry_id = je.id AND COALESCE(l2.description, '') <> ''
+             ORDER BY l2.line_no LIMIT 1),
+           '') AS description,
   CASE je.status WHEN 'posted' THEN '確定' WHEN 'draft' THEN '下書き' ELSE COALESCE(je.status, '') END AS status_label,
   COALESCE((SELECT pt.name FROM partners pt WHERE pt.id = je.partner_id), '') AS partner_name,
   COALESCE(SUM(CASE WHEN jl.dc = 'D' THEN jl.amount ELSE 0 END), 0) AS debit_total
