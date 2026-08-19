@@ -104,9 +104,22 @@ ap_now AS (
                 AND e.fiscal_year_id IN (SELECT id FROM cur_yr)), 0) AS ap
 ),
 exp_now AS (
-  SELECT COALESCE(SUM(amount), 0) AS exp
-  FROM expense_request
-  WHERE settlement_status = 'approved'
+  -- **会計期間で絞る**（BUG-0248 ①）。旧実装は `settlement_status = 'approved'` だけで
+  -- **日付条件も会計年度条件も無かった**ので、3 年前に承認されたまま精算されずに残っている申請も
+  -- 今月の出金として満額計上されていた。放置された古い申請ほど当月の資金を食う、という嘘になる。
+  -- 対象は**当年度に計上される経費**（`expense_date` が当年度内）に限る。
+  --
+  -- **残り（BUG-0248 ②）**: 未払金・承認済み経費を `idx = 0` で当月に一括計上している点は未対応。
+  -- 期日の情報を持っているのに使っていないので当月に山ができ、
+  -- 「今月は苦しいが来月から楽になる」という実在しない形が毎月出る。
+  -- これは `docs/tasks/04`（資金繰り M-2）の「確定債務層」で作り直す前提なので、ここでは触らない
+  SELECT COALESCE(SUM(er.amount), 0) AS exp
+  FROM expense_request er
+  WHERE er.settlement_status = 'approved'
+    AND EXISTS (SELECT 1 FROM fiscal_years fy
+                 WHERE fy.id IN (SELECT id FROM cur_yr)
+                   AND date(er.expense_date) >= date(fy.start_date)
+                   AND date(er.expense_date) <= date(fy.end_date))
 ),
 vend_out AS (
   SELECT max(COALESCE(date(v.due_date, 'start of month'),
