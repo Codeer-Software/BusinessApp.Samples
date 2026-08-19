@@ -84,13 +84,23 @@ void CancelEdit_OnClick()
 
     // 既存の明細を読み込んで編集していた場合: 変更を捨てて、入力欄を新しい空の行に戻す。
     // 確定済みの明細そのものには触らない（リストにはそのまま残る）
+    //
+    // **`Reload()` はモジュール全体を読み直す**ので、同じ画面で直していた
+    // 件名・目的・支払先・計上日の未保存分も**まとめて消える**（BUG-0193）。
+    // 入力欄の変更だけを選んで捨てる手段が CLB に無いのでこの実装は変えられないが、
+    // **黙って消すのはやめる**——不可逆なので先に確認する（ADR-0062）
+    var back = MessageBox.Show(
+        "入力欄の編集をやめます。**この画面で保存していない変更（件名・目的・支払先・計上日）も"
+        + "まとめて元に戻ります。** よろしいですか？", "編集をやめる", "キャンセル");
+    if (back != "編集をやめる") return;
+
     using var loading = LoadingService.StartLoading(0);
     this.Reload();                       // 入力欄の変更を先に捨てる（次の Submit で保存させない）
     EditingLineIdRaw.Value = null;
     var ret = this.Submit();
     if (ret == false) { Toaster.Error("入力欄を戻せませんでした"); return; }
     this.Reload();
-    Toaster.Info("編集をやめました（明細はそのままです）");
+    Toaster.Info("編集をやめました（明細はそのまま。保存していなかったヘッダの変更は元に戻りました）");
 }
 
 // 入力欄の項目をすべて空に戻す（行そのものは残す＝ModuleField が抱えている実体なので消せない）
@@ -428,11 +438,25 @@ void RecalcFromLines()
     Amount.Value = total;
     TaxAmount.Value = tax;
 
-    // 計上日の既定は「明細でいちばん遅い利用日」。下書きのうちだけ追随させる
-    // （申請後に日付が動くと承認済みの内容が変わってしまうため）
+    // 計上日の**既定**は「明細でいちばん遅い利用日」。下書きのうちだけ追随させる
+    // （申請後に日付が動くと承認済みの内容が変わってしまうため）。
+    //
+    // **既定であって、毎回の上書きではない**（BUG-0188）。
+    // 旧実装は下書きのあいだ無条件に書き戻していたので、
+    // 経理・申請者が意図して計上日を月末（例 2026/07/31）に置いても、
+    // そのあと明細を 1 件足す・直す・消すと**レシートの日付に戻って**しまった。
+    // 自動で入れた値を痕跡に控え、**計上日が痕跡と一致している間だけ**追随させる
+    // （請求書 BUG-0182・見積 BUG-0423 と同じ型）
     if (hasUsed && (SettlementStatus.Value == null || SettlementStatus.Value == "draft"))
     {
-        ExpenseDate.Value = lastUsed;
+        var trace = ExpenseDateAutoValue.Value ?? "";
+        var untouched = (ExpenseDate.Value == null)
+            || (trace != "" && trace == $"{ExpenseDate.Value:yyyy-MM-dd}");
+        if (untouched)
+        {
+            ExpenseDate.Value = lastUsed;
+            ExpenseDateAutoValue.Value = $"{lastUsed:yyyy-MM-dd}";
+        }
     }
 }
 
@@ -779,6 +803,10 @@ void OnAfterInitialization()
         ExpenseDate.Value = DateOnly.FromDateTime(DateTime.Today);
         // 複製は保存済みの申請に対する操作（未保存では出さない。驚き最小: 2026-08-03 UXレビュー）
         DuplicateButton.IsVisible = false;
+        // **複製はどの状態でも押せてよい**（BUG-0047・2026-08-19 判断）。
+        // この機能は「反復的な経費を**過去の申請から**新規作成する」ためのもので、
+        // 完了した申請こそがいちばん複製したい対象。ADR-0026 の「状態遷移ボタンの一元化」は
+        // **その伝票の状態を動かすボタン**の話であって、新しい伝票を作る操作は対象外
         UpdateVisibility();
         UpdateAccountingButtons();
         UpdateLineButtons();

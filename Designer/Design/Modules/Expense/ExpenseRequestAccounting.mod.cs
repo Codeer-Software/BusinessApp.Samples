@@ -425,6 +425,36 @@ void GenerateJournal_OnClick()
 // 経理: 精算済にする (accounting → settled)
 // 支払仕訳 (D 未払金2020 / C 普通預金1020) を生成してからステータスを進める
 // ============================================================
+// この申請の未払計上仕訳が計上した未払金の額（BUG-0190）。
+// 支払仕訳はこの額をそのまま落とす——ヘッダの集計列を使うと、
+// 明細とヘッダが乖離したときに未払金が消えずに残る
+int AccruedPayableAmount()
+{
+    var js = new ModuleSearcher<JournalEntry>();
+    js.AddEquals(e => e.SourceType.Value, "expense");
+    js.AddEquals(e => e.SourceId.Value, this.Id.Value);
+    var je = js.ExecuteFirstOrDefault();
+    if (je == null) return 0;
+
+    var role = new ModuleSearcher<Account>();
+    role.AddEquals(a => a.AccountRole.Value, "accounts_payable");
+    var apAcc = role.ExecuteFirstOrDefault();
+    if (apAcc == null) return 0;
+    var apId = ((Account)apAcc).Id.Value;
+
+    var ls = new ModuleSearcher<JournalLine>();
+    ls.AddEquals(l => l.JournalEntryId.Value, ((JournalEntry)je).Id.Value);
+    var total = 0;
+    foreach (var row in ls.Execute())
+    {
+        var l = (JournalLine)row;
+        if ($"{l.Account.Value}" != $"{apId}") continue;
+        if (l.Dc.Value == "C") { total = total + (l.Amount.Value ?? 0); }
+        if (l.Dc.Value == "D") { total = total - (l.Amount.Value ?? 0); }
+    }
+    return total;
+}
+
 void Settle_OnClick()
 {
     if (SettlementStatus.Value != "accounting") return;
@@ -497,7 +527,17 @@ void Settle_OnClick()
         if (typedLast.JournalNo.Value != null) { nextNo = (int)typedLast.JournalNo.Value + 1; }
     }
 
-    int amount = Amount.Value;
+    // **支払うのは「未払計上した額」**（BUG-0190）。
+    // 未払計上（D 費目 / C 未払金）は明細から積み直した合計で立てるのに、
+    // 支払（D 未払金 / C 普通預金）はヘッダの集計列を使っていた。
+    // 両者が乖離すると**未払金が消えずに残る**——2 つの経路が別の数字を見ているのが原因なので、
+    // **実際に立てた未払金の額をそのまま落とす**。これなら定義上ずれようがない
+    int amount = AccruedPayableAmount();
+    if (amount <= 0)
+    {
+        Toaster.Error("この申請の未払計上仕訳が見つかりません（先に「仕訳を生成」を実行してください）");
+        return;
+    }
 
     // 支払仕訳: D 未払金 / C 普通預金
     var je = new JournalEntry();

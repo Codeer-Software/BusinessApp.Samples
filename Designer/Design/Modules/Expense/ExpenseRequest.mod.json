@@ -1632,6 +1632,29 @@
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign"
+    },
+    {
+      "DbColumn": "",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "StringEmpty",
+      "ShouldTrimAfterEdit": false,
+      "AutoTab": false,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "ExpenseDateAutoValue",
+      "IgnoreModification": true,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -1710,7 +1733,8 @@
         "IsFixedAsset",
         "AssetNo",
         "ActualConfirmed",
-        "EditingLineIdRaw"
+        "EditingLineIdRaw",
+        "ExpenseDateAutoValue"
       ],
       "ClassName": "",
       "Color": "",
@@ -3411,7 +3435,9 @@
   "ListLayouts": {
     "": {
       "HeaderTitle": "",
-      "DataOnlyFields": [],
+      "DataOnlyFields": [
+        "ExpenseDateAutoValue"
+      ],
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,
       "OnBeforeInitialization": "",
