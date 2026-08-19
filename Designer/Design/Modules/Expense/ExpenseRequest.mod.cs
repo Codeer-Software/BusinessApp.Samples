@@ -647,6 +647,26 @@ bool ValidateForApply()
                 return false;
             }
         }
+        // **費目マスタの既定が空のまま申請を通さない**（BUG-0186）。
+        //
+        // 既定勘定科目・既定税区分は費目マスタの任意入力なので、システム管理者が費目を足して
+        // 埋め忘れると、その行は `tax_category_id` が NULL のまま保存される。申請も承認も通り、
+        // **経理が「仕訳を生成」を押して初めて**「税区分が解決できません」で止まる——
+        // そのとき明細は `CanEditLines()` が偽で誰も直せず、差し戻すしかない。
+        // ADR-0052 の「税区分 NOT NULL」方針どおり、**入口で止めて費目マスタを直させる**
+        // （不変条件 D05 も同じ状態を違反として検出する。止める場所を前倒しするだけ）
+        if (cat.DefaultTaxCategory.Value == null && l.TaxCategoryRef.Value == null)
+        {
+            Toaster.Error($"{no} 行目: 費目「{cat.Name.Value}」に既定の税区分が設定されていないため申請できません"
+                + "（システム管理者に業務マスタ > 費目 の設定を依頼してください）");
+            return false;
+        }
+        if (cat.DefaultAccount.Value == null)
+        {
+            Toaster.Error($"{no} 行目: 費目「{cat.Name.Value}」に既定の勘定科目が設定されていないため申請できません"
+                + "（システム管理者に業務マスタ > 費目 の設定を依頼してください）");
+            return false;
+        }
         if (!ValidateLineTax(l, cat, no)) return false;
         total = total + l.Amount.Value;
         if (l.Receipt.FileName == null || l.Receipt.FileName == "") missingReceipt = missingReceipt + 1;
@@ -1130,7 +1150,7 @@ void Duplicate_OnClick()
     // **自分が作った行だけを探す**（BUG-0457）。絞り込みが無いと、
     // `flow.Submit()` と この検索の間に別の人が下書きを作った瞬間、
     // **その人の承認フローに紐づく**（`ApprovalFlow` の読取条件は人ゲートのみで行フィルタが無い）。
-    // 同じ用途の `ApprovalFlow.FetchLatestOwnFlowFromDb()` は Creator を付けており、こちらだけ抜けていた
+    // 同じ用途の `ApprovalFlow.FetchSubmittedFlowFromDb()` は Creator と親 Id を付けており、こちらだけ抜けていた
     var fs = new ModuleSearcher<ApprovalFlow>();
     fs.AddEquals(f => f.Creator.Value, CurrentUser.Id.Value);
     fs.AddEquals(f => f.ParentId.Value, $"{typedCreated.Id.Value}");

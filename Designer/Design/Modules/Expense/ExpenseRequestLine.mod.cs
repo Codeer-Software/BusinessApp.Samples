@@ -7,6 +7,29 @@
 // AI 読み取り完了時: 費目から税区分を補い、少額基準を超える資産性支出なら固定資産にする。
 // AI が触ってはいけない項目（税区分・案件・固定資産・行番号）は Remarks で禁じているが、
 // 返してきた場合に備えてここで整える。
+// 明細フォームを開いたとき（新規行・既存行の読込のどちらも通る）。
+// 「うち消費税」欄の出し分けを初期表示から効かせる（BUG-0192）
+void Entry_OnAfterInitialization()
+{
+    UpdateTaxAmountVisibility();
+}
+
+// 「うち消費税」欄は**課税仕入の行にだけ出す**（BUG-0192）。
+//
+// docs/07 §7 と ADR-0066 の B-03 は「不課税・非課税の費目では欄を隠す」と規定しているのに、
+// 明細モジュールには可視制御が 1 行も無かった。欄が出たままだと不課税の行にも数字を入れられ、
+// `ValidateLineTax` は課税仕入でないため素通しするので、**`expense_request_lines.tax_amount` に
+// 残った値がヘッダ合計と食い違う**（仕訳には効かないので帳簿は合うが、画面の数字だけが合わない）。
+//
+// 隠すときに値を捨てるのは `ApplyCategoryDefaults` / `TaxCategory_OnDataChanged` が既にやっている
+// （そちらは理由を Toaster で言う）。ここは**見え方だけ**を受け持つ
+void UpdateTaxAmountVisibility()
+{
+    var taxable = IsTaxablePurchase();
+    LblTax.IsVisible = taxable;
+    TaxAmount.IsVisible = taxable;
+}
+
 void AiLine_Completed()
 {
     var cat = FindCategory(ExpenseCategoryRef.Value);
@@ -46,6 +69,7 @@ void TaxCategory_OnDataChanged()
         TaxAmount.Value = null;
         Toaster.Info($"消費税の対象外の税区分のため、「うち消費税」{cleared:#,0} 円をクリアしました");
     }
+    UpdateTaxAmountVisibility();
     ApplyAssetSuggestion(FindCategory(ExpenseCategoryRef.Value));
 }
 
@@ -87,16 +111,29 @@ void ApplyCategoryDefaults(ExpenseCategory cat)
         Toaster.Info($"「{cat.Name.Value}」は消費税の対象外の費目のため、「うち消費税」{cleared:#,0} 円をクリアしました");
     }
 
+    UpdateTaxAmountVisibility();
     ApplyAssetSuggestion(cat);
 }
 
 // 資産性の費目 × 少額基準以上なら固定資産計上対象を自動 ON（利用者は手で外せる）
 void ApplyAssetSuggestion(ExpenseCategory cat)
 {
+    // **人が手で動かしたチェックは、以後この行では自動で触らない**（BUG-0189・ADR-0066 D-05）。
+    //
+    // 旧実装は「今 OFF なら ON にする」だけだったので、100,000 円で自動 ON → 意図して OFF →
+    // 打ち間違いを 100,500 円に直す、で**また ON に戻った**。何度外しても戻ってくる。
+    // 自動で入れた値を痕跡（`IsFixedAssetAutoValue`）に控え、**現在値が痕跡と一致している間だけ**
+    // 追随させる（税区分 BUG-0182・請求書 BUG-0182・見積 BUG-0423 と同じ型）
+    if ((IsFixedAssetAutoValue.Value ?? "") == "manual") return;
+
     var isCandidate = (cat != null) && (cat.IsAssetCandidate.Value == true);
     if (!isCandidate)
     {
-        if (IsFixedAsset.Value == true) IsFixedAsset.Value = false;
+        if (IsFixedAsset.Value == true)
+        {
+            IsFixedAsset.Value = false;
+            IsFixedAssetAutoValue.Value = "false";
+        }
         return;
     }
     var limit = GetThresholdAmountAt("SMALL_ASSET_EXPENSE", UsedDate.Value);
@@ -110,6 +147,7 @@ void ApplyAssetSuggestion(ExpenseCategory cat)
     if (limit > 0 && amt >= limit && IsFixedAsset.Value != true)
     {
         IsFixedAsset.Value = true;
+        IsFixedAssetAutoValue.Value = "true";
         Toaster.Info($"税抜金額 {amt:#,0} 円 ≧ 少額基準 {limit:#,0} 円のため固定資産計上対象にしました（承認後に固定資産台帳へ登録されます）");
     }
     // 金額を下げたときも戻す（BUG-0319）。上げるときだけ動いて下げるときに動かないと、
@@ -119,6 +157,7 @@ void ApplyAssetSuggestion(ExpenseCategory cat)
     else if (limit > 0 && amt < limit && IsFixedAsset.Value == true)
     {
         IsFixedAsset.Value = false;
+        IsFixedAssetAutoValue.Value = "false";
         Toaster.Info($"税抜金額 {amt:#,0} 円 < 少額基準 {limit:#,0} 円になったので固定資産の指定を外しました（必要なら手で戻してください）");
     }
 }
@@ -195,4 +234,14 @@ int GetThresholdAmountAt(string code, var d)
         limit = th.Amount.Value ?? 0;
     }
     return limit;
+}
+
+// 固定資産チェックを人が動かしたら、自動セットの痕跡を捨てる（BUG-0189）。
+// 以後この行では金額・利用日・費目を直しても自動で ON/OFF しない
+void IsFixedAsset_OnDataChanged()
+{
+    // 自動セットのときもここを通る（値の代入で同期的に発火する）。
+    // その場合は呼び元が**この直後に**痕跡を "true"/"false" で上書きするので、"manual" は残らない
+    var currentMark = (IsFixedAsset.Value == true) ? "true" : "false";
+    if ((IsFixedAssetAutoValue.Value ?? "") != currentMark) { IsFixedAssetAutoValue.Value = "manual"; }
 }

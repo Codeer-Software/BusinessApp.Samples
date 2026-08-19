@@ -408,7 +408,7 @@
       "OnSearchDataChanged": "",
       "DisplayName": "固定資産",
       "IsRequired": false,
-      "OnDataChanged": "",
+      "OnDataChanged": "IsFixedAsset_OnDataChanged",
       "Name": "IsFixedAsset",
       "IgnoreModification": false,
       "OnValidateInput": "",
@@ -824,6 +824,29 @@
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "DbColumn": "",
+      "IsMultiline": false,
+      "IsAutoFitRows": false,
+      "Placeholder": "",
+      "TextEditEmptyType": "StringEmpty",
+      "ShouldTrimAfterEdit": false,
+      "AutoTab": false,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "IsFixedAssetAutoValue",
+      "IgnoreModification": true,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -869,7 +892,7 @@
   "DetailLayouts": {
     "entry": {
       "OnBeforeInitialization": "",
-      "OnAfterInitialization": "",
+      "OnAfterInitialization": "Entry_OnAfterInitialization",
       "OnLocationChanging": "",
       "OnFieldDataChanged": "",
       "FocusControlMode": "Inherit",
@@ -880,7 +903,8 @@
         "ExpenseRequestId",
         "Creator",
         "TaxCategoryAutoFrom",
-        "TaxCategoryAutoValue"
+        "TaxCategoryAutoValue",
+        "IsFixedAssetAutoValue"
       ],
       "ClassName": "",
       "Color": "",

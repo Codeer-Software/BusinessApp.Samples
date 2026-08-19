@@ -866,7 +866,7 @@ void SubmitButton_OnClick()
     // 申請成功後: 最初の承認者へ通知 (メモリの Id は temporary のため DB から取り直す)
     if (wasNew)
     {
-        NotifyActiveApprovers(FetchLatestOwnFlowFromDb(), "承認依頼");
+        NotifyActiveApprovers(FetchSubmittedFlowFromDb(parent.Id.Value), "承認依頼");
     }
 }
 
@@ -978,12 +978,26 @@ int ResolveDbAttemptNo()
     return (int)(AttemptNo.Value ?? 1);
 }
 
-// 新規申請直後: メモリの Id が temporary のため、自分が直近に作成したフローを DB から特定する
-// (同一ユーザーの同時多重申請はブラウザ操作上起こらない前提)
-ApprovalFlow FetchLatestOwnFlowFromDb()
+// 申請直後の自フローを DB から特定する（BUG-0187）。
+//
+// **「自分が作った最新のフロー」で引いてはいけない。** ADR-0066 の UI 改訂で
+// **明細を 1 件足した時点で申請が下書き保存され `approval_flow` 行も作られる**ようになったため、
+// 下書き A を作ってから下書き B を作り A を申請すると、最新は B なので**通知がフロー B に送られる**。
+// B は Draft で Active な段が無く、承認者に「承認依頼」が 1 通も飛ばない
+// （承認待ち一覧には出るので詰みはしないが、気づくのが遅れる）。
+//
+// ① まず実 Id で自分を引く（`Resubmit_OnClick` / `ReapproveForOverrun` と同じ流儀）。
+//    下書きから申請したケースはここで当たる——`Status == "Draft"` の既存行なので Id は実在する。
+// ② 本当の新規（メモリ Id が temporary）のときだけ DB を探すが、**この申請（親 Id）に絞る**。
+//    親は `Submit()` 済みなので Id は実在する
+ApprovalFlow FetchSubmittedFlowFromDb(object parentId)
 {
+    var self = FetchSelfFromDb();
+    if (self != null) return self;
+
     var s = new ModuleSearcher<ApprovalFlow>();
     s.AddEquals(f => f.Creator.Value, CurrentUser.Id.Value);
+    if (parentId != null) { s.AddEquals(f => f.ParentId.Value, parentId); }
     s.OrderByDescending(f => f.Id.Value);
     s.Limit(1);
     var found = s.ExecuteFirstOrDefault();
