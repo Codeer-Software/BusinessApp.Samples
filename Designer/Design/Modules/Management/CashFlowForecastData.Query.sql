@@ -11,6 +11,15 @@ WITH RECURSIVE months(idx, month_first) AS (
   UNION ALL
   SELECT idx + 1, date(month_first, '+1 month') FROM months WHERE idx < 3
 ),
+-- 【前月分の入金を落とさない・BUG-0329】定期請求の入金は「対象月の翌月末」に立てる。
+--   対象月のリストを当月から始めると、**前月分の請求に対する当月の入金が生成されない**——
+--   当月（idx=0）の入金見込みから定期請求が構造的に消える。
+--   対象月だけ 1 ヶ月前から回し、着地月が窓の外に出た分は `flows` の突き合わせで自然に落ちる
+rec_months(idx, month_first) AS (
+  SELECT -1, date('now', 'localtime', 'start of month', '-1 month')
+  UNION ALL
+  SELECT idx + 1, date(month_first, '+1 month') FROM rec_months WHERE idx < 3
+),
 cur_yr AS (
   SELECT id FROM fiscal_years
   WHERE date(start_date) <= date('now', 'localtime') AND date(end_date) >= date('now', 'localtime')
@@ -69,7 +78,7 @@ rec_in AS (
          CASE WHEN rb.billing_cycle = 'yearly' THEN COALESCE(rb.annual_amount, 0)
               ELSE COALESCE(rb.monthly_amount, 0) END
            * (100 + (SELECT pct FROM sales_rate)) / 100 AS amt
-  FROM months mm
+  FROM rec_months mm
   -- 確定済のみ（ADR-0057）。下書き・終了は「定期請求の実行」の対象外なので入金見込みにも載せない
   JOIN recurring_billings rb ON rb.is_active = 1 AND rb.status = 'confirmed'
     AND date(rb.start_month) <= mm.month_first
