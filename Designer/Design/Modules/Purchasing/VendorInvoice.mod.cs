@@ -403,6 +403,7 @@ void Accrue_OnClick()
     je.FiscalYearRef.Value = typedFy.Id.Value;
     je.SourceType.Value = "vendor_invoice";
     je.SourceId.Value = this.Id.Value;
+    je.PartnerRef.Value = Partner.Value;  // 電帳法の検索要件（取引先で探せること・BUG-0003）
     je.Lines.AddRows(lineCount);
     var idx = 0;
     foreach (var row in je.Lines.Rows)
@@ -541,6 +542,7 @@ void Pay_OnClick()
     je.FiscalYearRef.Value = typedFy.Id.Value;
     je.SourceType.Value = "vendor_payment";
     je.SourceId.Value = this.Id.Value;
+    je.PartnerRef.Value = Partner.Value;  // 電帳法の検索要件（取引先で探せること・BUG-0003）
     je.Lines.AddRows(2);
     var idx = 0;
     foreach (var row in je.Lines.Rows)

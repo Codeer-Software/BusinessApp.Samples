@@ -517,6 +517,7 @@ void Run_OnClick()
             je.FiscalYearRef.Value = typedFy.Id.Value;
             je.SourceType.Value = "recurring";
             je.SourceId.Value = invoiceId;
+            je.PartnerRef.Value = b.PartnerRef.Value;  // 電帳法の検索要件（取引先で探せること・BUG-0003）
             je.Lines.AddRows(lineCount);
             var idx = 0;
             foreach (var jlRow in je.Lines.Rows)
@@ -663,6 +664,7 @@ void Run_OnClick()
             je.FiscalYearRef.Value = typedFy.Id.Value;
             je.SourceType.Value = "recurring_annual";
             je.SourceId.Value = annualInvId;
+            je.PartnerRef.Value = b.PartnerRef.Value;  // 電帳法の検索要件（取引先で探せること・BUG-0003）
             je.Lines.AddRows(lineCount);
             var idxA = 0;
             foreach (var jlRow in je.Lines.Rows)
@@ -823,6 +825,7 @@ int CreateDeferJournal(object fiscalYearId, object billing, object annualInvId, 
     dje.FiscalYearRef.Value = fiscalYearId;
     dje.SourceType.Value = "recurring_defer";
     dje.SourceId.Value = annualInvId;
+    dje.PartnerRef.Value = b.PartnerRef.Value;  // 電帳法の検索要件（取引先で探せること・BUG-0003）
     dje.Lines.AddRows(2);
     var idxD = 0;
     foreach (var jlRow in dje.Lines.Rows)

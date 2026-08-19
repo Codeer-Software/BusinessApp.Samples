@@ -390,6 +390,7 @@ int CreateReversalJournal(JournalEntry src, string sourceType, string kind)
     je.FiscalYearRef.Value = typedFy.Id.Value;
     je.SourceType.Value = sourceType;
     je.SourceId.Value = this.Id.Value;
+    je.PartnerRef.Value = PartnerRef.Value;  // 電帳法の検索要件（取引先で探せること・BUG-0003）
     je.Lines.AddRows(srcLines.Count);   // 引数は 1 文で確定させる（ISSUE-0006）
     var idx = 0;
     foreach (var row in je.Lines.Rows)

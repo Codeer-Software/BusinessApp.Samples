@@ -1839,22 +1839,52 @@ def rule_040(idx, add):
     （`Math.Max(...)` などの中に入っている割り算や、明示的に `(int)` へキャストしている式は対象外）。
     """
     import re as _re
-    # var x = <式> / <式>;  ただし右辺全体が単純な算術（関数呼び出し・キャストを含まない）
-    pat = _re.compile(r"\bvar\s+(\w+)\s*=\s*([^;=]*?/[^;]*?);")
+    # var x = <式> / <式>;
+    decl = _re.compile(r"\bvar\s+(\w+)\s*=\s*([^;=]*?/[^;]*?);")
+    # var x = 0; ... と宣言しておいて、後から x = <式> / <式>; と代入する形。
+    # 宣言行には割り算が無いので decl では拾えないが、変数の型は var で決まっており小数に化ける
+    # （BUG-0421・入金差額の内税分解が 454.5454… として仕訳に載った）
+    zero_decl = _re.compile(r"\bvar\s+(\w+)\s*=\s*-?\d+\s*;")
+    assign = _re.compile(r"(?:^|[;{}])\s*(\w+)\s*=\s*([^;=<>!+\-*/][^;=]*?/[^;]*?);", _re.M)
+
+    def _plain_arithmetic(rhs):
+        """関数呼び出し・キャスト・文字列を含まない素の四則演算か。
+        `(100 + pct)` のような**grouping だけの括弧は対象に含める**——
+        BUG-0421 の `diff * pct / (100 + pct)` は「括弧がある」だけの理由で素通りしていた
+        （内税分解の定番の形なので、取りこぼすと痛い）"""
+        if '"' in rhs:
+            return False
+        if _re.search(r"[\w\]]\s*\(", rhs):   # 識別子の直後の ( ＝ メソッド呼び出し
+            return False
+        if _re.search(r"\(\s*(?:int|long|short|byte|decimal|double|float|[A-Z]\w*)\s*\)", rhs):
+            return False   # 明示キャスト（(int)x など）は切り捨てが保証されるので対象外
+        return True
+
+    _tail = ("CLB のスクリプトは**整数どうしでも小数になる**ことがあり、"
+             "切り捨て前提の計算（時間・年数・按分）が静かに狂う（BUG-0410／BUG-0421・実測）。"
+             "切り捨てたいなら `int {} = ...;` と型で受ける")
+
     for mod in idx.modules.values():
         cs = mod["cs"]
         if not cs:
             continue
-        for m in pat.finditer(cs):
+        for m in decl.finditer(cs):
             rhs = m.group(2)
-            if "(" in rhs or ")" in rhs:      # 関数呼び出し・キャストは対象外（意図が読めない）
-                continue
-            if '"' in rhs:
+            if not _plain_arithmetic(rhs):
                 continue
             add("CLB-040", SEV_ERROR, mod["cs_path"], line_of(cs, m.start()),
-                "`var {} = {};` — CLB のスクリプトは**整数どうしでも小数になる**ことがあり、"
-                "切り捨て前提の計算（時間・年数・按分）が静かに狂う（BUG-0410・実測）。"
-                "切り捨てたいなら `int {} = ...;` と型で受ける".format(m.group(1), rhs.strip(), m.group(1)))
+                ("`var {} = {};` — " + _tail).format(m.group(1), rhs.strip(), m.group(1)))
+        varnames = set(zero_decl.findall(cs))
+        for m in assign.finditer(cs):
+            name = m.group(1)
+            if name not in varnames:
+                continue
+            rhs = m.group(2)
+            if not _plain_arithmetic(rhs):
+                continue
+            add("CLB-040", SEV_ERROR, mod["cs_path"], line_of(cs, m.start()),
+                ("`{} = {};` — 宣言が `var {} = 0;` なので小数を受け取れてしまう。" + _tail)
+                .format(name, rhs.strip(), name, name))
 
 
 def rule_041(idx, add):

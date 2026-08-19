@@ -424,6 +424,7 @@ void Run_OnClick()
         je.FiscalYearRef.Value = typedFy.Id.Value;
         je.SourceType.Value = "ses";
         je.SourceId.Value = invoiceId;
+        je.PartnerRef.Value = p.PartnerRef.Value;  // 電帳法の検索要件（取引先で探せること・BUG-0003）
         je.Lines.AddRows(lineCount);
         var idx = 0;
         foreach (var jlRow in je.Lines.Rows)

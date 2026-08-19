@@ -40,6 +40,13 @@ void OnAfterInitialization()
     UpdateAccountingButtons();
 }
 
+// 仕訳に載せる取引先。**支払先が取引先のときだけ**（従業員への精算は取引先ではない・BUG-0003）
+object PayeePartnerForJournal()
+{
+    if (PayeeType.Value != "partner") { return null; }
+    return PayeePartner.Value;
+}
+
 // 支払先区分に応じて「精算対象者」か「支払取引先」の片方だけ出す
 void UpdateVisibility()
 {
@@ -349,6 +356,7 @@ void GenerateJournal_OnClick()
     je.FiscalYearRef.Value = typedFy.Id.Value;
     je.SourceType.Value = "expense";
     je.SourceId.Value = this.Id.Value;
+    je.PartnerRef.Value = PayeePartnerForJournal();  // 電帳法の検索要件（取引先で探せること・BUG-0003）
     je.Lines.AddRows(dcList.Count);
     var idx = -1;
     foreach (var row in je.Lines.Rows)
@@ -501,6 +509,7 @@ void Settle_OnClick()
     je.FiscalYearRef.Value = typedFy.Id.Value;
     je.SourceType.Value = "expense_payment";
     je.SourceId.Value = this.Id.Value;
+    je.PartnerRef.Value = PayeePartnerForJournal();  // 電帳法の検索要件（取引先で探せること・BUG-0003）
     je.Lines.AddRows(2);
     var idx = 0;
     foreach (var row in je.Lines.Rows)

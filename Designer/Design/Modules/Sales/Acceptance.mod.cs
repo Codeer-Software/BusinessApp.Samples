@@ -739,6 +739,7 @@ void Confirm_OnClick()
     je.FiscalYearRef.Value = typedFy.Id.Value;
     je.SourceType.Value = "acceptance";
     je.SourceId.Value = this.Id.Value;
+    je.PartnerRef.Value = typedSo.PartnerRef.Value;  // 電帳法の検索要件（取引先で探せること・BUG-0003）
     je.Lines.AddRows(dcList.Count);
     var idx = 0;
     foreach (var row in je.Lines.Rows)

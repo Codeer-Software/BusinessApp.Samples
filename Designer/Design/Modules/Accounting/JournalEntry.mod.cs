@@ -1144,6 +1144,7 @@ void Reverse_OnClick()
     je.FiscalYearRef.Value = ((FiscalYear)fy).Id.Value;
     je.SourceType.Value = "reversal";
     je.SourceId.Value = this.Id.Value;
+    je.PartnerRef.Value = PartnerRef.Value;  // 電帳法の検索要件（取引先で探せること・BUG-0003）（元伝票から引き継ぐ）
     je.Lines.AddRows(srcLines.Count);
 
     var i = 0;

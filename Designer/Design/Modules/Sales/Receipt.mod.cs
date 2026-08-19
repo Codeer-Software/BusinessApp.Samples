@@ -449,8 +449,13 @@ void Confirm_OnClick()
     // 「振込手数料等」の差額自動処理は銀行振込のみ（現金・相殺の不足額は振込手数料ではない・ADR-0035）
     var useDiff = (Method.Value == "bank" && diff >= 1 && diff <= diffMax && feeAccount != null);
 
-    // 差額の内税分解（支払手数料の既定税区分が課税仕入のとき）
-    var diffTax = 0;
+    // 差額の内税分解（支払手数料の既定税区分が課税仕入のとき）。
+    // **`int` で受ける**（CLB-040）。`var` のままだと動的値との演算で小数に化け、
+    // 支払手数料 454.5454… ／ 仮払消費税 45.4545… が仕訳金額として保存される。
+    // 貸借は合う（合計は差額のまま）ので `ValidateBalanced()` も designcheck も素通りし、
+    // 総勘定元帳と消費税集計表にだけ小数円が現れる。
+    // 差額が 11 の倍数（550 円など典型的な振込手数料）のときは偶然割り切れるので、テストで踏みにくい
+    int diffTax = 0;
     object diffTaxCatId = null;
     if (useDiff)
     {
@@ -500,6 +505,7 @@ void Confirm_OnClick()
     je.FiscalYearRef.Value = typedFy.Id.Value;
     je.SourceType.Value = "receipt";
     je.SourceId.Value = this.Id.Value;
+    je.PartnerRef.Value = iv.PartnerRef.Value;  // 電帳法の検索要件（取引先で探せること・BUG-0003）
     je.Lines.AddRows(lineCount);
     var idx = 0;
     foreach (var row in je.Lines.Rows)
@@ -1019,6 +1025,7 @@ void ConfirmMulti()
     je.FiscalYearRef.Value = typedFy.Id.Value;
     je.SourceType.Value = "receipt";
     je.SourceId.Value = this.Id.Value;
+    je.PartnerRef.Value = PartnerOfThisReceipt();  // 電帳法の検索要件（取引先で探せること・BUG-0003）。合算入金は全明細が同一取引先
     je.Lines.AddRows(dcList.Count);
     var idx = 0;
     foreach (var lr in je.Lines.Rows)
