@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/Tools/">
+    <Project Path="BusinessApp/BusinessApp.Designer/BusinessApp.Designer.csproj" />
+    <Project Path="BusinessApp/BusinessApp.LicenseRegisterCli/BusinessApp.LicenseRegisterCli.csproj" />
+  </Folder>
+  <Folder Name="/WebApp/">
+    <Project Path="BusinessApp/BusinessApp.Client.Shared/BusinessApp.Client.Shared.csproj" />
+    <Project Path="BusinessApp/BusinessApp.Client/BusinessApp.Client.csproj" />
+    <Project Path="BusinessApp/BusinessApp.Server/BusinessApp.Server.csproj" />
+  </Folder>
+</Solution>
