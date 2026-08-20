@@ -1,0 +1,12 @@
+{
+  "DataSources": [
+    {
+      "Name": "BusinessAppSQLite",
+      "DataSourceType": "SQLite",
+      "AllowCliSqlAccess": true
+    }
+  ],
+  "FileStorageNames": [
+    "Local"
+  ]
+}
