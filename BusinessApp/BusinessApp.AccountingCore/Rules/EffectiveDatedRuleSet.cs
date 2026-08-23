@@ -1,17 +1,7 @@
 namespace BusinessApp.AccountingCore.Rules;
 
-using BusinessApp.AccountingCore.Primitives;
-
-/// <summary>有効期間を持つ制度ルール。</summary>
-public interface IEffectiveDatedRule
-{
-    EffectivePeriod Period { get; }
-
-    RuleVersion Version { get; }
-}
-
 /// <summary>
-/// 有効期間つき制度ルールの集合。税率・控除割合・耐用年数などをこの形で外から渡す。
+/// 有効期間つき制度ルールの集合。
 /// </summary>
 /// <remarks>
 /// <para><b>ルールの値そのものは AccountingCore に持たない。</b> 制度値をコードに書かないという規律
@@ -40,6 +30,7 @@ public sealed class EffectiveDatedRuleSet<TRule>
         }
     }
 
+    /// <summary>有効期間の早い順に並んだルール。</summary>
     public IReadOnlyList<TRule> Rules => _rules;
 
     /// <summary>指定日に有効なルールを返す。どの期間にも当たらなければ null。</summary>

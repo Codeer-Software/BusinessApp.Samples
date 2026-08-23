@@ -77,7 +77,17 @@ public static class JournalEntryValidator
             return;
         }
 
-        if (calendar.FindFiscalYear(period.FiscalYearId) is { Status: PeriodStatus.Closed } fiscalYear)
+        var fiscalYear = calendar.FindFiscalYear(period.FiscalYearId);
+        if (fiscalYear is null)
+        {
+            // 期間はあるのに年度が無い状態。マスタが壊れているので、素通しせず必ず弾く。
+            violations.Add(new Violation(
+                ViolationCodes.PeriodNotFound,
+                $"会計期間 {period.Period} が属する会計年度 {period.FiscalYearId} がない。"));
+            return;
+        }
+
+        if (fiscalYear.Status == PeriodStatus.Closed)
         {
             violations.Add(new Violation(
                 ViolationCodes.PeriodClosed,

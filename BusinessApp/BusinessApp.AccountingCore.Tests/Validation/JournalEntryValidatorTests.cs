@@ -1,8 +1,9 @@
-namespace BusinessApp.AccountingCore.Tests;
+namespace BusinessApp.AccountingCore.Tests.Validation;
 
 using BusinessApp.AccountingCore.Calendar;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Masters;
+using BusinessApp.AccountingCore.Primitives;
 using BusinessApp.AccountingCore.Tests.Fixtures;
 using BusinessApp.AccountingCore.Validation;
 
@@ -14,9 +15,7 @@ public class JournalEntryValidatorTests
     [Fact]
     public void 貸借が一致した仕訳は計上できる()
     {
-        var violations = Validate(AccountingFixture.CashSale(Ordinary));
-
-        Assert.Empty(violations);
+        Assert.Empty(Validate(AccountingFixture.CashSale(Ordinary)));
     }
 
     [Fact]
@@ -34,15 +33,17 @@ public class JournalEntryValidatorTests
     [Fact]
     public void 明細のない仕訳は計上できない()
     {
-        AssertViolation(ViolationCodes.NoLines, Validate(AccountingFixture.Entry(Ordinary)));
+        var violations = Validate(AccountingFixture.Entry(Ordinary));
+
+        AssertViolation(ViolationCodes.NoLines, violations);
+        // 明細が無い時点で以降の明細検査は無意味なので、貸借一致の違反は重ねて出さない。
+        Assert.DoesNotContain(violations, v => v.Code == ViolationCodes.Unbalanced);
     }
 
     [Fact]
     public void 会計期間のない日付には計上できない()
     {
-        var entry = AccountingFixture.CashSale(new DateOnly(2027, 4, 1));
-
-        AssertViolation(ViolationCodes.PeriodNotFound, Validate(entry));
+        AssertViolation(ViolationCodes.PeriodNotFound, Validate(AccountingFixture.CashSale(new DateOnly(2027, 4, 1))));
     }
 
     [Fact]
@@ -64,6 +65,26 @@ public class JournalEntryValidatorTests
     }
 
     [Fact]
+    public void 期間が属する会計年度がなければ計上できない()
+    {
+        // 期間はあるのに年度が無いのはマスタが壊れた状態。
+        // FiscalCalendar.IsPostable と判断が食い違わないことを固定する。
+        var orphan = new AccountingPeriod(
+            "ORPHAN",
+            "FY99",
+            new EffectivePeriod(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 31)),
+            PeriodStatus.Open);
+        var context = new PostingContext(
+            new AccountCatalog(AccountingFixture.Accounts),
+            new FiscalCalendar([], [orphan]));
+
+        var violations = JournalEntryValidator.ValidateForPosting(AccountingFixture.CashSale(Ordinary), context);
+
+        Assert.Contains(violations, v => v.Code == ViolationCodes.PeriodNotFound);
+        Assert.False(context.Calendar.IsPostable(Ordinary));
+    }
+
+    [Fact]
     public void 損益科目の明細に部門がなければ計上できない()
     {
         var entry = AccountingFixture.Entry(
@@ -71,8 +92,7 @@ public class JournalEntryValidatorTests
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 100_000),
             AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Sales, 100_000));
 
-        var violation = AssertViolation(ViolationCodes.DepartmentMissing, Validate(entry));
-        Assert.Equal(2, violation.LineNo);
+        Assert.Equal(2, AssertViolation(ViolationCodes.DepartmentMissing, Validate(entry)).LineNo);
     }
 
     [Fact]
@@ -128,7 +148,11 @@ public class JournalEntryValidatorTests
             AccountingFixture.Line(1, DebitCredit.Debit, "9999", 1_000),
             AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Cash, 1_000));
 
-        AssertViolation(ViolationCodes.AccountUnknown, Validate(entry));
+        var violations = Validate(entry);
+
+        AssertViolation(ViolationCodes.AccountUnknown, violations);
+        // 科目が引けない行に「部門がない」まで重ねて出さない。
+        Assert.DoesNotContain(violations, v => v.Code == ViolationCodes.DepartmentMissing);
     }
 
     [Fact]
@@ -139,7 +163,7 @@ public class JournalEntryValidatorTests
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
             AccountingFixture.Line(1, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
 
-        AssertViolation(ViolationCodes.DuplicateLineNo, Validate(entry));
+        Assert.Equal(1, AssertViolation(ViolationCodes.DuplicateLineNo, Validate(entry)).LineNo);
     }
 
     [Theory]
@@ -165,7 +189,7 @@ public class JournalEntryValidatorTests
     }
 
     [Fact]
-    public void 消費税行は伝票内の本体行を指していなければならない()
+    public void 消費税行は伝票内の行を指していなければならない()
     {
         var entry = AccountingFixture.Entry(
             Ordinary,
@@ -177,6 +201,57 @@ public class JournalEntryValidatorTests
             });
 
         AssertViolation(ViolationCodes.TaxLineParentInvalid, Validate(entry));
+    }
+
+    [Fact]
+    public void 消費税行は親行の指定を省略できない()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000) with
+            {
+                IsTaxLine = true,
+            });
+
+        AssertViolation(ViolationCodes.TaxLineParentInvalid, Validate(entry));
+    }
+
+    [Fact]
+    public void 消費税行が別の消費税行を親に指すことはできない()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 100) with
+            {
+                IsTaxLine = true,
+                ParentLineNo = 1,
+            },
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_100) with
+            {
+                IsTaxLine = true,
+                ParentLineNo = 2,
+            });
+
+        Assert.Equal(3, AssertViolation(ViolationCodes.TaxLineParentInvalid, Validate(entry)).LineNo);
+    }
+
+    [Fact]
+    public void 親行を正しく指す消費税行は計上できる()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 1_000,
+                department: AccountingFixture.SalesDepartment),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 100) with
+            {
+                IsTaxLine = true,
+                ParentLineNo = 1,
+            },
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_100));
+
+        Assert.Empty(Validate(entry));
     }
 
     [Fact]
@@ -203,6 +278,15 @@ public class JournalEntryValidatorTests
         Assert.Contains(ViolationCodes.Unbalanced, codes);
         Assert.Contains(ViolationCodes.PeriodNotFound, codes);
         Assert.Contains(ViolationCodes.DepartmentMissing, codes);
+    }
+
+    [Fact]
+    public void nullでは検証できない()
+    {
+        Assert.Throws<ArgumentNullException>(
+            () => JournalEntryValidator.ValidateForPosting(null!, AccountingFixture.Context()));
+        Assert.Throws<ArgumentNullException>(
+            () => JournalEntryValidator.ValidateForPosting(AccountingFixture.CashSale(Ordinary), null!));
     }
 
     private static IReadOnlyList<Violation> Validate(JournalEntry entry)

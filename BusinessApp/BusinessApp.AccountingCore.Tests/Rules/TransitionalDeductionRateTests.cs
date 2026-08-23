@@ -1,4 +1,4 @@
-namespace BusinessApp.AccountingCore.Tests;
+namespace BusinessApp.AccountingCore.Tests.Rules;
 
 using BusinessApp.AccountingCore.Primitives;
 using BusinessApp.AccountingCore.Rules;
@@ -45,11 +45,11 @@ public class TransitionalDeductionRateTests
     }
 
     /// <summary>
-    /// 国税庁 Q&amp;A 問 113 の設例。商品仕入れは引渡日で判定するため、
-    /// <b>1 契約でも日付をまたげば割合が分かれる</b>（docs/research §1-2）。
+    /// 商品仕入れは引渡日で判定するため、<b>1 契約でも日付をまたげば割合が分かれる</b>
+    /// （docs/research §1-2 の設例）。
     /// </summary>
     [Fact]
-    public void 同一契約でも引渡日が期をまたげば割合が分かれる()
+    public void 同一契約でも引渡日が切替をまたげば割合が分かれる()
     {
         var before = Rules.ResolveAt(new DateOnly(2026, 9, 30));
         var after = Rules.ResolveAt(new DateOnly(2026, 10, 1));
@@ -82,6 +82,15 @@ public class TransitionalDeductionRateTests
         Assert.Equal(Yen.From(expected), rate.Apply(Yen.From(7_777), mode));
     }
 
+    [Fact]
+    public void 経過措置の終了後は控除額が零になる()
+    {
+        var rate = Rules.ResolveAt(new DateOnly(2031, 10, 1));
+
+        Assert.NotNull(rate);
+        Assert.Equal(Yen.Zero, rate.Apply(Yen.From(7_777), RoundingMode.Truncate));
+    }
+
     /// <summary>
     /// I-16。令和 8 年度改正で 2026-10-01 以後の割合は 50%→70% に変わったが、
     /// <b>版で引けば改正前の割合が再現できる</b>。過去の仕訳を再計算しないための土台。
@@ -97,20 +106,15 @@ public class TransitionalDeductionRateTests
     }
 
     [Fact]
-    public void 有効期間が重なる制度ルールは受け付けない()
+    public void 制度ルールは有効期間の隙間なく定義されている()
     {
-        var overlapping = new[]
+        // 2023-10-01 から終期なしまで、1 日も欠けずに割合が引けること。
+        var rules = Rules.Rules;
+        foreach (var (earlier, later) in rules.Zip(rules.Skip(1)))
         {
-            new TransitionalDeductionRate(
-                new EffectivePeriod(new DateOnly(2023, 10, 1), new DateOnly(2026, 9, 30)),
-                0.80m,
-                new RuleVersion("a")),
-            new TransitionalDeductionRate(
-                new EffectivePeriod(new DateOnly(2026, 9, 30), new DateOnly(2028, 9, 30)),
-                0.70m,
-                new RuleVersion("b")),
-        };
+            Assert.Equal(earlier.Period.To!.Value.AddDays(1), later.Period.From);
+        }
 
-        Assert.Throws<ArgumentException>(() => new EffectiveDatedRuleSet<TransitionalDeductionRate>(overlapping));
+        Assert.Null(rules[^1].Period.To);
     }
 }

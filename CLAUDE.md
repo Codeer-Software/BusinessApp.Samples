@@ -132,12 +132,13 @@ CLB スクリプト（`*.mod.cs`）はツリーウォーク型インタプリタ
 | 対象                  | 手段                                                                     |
 | --------------------- | ------------------------------------------------------------------------ |
 | デザイン読込妥当性    | `designcheck` CLI。`findingCount` が 0 になるまで直す                    |
-| C# ロジック           | `dotnet test`。**会計ロジックは常に緑**が前提                            |
+| C# ロジック           | `dotnet test`。テスト・カバレッジ 100%・配置規約を一度に検査（ADR-0012） |
 | DB（DDL・投入・確認） | `sql` CLI（自前で DB 接続しない）                                        |
 | 稼働アプリへの反映    | `pwsh -NoProfile -File tools/clb/deploy.ps1` → FileWatcher が hot-reload |
 | 画面・挙動            | サーバ起動（`http://localhost:5085`）→ ブラウザで操作・スクショ          |
 | ドキュメント規約      | `python tools/docs/lint_docs.py`                                         |
 | **公開前チェック**    | `python tools/docs/lint_secrets.py`（**コミット前に必ず流す**）          |
+| 上記の自動実行        | `git config core.hooksPath tools/git-hooks`（clone 後に 1 回。ADR-0012） |
 
 `designcheck` の緑は「読み込める」までの保証でしかない。計算・状態遷移・見た目は実機で確認する。
 **`*.mod.cs` の変更と DB スキーマの変更は deploy だけでは反映されない。サーバ再起動が必要。**
