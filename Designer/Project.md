@@ -95,4 +95,8 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
   一覧の削除ボタンは PageFrame の `Link.ListPageDesign.ListFieldDesign.CanDelete` でも切る。
 - 2026-08-24: 一覧の既定の並び順は PageFrame の `Link...SearchCondition.SortConditions` で指定する。
   指定しないと**降順で出る**（マスタでは使いものにならない）。
+- 2026-08-24: **LinkField の候補ダイアログは、一覧画面とは別に絞り込みと並び順を持つ。**
+  フィールド側の `SearchCondition` に `SortConditions` と `Condition` を設定する。
+  マスタを指す LinkField は `IsActive.Value = true` で絞る（`is_active` は「入力候補に出すか」の意味。ADR-0006）。
+  設定しないと**無効にした科目が候補に出てしまい、降順で並ぶ**。
   `designcheck` は findings 0。DB には `app_users` のみ存在し、`temporary_files` は未作成
