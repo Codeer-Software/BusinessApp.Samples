@@ -84,4 +84,15 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
   この形なら SQL ファイルも結果ファイルも作らずに済む（CLAUDE.md §3-2-1）。
 - 2026-08-24: デザイナ exe は WinExe なので、PowerShell の `&` で呼ぶと**待たずに戻る**。
   終了コードを見るには `Start-Process -Wait -PassThru` か `Process.WaitForExit()` を使う。
+- 2026-08-24: **デザイン enum は複数形で名づける**（`TaxationTypes` / `RateKinds`）。enum 名は
+  モジュール・PageFrame と同じ型名空間に入るため、単数形だと同名のフィールドと衝突し、
+  `designcheck` に「スクリプトではフィールド名が優先されます」と指摘される。
+- 2026-08-24: **予約名フィールドは規定のデザイン型で作る。** `OptimisticLocking` は
+  `OptimisticLockingFieldDesign` ＋ `IncrementVersion: true`（SQLite）。型が違うと
+  designcheck 緑・HTTP 200 のまま更新だけが失敗する（qa/01 F-09）。
+  `creator` / `updater` 列は型が未決なので、当面モジュールに持たせない（フェーズ 6 の監査ログで決める）。
+- 2026-08-24: マスタは**物理削除させない**（`CanDelete: false`。ADR-0006「削除ではなく無効化」）。
+  一覧の削除ボタンは PageFrame の `Link.ListPageDesign.ListFieldDesign.CanDelete` でも切る。
+- 2026-08-24: 一覧の既定の並び順は PageFrame の `Link...SearchCondition.SortConditions` で指定する。
+  指定しないと**降順で出る**（マスタでは使いものにならない）。
   `designcheck` は findings 0。DB には `app_users` のみ存在し、`temporary_files` は未作成

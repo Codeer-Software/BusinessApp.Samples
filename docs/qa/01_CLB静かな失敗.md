@@ -105,6 +105,8 @@ CLB には**エラーにも `designcheck` の指摘にもならず、静かに�
 | F-06 | 追加はできるのに直せない・消せない | `DataWriteCondition` は画面側で評価される。条件が参照する列がレイアウトにも `DataOnlyFields` にも無いと null になり、常に偽になる |
 | F-07 | 画面のインスタンスの値が黙って落ちる | 別インスタンスで `Submit()` した後は、画面のインスタンスに値を入れ直してから表示を組み直す |
 | F-08 | `Submit()` の失敗に気づけない | 戻り値は `bool?`（`null`=送信なし / `false`=失敗 / `true`=成功）。**必ず検査**して失敗を通知する |
+| F-09 | 一覧も詳細も正しく出るのに、更新すると必ず「更新に失敗しました」。`designcheck` は緑、`POST /api/module_data` は 200、サーバログにも何も出ない | **予約名フィールドは専用のデザイン型でなければならない**（2026-08-24 実測 1.3.20）。`OptimisticLocking` を `NumberFieldDesign`、`Creator` / `Updater` を `NumberFieldDesign` にしていたのが原因。`OptimisticLocking` は `OptimisticLockingFieldDesign` ＋ **SQLite では `IncrementVersion: true`**、`Creator` / `Updater` は `TextFieldDesign` にする |
+| F-10 | 新規作成したマスタが最初から無効になり、入力候補に出ない | **Boolean の初期値は DB の `DEFAULT` を見ない。**画面は必ず false 始まりになる（2026-08-24 実測 1.3.20）。`DetailLayout.OnAfterInitialization` で `IsNewData` ガードを付けて代入する。新規判定は `Id.Value == null` ではなく `IsNewData` |
 
 ## G. ブラウザ自動操作（アプリの不具合ではない）
 
@@ -127,6 +129,12 @@ CLB には**エラーにも `designcheck` の指摘にもならず、静かに�
 | H-04 | `DbTable` にビューを指定するなら `INSTEAD OF INSERT` / `INSTEAD OF UPDATE` トリガーが要る |
 | H-05 | スキーマ変更後は**サーバ再起動が必須**（列定義が static にキャッシュされる） |
 | H-06 | `ExecuteSqlField` の `@プレースホルダ` は**フィールド名ではなく DB 列名**で解決される |
+
+## J. デザイン enum
+
+| # | 症状 | ルール |
+|---|---|---|
+| J-01 | `designcheck` が「列挙型名がモジュールのフィールド名と重複しています。スクリプトではフィールド名が優先されます」と報告する | **デザイン enum は複数形で名づける**（`TaxationTypes` / `RateKinds`）。enum 名はプロジェクト全体で 1 つの型名空間に入り、単数形だと同名のフィールドと必ず衝突する（2026-08-24 実測 1.3.20） |
 
 ## I. その他
 

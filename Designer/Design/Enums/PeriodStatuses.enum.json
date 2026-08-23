@@ -1,0 +1,16 @@
+{
+  "Name": "PeriodStatuses",
+  "ValueType": "String",
+  "Members": [
+    {
+      "Name": "Open",
+      "Value": "open",
+      "DisplayText": "未締め"
+    },
+    {
+      "Name": "Closed",
+      "Value": "closed",
+      "DisplayText": "締め済み"
+    }
+  ]
+}

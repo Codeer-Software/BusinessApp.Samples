@@ -1,0 +1,31 @@
+{
+  "Name": "AccountCategories",
+  "ValueType": "String",
+  "Members": [
+    {
+      "Name": "Asset",
+      "Value": "asset",
+      "DisplayText": "資産"
+    },
+    {
+      "Name": "Liability",
+      "Value": "liability",
+      "DisplayText": "負債"
+    },
+    {
+      "Name": "Equity",
+      "Value": "equity",
+      "DisplayText": "純資産"
+    },
+    {
+      "Name": "Revenue",
+      "Value": "revenue",
+      "DisplayText": "収益"
+    },
+    {
+      "Name": "Expense",
+      "Value": "expense",
+      "DisplayText": "費用"
+    }
+  ]
+}

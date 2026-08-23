@@ -1,0 +1,21 @@
+{
+  "Name": "RateKinds",
+  "ValueType": "String",
+  "Members": [
+    {
+      "Name": "Standard",
+      "Value": "standard",
+      "DisplayText": "標準税率"
+    },
+    {
+      "Name": "Reduced",
+      "Value": "reduced",
+      "DisplayText": "軽減税率"
+    },
+    {
+      "Name": "Legacy8",
+      "Value": "legacy_8",
+      "DisplayText": "旧税率8%"
+    }
+  ]
+}
