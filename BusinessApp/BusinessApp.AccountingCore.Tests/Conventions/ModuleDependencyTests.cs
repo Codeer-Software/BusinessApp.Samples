@@ -25,12 +25,13 @@ public class ModuleDependencyTests
         // 共有カーネル。どのモジュールにも依存しない。
         ["Shared"] = [],
 
-        // マスタ層。互いに依存しない。
+        // 制度の分類。勘定科目を知らない（税区分は科目に依存しない）。
+        ["ConsumptionTax"] = ["Shared"],
+
+        // マスタ層。勘定科目は「既定税区分」を持つので、向きは Accounts → ConsumptionTax。
+        // 逆向き（税区分が科目を知る）を許可しないために、この向きを明示しておく。
         ["Accounts"] = ["Shared"],
         ["Periods"] = ["Shared"],
-
-        // 制度ロジック。
-        ["ConsumptionTax"] = ["Shared", "Accounts"],
 
         // 記帳。マスタと制度の上に載る。
         ["Journals"] = ["Shared", "Accounts", "Periods", "ConsumptionTax"],
