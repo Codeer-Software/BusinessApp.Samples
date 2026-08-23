@@ -82,7 +82,7 @@ API キー等の秘密は .NET User Secrets に置く。設定ファイルにも
 
 | 場所 | 内容 |
 |---|---|
-| [`docs/README.md`](docs/README.md) | 企画・ペルソナ・機能スコープ・会計ドメイン設計・進捗台帳の索引 |
+| [`docs/README.md`](docs/README.md) | 企画・ペルソナ・機能スコープ・会計ドメイン設計・実装計画の索引 |
 | [`docs/decisions/`](docs/decisions/README.md) | 意思決定ログ（ADR） |
 | [`docs/research/`](docs/research/) | 制度リサーチ（出典 URL と確認日つき） |
 | [`Designer/Project.md`](Designer/Project.md) | CLB デザイン固有ルール（DB・命名・レイアウト・デプロイ） |
