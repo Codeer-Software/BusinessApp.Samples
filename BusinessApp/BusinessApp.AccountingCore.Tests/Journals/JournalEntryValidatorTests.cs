@@ -1,6 +1,7 @@
 namespace BusinessApp.AccountingCore.Tests.Journals;
 
 using BusinessApp.AccountingCore.Accounts;
+using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
@@ -69,8 +70,8 @@ public class JournalEntryValidatorTests
         // 期間はあるのに年度が無いのはマスタが壊れた状態。
         // FiscalCalendar.IsPostable と判断が食い違わないことを固定する。
         var orphan = new AccountingPeriod(
-            "ORPHAN",
-            "FY99",
+            new AccountingPeriodId(99),
+            new FiscalYearId(99),
             new EffectivePeriod(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 31)),
             PeriodStatus.Open);
         var context = new PostingContext(
@@ -106,6 +107,28 @@ public class JournalEntryValidatorTests
     }
 
     [Fact]
+    public void 法定記載事項を備えた明細は計上できる()
+    {
+        // 帳簿の法定記載事項（消法 30 ⑧）を明細が満たす形（docs/06 §8）。
+        // 取引先は識別子と名前の写しを両方持つ（docs/04 §4-2）。
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 10_000,
+                department: AccountingFixture.SalesDepartment) with
+            {
+                SubAccountId = AccountingFixture.PettyCash,
+                PartnerId = AccountingFixture.Partner,
+                PartnerNameSnapshot = "株式会社取引先",
+                ItemDescription = "事務用品",
+                TaxTreatment = TaxTreatment.TaxableSales,
+                TaxPoint = Ordinary,
+            },
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Cash, 10_000));
+
+        Assert.Empty(Validate(entry));
+    }
+
+    [Fact]
     public void 金額が零以下の明細は計上できない()
     {
         var entry = AccountingFixture.Entry(
@@ -121,7 +144,7 @@ public class JournalEntryValidatorTests
     {
         var entry = AccountingFixture.Entry(
             Ordinary,
-            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000, taxCategoryId: ""),
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000, taxCategoryId: default(TaxCategoryId)),
             AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
 
         AssertViolation(JournalViolationCodes.TaxCategoryMissing, Validate(entry));
@@ -144,7 +167,7 @@ public class JournalEntryValidatorTests
     {
         var entry = AccountingFixture.Entry(
             Ordinary,
-            AccountingFixture.Line(1, DebitCredit.Debit, "9999", 1_000),
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.UnknownAccount, 1_000),
             AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Cash, 1_000));
 
         var violations = Validate(entry);
@@ -181,7 +204,7 @@ public class JournalEntryValidatorTests
         var entry = AccountingFixture.CashSale(Ordinary) with
         {
             EntryType = EntryType.Reversal,
-            OriginalEntryId = "JE-0001",
+            OriginalEntryId = new JournalEntryId(1000),
         };
 
         Assert.Empty(Validate(entry));

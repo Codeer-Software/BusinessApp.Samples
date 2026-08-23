@@ -10,13 +10,13 @@ namespace BusinessApp.AccountingCore.Periods;
 public sealed class FiscalCalendar
 {
     private readonly IReadOnlyList<AccountingPeriod> _periods;
-    private readonly IReadOnlyDictionary<string, FiscalYear> _fiscalYearsById;
+    private readonly IReadOnlyDictionary<FiscalYearId, FiscalYear> _fiscalYearsById;
 
     public FiscalCalendar(IEnumerable<FiscalYear> fiscalYears, IEnumerable<AccountingPeriod> periods)
     {
         ArgumentNullException.ThrowIfNull(fiscalYears);
         ArgumentNullException.ThrowIfNull(periods);
-        _fiscalYearsById = fiscalYears.ToDictionary(y => y.Id, StringComparer.Ordinal);
+        _fiscalYearsById = fiscalYears.ToDictionary(y => y.Id);
         _periods = periods.OrderBy(p => p.Period.From).ToList();
 
         var overlapping = _periods
@@ -25,7 +25,7 @@ public sealed class FiscalCalendar
         if (overlapping.earlier is not null)
         {
             throw new ArgumentException(
-                $"会計期間が重複している: {overlapping.earlier.Id}（{overlapping.earlier.Period}）と {overlapping.later.Id}（{overlapping.later.Period}）",
+                $"会計期間が重複している: {overlapping.earlier.Id.Value}（{overlapping.earlier.Period}）と {overlapping.later.Id.Value}（{overlapping.later.Period}）",
                 nameof(periods));
         }
     }
@@ -34,8 +34,8 @@ public sealed class FiscalCalendar
     public AccountingPeriod? ResolvePeriod(DateOnly postingDate)
         => _periods.FirstOrDefault(p => p.Period.Includes(postingDate));
 
-    public FiscalYear? FindFiscalYear(string fiscalYearId)
-        => fiscalYearId is not null && _fiscalYearsById.TryGetValue(fiscalYearId, out var year) ? year : null;
+    public FiscalYear? FindFiscalYear(FiscalYearId fiscalYearId)
+        => _fiscalYearsById.TryGetValue(fiscalYearId, out var year) ? year : null;
 
     /// <summary>その日に仕訳を計上できるか。期間が無い・期間が締め済み・年度が締め済みのいずれでも計上できない。</summary>
     public bool IsPostable(DateOnly postingDate)

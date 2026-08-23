@@ -10,6 +10,6 @@ namespace BusinessApp.AccountingCore.Accounts;
 /// </remarks>
 public interface IAccountLookup
 {
-    /// <summary>科目 ID で引く。見つからなければ null。</summary>
-    AccountDefinition? Find(string accountId);
+    /// <summary>識別子で引く。見つからなければ null。</summary>
+    AccountDefinition? Find(AccountId accountId);
 }

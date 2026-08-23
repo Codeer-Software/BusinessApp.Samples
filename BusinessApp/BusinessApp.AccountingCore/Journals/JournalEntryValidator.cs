@@ -1,6 +1,7 @@
 namespace BusinessApp.AccountingCore.Journals;
 
 using BusinessApp.AccountingCore.Accounts;
+using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 
@@ -50,7 +51,7 @@ public static class JournalEntryValidator
             violations.Add(new Violation(JournalViolationCodes.DuplicateLineNo, "行番号が重複している。", lineNo));
         }
 
-        if (entry.EntryType.RequiresOriginalEntry() && string.IsNullOrEmpty(entry.OriginalEntryId))
+        if (entry.EntryType.RequiresOriginalEntry() && entry.OriginalEntryId is null)
         {
             violations.Add(new Violation(
                 JournalViolationCodes.OriginalEntryMissing,
@@ -109,7 +110,8 @@ public static class JournalEntryValidator
                     line.LineNo));
             }
 
-            if (string.IsNullOrEmpty(line.TaxCategoryId))
+            // 既定値のまま（未設定）の税区分を通さない。NULL と「対象外」を 2 通りで表さない（docs/06 §1）。
+            if (line.TaxCategoryId == default)
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.TaxCategoryMissing,
@@ -124,7 +126,7 @@ public static class JournalEntryValidator
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.AccountUnknown,
-                    $"勘定科目 {line.AccountId} がマスタにない。",
+                    $"勘定科目 {line.AccountId.Value} がマスタにない。",
                     line.LineNo));
                 continue;
             }
@@ -137,7 +139,7 @@ public static class JournalEntryValidator
                     line.LineNo));
             }
 
-            if (account.Category.IsProfitAndLoss() && string.IsNullOrEmpty(line.DepartmentId))
+            if (account.Category.IsProfitAndLoss() && line.DepartmentId is null)
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.DepartmentMissing,

@@ -29,12 +29,14 @@ public class ModuleDependencyTests
         ["ConsumptionTax"] = ["Shared"],
 
         // マスタ層。勘定科目は「既定税区分」を持つので、向きは Accounts → ConsumptionTax。
-        // 逆向き（税区分が科目を知る）を許可しないために、この向きを明示しておく。
-        ["Accounts"] = ["Shared"],
+        // 逆向き（税区分が科目を知る）は許可しない。
+        ["Accounts"] = ["Shared", "ConsumptionTax"],
+        ["Departments"] = ["Shared"],
+        ["Partners"] = ["Shared"],
         ["Periods"] = ["Shared"],
 
         // 記帳。マスタと制度の上に載る。
-        ["Journals"] = ["Shared", "Accounts", "Periods", "ConsumptionTax"],
+        ["Journals"] = ["Shared", "Accounts", "Departments", "Partners", "Periods", "ConsumptionTax"],
     };
 
     [Fact]

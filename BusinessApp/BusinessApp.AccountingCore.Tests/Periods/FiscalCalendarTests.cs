@@ -12,16 +12,16 @@ using BusinessApp.AccountingCore.Tests.Fixtures;
 public class FiscalCalendarTests
 {
     [Theory]
-    [InlineData("2026-04-01", "FY18-202604")]
-    [InlineData("2026-04-30", "FY18-202604")]
-    [InlineData("2026-05-01", "FY18-202605")]
-    [InlineData("2027-03-31", "FY18-202703")]
-    public void 月末日と月初日を取りこぼさない(string date, string expectedPeriodId)
+    [InlineData("2026-04-01", 1)]
+    [InlineData("2026-04-30", 1)]
+    [InlineData("2026-05-01", 2)]
+    [InlineData("2027-03-31", 12)]
+    public void 月末日と月初日を取りこぼさない(string date, long expectedPeriodId)
     {
         var period = AccountingFixture.Calendar().ResolvePeriod(DateOnly.Parse(date));
 
         Assert.NotNull(period);
-        Assert.Equal(expectedPeriodId, period.Id);
+        Assert.Equal(new AccountingPeriodId(expectedPeriodId), period.Id);
     }
 
     [Theory]
@@ -37,9 +37,9 @@ public class FiscalCalendarTests
     {
         var calendar = AccountingFixture.Calendar();
 
-        Assert.Equal("第 18 期（2026 年度）", calendar.FindFiscalYear(AccountingFixture.FiscalYearId)?.Label);
-        Assert.Null(calendar.FindFiscalYear("FY99"));
-        Assert.Null(calendar.FindFiscalYear(null!));
+        Assert.Equal("第 18 期（2026 年度）", calendar.FindFiscalYear(AccountingFixture.FiscalYear)?.Label);
+        Assert.Null(calendar.FindFiscalYear(new FiscalYearId(99)));
+        Assert.Null(calendar.FindFiscalYear(default));
     }
 
     [Fact]
@@ -75,8 +75,8 @@ public class FiscalCalendarTests
     public void 属する年度が存在しない期間には計上できない()
     {
         var orphan = new AccountingPeriod(
-            "ORPHAN",
-            "FY99",
+            new AccountingPeriodId(99),
+            new FiscalYearId(99),
             new EffectivePeriod(new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 30)),
             PeriodStatus.Open);
         var calendar = new FiscalCalendar([], [orphan]);
@@ -88,11 +88,11 @@ public class FiscalCalendarTests
     public void 重なる会計期間は受け付けない()
     {
         var april = new AccountingPeriod(
-            "A",
-            AccountingFixture.FiscalYearId,
+            new AccountingPeriodId(1),
+            AccountingFixture.FiscalYear,
             new EffectivePeriod(new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 30)),
             PeriodStatus.Open);
-        var overlapping = april with { Id = "B", Period = new EffectivePeriod(new DateOnly(2026, 4, 30), new DateOnly(2026, 5, 31)) };
+        var overlapping = april with { Id = new AccountingPeriodId(2), Period = new EffectivePeriod(new DateOnly(2026, 4, 30), new DateOnly(2026, 5, 31)) };
 
         Assert.Throws<ArgumentException>(() => new FiscalCalendar([], [april, overlapping]));
     }

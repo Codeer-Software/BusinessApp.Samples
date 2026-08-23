@@ -3,7 +3,8 @@ namespace BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>会計年度（docs/04 §7）。</summary>
-/// <param name="Id">会計年度 ID。</param>
+/// <param name="Id">会計年度の識別子。</param>
+/// <param name="Code">年度コード（例 "FY18"）。</param>
 /// <param name="Label">表示名（例「第 18 期（2026 年度）」）。</param>
 /// <param name="Period">年度の期間。</param>
 /// <param name="Status">締めの状態。</param>
@@ -12,7 +13,8 @@ using BusinessApp.AccountingCore.Shared;
 /// （法 8 ④・令 2）、年度の開始日と一致しない場合は警告する。
 /// </param>
 public sealed record FiscalYear(
-    string Id,
+    FiscalYearId Id,
+    string Code,
     string Label,
     EffectivePeriod Period,
     PeriodStatus Status,

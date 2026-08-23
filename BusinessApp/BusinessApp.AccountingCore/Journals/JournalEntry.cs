@@ -1,5 +1,7 @@
 namespace BusinessApp.AccountingCore.Journals;
 
+using BusinessApp.AccountingCore.Partners;
+using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
@@ -7,10 +9,16 @@ using BusinessApp.AccountingCore.Shared;
 /// </summary>
 public sealed record JournalEntry
 {
-    public required string Id { get; init; }
+    /// <summary>識別子。まだ保存していない伝票は null。</summary>
+    public JournalEntryId? Id { get; init; }
 
-    /// <summary>伝票番号。計上時に採番し、欠番を埋め直さず再利用もしない（I-17）。下書きでは null。</summary>
-    public string? EntryNo { get; init; }
+    /// <summary>属する会計年度。伝票番号の採番単位でもある。</summary>
+    public required FiscalYearId FiscalYearId { get; init; }
+
+    /// <summary>
+    /// 伝票番号。計上時に採番し、欠番を埋め直さず再利用もしない（I-17）。下書きでは null。
+    /// </summary>
+    public int? EntryNo { get; init; }
 
     /// <summary>取引日。帳簿の「取引年月日」であり、法定記載事項②。</summary>
     public required DateOnly TransactionDate { get; init; }
@@ -23,11 +31,11 @@ public sealed record JournalEntry
     public required EntryType EntryType { get; init; }
 
     /// <summary>原仕訳。訂正・取消では必須（I-06）。</summary>
-    public string? OriginalEntryId { get; init; }
+    public JournalEntryId? OriginalEntryId { get; init; }
 
     public string? Description { get; init; }
 
-    public string? PartnerId { get; init; }
+    public PartnerId? PartnerId { get; init; }
 
     /// <summary>投入元の部品名。手入力は null（docs/04 §10）。</summary>
     public string? SourceComponent { get; init; }

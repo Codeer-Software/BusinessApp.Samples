@@ -1,21 +1,31 @@
 namespace BusinessApp.AccountingCore.Tests.Fixtures;
 
 using BusinessApp.AccountingCore.Accounts;
+using BusinessApp.AccountingCore.ConsumptionTax;
+using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Journals;
+using BusinessApp.AccountingCore.Partners;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>検証テストの素材。第 18 期（2026-04-01〜2027-03-31）を月次で持つ。</summary>
 public static class AccountingFixture
 {
-    public const string FiscalYearId = "FY18";
-    public const string Cash = "1100";
-    public const string AccountsPayable = "2100";
-    public const string Sales = "4000";
-    public const string SuppliesExpense = "5200";
-    public const string RetiredExpense = "5900";
-    public const string SalesDepartment = "D01";
-    public const string TaxCategoryOutOfScope = "TC-OUT";
+    public static readonly FiscalYearId FiscalYear = new(18);
+
+    // 識別子（DB の主キー）と科目コードは別物である。
+    // 前者はシステムが採番し、後者は利用者が見る自然キー。
+    public static readonly AccountId Cash = new(1);
+    public static readonly AccountId AccountsPayable = new(2);
+    public static readonly AccountId Sales = new(3);
+    public static readonly AccountId SuppliesExpense = new(4);
+    public static readonly AccountId RetiredExpense = new(5);
+    public static readonly AccountId UnknownAccount = new(999);
+
+    public static readonly SubAccountId PettyCash = new(1);
+    public static readonly DepartmentId SalesDepartment = new(1);
+    public static readonly PartnerId Partner = new(1);
+    public static readonly TaxCategoryId OutOfScope = new(1);
 
     public static IReadOnlyList<AccountDefinition> Accounts { get; } =
     [
@@ -26,15 +36,18 @@ public static class AccountingFixture
         new(RetiredExpense, "5900", "廃止した費用科目", AccountCategory.Expense, IsActive: false),
     ];
 
-    public static PostingContext Context(PeriodStatus septemberStatus = PeriodStatus.Open,
+    public static PostingContext Context(
+        PeriodStatus septemberStatus = PeriodStatus.Open,
         PeriodStatus fiscalYearStatus = PeriodStatus.Open)
         => new(new AccountCatalog(Accounts), Calendar(septemberStatus, fiscalYearStatus));
 
-    public static FiscalCalendar Calendar(PeriodStatus septemberStatus = PeriodStatus.Open,
+    public static FiscalCalendar Calendar(
+        PeriodStatus septemberStatus = PeriodStatus.Open,
         PeriodStatus fiscalYearStatus = PeriodStatus.Open)
     {
         var fiscalYear = new FiscalYear(
-            FiscalYearId,
+            FiscalYear,
+            "FY18",
             "第 18 期（2026 年度）",
             new EffectivePeriod(new DateOnly(2026, 4, 1), new DateOnly(2027, 3, 31)),
             fiscalYearStatus,
@@ -45,7 +58,7 @@ public static class AccountingFixture
             var start = new DateOnly(2026, 4, 1).AddMonths(offset);
             var end = start.AddMonths(1).AddDays(-1);
             var status = start.Month == 9 ? septemberStatus : PeriodStatus.Open;
-            return new AccountingPeriod($"{FiscalYearId}-{start:yyyyMM}", FiscalYearId, new EffectivePeriod(start, end), status);
+            return new AccountingPeriod(new AccountingPeriodId(offset + 1), FiscalYear, new EffectivePeriod(start, end), status);
         });
 
         return new FiscalCalendar([fiscalYear], periods);
@@ -60,7 +73,8 @@ public static class AccountingFixture
     public static JournalEntry Entry(DateOnly date, params JournalLine[] lines)
         => new()
         {
-            Id = "JE-TEST",
+            Id = new JournalEntryId(1),
+            FiscalYearId = FiscalYear,
             TransactionDate = date,
             PostingDate = date,
             Status = EntryStatus.Draft,
@@ -72,10 +86,10 @@ public static class AccountingFixture
     public static JournalLine Line(
         int lineNo,
         DebitCredit side,
-        string accountId,
+        AccountId accountId,
         long amount,
-        string? department = null,
-        string taxCategoryId = TaxCategoryOutOfScope)
+        DepartmentId? department = null,
+        TaxCategoryId? taxCategoryId = null)
         => new()
         {
             LineNo = lineNo,
@@ -83,6 +97,6 @@ public static class AccountingFixture
             AccountId = accountId,
             DepartmentId = department,
             Amount = Yen.From(amount),
-            TaxCategoryId = taxCategoryId,
+            TaxCategoryId = taxCategoryId ?? OutOfScope,
         };
 }

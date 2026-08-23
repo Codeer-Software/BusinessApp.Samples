@@ -6,14 +6,14 @@ namespace BusinessApp.AccountingCore.Accounts;
 /// </summary>
 public sealed class AccountCatalog : IAccountLookup
 {
-    private readonly IReadOnlyDictionary<string, AccountDefinition> _byId;
+    private readonly IReadOnlyDictionary<AccountId, AccountDefinition> _byId;
 
     public AccountCatalog(IEnumerable<AccountDefinition> accounts)
     {
         ArgumentNullException.ThrowIfNull(accounts);
-        _byId = accounts.ToDictionary(a => a.Id, StringComparer.Ordinal);
+        _byId = accounts.ToDictionary(a => a.Id);
     }
 
-    public AccountDefinition? Find(string accountId)
-        => accountId is not null && _byId.TryGetValue(accountId, out var account) ? account : null;
+    public AccountDefinition? Find(AccountId accountId)
+        => _byId.TryGetValue(accountId, out var account) ? account : null;
 }
