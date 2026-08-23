@@ -26,10 +26,10 @@ related: [docs/README.md, docs/00_ドキュメント規約.md, Designer/CLAUDE.m
 
 ## 0-1. 呼称の約束（会話・文書とも厳守）
 
-| 語 | 指すもの |
-|---|---|
+| 語           | 指すもの                                                       |
+| ------------ | -------------------------------------------------------------- |
 | **ユーザー** | **このアプリの使用者**（経理担当・経理責任者・経営者・税理士） |
-| **開発者** | **このリポジトリでアプリを作る側**（依頼主と Claude 自身） |
+| **開発者**   | **このリポジトリでアプリを作る側**（依頼主と Claude 自身）     |
 
 依頼主を「ユーザー」と呼ばない。指すときは「開発者」と書く。
 
@@ -118,15 +118,15 @@ CLB スクリプト（`*.mod.cs`）はツリーウォーク型インタプリタ
 
 ## 4. 検証ループ
 
-| 対象 | 手段 |
-|---|---|
-| デザイン読込妥当性 | `designcheck` CLI。`findingCount` が 0 になるまで直す |
-| C# ロジック | `dotnet test`。**会計ロジックは常に緑**が前提 |
-| DB（DDL・投入・確認） | `sql` CLI（自前で DB 接続しない） |
-| 稼働アプリへの反映 | `pwsh -NoProfile -File tools/clb/deploy.ps1` → FileWatcher が hot-reload |
-| 画面・挙動 | サーバ起動（`http://localhost:5085`）→ ブラウザで操作・スクショ |
-| ドキュメント規約 | `python tools/docs/lint_docs.py` |
-| **公開前チェック** | `python tools/docs/lint_secrets.py`（**コミット前に必ず流す**） |
+| 対象                  | 手段                                                                     |
+| --------------------- | ------------------------------------------------------------------------ |
+| デザイン読込妥当性    | `designcheck` CLI。`findingCount` が 0 になるまで直す                    |
+| C# ロジック           | `dotnet test`。**会計ロジックは常に緑**が前提                            |
+| DB（DDL・投入・確認） | `sql` CLI（自前で DB 接続しない）                                        |
+| 稼働アプリへの反映    | `pwsh -NoProfile -File tools/clb/deploy.ps1` → FileWatcher が hot-reload |
+| 画面・挙動            | サーバ起動（`http://localhost:5085`）→ ブラウザで操作・スクショ          |
+| ドキュメント規約      | `python tools/docs/lint_docs.py`                                         |
+| **公開前チェック**    | `python tools/docs/lint_secrets.py`（**コミット前に必ず流す**）          |
 
 `designcheck` の緑は「読み込める」までの保証でしかない。計算・状態遷移・見た目は実機で確認する。
 **`*.mod.cs` の変更と DB スキーマの変更は deploy だけでは反映されない。サーバ再起動が必要。**
