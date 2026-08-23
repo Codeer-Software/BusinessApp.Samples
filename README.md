@@ -49,11 +49,13 @@ CLAUDE.md                   Claude Code 向けミッションブリーフ
 
 前提: Windows / .NET 8 SDK。デザイン編集まで行う場合は CLB デザイナ 1.3.20 も必要。
 
-1. **環境固有設定の生成** — 以下の `*.sample` を同名（`.sample` 抜き）でコピーし、
-   中のプレースホルダを実パスに置換する
-   - `BusinessApp/BusinessApp.Server/appsettings.Development.json`
-   - `Designer/Design/designer.settings.Development.json`
-   - `.claude/settings.local.json`（Claude Code を使う場合のみ。雛形は `.claude/settings.local.json.sample`）
+1. **環境固有設定の作成** — 次の 3 つは環境ごとに内容が異なるため Git 追跡外にしてある。
+   新しい環境では手で用意する
+   - `BusinessApp/BusinessApp.Server/appsettings.Development.json` — DB 接続文字列、
+     デザイン zip の配置先、ファイルストレージの場所（雛形は未整備）
+   - `Designer/Design/designer.settings.Development.json` — デザイナ CLI の接続先（雛形は未整備）
+   - `.claude/settings.local.json` — Claude Code を使う場合のみ。
+     雛形の `.claude/settings.local.json.sample` をコピーしてプレースホルダを置換する
 2. **DB 構築** — `Designer/ddl/*.sql` を番号順に適用する
 3. **デザインのデプロイ** — `pwsh -NoProfile -File tools/clb/deploy.ps1`
 4. **起動**

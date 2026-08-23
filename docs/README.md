@@ -82,6 +82,4 @@ related: [00_ドキュメント規約.md]
 
 ## 保留リスト
 
-- 2026-08-23 環境固有設定の雛形（`appsettings.Development.json.sample` /
-  `designer.settings.Development.json.sample`）が未作成。実体を読むと接続文字列が会話ログに載るため、
-  開発者の判断を待っている（未了）
+（なし）
