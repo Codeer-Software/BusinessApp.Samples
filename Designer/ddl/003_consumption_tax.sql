@@ -26,6 +26,15 @@ CREATE TABLE tax_categories (
                                     'taxable_sales', 'taxable_purchase',
                                     'non_taxable', 'export_exempt', 'out_of_scope')),
 
+    -- 税率の「種類」。**税率の数値はここに持たない。**
+    -- 利用者が選ぶのは「標準税率か軽減税率か」であって、その日に何 % かは制度ルールが決める。
+    -- 名前に "10%" と書いてしまうと、税率が変わった日にマスタ名が嘘になる。
+    --   standard  標準税率
+    --   reduced   軽減税率
+    --   legacy_8  旧税率 8%（経過措置等）
+    --   NULL      税率の概念がない区分（非課税・免税・対象外）
+    rate_kind                   TEXT CHECK (rate_kind IN ('standard', 'reduced', 'legacy_8')),
+
     -- 入力時の初期値としての用途区分。明細の値が正であり、
     -- 「値が入っていない行の穴埋め」には使わない（docs/06 §1）。
     default_tax_treatment       TEXT CHECK (default_tax_treatment IN (
@@ -41,5 +50,9 @@ CREATE TABLE tax_categories (
     -- 会計コアが認証部品なしでは立ち上がらなくなる。CLB の予約名として値は自動で入る。
     creator                     INTEGER,
     updater                     INTEGER,
-    optimistic_locking          INTEGER NOT NULL DEFAULT 0
+    optimistic_locking          INTEGER NOT NULL DEFAULT 0,
+
+    -- 課税区分と税率区分の整合。課税でない区分に税率区分は付かず、課税の区分には必ず付く。
+    CHECK (taxation_type IN ('taxable_sales', 'taxable_purchase') OR rate_kind IS NULL),
+    CHECK (taxation_type NOT IN ('taxable_sales', 'taxable_purchase') OR rate_kind IS NOT NULL)
 );

@@ -28,13 +28,32 @@ internal static class TestDatabase
         return connection;
     }
 
+    /// <summary>DDL に加えて初期データ（<c>Designer/seed/</c>）も適用した接続を返す。</summary>
+    public static SqliteConnection CreateWithSeed()
+    {
+        var connection = Create();
+        foreach (var file in SeedFiles())
+        {
+            Execute(connection, File.ReadAllText(file));
+        }
+
+        return connection;
+    }
+
     /// <summary>番号順の DDL ファイル。適用順は外部キーの向きで決まっている。</summary>
-    public static IReadOnlyList<string> DdlFiles()
-        => Directory.GetFiles(DdlDirectory, "*.sql")
+    public static IReadOnlyList<string> DdlFiles() => NumberedSqlFiles(DdlDirectory);
+
+    /// <summary>番号順の初期データファイル。</summary>
+    public static IReadOnlyList<string> SeedFiles() => NumberedSqlFiles(SeedDirectory);
+
+    private static IReadOnlyList<string> NumberedSqlFiles(string directory)
+        => Directory.GetFiles(directory, "*.sql")
             .OrderBy(Path.GetFileName, StringComparer.Ordinal)
             .ToList();
 
     public static string DdlDirectory { get; } = Path.Combine(RepositoryRoot(), "Designer", "ddl");
+
+    public static string SeedDirectory { get; } = Path.Combine(RepositoryRoot(), "Designer", "seed");
 
     public static void Execute(SqliteConnection connection, string sql)
     {
