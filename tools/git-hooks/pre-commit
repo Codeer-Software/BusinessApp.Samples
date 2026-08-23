@@ -19,7 +19,7 @@ python tools/docs/lint_secrets.py
 echo "[pre-commit] 2/3 ドキュメント規約の検査"
 python tools/docs/lint_docs.py
 
-echo "[pre-commit] 3/3 テストとカバレッジ"
-dotnet test BusinessApp/BusinessApp.AccountingCore.Tests/BusinessApp.AccountingCore.Tests.csproj --nologo -v q
+echo "[pre-commit] 3/3 テスト・カバレッジ・スキーマ"
+dotnet test BusinessApp.slnx --nologo -v q
 
 echo "[pre-commit] すべて緑"

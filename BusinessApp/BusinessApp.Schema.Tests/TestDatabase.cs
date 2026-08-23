@@ -1,0 +1,84 @@
+namespace BusinessApp.Schema.Tests;
+
+using Microsoft.Data.Sqlite;
+
+/// <summary>
+/// <c>Designer/ddl/</c> の DDL を使い捨ての SQLite に適用して返す。
+/// </summary>
+/// <remarks>
+/// <para><b>本物の DDL ファイルをそのまま流す。</b> テスト用に書き写したスキーマを使うと、
+/// 写し間違いを検出できないうえ、DDL を直したときに両方を直す必要が出て必ず腐る。</para>
+/// <para>接続ごとにインメモリ DB を作るので、テストは互いに干渉しない。
+/// SQLite の外部キーは<b>接続ごと</b>に有効化する必要があるため、接続文字列で明示する
+/// （実際の稼働 DB でも有効になっていることは確認済み）。</para>
+/// </remarks>
+internal static class TestDatabase
+{
+    /// <summary>DDL を適用済みの、開いた接続を返す。閉じるとデータは消える。</summary>
+    public static SqliteConnection Create()
+    {
+        var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        connection.Open();
+
+        foreach (var file in DdlFiles())
+        {
+            Execute(connection, File.ReadAllText(file));
+        }
+
+        return connection;
+    }
+
+    /// <summary>番号順の DDL ファイル。適用順は外部キーの向きで決まっている。</summary>
+    public static IReadOnlyList<string> DdlFiles()
+        => Directory.GetFiles(DdlDirectory, "*.sql")
+            .OrderBy(Path.GetFileName, StringComparer.Ordinal)
+            .ToList();
+
+    public static string DdlDirectory { get; } = Path.Combine(RepositoryRoot(), "Designer", "ddl");
+
+    public static void Execute(SqliteConnection connection, string sql)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
+    }
+
+    public static T ScalarOf<T>(SqliteConnection connection, string sql)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return (T)Convert.ChangeType(command.ExecuteScalar()!, typeof(T));
+    }
+
+    public static IReadOnlyList<string> Query(SqliteConnection connection, string sql)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        using var reader = command.ExecuteReader();
+
+        var values = new List<string>();
+        while (reader.Read())
+        {
+            values.Add(reader.IsDBNull(0) ? string.Empty : reader.GetValue(0).ToString()!);
+        }
+
+        return values;
+    }
+
+    /// <summary>
+    /// 出力ディレクトリから遡ってリポジトリのルート（<c>BusinessApp.slnx</c> のある場所）を探す。
+    /// 絶対パスをコードに書かない（CLAUDE.md §5）。
+    /// </summary>
+    private static string RepositoryRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            if (directory.EnumerateFiles("*.slnx").Any())
+            {
+                return directory.FullName;
+            }
+        }
+
+        throw new InvalidOperationException("リポジトリのルート（*.slnx のある場所）を特定できない。");
+    }
+}

@@ -21,8 +21,11 @@ CREATE TABLE fiscal_years (
 
     created_at                  DATETIME,
     updated_at                  DATETIME,
-    creator                     INTEGER REFERENCES app_users(id),
-    updater                     INTEGER REFERENCES app_users(id),
+    -- 認証部品（app_users）の識別子。**外部キーを張らない。**
+    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0006）、DB 制約で結ぶと
+    -- 会計コアが認証部品なしでは立ち上がらなくなる。CLB の予約名として値は自動で入る。
+    creator                     INTEGER,
+    updater                     INTEGER,
     optimistic_locking          INTEGER NOT NULL DEFAULT 0,
 
     CHECK (start_date <= end_date)
@@ -38,8 +41,11 @@ CREATE TABLE accounting_periods (
 
     created_at                  DATETIME,
     updated_at                  DATETIME,
-    creator                     INTEGER REFERENCES app_users(id),
-    updater                     INTEGER REFERENCES app_users(id),
+    -- 認証部品（app_users）の識別子。**外部キーを張らない。**
+    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0006）、DB 制約で結ぶと
+    -- 会計コアが認証部品なしでは立ち上がらなくなる。CLB の予約名として値は自動で入る。
+    creator                     INTEGER,
+    updater                     INTEGER,
     optimistic_locking          INTEGER NOT NULL DEFAULT 0,
 
     CHECK (start_date <= end_date),

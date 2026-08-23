@@ -78,4 +78,10 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
 ここには**このプロジェクト固有の実測**だけを書く。
 
 - 2026-08-23: 初期状態は `EmptyAuth` テンプレート（`AppUser` ＋ `Home` の 2 モジュール）。
+- 2026-08-24: `sql` CLI は **`--out` を省くと結果 JSON が標準出力に来る**。PowerShell から呼ぶときは
+  `ProcessStartInfo.ArgumentList` に 1 引数ずつ足して `RedirectStandardOutput` で受ける。
+  `Start-Process -ArgumentList` だと `--query` 内の `'...'` が壊れて `incomplete input` になる。
+  この形なら SQL ファイルも結果ファイルも作らずに済む（CLAUDE.md §3-2-1）。
+- 2026-08-24: デザイナ exe は WinExe なので、PowerShell の `&` で呼ぶと**待たずに戻る**。
+  終了コードを見るには `Start-Process -Wait -PassThru` か `Process.WaitForExit()` を使う。
   `designcheck` は findings 0。DB には `app_users` のみ存在し、`temporary_files` は未作成

@@ -3,7 +3,7 @@ title: ddl — スキーマ定義
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-08-23
+updated: 2026-08-24
 supersedes: []
 related: [../Project.md, ../../docs/04_会計ドメイン設計.md, ../../docs/decisions/0006-マスタの三層分類.md]
 ---
@@ -12,12 +12,25 @@ related: [../Project.md, ../../docs/04_会計ドメイン設計.md, ../../docs/d
 会計コアのテーブル定義。**適用は番号順**で、`sql` CLI から流す（自前で DB 接続しない）。
 
 ```powershell
-& "<DesignerExePath>" sql "<REPO_ROOT>/Designer/Design" `
-    --datasource BusinessAppSQLite --file "<REPO_ROOT>/Designer/ddl/001_organization.sql" --out "<出力先>"
+pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/001_organization.sql
 ```
 
-`DesignerExePath` は `../LocalEnvironment.md`（Git 追跡外）にある。
+`tools/clb/sql.ps1` がデザイナ exe のパスを `../LocalEnvironment.md`（Git 追跡外）から解決し、
+結果 JSON を標準出力に返す。**一時ファイルを作らない**（[CLAUDE.md](../../CLAUDE.md) §3-2-1）。
+
 **スキーマを変えたらサーバとデザイナの再起動が要る**（列定義が static にキャッシュされるため）。
+
+## テスト
+
+`BusinessApp.Schema.Tests` が**この DDL ファイルそのものを**インメモリ SQLite に適用して検査する。
+テスト用に書き写したスキーマを使わないので、写し間違いも「直したつもり」も起きない。
+
+```powershell
+dotnet test BusinessApp.slnx
+```
+
+検査するのは「スキーマの形」（主キー・日付列の宣言型・金額の型・論理削除列の不在・
+他部品のテーブルを参照しないこと）と「制約が実際に書き込みを拒むこと」の 2 種類である。
 
 ## ファイル
 
@@ -64,6 +77,16 @@ related: [../Project.md, ../../docs/04_会計ドメイン設計.md, ../../docs/d
 
 I-01（貸借一致）・I-03（有効な会計期間）・I-13（損益科目の部門）は
 **行をまたぐ判定**なので DB の `CHECK` では書けない。`JournalEntryValidator` が担保する。
+
+### 認証部品のテーブルに外部キーを張らない
+
+`creator` / `updater` は CLB の予約名で、値は認証部品のユーザー識別子だが、
+**`app_users` への外部キーは張らない。**
+
+ユーザーは会計コアの責務ではなく別部品のものであり（[ADR-0006](../../docs/decisions/0006-マスタの三層分類.md)）、
+DB 制約で結ぶと**会計コアが認証部品なしでは立ち上がらなくなる**。
+C# のモジュール依存（[ADR-0013](../../docs/decisions/0013-機能単位のモジュール分割と依存方向.md)）と
+同じ規律を DB にも当て、スキーマテストが「他部品のテーブルを参照していないこと」を検査する。
 
 ### 論理削除を使わない
 
