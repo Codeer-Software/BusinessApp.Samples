@@ -21,4 +21,10 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- C# の列挙型・DB の CHECK 制約・CLB のデザイン enum が一致していることを検査するために参照する。
+       AccountingCore 側は依存ゼロのまま（参照の向きはこちら → AccountingCore）。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\BusinessApp.AccountingCore\BusinessApp.AccountingCore.csproj" />
+  </ItemGroup>
+
 </Project>
