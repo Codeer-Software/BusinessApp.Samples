@@ -142,6 +142,8 @@ def submit_button(text: str) -> dict:
 
 def grid_column(layout: dict | None, width: int | None = None, vertical: str | None = None,
                 horizontal: str | None = None) -> dict:
+    # 揃えの有効値は Start / Center / End / Stretch。旧値 Left / Right は静かに Start に化ける
+    # （qa/01 A-01）。lint_design.py が検査する。
     column = {
         "IgnoreContentWidth": False,
         "Padding": {},
@@ -205,7 +207,7 @@ def build_detail_layout(spec: dict, labels: dict[str, str]) -> dict:
         rows.append(grid_row(columns))
 
     if spec.get("canUpdate", True) or spec.get("canCreate", True):
-        rows.append(grid_row([grid_column(field_layout("SubmitButton"), horizontal="Right")]))
+        rows.append(grid_row([grid_column(field_layout("SubmitButton"), horizontal="End")]))
     layout["Layout"]["Rows"] = rows
     return layout
 

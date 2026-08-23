@@ -21,6 +21,11 @@ related: [../docs/README.md]
 |---|---|
 | [`clb/deploy.ps1`](clb/deploy.ps1) | `Designer/Design` を zip 化して `LocalData/designs/App.zip` に配置する（デザイナ GUI「送信」の代替。FileWatcher が hot-reload） |
 | [`server/wait-server.ps1`](server/wait-server.ps1) | 開発サーバ（`http://localhost:5085`）の起動を待つ |
+| [`clb/sql.ps1`](clb/sql.ps1) | `sql` CLI のラッパ。結果 JSON を標準出力に返し、**一時ファイルを作らない** |
+| [`clb/designcheck.ps1`](clb/designcheck.ps1) | `designcheck` のラッパ。結果は固定パスに上書きし続ける |
+| [`clb/lint_design.py`](clb/lint_design.py) | **CLB デザインの静的検査**。`designcheck` が緑でも壊れるもの（[qa/01](../docs/qa/01_CLB静かな失敗.md)）のうち JSON とスクリプトで判るものを検出する |
+| [`clb/scaffold_module.py`](clb/scaffold_module.py) | モジュール定義の足場作り。生成後は `Design/Modules/*.mod.json` が正典 |
+| [`git-hooks/pre-commit`](git-hooks/pre-commit) | コミット前の検証。`git config core.hooksPath tools/git-hooks` で有効にする |
 | [`docs/lint_secrets.py`](docs/lint_secrets.py) | **公開リポジトリ向けの混入検査**。追跡ファイルに絶対パス・ユーザー名・接続文字列・API キー・秘密鍵が無いかを検査する |
 | [`docs/lint_secrets_allow.txt`](docs/lint_secrets_allow.txt) | 上記の誤検知抑制リスト |
 
@@ -39,6 +44,21 @@ pwsh -NoProfile -File tools/server/wait-server.ps1 -TimeoutSec 60
 # 公開前チェック（コミット前に流す）
 python tools/docs/lint_secrets.py
 python tools/docs/lint_secrets.py --staged
+
+# CLB デザインの検査（designcheck の後に流す）
+pwsh -NoProfile -File tools/clb/designcheck.ps1
+python tools/clb/lint_design.py
+
+# DB を触る（一時ファイルを作らない）
+pwsh -NoProfile -File tools/clb/sql.ps1 -Query "SELECT COUNT(*) FROM accounts;"
+pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
+```
+
+上の 4 つ（`lint_secrets` / `lint_docs` / `lint_design` / `dotnet test`）は
+**コミット前フックが自動で流す**。有効にするのは clone 後の 1 回だけ。
+
+```powershell
+git config core.hooksPath tools/git-hooks
 ```
 
 `*.mod.cs`（CLB スクリプト）を変更した場合と DB スキーマを変更した場合は、

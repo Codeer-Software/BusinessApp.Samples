@@ -13,13 +13,16 @@ set -e
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
-echo "[pre-commit] 1/3 秘密の検査"
+echo "[pre-commit] 1/4 秘密の検査"
 python tools/docs/lint_secrets.py
 
-echo "[pre-commit] 2/3 ドキュメント規約の検査"
+echo "[pre-commit] 2/4 ドキュメント規約の検査"
 python tools/docs/lint_docs.py
 
-echo "[pre-commit] 3/3 テスト・カバレッジ・スキーマ"
+echo "[pre-commit] 3/4 CLB デザインの検査"
+python tools/clb/lint_design.py
+
+echo "[pre-commit] 4/4 テスト・カバレッジ・スキーマ"
 dotnet test BusinessApp.slnx --nologo -v q
 
 echo "[pre-commit] すべて緑"

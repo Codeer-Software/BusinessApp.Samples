@@ -1206,7 +1206,7 @@
                   "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
-                "HorizontalAlignment": "Right"
+                "HorizontalAlignment": "End"
               }
             ]
           }
