@@ -1,0 +1,49 @@
+{
+  "_README": "マシン固有の許可とフックの雛形。このファイルを同じフォルダの settings.local.json にコピーし、<DESIGNER_EXE> をデザイナ exe の実パス（JSON 文字列なので \\ は \\\\ にエスケープ）、<EXTRAS_REPO> を Codeer.LowCode.Blazor.Extras のクローン先、<PREV_REPO> を旧プロジェクト（参照用）のパスに置き換える。settings.local.json は Git 追跡外（絶対パスを追跡ファイルへ書かないため）。追加でパスが要る参照先は additionalDirectories に足す。",
+  "permissions": {
+    "additionalDirectories": [
+      "<EXTRAS_REPO>",
+      "<PREV_REPO>"
+    ],
+    "allow": [
+      "Bash(\"<DESIGNER_EXE>\" designcheck:*)",
+      "Bash(\"<DESIGNER_EXE>\" sql:*)",
+      "Bash(\"<DESIGNER_EXE>\" rename-field:*)",
+      "Bash(\"<DESIGNER_EXE>\" rename-module:*)",
+      "Bash(\"<DESIGNER_EXE>\" rename-pageframe:*)",
+      "Bash(\"<DESIGNER_EXE>\" rename-layout:*)",
+      "Bash(\"<DESIGNER_EXE>\" rename-enum:*)",
+      "Bash(\"<DESIGNER_EXE>\" rename-enum-member:*)",
+      "Bash(\"<DESIGNER_EXE>\" rename-batch:*)",
+      "Bash(\"<DESIGNER_EXE>\" field-catalog:*)",
+      "Bash(\"<DESIGNER_EXE>\" script-catalog:*)",
+      "Bash(\"<DESIGNER_EXE>\" defaults:*)",
+      "Bash(\"<DESIGNER_EXE>\" template-list:*)",
+      "Bash(\"<DESIGNER_EXE>\" template-extract:*)",
+      "Bash(\"<DESIGNER_EXE>\" ai-refresh:*)",
+      "Bash(\"<DESIGNER_EXE>\" claude-workspace:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \".claude/refresh-ai-workspace.ps1\" \"<DESIGNER_EXE>\" \"Design\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \".claude/refresh-ai-workspace.ps1\" \"<DESIGNER_EXE>\" \"Design\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -371,3 +371,13 @@ LocalData/
 
 # プロジェクト固有: 環境固有設定
 BusinessApp/BusinessApp.Server/appsettings.Development.json
+
+# ===== Claude Code: マシン固有の許可・フック（雛形は .claude/settings.local.json.sample） =====
+# 絶対パスを含むため追跡しない（公開リポジトリのローカル構成漏洩を防ぐ）
+.claude/settings.local.json
+
+# ===== デザイナ CLI の作業出力（--out JSON・スクショ等）=====
+Designer/temporary/
+
+# ===== ライセンス未確認の参照物（他社サンプル等）はリポジトリ外に置く。誤配置の保険 =====
+references/
