@@ -1,10 +1,9 @@
 namespace BusinessApp.AccountingCore.Tests.Fixtures;
 
-using BusinessApp.AccountingCore.Calendar;
+using BusinessApp.AccountingCore.Accounts;
 using BusinessApp.AccountingCore.Journals;
-using BusinessApp.AccountingCore.Masters;
-using BusinessApp.AccountingCore.Primitives;
-using BusinessApp.AccountingCore.Validation;
+using BusinessApp.AccountingCore.Periods;
+using BusinessApp.AccountingCore.Shared;
 
 /// <summary>検証テストの素材。第 18 期（2026-04-01〜2027-03-31）を月次で持つ。</summary>
 public static class AccountingFixture

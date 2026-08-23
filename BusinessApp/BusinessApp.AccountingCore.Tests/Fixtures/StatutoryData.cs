@@ -1,7 +1,7 @@
 namespace BusinessApp.AccountingCore.Tests.Fixtures;
 
-using BusinessApp.AccountingCore.Primitives;
-using BusinessApp.AccountingCore.Rules;
+using BusinessApp.AccountingCore.ConsumptionTax;
+using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
 /// テストで使う制度値。<b>本番の制度値は制度ルールのマスタが持つ</b>（CLAUDE.md §2-3）。

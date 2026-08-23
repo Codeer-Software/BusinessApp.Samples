@@ -1,8 +1,7 @@
 namespace BusinessApp.AccountingCore.Journals;
 
-using BusinessApp.AccountingCore.Masters;
-using BusinessApp.AccountingCore.Primitives;
-using BusinessApp.AccountingCore.Rules;
+using BusinessApp.AccountingCore.ConsumptionTax;
+using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
 /// 仕訳明細（docs/04 §4-1）。金額は税抜・正の整数円で、借方貸方は <see cref="DebitCredit"/> が持つ。

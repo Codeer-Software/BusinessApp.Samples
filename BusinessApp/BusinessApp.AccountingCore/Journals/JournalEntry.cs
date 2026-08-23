@@ -1,7 +1,6 @@
 namespace BusinessApp.AccountingCore.Journals;
 
-using BusinessApp.AccountingCore.Masters;
-using BusinessApp.AccountingCore.Primitives;
+using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
 /// 仕訳伝票（docs/04 §4-1）。日付は用途ごとに別の項目で持ち、1 つに潰さない（docs/04 §2）。

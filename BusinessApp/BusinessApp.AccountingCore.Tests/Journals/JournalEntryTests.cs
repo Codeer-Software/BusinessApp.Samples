@@ -1,7 +1,6 @@
 namespace BusinessApp.AccountingCore.Tests.Journals;
 
-using BusinessApp.AccountingCore.Masters;
-using BusinessApp.AccountingCore.Primitives;
+using BusinessApp.AccountingCore.Shared;
 using BusinessApp.AccountingCore.Tests.Fixtures;
 
 /// <summary>伝票の集計（I-01）。金額は正で持ち、向きは借方貸方が表す。</summary>

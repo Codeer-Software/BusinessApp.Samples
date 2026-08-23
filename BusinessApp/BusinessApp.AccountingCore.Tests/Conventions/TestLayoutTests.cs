@@ -1,5 +1,7 @@
 namespace BusinessApp.AccountingCore.Tests.Conventions;
 
+using BusinessApp.AccountingCore.Shared;
+
 using System.Text.RegularExpressions;
 
 /// <summary>
@@ -19,9 +21,6 @@ public class TestLayoutTests
     /// <summary>ソースと対応しないテスト専用のフォルダ。</summary>
     private static readonly string[] ExemptDirectories = ["Fixtures", "Golden", "Conventions"];
 
-    private const string TestProjectName = "BusinessApp.AccountingCore.Tests";
-    private const string SourceProjectName = "BusinessApp.AccountingCore";
-
     [Fact]
     public void テストファイルは対象と同じ場所と名前に置かれている()
     {
@@ -29,10 +28,10 @@ public class TestLayoutTests
 
         foreach (var (testFile, relativePath) in MirroredTestFiles())
         {
-            var expectedSource = Path.Combine(SourceProjectDirectory, relativePath[..^"Tests.cs".Length] + ".cs");
+            var expectedSource = Path.Combine(ProjectPaths.SourceProject, relativePath[..^"Tests.cs".Length] + ".cs");
             if (!File.Exists(expectedSource))
             {
-                missing.Add($"{TestProjectName}/{relativePath} に対応する {SourceProjectName}/{Path.GetRelativePath(SourceProjectDirectory, expectedSource)} がない");
+                missing.Add($"{ProjectPaths.TestProjectName}/{relativePath} に対応する {ProjectPaths.SourceProjectName}/{Path.GetRelativePath(ProjectPaths.SourceProject, expectedSource)} がない");
             }
         }
 
@@ -48,8 +47,8 @@ public class TestLayoutTests
         {
             var folder = Path.GetDirectoryName(relativePath);
             var expected = string.IsNullOrEmpty(folder)
-                ? TestProjectName
-                : $"{TestProjectName}.{folder.Replace(Path.DirectorySeparatorChar, '.')}";
+                ? ProjectPaths.TestProjectName
+                : $"{ProjectPaths.TestProjectName}.{folder.Replace(Path.DirectorySeparatorChar, '.')}";
 
             var declared = DeclaredNamespace(testFile);
             if (declared != expected)
@@ -65,13 +64,13 @@ public class TestLayoutTests
     public void テストプロジェクトとソースプロジェクトを見つけられる()
     {
         // 以降の検査が「ファイルが 1 つも見つからず素通り」で緑にならないための土台。
-        Assert.True(Directory.Exists(SourceProjectDirectory), $"{SourceProjectName} が見つからない");
+        Assert.True(Directory.Exists(ProjectPaths.SourceProject), $"{ProjectPaths.SourceProjectName} が見つからない");
         Assert.NotEmpty(MirroredTestFiles());
     }
 
     private static IReadOnlyList<(string FullPath, string RelativePath)> MirroredTestFiles()
-        => Directory.EnumerateFiles(TestProjectDirectory, "*Tests.cs", SearchOption.AllDirectories)
-            .Select(path => (FullPath: path, RelativePath: Path.GetRelativePath(TestProjectDirectory, path)))
+        => Directory.EnumerateFiles(ProjectPaths.TestProject, "*Tests.cs", SearchOption.AllDirectories)
+            .Select(path => (FullPath: path, RelativePath: Path.GetRelativePath(ProjectPaths.TestProject, path)))
             .Where(file => !IsExempt(file.RelativePath))
             .OrderBy(file => file.RelativePath, StringComparer.Ordinal)
             .ToList();
@@ -89,25 +88,4 @@ public class TestLayoutTests
         return match.Success ? match.Groups[1].Value : null;
     }
 
-    private static string TestProjectDirectory { get; } = FindProjectDirectory();
-
-    private static string SourceProjectDirectory { get; } =
-        Path.Combine(Path.GetDirectoryName(TestProjectDirectory)!, SourceProjectName);
-
-    /// <summary>
-    /// 出力ディレクトリから遡って <c>.csproj</c> のある場所を探す。
-    /// <c>CallerFilePath</c> を使うとビルドしたマシンの絶対パスがアセンブリに焼き込まれるので使わない。
-    /// </summary>
-    private static string FindProjectDirectory()
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-        {
-            if (directory.EnumerateFiles("*.csproj").Any())
-            {
-                return directory.FullName;
-            }
-        }
-
-        throw new InvalidOperationException($"{TestProjectName} のプロジェクトディレクトリを特定できない。");
-    }
 }
