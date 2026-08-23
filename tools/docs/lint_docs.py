@@ -199,6 +199,11 @@ def check_body(doc: Doc, findings: List[Tuple[str, str, str]]) -> None:
         if APPEND_ANTIPATTERN.match(doc.lines[i]):
             add(SEV_WARN, "{}行目: ヘッダに更新履歴を積んでいます（規約 §4-2）".format(i + 1))
 
+    if is_reference:
+        # ADR とリサーチは「引くもの」。自身の未確認事項を本文で列挙するのが正しい姿なので、
+        # 未処理マーカーの検査対象から外す
+        return
+
     in_hold_list = False
     in_code = False
     for i in range(doc.body_start, len(doc.lines)):
