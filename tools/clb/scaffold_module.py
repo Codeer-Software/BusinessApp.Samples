@@ -52,6 +52,7 @@ detail     詳細画面の行。各行はフィールド名の配列（ラベル
 list       一覧に出すフィールド名の配列
 search     検索条件に出すフィールド名の配列
 labelWidth ラベル列の幅（px。省略時 140）
+canCreate / canUpdate / canDelete  省略時 true。false にすると参照のみの画面になる
 """
 from __future__ import annotations
 
@@ -203,7 +204,8 @@ def build_detail_layout(spec: dict, labels: dict[str, str]) -> dict:
             columns.append(grid_column(field_layout(field_name)))
         rows.append(grid_row(columns))
 
-    rows.append(grid_row([grid_column(field_layout("SubmitButton"), horizontal="Right")]))
+    if spec.get("canUpdate", True) or spec.get("canCreate", True):
+        rows.append(grid_row([grid_column(field_layout("SubmitButton"), horizontal="Right")]))
     layout["Layout"]["Rows"] = rows
     return layout
 
@@ -259,6 +261,11 @@ def main() -> None:
     module["DataSourceName"] = spec.get("dataSource", "BusinessAppSQLite")
     module["DbTable"] = spec["table"]
     module["PageTitle"] = spec.get("pageTitle", "")
+    # 既定はすべて true。false にすると入力フィールドが ViewOnly になる（CommonMistakes #40）ので、
+    # 「参照のみの画面」を作るのに使える。
+    module["CanCreate"] = spec.get("canCreate", True)
+    module["CanUpdate"] = spec.get("canUpdate", True)
+    module["CanDelete"] = spec.get("canDelete", True)
 
     fields = [build_field(f) for f in spec["fields"]]
     for row_fields in spec.get("detail", []):
@@ -266,7 +273,8 @@ def main() -> None:
             fields.append(label_field(name + "Label", labels.get(name, name)))
     for name in spec.get("search", []):
         fields.append(label_field(name + "SearchLabel", labels.get(name, name)))
-    fields.append(submit_button(spec.get("submitText", "登録")))
+    if spec.get("canUpdate", True) or spec.get("canCreate", True):
+        fields.append(submit_button(spec.get("submitText", "登録")))
     module["Fields"] = fields
 
     module["DetailLayouts"][""] = build_detail_layout(spec, labels)
