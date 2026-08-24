@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# コミット前の検証（ADR-0012）。
+#
+# 有効にする（clone 後に 1 回だけ）:
+#   git config core.hooksPath tools/git-hooks
+#
+# .git/hooks ではなくここに置いてあるのは、フック自体を Git の追跡下に置いて
+# レビューできるようにするため。--no-verify で迂回できるので、規律の代替ではなく
+# 「うっかり」を防ぐ装置と位置づける。
+set -e
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+echo "[pre-commit] 1/4 秘密の検査"
+python tools/docs/lint_secrets.py
+
+echo "[pre-commit] 2/4 ドキュメント規約の検査"
+python tools/docs/lint_docs.py
+
+echo "[pre-commit] 3/4 CLB デザインの検査"
+python tools/clb/lint_design.py
+
+echo "[pre-commit] 4/4 テスト・カバレッジ・スキーマ"
+dotnet test BusinessApp.slnx --nologo -v q
+
+echo "[pre-commit] すべて緑"

@@ -1,0 +1,36 @@
+{
+  "Name": "TaxationTypes",
+  "ValueType": "String",
+  "Members": [
+    {
+      "Name": "TaxableSales",
+      "Value": "taxable_sales",
+      "DisplayText": "課税売上"
+    },
+    {
+      "Name": "TaxablePurchase",
+      "Value": "taxable_purchase",
+      "DisplayText": "課税仕入"
+    },
+    {
+      "Name": "NonTaxableSales",
+      "Value": "non_taxable_sales",
+      "DisplayText": "非課税売上"
+    },
+    {
+      "Name": "NonTaxablePurchase",
+      "Value": "non_taxable_purchase",
+      "DisplayText": "非課税仕入"
+    },
+    {
+      "Name": "ExportExempt",
+      "Value": "export_exempt",
+      "DisplayText": "免税（輸出）"
+    },
+    {
+      "Name": "OutOfScope",
+      "Value": "out_of_scope",
+      "DisplayText": "対象外"
+    }
+  ]
+}

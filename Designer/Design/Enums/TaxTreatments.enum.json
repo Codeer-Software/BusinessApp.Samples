@@ -1,0 +1,21 @@
+{
+  "Name": "TaxTreatments",
+  "ValueType": "String",
+  "Members": [
+    {
+      "Name": "ForTaxableSales",
+      "Value": "for_taxable_sales",
+      "DisplayText": "課税売上対応"
+    },
+    {
+      "Name": "Common",
+      "Value": "common",
+      "DisplayText": "共通対応"
+    },
+    {
+      "Name": "ForExemptSales",
+      "Value": "for_exempt_sales",
+      "DisplayText": "非課税売上対応"
+    }
+  ]
+}

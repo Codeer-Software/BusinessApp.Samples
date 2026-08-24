@@ -78,4 +78,33 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
 ここには**このプロジェクト固有の実測**だけを書く。
 
 - 2026-08-23: 初期状態は `EmptyAuth` テンプレート（`AppUser` ＋ `Home` の 2 モジュール）。
+- 2026-08-24: `sql` CLI は **`--out` を省くと結果 JSON が標準出力に来る**。PowerShell から呼ぶときは
+  `ProcessStartInfo.ArgumentList` に 1 引数ずつ足して `RedirectStandardOutput` で受ける。
+  `Start-Process -ArgumentList` だと `--query` 内の `'...'` が壊れて `incomplete input` になる。
+  この形なら SQL ファイルも結果ファイルも作らずに済む（CLAUDE.md §3-2-1）。
+- 2026-08-24: デザイナ exe は WinExe なので、PowerShell の `&` で呼ぶと**待たずに戻る**。
+  終了コードを見るには `Start-Process -Wait -PassThru` か `Process.WaitForExit()` を使う。
+- 2026-08-24: **デザイン enum は複数形で名づける**（`TaxationTypes` / `RateKinds`）。enum 名は
+  モジュール・PageFrame と同じ型名空間に入るため、単数形だと同名のフィールドと衝突し、
+  `designcheck` に「スクリプトではフィールド名が優先されます」と指摘される。
+- 2026-08-24: **予約名フィールドは規定のデザイン型で作る。** `OptimisticLocking` は
+  `OptimisticLockingFieldDesign` ＋ `IncrementVersion: true`（SQLite）。型が違うと
+  designcheck 緑・HTTP 200 のまま更新だけが失敗する（qa/01 F-09）。
+  `creator` / `updater` 列は型が未決なので、当面モジュールに持たせない（フェーズ 6 の監査ログで決める）。
+- 2026-08-24: マスタは**物理削除させない**（`CanDelete: false`。ADR-0006「削除ではなく無効化」）。
+  一覧の削除ボタンは PageFrame の `Link.ListPageDesign.ListFieldDesign.CanDelete` でも切る。
+- 2026-08-24: 一覧の既定の並び順は PageFrame の `Link...SearchCondition.SortConditions` で指定する。
+  指定しないと**降順で出る**（マスタでは使いものにならない）。
+- 2026-08-24: **ヘッダ＋明細（仕訳伝票と明細）の正典**（`Docs/AppPatterns/header_detail.md`）:
+  明細表は **`ListField`**（`DetailListField` ではない。名前に反するので最頻出の誤り）。
+  子の親 FK は **`IdFieldDesign` ＋ `IsManualInput: false`**（`NumberField` は不可）。
+  親の詳細レイアウトに `ListField` を置き、`SearchCondition.Condition` に
+  `FieldMatchCondition` → `FieldVariableMatchCondition`（`SearchTargetVariable` = 子の FK、
+  `Variable` = 親の `Id.Value`）を入れて逆引きする。**列定義は子モジュールの `ListLayouts[""].Elements`**。
+  親の Submit で子の Add/Update/Delete が 1 トランザクションにまとまる。
+  親詳細の `LimitCount` は全件（`0` にすると明細が消える）。
+- 2026-08-24: **LinkField の候補ダイアログは、一覧画面とは別に絞り込みと並び順を持つ。**
+  フィールド側の `SearchCondition` に `SortConditions` と `Condition` を設定する。
+  マスタを指す LinkField は `IsActive.Value = true` で絞る（`is_active` は「入力候補に出すか」の意味。ADR-0006）。
+  設定しないと**無効にした科目が候補に出てしまい、降順で並ぶ**。
   `designcheck` は findings 0。DB には `app_users` のみ存在し、`temporary_files` は未作成

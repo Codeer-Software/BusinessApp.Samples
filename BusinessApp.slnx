@@ -1,4 +1,13 @@
 <Solution>
+  <Folder Name="/AccountingCore/">
+    <Project Path="BusinessApp/BusinessApp.AccountingCore/BusinessApp.AccountingCore.csproj" />
+    <Project Path="BusinessApp/BusinessApp.AccountingCore.Client/BusinessApp.AccountingCore.Client.csproj" />
+    <Project Path="BusinessApp/BusinessApp.AccountingCore.Server/BusinessApp.AccountingCore.Server.csproj" />
+    <Project Path="BusinessApp/BusinessApp.AccountingCore.Tests/BusinessApp.AccountingCore.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Schema/">
+    <Project Path="BusinessApp/BusinessApp.Schema.Tests/BusinessApp.Schema.Tests.csproj" />
+  </Folder>
   <Folder Name="/Tools/">
     <Project Path="BusinessApp/BusinessApp.Designer/BusinessApp.Designer.csproj" />
     <Project Path="BusinessApp/BusinessApp.LicenseRegisterCli/BusinessApp.LicenseRegisterCli.csproj" />
