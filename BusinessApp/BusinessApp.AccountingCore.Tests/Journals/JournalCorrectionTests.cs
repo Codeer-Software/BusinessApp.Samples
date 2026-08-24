@@ -133,6 +133,63 @@ public class JournalCorrectionTests
     }
 
     [Fact]
+    public void 訂正を重ねても摘要が入れ子にならない()
+    {
+        // **実機で見つけた。** 素朴に前置きすると
+        // 「伝票番号 5 の訂正: 伝票番号 3 の訂正: 8 月分の…」と伸び続ける（2026-08-25）。
+        // 摘要欄は取引の説明であって履歴ではない。履歴は原仕訳への参照で辿れる。
+        var corrected = Posted(entryType: EntryType.Correction, entryNo: 5) with
+        {
+            Description = "伝票番号 3 の訂正: 8 月分のサーバ利用料",
+        };
+
+        var result = JournalCorrection.Start(corrected, CorrectedOn, EnteredAt, StartContext());
+
+        Assert.Equal("伝票番号 5 の訂正: 8 月分のサーバ利用料", result.Drafts!.Value.Correction.Description);
+        Assert.Equal("伝票番号 5 の取消: 8 月分のサーバ利用料", result.Drafts!.Value.Reversal.Description);
+    }
+
+    [Fact]
+    public void 何段重なった接頭辞も落とす()
+    {
+        // 直す前に作られた伝票が既に入れ子を抱えていても、そこから先は伸びない。
+        var nested = Posted(entryType: EntryType.Correction, entryNo: 9) with
+        {
+            Description = "伝票番号 5 の訂正: 伝票番号 3 の取消: 伝票番号 1 の訂正: 本文",
+        };
+
+        var result = JournalCorrection.Start(nested, CorrectedOn, EnteredAt, StartContext());
+
+        Assert.Equal("伝票番号 9 の訂正: 本文", result.Drafts!.Value.Correction.Description);
+    }
+
+    [Fact]
+    public void 接頭辞しかない摘要は本文なしになる()
+    {
+        var prefixOnly = Posted(entryType: EntryType.Correction, entryNo: 4) with
+        {
+            Description = "伝票番号 3 の取消",
+        };
+
+        var result = JournalCorrection.Start(prefixOnly, CorrectedOn, EnteredAt, StartContext());
+
+        Assert.Equal("伝票番号 4 の訂正", result.Drafts!.Value.Correction.Description);
+    }
+
+    [Fact]
+    public void 似ているだけの摘要は落とさない()
+    {
+        // 「伝票番号 3 の訂正について打ち合わせ」のような本文を、接頭辞と間違えて削らない。
+        var lookalike = Posted() with { Description = "伝票番号 3 の訂正について打ち合わせ" };
+
+        var result = JournalCorrection.Start(lookalike, CorrectedOn, EnteredAt, StartContext());
+
+        Assert.Equal(
+            "伝票番号 1 の訂正: 伝票番号 3 の訂正について打ち合わせ",
+            result.Drafts!.Value.Correction.Description);
+    }
+
+    [Fact]
     public void 年度をまたぐ訂正は_両方とも計上日の属する年度に載る()
     {
         var lastMarch = new DateOnly(2026, 3, 20);

@@ -1,5 +1,6 @@
 namespace BusinessApp.AccountingCore.Journals;
 
+using System.Text.RegularExpressions;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
@@ -59,6 +60,51 @@ internal static class AmendmentRules
                 $"種別が「{original.EntryType}」の仕訳は{kind.CannotVerb}。"
                 + "対象にできるのは通常の仕訳と訂正だけ。");
         }
+    }
+
+    /// <summary>
+    /// 摘要に「何の取消・訂正か」を残す。<b>原仕訳の摘要を消さない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>帳簿を読む人は、足された伝票だけを見て何が起きたかを追えなければならない。</para>
+    /// <para><b>接頭辞は重ねない。</b> 訂正は訂正できるので、素朴に前置きすると
+    /// 「伝票番号 5 の訂正: 伝票番号 3 の訂正: 8 月分のサーバ利用料」と入れ子が伸びていく
+    /// （実機で確認。2026-08-25）。摘要欄は取引の説明であって履歴ではなく、
+    /// 履歴は <c>original_entry_id</c> で辿れる。<b>直前の接頭辞をすべて落として本文だけを引き継ぐ。</b></para>
+    /// <para>伝票番号がある前提で書いてよい。無い伝票は <see cref="ValidateOriginal"/> が先に止めている。</para>
+    /// </remarks>
+    public static string Describe(JournalEntry original, AmendmentKind kind)
+    {
+        var body = StripPrefixes(original.Description);
+
+        return body.Length == 0
+            ? $"伝票番号 {original.EntryNo} の{kind.Noun}"
+            : $"伝票番号 {original.EntryNo} の{kind.Noun}: {body}";
+    }
+
+    /// <summary>
+    /// 自分で付けた接頭辞（「伝票番号 N の取消: 」等）を、無くなるまで落とす。
+    /// </summary>
+    /// <remarks>
+    /// <b>語は <see cref="AmendmentKind"/> から組み立てる。</b> ここに「取消」「訂正」と
+    /// 書き写すと、文言を変えたときに剥がせなくなって入れ子が静かに復活する。
+    /// </remarks>
+    private static readonly Regex Prefix = new(
+        $@"^伝票番号 \d+ の({AmendmentKind.Reversal.Noun}|{AmendmentKind.Correction.Noun})(: |$)",
+        RegexOptions.CultureInvariant);
+
+    private static string StripPrefixes(string? description)
+    {
+        // `is { Success: true }` で書くと、Match が null になり得ないぶんの分岐が
+        // 到達不能なまま残る。素直に success を見る。
+        var body = (description ?? string.Empty).Trim();
+
+        for (var match = Prefix.Match(body); match.Success; match = Prefix.Match(body))
+        {
+            body = body[match.Length..].Trim();
+        }
+
+        return body;
     }
 }
 

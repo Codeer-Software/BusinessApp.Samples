@@ -53,7 +53,7 @@ public static class JournalReversal
             Status = EntryStatus.Draft,
             EntryType = EntryType.Reversal,
             OriginalEntryId = original.Id,
-            Description = Describe(original),
+            Description = AmendmentRules.Describe(original, AmendmentKind.Reversal),
             PartnerId = original.PartnerId,
             EnteredAt = enteredAt,
             Lines = [.. original.Lines.Select(Reverse)],
@@ -85,17 +85,6 @@ public static class JournalReversal
     private static JournalLine Reverse(JournalLine line)
         => line with { DebitCredit = line.DebitCredit.Opposite() };
 
-    /// <summary>
-    /// 摘要に「何の取消か」を残す。<b>原仕訳の摘要を消さない。</b>
-    /// 帳簿を読む人は、取消だけを見て何が起きたかを追えなければならない。
-    /// </summary>
-    /// <remarks>
-    /// 伝票番号がある前提で書いてよい。無い伝票は <see cref="Validate"/> が先に止めている。
-    /// </remarks>
-    private static string Describe(JournalEntry original)
-        => string.IsNullOrWhiteSpace(original.Description)
-            ? $"伝票番号 {original.EntryNo} の取消"
-            : $"伝票番号 {original.EntryNo} の取消: {original.Description}";
 }
 
 /// <summary>

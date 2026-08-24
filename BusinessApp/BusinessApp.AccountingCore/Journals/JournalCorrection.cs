@@ -55,7 +55,7 @@ public static class JournalCorrection
             Status = EntryStatus.Draft,
             EntryType = EntryType.Correction,
             OriginalEntryId = original.Id,
-            Description = Describe(original),
+            Description = AmendmentRules.Describe(original, AmendmentKind.Correction),
             PartnerId = original.PartnerId,
             EnteredAt = enteredAt,
             // 原仕訳をそのまま写す。**正しい姿ではなく、直す前の姿を出す。**
@@ -115,17 +115,6 @@ public static class JournalCorrection
         return violations;
     }
 
-    /// <summary>
-    /// 摘要に「何の訂正か」を残す。<b>原仕訳の摘要を消さない。</b>
-    /// 取消と違って利用者が書き換えられるので、これは初期値でしかない。
-    /// </summary>
-    /// <remarks>
-    /// 伝票番号がある前提で書いてよい。無い伝票は取消の検証が先に止めている。
-    /// </remarks>
-    private static string Describe(JournalEntry original)
-        => string.IsNullOrWhiteSpace(original.Description)
-            ? $"伝票番号 {original.EntryNo} の訂正"
-            : $"伝票番号 {original.EntryNo} の訂正: {original.Description}";
 }
 
 /// <summary>
