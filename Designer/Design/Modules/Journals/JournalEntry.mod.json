@@ -108,7 +108,7 @@
       "OnSearchDataChanged": "",
       "DisplayName": "計上日",
       "IsRequired": true,
-      "OnDataChanged": "",
+      "OnDataChanged": "PostingDate_OnDataChanged",
       "Name": "PostingDate",
       "IgnoreModification": false,
       "OnValidateInput": "",
