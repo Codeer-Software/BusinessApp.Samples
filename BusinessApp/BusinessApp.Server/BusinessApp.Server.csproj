@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\BusinessApp.Client\BusinessApp.Client.csproj" />
+    <ProjectReference Include="..\BusinessApp.AccountingCore.Server\BusinessApp.AccountingCore.Server.csproj" />
     <PackageReference Include="Codeer.LowCode.Blazor.DbAccess" Version="0.1.0" />
   </ItemGroup>
   <ItemGroup>

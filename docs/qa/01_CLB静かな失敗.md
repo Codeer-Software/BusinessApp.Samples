@@ -69,6 +69,7 @@ D-10（ラベル列の縦揃え）・F-01（`OnValidateInput`）・F-09（予約
 | C-09 | 削除しても再読込で復活する | `ListField` の行削除はメモリ上の操作。保存契機が無いホストでは DB に届かない |
 | C-10 | `ReloadWithLock()` が無い | 現在の公開 API に存在しない。`Reload()` を使う |
 | C-11 | 未保存のモジュールで `Reload()` を呼ぶと例外 | `IsNewData` でガードする |
+| C-12 | `ExecuteAsync` に渡したパラメータで実行時例外（`The member p1 of type ParamAndRawDbTypeName cannot be used as a parameter value`） | **`IDbAccessor` は Query と Execute でパラメータ辞書の型が違う。** `QueryAsync` は `Dictionary<string, ParamAndRawDbTypeName>`、`ExecuteAsync` / `InsertAsync` は `Dictionary<string, object>`（生値）。C# の `new() { ... }` は代入先の型に合わせるので、包んだまま書いてもコンパイルが通り、実行時に Dapper が落とす（2026-08-24 実測 1.3.20） |
 
 ## D. 表示・レイアウト
 
@@ -113,6 +114,9 @@ D-10（ラベル列の縦揃え）・F-01（`OnValidateInput`）・F-09（予約
 | F-08 | `Submit()` の失敗に気づけない | 戻り値は `bool?`（`null`=送信なし / `false`=失敗 / `true`=成功）。**必ず検査**して失敗を通知する |
 | F-09 | 一覧も詳細も正しく出るのに、更新すると必ず「更新に失敗しました」。`designcheck` は緑、`POST /api/module_data` は 200、サーバログにも何も出ない | **予約名フィールドは専用のデザイン型でなければならない**（2026-08-24 実測 1.3.20）。`OptimisticLocking` を `NumberFieldDesign`、`Creator` / `Updater` を `NumberFieldDesign` にしていたのが原因。`OptimisticLocking` は `OptimisticLockingFieldDesign` ＋ **SQLite では `IncrementVersion: true`**、`Creator` / `Updater` は `TextFieldDesign` にする |
 | F-10 | 新規作成したマスタが最初から無効になり、入力候補に出ない | **Boolean の初期値は DB の `DEFAULT` を見ない。**画面は必ず false 始まりになる（2026-08-24 実測 1.3.20）。`DetailLayout.OnAfterInitialization` で `IsNewData` ガードを付けて代入する。新規判定は `Id.Value == null` ではなく `IsNewData` |
+| F-11 | サーバ側の関門で親子を見ようとすると、子の `ModuleSubmitData` が 1 つも無い | **ヘッダ＋明細の保存は `ModuleSubmitData` 1 つにまとまって届く。**親も子も同じ `Add` / `Update` に混ざって入る（2026-08-24 実測 1.3.20）。`ModuleSubmitData.ModuleName` ではなく **`ModuleData.Name`** で見分ける |
+| F-12 | サーバ側の関門で読んだ値が既定値（日付が `0001-01-01`、明細が 0 件）になる | **`ModuleData` には変更されたフィールドしか入らない。**画面で触っていない項目は `Fields` に存在しない（`Id` と `OptimisticLocking` は常に来る）。書き込みたいフィールドも**無ければ自分で作る**必要がある（2026-08-24 実測 1.3.20）。<br>**送られてきた差分だけで業務検証をしてはいけない。** 既存データを開いて 1 項目だけ変えた保存では、他の項目が差分に載らず必ず誤判定する。いったん保存させてから DB を読み直して検証し、違反なら例外を投げて巻き戻す |
+| F-13 | 保存後に状態を変える更新が DB のトリガに弾かれる | 不変にした行（計上済みの仕訳など）は、**最初から最終状態で書くと子行を足せない**。「下書きで書く → 読み直して検証 → 状態を進める」の順にする。`SubmitAsync` の中で投げた例外は保存ごと巻き戻る（2026-08-24 実測。下書き行も採番も残らないことを確認） |
 
 ## G. ブラウザ自動操作（アプリの不具合ではない）
 

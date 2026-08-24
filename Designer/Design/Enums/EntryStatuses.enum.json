@@ -1,0 +1,16 @@
+{
+  "Name": "EntryStatuses",
+  "ValueType": "String",
+  "Members": [
+    {
+      "Name": "Draft",
+      "Value": "draft",
+      "DisplayText": "下書き"
+    },
+    {
+      "Name": "Posted",
+      "Value": "posted",
+      "DisplayText": "計上済み"
+    }
+  ]
+}
