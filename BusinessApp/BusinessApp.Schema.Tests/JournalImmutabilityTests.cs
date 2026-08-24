@@ -131,4 +131,44 @@ public class JournalImmutabilityTests
                 VALUES (1, 1, 'debit', 1, 100.5, 1);
             """));
     }
+
+    /// <summary>
+    /// 1 本の仕訳を取り消す反対仕訳は 1 本まで。
+    /// </summary>
+    /// <remarks>
+    /// アプリも計上前に検査するが、同時に 2 人が取り消すと両方が「まだ取り消されていない」を
+    /// 読んでしまう。**二重取消が通ると残高が原仕訳 1 本分ずれる。**
+    /// </remarks>
+    [Fact]
+    public void 同じ仕訳を二度取り消せない()
+    {
+        using var db = SchemaSeed.CreateWithPostedEntry();
+
+        TestDatabase.Execute(db, Reversal(id: 2, entryNo: 2));
+
+        // 止まるのは 2 本目を**計上する**ところ。下書きのままなら作れる。
+        Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Reversal(id: 3, entryNo: 3)));
+        Assert.Equal(1L, TestDatabase.ScalarOf<long>(db,
+            "SELECT COUNT(*) FROM journal_entries WHERE entry_type = 'reversal' AND status = 'posted'"));
+    }
+
+    /// <summary>下書きのままなら何本でも作れる（計上した 1 本だけが帳簿に載る）。</summary>
+    [Fact]
+    public void 取消の下書きは何本でも作れる()
+    {
+        using var db = SchemaSeed.CreateWithPostedEntry();
+
+        TestDatabase.Execute(db, ReversalDraft(2) + ReversalDraft(3));
+
+        Assert.Equal(2L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM journal_entries WHERE entry_type = 'reversal'"));
+    }
+
+    private static string ReversalDraft(int id) => $"""
+        INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, entered_at)
+            VALUES ({id}, 1, '2026-05-20', '2026-05-21', 'draft', 'reversal', 1, '2026-05-21 10:00:00');
+        """;
+
+    private static string Reversal(int id, int entryNo) => ReversalDraft(id) + $"""
+        UPDATE journal_entries SET status = 'posted', entry_no = {entryNo}, posted_at = '2026-05-21 10:00:00' WHERE id = {id};
+        """;
 }

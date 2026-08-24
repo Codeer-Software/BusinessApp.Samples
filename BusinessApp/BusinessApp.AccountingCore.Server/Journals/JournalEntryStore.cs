@@ -135,6 +135,116 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
         }
     }
 
+    /// <summary>この原仕訳を取り消す計上済みの反対仕訳が既にあるか（二重取消の検出）。</summary>
+    public async Task<bool> HasReversalAsync(JournalEntryId originalId)
+    {
+        var rows = await QueryAsync(
+            """
+            select 1 from journal_entries
+             where original_entry_id = @p1 and entry_type = 'reversal' and status = 'posted'
+             limit 1
+            """,
+            originalId.Value);
+
+        return rows.Count > 0;
+    }
+
+    /// <summary>
+    /// 明細を入れ替える。<b>反対仕訳の明細はシステムが決める</b>ので、
+    /// 送られてきた内容が何であれ、原仕訳を反転したものに置き換える。
+    /// </summary>
+    /// <remarks>
+    /// 下書きにしか当てない。計上済みの明細は DDL のトリガが変更も削除も追加も止める。
+    /// </remarks>
+    public async Task ReplaceLinesAsync(JournalEntryId id, IReadOnlyList<JournalLine> lines)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+
+        // 下書きにしか当てない。計上済みの明細はトリガが止めるが、トリガに当てて
+        // 生の SQLite 例外を出すより、業務のことばで先に止めるほうがよい。
+        var draft = await QueryAsync(
+            "select 1 from journal_entries where id = @p1 and status = 'draft'", id.Value);
+        if (draft.Count != 1)
+        {
+            throw new InvalidOperationException($"仕訳 {id.Value} は下書きではないので明細を入れ替えられない。");
+        }
+
+        await dbAccessor.ExecuteAsync(
+            dataSourceName,
+            "delete from journal_lines where journal_entry_id = @p1",
+            new() { { "@p1", id.Value } });
+
+        foreach (var line in lines)
+        {
+            await dbAccessor.ExecuteAsync(
+                dataSourceName,
+                """
+                insert into journal_lines
+                    (journal_entry_id, line_no, debit_credit, account_id, sub_account_id,
+                     department_id, partner_id, partner_name_snapshot, amount, tax_category_id,
+                     tax_treatment, tax_point, applied_rule_version, is_tax_line, parent_line_no,
+                     item_description, book_only_deduction, evidence_ref)
+                values (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10,
+                        @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18)
+                """,
+                new()
+                {
+                    { "@p1", id.Value },
+                    { "@p2", line.LineNo },
+                    { "@p3", DbValue.ToSnakeCase(line.DebitCredit) },
+                    { "@p4", line.AccountId.Value },
+                    { "@p5", line.SubAccountId?.Value },
+                    { "@p6", line.DepartmentId?.Value },
+                    { "@p7", line.PartnerId?.Value },
+                    { "@p8", line.PartnerNameSnapshot },
+                    { "@p9", checked((long)line.Amount.Value) },
+                    { "@p10", line.TaxCategoryId.Value },
+                    { "@p11", line.TaxTreatment is { } treatment ? DbValue.ToSnakeCase(treatment) : null },
+                    { "@p12", line.TaxPoint is { } point ? DbValue.ToDbDate(point) : null },
+                    { "@p13", line.AppliedRuleVersion?.Value },
+                    { "@p14", line.IsTaxLine ? 1 : 0 },
+                    { "@p15", line.ParentLineNo },
+                    { "@p16", line.ItemDescription },
+                    { "@p17", line.BookOnlyDeduction },
+                    { "@p18", line.EvidenceRef },
+                });
+        }
+    }
+
+    /// <summary>
+    /// 取消の伝票を、システムが決めた内容で置き換える。
+    /// </summary>
+    /// <remarks>
+    /// <b>取消は利用者が中身を決める操作ではない</b>ので、取引日・会計年度・取引先・摘要まで
+    /// 原仕訳から作り直したもので上書きする。外部投入の印は手入力の取消には付かないので落とす。
+    /// </remarks>
+    public async Task OverwriteReversalHeaderAsync(JournalEntryId id, JournalEntry reversal)
+    {
+        ArgumentNullException.ThrowIfNull(reversal);
+
+        var affected = await dbAccessor.ExecuteAsync(
+            dataSourceName,
+            """
+            update journal_entries
+               set transaction_date = @p2, fiscal_year_id = @p3, partner_id = @p4, description = @p5,
+                   source_component = null, source_document_id = null, idempotency_key = null
+             where id = @p1 and status = 'draft'
+            """,
+            new()
+            {
+                { "@p1", id.Value },
+                { "@p2", DbValue.ToDbDate(reversal.TransactionDate) },
+                { "@p3", reversal.FiscalYearId.Value },
+                { "@p4", reversal.PartnerId?.Value },
+                { "@p5", reversal.Description },
+            });
+
+        if (affected != 1)
+        {
+            throw new InvalidOperationException($"仕訳 {id.Value} は下書きではないので取消の内容を書き込めない。");
+        }
+    }
+
     private async Task<IReadOnlyList<IDictionary<string, object>>> QueryAsync(string sql, long parameter)
         => await dbAccessor.QueryAsync(
             dataSourceName, sql,

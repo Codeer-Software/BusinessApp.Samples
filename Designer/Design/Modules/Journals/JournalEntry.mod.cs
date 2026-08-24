@@ -36,6 +36,17 @@ void ApplyPostedLock()
     SubmitButton.IsVisible = !posted;
 }
 
+// 計上日を変えたら会計年度を付け直す。
+//
+// 期末をまたいで計上日を直したとき（3/31 → 4/1）に旧年度が残ると、サーバ側の検証で
+// 弾かれる。安全側ではあるが、利用者に「会計年度も直せ」と言うことになる。
+// **会計年度は計上日から決まるものなので、選ばせない。**
+void PostingDate_OnDataChanged()
+{
+    if (PostingDate.Value == null) return;
+    SelectFiscalYear(PostingDate.Value);
+}
+
 // 明細の追加・変更・削除で発火する（ListField の OnDataChanged）。
 void Lines_OnDataChanged()
 {
@@ -107,6 +118,12 @@ void UpdateTotals()
 void SelectFiscalYear(DateOnly postingDate)
 {
     var target = Iso(postingDate);
+
+    // **先に空にする。** 該当する年度が無いときに古い年度が残ると、
+    // 「計上日は翌年度なのに会計年度は前年度」という食い違った伝票ができ、
+    // サーバ側の検証で弾かれるまで気づけない。**空欄なら、その場で分かる。**
+    FiscalYear.Value = "";
+    FiscalYear.DisplayText = "";
 
     // 会計年度は多くて十数件なので、全件取って画面側で選ぶ。
     // 日付の大小はフィールド値のままでは比較できないので ISO 文字列に寄せる（qa/01 B-09）。

@@ -61,6 +61,14 @@ CREATE INDEX ix_journal_entries_posting_date ON journal_entries (posting_date);
 CREATE INDEX ix_journal_entries_transaction_date ON journal_entries (transaction_date);
 CREATE INDEX ix_journal_entries_original ON journal_entries (original_entry_id);
 
+-- 1 本の仕訳を取り消す反対仕訳は 1 本まで（I-05 の系）。
+-- **二重取消は残高を狂わせる。** 反対仕訳が 2 本残っても、元の取引は 1 回しか無い。
+-- アプリ側も計上前に検査するが、同時に 2 人が取り消すと両方が「まだ取り消されていない」を
+-- 読んでしまう。最後に止めるのは DB である。
+CREATE UNIQUE INDEX ux_journal_entries_single_reversal
+    ON journal_entries (original_entry_id)
+    WHERE entry_type = 'reversal' AND status = 'posted';
+
 CREATE TABLE journal_lines (
     id                          INTEGER PRIMARY KEY AUTOINCREMENT,
 
