@@ -142,15 +142,27 @@ public class JournalReversalTests
     }
 
     [Fact]
+    public void 既に取り消された仕訳は取り消せない()
+    {
+        // 二重取消は残高を狂わせる。反対仕訳が 2 本残っても、元の取引は 1 回しか無い。
+        var result = JournalReversal.Reverse(
+            Posted(), ReversedOn, EnteredAt, new ReversalContext(IsAlreadyReversed: true));
+
+        Assert.False(result.Created);
+        Assert.Contains(JournalViolationCodes.AlreadyReversed, result.Violations.Select(v => v.Code));
+    }
+
+    [Fact]
     public void 違反は全件返す()
     {
         // 直しては弾かれを繰り返させない。
         var result = JournalReversal.Reverse(
             AccountingFixture.CashSale(TransactionDate) with { Id = null, EntryType = EntryType.Reversal },
             TransactionDate.AddDays(-1),
-            EnteredAt);
+            EnteredAt,
+            new ReversalContext(IsAlreadyReversed: true));
 
-        Assert.Equal(4, result.Violations.Count);
+        Assert.Equal(5, result.Violations.Count);
     }
 
     [Fact]

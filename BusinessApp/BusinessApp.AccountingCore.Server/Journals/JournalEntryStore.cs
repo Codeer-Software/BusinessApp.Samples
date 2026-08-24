@@ -135,6 +135,80 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
         }
     }
 
+    /// <summary>この原仕訳を取り消す計上済みの反対仕訳が既にあるか（二重取消の検出）。</summary>
+    public async Task<bool> HasReversalAsync(JournalEntryId originalId)
+    {
+        var rows = await QueryAsync(
+            """
+            select 1 from journal_entries
+             where original_entry_id = @p1 and entry_type = 'reversal' and status = 'posted'
+             limit 1
+            """,
+            originalId.Value);
+
+        return rows.Count > 0;
+    }
+
+    /// <summary>
+    /// 明細を入れ替える。<b>反対仕訳の明細はシステムが決める</b>ので、
+    /// 送られてきた内容が何であれ、原仕訳を反転したものに置き換える。
+    /// </summary>
+    /// <remarks>
+    /// 下書きにしか当てない。計上済みの明細は DDL のトリガが変更も削除も追加も止める。
+    /// </remarks>
+    public async Task ReplaceLinesAsync(JournalEntryId id, IReadOnlyList<JournalLine> lines)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+
+        await dbAccessor.ExecuteAsync(
+            dataSourceName,
+            "delete from journal_lines where journal_entry_id = @p1",
+            new() { { "@p1", id.Value } });
+
+        foreach (var line in lines)
+        {
+            await dbAccessor.ExecuteAsync(
+                dataSourceName,
+                """
+                insert into journal_lines
+                    (journal_entry_id, line_no, debit_credit, account_id, sub_account_id,
+                     department_id, partner_id, partner_name_snapshot, amount, tax_category_id,
+                     tax_treatment, tax_point, applied_rule_version, is_tax_line, parent_line_no,
+                     item_description, book_only_deduction, evidence_ref)
+                values (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10,
+                        @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18)
+                """,
+                new()
+                {
+                    { "@p1", id.Value },
+                    { "@p2", line.LineNo },
+                    { "@p3", DbValue.ToSnakeCase(line.DebitCredit) },
+                    { "@p4", line.AccountId.Value },
+                    { "@p5", line.SubAccountId?.Value },
+                    { "@p6", line.DepartmentId?.Value },
+                    { "@p7", line.PartnerId?.Value },
+                    { "@p8", line.PartnerNameSnapshot },
+                    { "@p9", (long)line.Amount.Value },
+                    { "@p10", line.TaxCategoryId.Value },
+                    { "@p11", line.TaxTreatment is { } treatment ? DbValue.ToSnakeCase(treatment) : null },
+                    { "@p12", line.TaxPoint?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) },
+                    { "@p13", line.AppliedRuleVersion?.Value },
+                    { "@p14", line.IsTaxLine ? 1 : 0 },
+                    { "@p15", line.ParentLineNo },
+                    { "@p16", line.ItemDescription },
+                    { "@p17", line.BookOnlyDeduction },
+                    { "@p18", line.EvidenceRef },
+                });
+        }
+    }
+
+    /// <summary>下書きの摘要を差し替える（取消の摘要はシステムが決める）。</summary>
+    public async Task UpdateDescriptionAsync(JournalEntryId id, string? description)
+        => await dbAccessor.ExecuteAsync(
+            dataSourceName,
+            "update journal_entries set description = @p2 where id = @p1 and status = 'draft'",
+            new() { { "@p1", id.Value }, { "@p2", description } });
+
     private async Task<IReadOnlyList<IDictionary<string, object>>> QueryAsync(string sql, long parameter)
         => await dbAccessor.QueryAsync(
             dataSourceName, sql,

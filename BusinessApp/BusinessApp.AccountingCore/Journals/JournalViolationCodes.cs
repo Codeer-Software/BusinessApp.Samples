@@ -96,4 +96,7 @@ public static class JournalViolationCodes
 
     /// <summary>取消の仕訳を取り消そうとした。</summary>
     public const string ReversalOfReversal = "E-REVERSAL-CHAIN";
+
+    /// <summary>既に取り消されている仕訳を、もう一度取り消そうとした。</summary>
+    public const string AlreadyReversed = "E-REVERSAL-DUPLICATE";
 }

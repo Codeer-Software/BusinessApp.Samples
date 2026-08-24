@@ -22,12 +22,18 @@ public static class JournalReversal
     /// <param name="original">取り消す原仕訳。計上済みでなければならない。</param>
     /// <param name="postingDate">反対仕訳の計上日。取り消すと決めた日。</param>
     /// <param name="enteredAt">入力年月日。システムが決める（docs/04 §2）。</param>
+    /// <param name="context">
+    /// 伝票 1 本だけでは判定できないこと（既に取り消されているか）。呼び出し側が調べて渡す。
+    /// </param>
     public static ReversalResult Reverse(
-        JournalEntry original, DateOnly postingDate, DateTimeOffset enteredAt)
+        JournalEntry original,
+        DateOnly postingDate,
+        DateTimeOffset enteredAt,
+        ReversalContext context = default)
     {
         ArgumentNullException.ThrowIfNull(original);
 
-        var violations = Validate(original, postingDate).ToList();
+        var violations = Validate(original, postingDate, context).ToList();
         if (violations.HasError())
         {
             return new ReversalResult(violations);
@@ -52,8 +58,18 @@ public static class JournalReversal
         return new ReversalResult(violations, reversal);
     }
 
-    private static IEnumerable<Violation> Validate(JournalEntry original, DateOnly postingDate)
+    private static IEnumerable<Violation> Validate(
+        JournalEntry original, DateOnly postingDate, ReversalContext context)
     {
+        // 二重取消は残高を狂わせる。取り消したものをもう一度取り消しても、
+        // 帳簿には「同じ金額の反対仕訳が 2 本」が残るだけで、元の取引は 1 回しか無い。
+        if (context.IsAlreadyReversed)
+        {
+            yield return new Violation(
+                JournalViolationCodes.AlreadyReversed,
+                "この仕訳は既に取り消されている。");
+        }
+
         // 下書きは帳簿ではないので、取り消すのではなく消せばよい（docs/04 §5）。
         // 下書きに反対仕訳を立てられると、帳簿に「取り消された何か」が増えるだけになる。
         if (original.Status != EntryStatus.Posted)
@@ -106,6 +122,16 @@ public static class JournalReversal
             ? $"伝票番号 {original.EntryNo} の取消"
             : $"伝票番号 {original.EntryNo} の取消: {original.Description}";
 }
+
+/// <summary>
+/// 取消の可否を決めるために、伝票 1 本の外から持ってくる情報。
+/// </summary>
+/// <remarks>
+/// <see cref="PostingContext"/> と同じ考え方で、<b>ドメインは DB を知らない</b>ので
+/// 呼び出し側が調べて渡す（ADR-0008）。
+/// </remarks>
+/// <param name="IsAlreadyReversed">この原仕訳を取り消す計上済みの反対仕訳が既にあるか。</param>
+public readonly record struct ReversalContext(bool IsAlreadyReversed);
 
 /// <summary>
 /// 反対仕訳を作った結果。

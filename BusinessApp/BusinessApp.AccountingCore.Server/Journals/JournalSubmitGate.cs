@@ -1,6 +1,7 @@
 namespace BusinessApp.AccountingCore.Server.Journals;
 
 using BusinessApp.AccountingCore.Journals;
+using BusinessApp.AccountingCore.Shared;
 using BusinessApp.AccountingCore.Server.Shared;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
@@ -36,6 +37,7 @@ using Codeer.LowCode.Blazor.Repository.Data;
 public sealed class JournalSubmitGate(
     AccountingMasterLoader masterLoader,
     JournalEntryStore entryStore,
+    JournalReversalPosting reversalPosting,
     EntryNumberSequenceStore sequenceStore,
     TimeProvider timeProvider)
 {
@@ -47,10 +49,15 @@ public sealed class JournalSubmitGate(
     /// </summary>
     public static JournalSubmitGate Create(
         IDbAccessor dbAccessor, string dataSourceName, TimeProvider timeProvider)
-        => new(new AccountingMasterLoader(dbAccessor, dataSourceName),
-               new JournalEntryStore(dbAccessor, dataSourceName),
-               new EntryNumberSequenceStore(dbAccessor, dataSourceName),
-               timeProvider);
+    {
+        var entryStore = new JournalEntryStore(dbAccessor, dataSourceName);
+        return new JournalSubmitGate(
+            new AccountingMasterLoader(dbAccessor, dataSourceName),
+            entryStore,
+            new JournalReversalPosting(entryStore),
+            new EntryNumberSequenceStore(dbAccessor, dataSourceName),
+            timeProvider);
+    }
 
     // 状態の文字列は列挙子から導く。手で "posted" と書くと、列挙子や DB の値を変えたときに
     // 黙って一致しなくなり、計上ボタンが下書き保存に化ける（qa/01 の静かな失敗そのもの）。
@@ -136,6 +143,12 @@ public sealed class JournalSubmitGate(
     private async Task PostAsync(JournalEntryId id, PostingContext context)
     {
         var draft = await entryStore.LoadAsync(id);
+
+        if (draft.EntryType == EntryType.Reversal)
+        {
+            draft = await reversalPosting.ApplyAsync(draft);
+        }
+
         var sequence = await sequenceStore.ReadAsync(draft.FiscalYearId);
         var result = JournalPosting.Post(draft, context, sequence, timeProvider.GetUtcNow());
 

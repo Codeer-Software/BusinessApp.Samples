@@ -50,6 +50,9 @@ internal sealed class AccountingServer : IDisposable
 
     public JournalSubmitGate Gate { get; }
 
+    /// <summary>取消の中身を決める部品。到達しない防御を直接呼んで確かめるために公開する。</summary>
+    public JournalReversalPosting ReversalPosting => new(EntryStore);
+
     /// <summary>
     /// 本番（<c>CustomizedModuleDataIO.SubmitAsync</c>）と同じ形で 1 回の保存を通す。
     /// <b>トランザクションで包む。</b> 例外で巻き戻ることまで含めて本番と同じにしないと、
@@ -191,6 +194,44 @@ internal sealed class AccountingServer : IDisposable
 
         return id;
     }
+
+    /// <summary>計上済みの仕訳を 1 件作る（取消の相手として使う）。</summary>
+    public JournalEntryId InsertPosted(
+        int entryNo, string? description, params (string DebitCredit, string AccountCode, long Amount)[] lines)
+    {
+        var id = InsertDraft();
+
+        // 摘要は下書きのうちに入れる。計上済みの変更はトリガが止める。
+        if (description is not null)
+        {
+            Execute($"update journal_entries set description = '{description}' where id = {id.Value}");
+        }
+
+        var lineNo = 0;
+        foreach (var (debitCredit, accountCode, amount) in lines)
+        {
+            InsertLine(id, ++lineNo, debitCredit, accountCode, amount);
+        }
+
+        // 下書きとして書いてから状態を進める（DDL のトリガが唯一許す順序）。
+        Execute($"""
+            update journal_entries
+               set status = 'posted', entry_no = {entryNo}, posted_at = '2026-08-24 13:00:00'
+             where id = {id.Value}
+            """);
+
+        // 採番も一緒に進める。進めないと、次の計上が同じ番号を取って一意制約に当たる。
+        Execute($"""
+            update journal_entry_sequences set next_entry_no = {entryNo + 1}
+             where fiscal_year_id = {FiscalYear.Value} and next_entry_no <= {entryNo}
+            """);
+
+        return id;
+    }
+
+    /// <summary>取消の下書きを 1 件作る（明細は入れない。中身はサーバが決める）。</summary>
+    public JournalEntryId InsertReversalDraft(JournalEntryId originalId, string postingDate = "2026-08-25")
+        => InsertDraft(postingDate: postingDate, entryType: "reversal", originalEntryId: originalId);
 
     /// <summary>取引先を 1 件足す（初期データには 0 件しか無い）。</summary>
     public long InsertPartner(string code = "P001", string name = "株式会社れい")
