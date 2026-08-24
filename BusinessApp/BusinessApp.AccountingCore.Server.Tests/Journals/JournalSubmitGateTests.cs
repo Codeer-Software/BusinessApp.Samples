@@ -230,6 +230,32 @@ public class JournalSubmitGateTests
         Assert.Contains(TemporaryId, error.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// まだ作っていない種別は計上させない（種別のホワイトリスト）。
+    /// </summary>
+    /// <remarks>
+    /// 期首残高・決算振替・繰越は、それぞれ固有の前提（I-11・I-12・繰越の再実行）を持つ。
+    /// 素通りさせると、その前提を満たさない伝票が普通の仕訳として帳簿に載る。
+    /// </remarks>
+    [Theory]
+    [InlineData("opening")]
+    [InlineData("closing")]
+    [InlineData("carryover")]
+    public async Task 未実装の種別は計上できない(string entryType)
+    {
+        using var server = new AccountingServer();
+        var draft = server.InsertDraft(entryType: entryType);
+        server.InsertLine(draft, 1, "debit", "1100", 100);
+        server.InsertLine(draft, 2, "credit", "2100", 100);
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => PostSavedAsync(server, draft));
+
+        Assert.Contains(JournalViolationCodes.EntryTypeNotSupported, error.Violations.Select(v => v.Code));
+        Assert.Equal("draft", server.StatusOf(draft));
+        Assert.Equal(1, server.Scalar<long>("select next_entry_no from journal_entry_sequences"));
+    }
+
     /// <summary>保存が済んでいる下書きを、保存経路を通して計上させる。</summary>
     private static Task PostSavedAsync(AccountingServer server, JournalEntryId id)
     {

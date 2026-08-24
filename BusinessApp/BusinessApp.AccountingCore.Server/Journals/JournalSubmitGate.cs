@@ -38,7 +38,8 @@ public sealed class JournalSubmitGate(
     AccountingMasterLoader masterLoader,
     JournalEntryStore entryStore,
     JournalReversalPosting reversalPosting,
-    EntryNumberSequenceStore sequenceStore,
+    JournalCorrectionPosting correctionPosting,
+    JournalPoster poster,
     TimeProvider timeProvider)
 {
     public const string EntryModuleName = "JournalEntry";
@@ -55,7 +56,8 @@ public sealed class JournalSubmitGate(
             new AccountingMasterLoader(dbAccessor, dataSourceName),
             entryStore,
             new JournalReversalPosting(entryStore),
-            new EntryNumberSequenceStore(dbAccessor, dataSourceName),
+            new JournalCorrectionPosting(entryStore),
+            new JournalPoster(entryStore, new EntryNumberSequenceStore(dbAccessor, dataSourceName), timeProvider),
             timeProvider);
     }
 
@@ -145,12 +147,14 @@ public sealed class JournalSubmitGate(
         var draft = await entryStore.LoadAsync(id);
 
         // **種別ごとに通ってよい経路を決める（ホワイトリスト）。** 未実装の種別
-        // （訂正・期首残高・決算振替・繰越）を素通りさせると、反対仕訳を起こさないまま
-        // 帳簿に取引が二重に載る。
+        // （期首残高・決算振替・繰越）を素通りさせると、それぞれの前提を満たさないまま
+        // 帳簿に載る。訂正を素通りさせた場合はもっと直接的で、原仕訳が生きたまま
+        // 再計上が載り、取引が二重に計上される。
         draft = draft.EntryType switch
         {
             EntryType.Normal => draft,
             EntryType.Reversal => await reversalPosting.ApplyAsync(draft, context),
+            EntryType.Correction => await correctionPosting.ApplyAsync(draft),
             _ => throw new JournalPostingRejectedException(
             [
                 new Violation(
@@ -159,16 +163,7 @@ public sealed class JournalSubmitGate(
             ]),
         };
 
-        var sequence = await sequenceStore.ReadAsync(draft.FiscalYearId);
-        var result = JournalPosting.Post(draft, context, sequence, timeProvider.GetUtcNow());
-
-        if (!result.IsPosted)
-        {
-            throw new JournalPostingRejectedException(result.Violations);
-        }
-
-        await sequenceStore.SaveAsync(sequence, result.NextSequence!.Value);
-        await entryStore.MarkPostedAsync(id, result.EntryNo!.Value, result.PostedEntry!.PostedAt!.Value);
+        await poster.PostAsync(draft, context);
     }
 
     /// <summary>

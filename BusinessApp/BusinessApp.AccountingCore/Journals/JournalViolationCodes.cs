@@ -85,20 +85,41 @@ public static class JournalViolationCodes
     /// <summary>消費税行が本体行から引き継ぐべき値を引き継いでいない。</summary>
     public const string TaxLineNotInherited = "E-TAX-INHERIT";
 
-    /// <summary>計上していない仕訳を取り消そうとした（docs/04 §5）。</summary>
-    public const string ReversalTargetNotPosted = "E-REVERSAL-NOT-POSTED";
+    // --- 取消・訂正に共通（原仕訳の側の規則。docs/04 §5・AmendmentRules）---
 
-    /// <summary>保存されていない仕訳を取り消そうとした（原仕訳を特定できない）。</summary>
-    public const string ReversalTargetUnidentified = "E-REVERSAL-NO-ID";
+    /// <summary>取り消す／訂正しようとした仕訳が存在しない。</summary>
+    public const string AmendmentTargetNotFound = "E-AMEND-NOT-FOUND";
 
-    /// <summary>取消の計上日が原仕訳より前になっている。</summary>
-    public const string ReversalBeforeOriginal = "E-REVERSAL-DATE";
+    /// <summary>計上していない仕訳を取り消す／訂正しようとした。</summary>
+    public const string AmendmentTargetNotPosted = "E-AMEND-NOT-POSTED";
 
-    /// <summary>通常でない仕訳（取消・期首残高・決算振替・繰越）を取り消そうとした。</summary>
-    public const string ReversalTargetNotNormal = "E-REVERSAL-TARGET-TYPE";
+    /// <summary>保存されていない仕訳を取り消す／訂正しようとした（原仕訳を特定できない）。</summary>
+    public const string AmendmentTargetUnidentified = "E-AMEND-NO-ID";
+
+    /// <summary>取消・訂正の計上日が原仕訳より前になっている。</summary>
+    public const string AmendmentBeforeOriginal = "E-AMEND-DATE";
+
+    /// <summary>対象にできない種別（取消・期首残高・決算振替・繰越）を取り消す／訂正しようとした。</summary>
+    public const string AmendmentTargetNotAmendable = "E-AMEND-TARGET-TYPE";
+
+    // --- 取消 ---
 
     /// <summary>既に取り消されている仕訳を、もう一度取り消そうとした。</summary>
     public const string AlreadyReversed = "E-REVERSAL-DUPLICATE";
+
+    // --- 訂正 ---
+
+    /// <summary>
+    /// 取り消されていない原仕訳を訂正しようとした。
+    /// <b>原仕訳が生きたまま再計上が載ると、取引が帳簿に二重に計上される。</b>
+    /// </summary>
+    public const string OriginalNotReversed = "E-CORRECTION-ORIGINAL-LIVE";
+
+    /// <summary>同じ原仕訳に対する再計上を 2 本目も計上しようとした。</summary>
+    public const string AlreadyCorrected = "E-CORRECTION-DUPLICATE";
+
+    /// <summary>再計上の計上日が、原仕訳を取り消した日より前になっている。</summary>
+    public const string CorrectionBeforeReversal = "E-CORRECTION-BEFORE-REVERSAL";
 
     /// <summary>まだ実装していない種別の仕訳を計上しようとした。</summary>
     public const string EntryTypeNotSupported = "E-ENTRY-TYPE";

@@ -60,7 +60,7 @@ public sealed class JournalReversalPosting(JournalEntryStore entryStore)
 
         var original = await entryStore.LoadAsync(originalId);
         var reversalContext = new ReversalContext(
-            await entryStore.HasReversalAsync(originalId), period.FiscalYearId);
+            await entryStore.FindReversedOnAsync(originalId) is not null, period.FiscalYearId);
         var result = JournalReversal.Reverse(original, draft.PostingDate, draft.EnteredAt, reversalContext);
 
         if (!result.Created)

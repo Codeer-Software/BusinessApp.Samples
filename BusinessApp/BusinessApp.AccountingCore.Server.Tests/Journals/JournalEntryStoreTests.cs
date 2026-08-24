@@ -270,4 +270,103 @@ public class JournalEntryStoreTests
         Assert.Contains("下書きではない", error.Message, StringComparison.Ordinal);
         Assert.Equal(2, server.Scalar<long>($"select count(*) from journal_lines where journal_entry_id = {id.Value}"));
     }
+
+    [Fact]
+    public async Task 計上済みの伝票には取消の内容を書き込めない()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertPosted(1, "原本", "2026-08-24", ("debit", "1100", 100), ("credit", "2100", 100));
+        var reversal = (await server.EntryStore.LoadAsync(id)) with { Description = "書き換え" };
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => server.EntryStore.OverwriteReversalHeaderAsync(id, reversal));
+
+        Assert.Contains("下書きではない", error.Message, StringComparison.Ordinal);
+        Assert.Equal("原本", server.Scalar<string>($"select description from journal_entries where id = {id.Value}"));
+    }
+
+    /// <summary>
+    /// サーバが自分から書く下書きが、全項目そのまま往復すること。
+    /// </summary>
+    /// <remarks>
+    /// <b>NULL のままの列は「書けている」ことを何も証明しない</b>（R3 で明細の 17 列が
+    /// 全テスト NULL だった実例がある）。任意項目を埋めた形と空の形の両方を通す。
+    /// </remarks>
+    [Fact]
+    public async Task 下書きは全項目が往復する()
+    {
+        using var server = new AccountingServer();
+        var partner = server.InsertPartner();
+        var original = server.InsertPosted(1, null, "2026-05-20", ("debit", "1100", 10), ("credit", "2100", 10));
+
+        var draft = new JournalEntry
+        {
+            FiscalYearId = AccountingServer.FiscalYear,
+            TransactionDate = new DateOnly(2026, 5, 20),
+            PostingDate = new DateOnly(2026, 8, 24),
+            Status = EntryStatus.Draft,
+            EntryType = EntryType.Correction,
+            OriginalEntryId = original,
+            Description = "全項目を埋めた下書き",
+            PartnerId = new PartnerId(partner),
+            SourceComponent = "expense",
+            SourceDocumentId = "EXP-001",
+            IdempotencyKey = "expense/EXP-001",
+            EnteredAt = AccountingServer.Now,
+            Lines = [Line(server, 1, DebitCredit.Debit, "1100", 700), Line(server, 2, DebitCredit.Credit, "2100", 700)],
+        };
+
+        var loaded = await server.EntryStore.LoadAsync(await server.EntryStore.InsertDraftAsync(draft));
+
+        Assert.Equal(draft with { Id = loaded.Id, Lines = loaded.Lines }, loaded with { Lines = loaded.Lines });
+        Assert.Equal(draft.Lines, loaded.Lines);
+    }
+
+    [Fact]
+    public async Task 任意項目が空の下書きも書ける()
+    {
+        // 取消・訂正でない下書き（原仕訳も取引先も外部投入の印も無い形）。
+        using var server = new AccountingServer();
+        var draft = new JournalEntry
+        {
+            FiscalYearId = AccountingServer.FiscalYear,
+            TransactionDate = new DateOnly(2026, 8, 24),
+            PostingDate = new DateOnly(2026, 8, 24),
+            Status = EntryStatus.Draft,
+            EntryType = EntryType.Normal,
+            EnteredAt = AccountingServer.Now,
+            Lines = [Line(server, 1, DebitCredit.Debit, "1100", 1)],
+        };
+
+        var loaded = await server.EntryStore.LoadAsync(await server.EntryStore.InsertDraftAsync(draft));
+
+        Assert.Null(loaded.OriginalEntryId);
+        Assert.Null(loaded.PartnerId);
+        Assert.Null(loaded.Description);
+        Assert.Null(loaded.SourceComponent);
+        Assert.Null(loaded.SourceDocumentId);
+        Assert.Null(loaded.IdempotencyKey);
+        Assert.Equal(EntryStatus.Draft, loaded.Status);
+    }
+
+    private static JournalLine Line(
+        AccountingServer server, int lineNo, DebitCredit side, string accountCode, long amount)
+        => new()
+        {
+            LineNo = lineNo,
+            DebitCredit = side,
+            AccountId = server.AccountOf(accountCode),
+            Amount = Yen.From(amount),
+            TaxCategoryId = server.TaxCategoryOf("OUT"),
+        };
+
+    [Fact]
+    public async Task 存在しない仕訳は見つからない()
+    {
+        using var server = new AccountingServer();
+
+        Assert.Null(await server.EntryStore.FindAsync(new JournalEntryId(999)));
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => server.EntryStore.LoadAsync(new JournalEntryId(999)));
+    }
 }

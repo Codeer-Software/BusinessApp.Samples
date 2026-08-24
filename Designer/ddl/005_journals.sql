@@ -69,6 +69,14 @@ CREATE UNIQUE INDEX ux_journal_entries_single_reversal
     ON journal_entries (original_entry_id)
     WHERE entry_type = 'reversal' AND status = 'posted';
 
+-- 1 本の仕訳を訂正する再計上も 1 本まで（ADR-0015）。
+-- **再計上が 2 本載ると、直した内容がそのまま二重に計上される。**
+-- 訂正をやり直したいときは、その訂正の伝票を訂正する（訂正は訂正できる）。
+-- 取消と同じく、アプリ側の検査は同時実行に勝てないので最後は DB が止める。
+CREATE UNIQUE INDEX ux_journal_entries_single_correction
+    ON journal_entries (original_entry_id)
+    WHERE entry_type = 'correction' AND status = 'posted';
+
 CREATE TABLE journal_lines (
     id                          INTEGER PRIMARY KEY AUTOINCREMENT,
 

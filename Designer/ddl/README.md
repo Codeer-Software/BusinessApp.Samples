@@ -86,6 +86,9 @@ dotnet test BusinessApp.slnx
 | I-14 外部伝票の二重計上を防ぐ | `idempotency_key` の `UNIQUE` | — （フェーズ 6 の投入 API） |
 | I-17 伝票番号を再利用しない | `UNIQUE (fiscal_year_id, entry_no)` ＋ 採番表 ＋ 下書きに番号を持たせない `CHECK` | `I-17` ＋ `E-FISCAL-YEAR` |
 | 入力年月日は変えられない | `BEFORE UPDATE` トリガ | — （サーバが値を決める） |
+| 取消は原仕訳 1 本につき 1 本 | 部分 UNIQUE インデックス | `E-REVERSAL-DUPLICATE` |
+| 再計上は原仕訳 1 本につき 1 本 | 部分 UNIQUE インデックス | `E-CORRECTION-DUPLICATE` |
+| 再計上より先に取消がある | — （順序は行をまたぐ） | `E-CORRECTION-ORIGINAL-LIVE` ＋ `E-CORRECTION-BEFORE-REVERSAL` |
 | 金額は正の整数円 | `CHECK (amount > 0)` | `E-AMOUNT` |
 | 行番号は正の整数で伝票内に一意 | `CHECK (line_no > 0)` ＋ `UNIQUE` | `E-LINE-NO` |
 | 消費税行だけが親行を持つ | `CHECK` | `E-TAX-PARENT` ＋ `E-TAX-INHERIT` |

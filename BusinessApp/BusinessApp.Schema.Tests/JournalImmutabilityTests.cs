@@ -163,12 +163,52 @@ public class JournalImmutabilityTests
         Assert.Equal(2L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM journal_entries WHERE entry_type = 'reversal'"));
     }
 
-    private static string ReversalDraft(int id) => $"""
+    /// <summary>
+    /// 1 本の仕訳を訂正する再計上も 1 本まで（ADR-0015）。
+    /// </summary>
+    /// <remarks>
+    /// <b>再計上が 2 本載ると、直した内容がそのまま二重に計上される。</b>
+    /// 取消と同じく、アプリ側の検査は同時に 2 人が訂正した場合に勝てない。
+    /// </remarks>
+    [Fact]
+    public void 同じ仕訳を二度訂正できない()
+    {
+        using var db = SchemaSeed.CreateWithPostedEntry();
+
+        TestDatabase.Execute(db, Amendment(id: 2, entryNo: 2, entryType: "reversal"));
+        TestDatabase.Execute(db, Amendment(id: 3, entryNo: 3, entryType: "correction"));
+
+        Assert.Throws<SqliteException>(() =>
+            TestDatabase.Execute(db, Amendment(id: 4, entryNo: 4, entryType: "correction")));
+        Assert.Equal(1L, TestDatabase.ScalarOf<long>(db,
+            "SELECT COUNT(*) FROM journal_entries WHERE entry_type = 'correction' AND status = 'posted'"));
+    }
+
+    /// <summary>
+    /// 取消と再計上は別々に数える。同じ原仕訳に 1 本ずつ載るのが訂正の正常な姿である。
+    /// </summary>
+    [Fact]
+    public void 取消と再計上は同じ原仕訳に一本ずつ載せられる()
+    {
+        using var db = SchemaSeed.CreateWithPostedEntry();
+
+        TestDatabase.Execute(db, Amendment(id: 2, entryNo: 2, entryType: "reversal"));
+        TestDatabase.Execute(db, Amendment(id: 3, entryNo: 3, entryType: "correction"));
+
+        Assert.Equal(2L, TestDatabase.ScalarOf<long>(db,
+            "SELECT COUNT(*) FROM journal_entries WHERE original_entry_id = 1 AND status = 'posted'"));
+    }
+
+    private static string ReversalDraft(int id) => AmendmentDraft(id, "reversal");
+
+    private static string Reversal(int id, int entryNo) => Amendment(id, entryNo, "reversal");
+
+    private static string AmendmentDraft(int id, string entryType) => $"""
         INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, entered_at)
-            VALUES ({id}, 1, '2026-05-20', '2026-05-21', 'draft', 'reversal', 1, '2026-05-21 10:00:00');
+            VALUES ({id}, 1, '2026-05-20', '2026-05-21', 'draft', '{entryType}', 1, '2026-05-21 10:00:00');
         """;
 
-    private static string Reversal(int id, int entryNo) => ReversalDraft(id) + $"""
+    private static string Amendment(int id, int entryNo, string entryType) => AmendmentDraft(id, entryType) + $"""
         UPDATE journal_entries SET status = 'posted', entry_no = {entryNo}, posted_at = '2026-05-21 10:00:00' WHERE id = {id};
         """;
 }
