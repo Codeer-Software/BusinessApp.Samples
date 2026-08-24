@@ -595,7 +595,7 @@
       },
       "PagerPosition": "Bottom",
       "ReplaceMode": "None",
-      "DeleteTogether": false,
+      "DeleteTogether": true,
       "CanCreate": true,
       "CanUpdate": true,
       "CanDelete": true,
