@@ -1,5 +1,7 @@
 namespace BusinessApp.Schema.Tests;
 
+using BusinessApp.TestSupport;
+
 /// <summary>
 /// 初期データ（<c>Designer/seed/</c>）の検査。
 /// </summary>

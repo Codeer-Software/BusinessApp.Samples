@@ -13,6 +13,81 @@
     },
     "Links": [
       {
+        "Title": "仕訳",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
+        "ModulePageType": "Auto",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "JournalEntry",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "",
+          "HeaderTitle": "",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": true,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": true,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [
+                {
+                  "Variable": "PostingDate.Value",
+                  "IsDescending": true
+                },
+                {
+                  "Variable": "EntryNo.Value",
+                  "IsDescending": true
+                }
+              ],
+              "SortFieldVariable": "",
+              "SortDescending": false,
+              "ModuleName": ""
+            },
+            "PagerPosition": "Top",
+            "ReplaceMode": "None",
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": true,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "UseIndexSort": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        }
+      },
+      {
         "Title": "事業所情報",
         "Icon": "",
         "IconType": "Font",

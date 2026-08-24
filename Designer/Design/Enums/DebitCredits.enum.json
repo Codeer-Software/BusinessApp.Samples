@@ -1,0 +1,16 @@
+{
+  "Name": "DebitCredits",
+  "ValueType": "String",
+  "Members": [
+    {
+      "Name": "Debit",
+      "Value": "debit",
+      "DisplayText": "借方"
+    },
+    {
+      "Name": "Credit",
+      "Value": "credit",
+      "DisplayText": "貸方"
+    }
+  ]
+}

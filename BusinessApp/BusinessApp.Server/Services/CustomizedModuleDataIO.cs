@@ -4,6 +4,7 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 using Codeer.LowCode.Blazor.DesignLogic;
 using Codeer.LowCode.Blazor.Extras.Services;
 using Codeer.LowCode.Blazor.Repository.Data;
+using BusinessApp.AccountingCore.Server.Journals;
 
 namespace BusinessApp.Server.Services
 {
@@ -13,13 +14,34 @@ namespace BusinessApp.Server.Services
         //-1 (コア既定) で無効
         static CustomizedModuleDataIO() => BulkAddThreshold = 100;
 
+        //モジュール定義 (*.mod.json) の DataSourceName と一致していなければならない。
+        const string AccountingDataSourceName = "BusinessAppSQLite";
+
         readonly DesignData _designData;
+        readonly JournalSubmitGate _journalGate;
 
         public CustomizedModuleDataIO(DesignData designData, IAuthenticationContext authenticationContext, IDbAccessor dbAccess, ITemporaryFileManager temporaryFileManager)
             : base(designData, authenticationContext, dbAccess, temporaryFileManager)
         {
             _designData = designData;
+
+            //会計の関門 (ADR-0008)。仕訳の計上はここを必ず通る。
+            //データソースは名前で引く。添字だと 2 件目が増えた瞬間に、
+            //会計コアだけが別の DB を読み書きして静かに壊れる。
+            var dataSourceName = SystemConfig.Instance.DataSources
+                .FirstOrDefault(e => e.Name == AccountingDataSourceName)?.Name
+                ?? throw LowCodeException.Create($"データソース {AccountingDataSourceName} が設定にない");
+            _journalGate = JournalSubmitGate.Create(dbAccess, dataSourceName, TimeProvider.System);
         }
+
+        //トランザクション単位の入口。伝票の更新だけを見る UpdateAsync では、
+        //同じ保存で送られてきた明細がまだ見えず、貸借一致を判定できない。
+        //
+        //関門が保存そのものを包む (JournalSubmitGate 参照)。順番は関門が持つので、
+        //ここから呼び忘れも並べ替えもできない。違反があれば関門が例外を投げ、
+        //この保存ごと巻き戻る。
+        public override Task<List<ModuleSubmitResult>> SubmitAsync(Guid transactionId, List<ModuleSubmitData> transactionData)
+            => _journalGate.SubmitAsync(transactionData, () => base.SubmitAsync(transactionId, transactionData));
 
         protected override async Task<string> AddAsync(Guid transactionId, Guid moduleSubmitId, ModuleData data)
         {

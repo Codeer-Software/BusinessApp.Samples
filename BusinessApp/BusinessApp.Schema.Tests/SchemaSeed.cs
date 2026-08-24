@@ -1,5 +1,7 @@
 namespace BusinessApp.Schema.Tests;
 
+using BusinessApp.TestSupport;
+
 using Microsoft.Data.Sqlite;
 
 /// <summary>制約の検査に要る最小限のデータ。会計年度 1 本・月次期間 1 本・マスタ数件。</summary>
@@ -34,6 +36,14 @@ internal static class SchemaSeed
         UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-05-20 10:00:00' WHERE id = 1;
         UPDATE journal_entry_sequences SET next_entry_no = next_entry_no + 1 WHERE fiscal_year_id = 1;
         """;
+
+    /// <summary>マスタだけを入れた DB を返す。</summary>
+    public static SqliteConnection Create()
+    {
+        var db = TestDatabase.Create();
+        TestDatabase.Execute(db, Masters);
+        return db;
+    }
 
     /// <summary>マスタと計上済み仕訳 1 本を入れた DB を返す。</summary>
     public static SqliteConnection CreateWithPostedEntry()

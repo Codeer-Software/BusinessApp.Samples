@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- 会計コアのサーバ側（ADR-0008）。DB アクセス・保存時の関門・帳票 API を置く。
+       CLB のサーバ資産に依存してよい層はここまでで、AccountingCore は依存ゼロを保つ。 -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -7,8 +9,18 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
+  <!-- DB 境界の値変換（Shared/DbValue）は外に見せないが、検査はする。 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="BusinessApp.AccountingCore.Server.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\BusinessApp.AccountingCore\BusinessApp.AccountingCore.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Codeer.LowCode.Blazor" Version="1.3.20" />
+    <PackageReference Include="Codeer.LowCode.Blazor.DbAccess" Version="0.1.0" />
   </ItemGroup>
 
 </Project>

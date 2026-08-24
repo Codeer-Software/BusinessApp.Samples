@@ -1,0 +1,36 @@
+{
+  "Name": "EntryTypes",
+  "ValueType": "String",
+  "Members": [
+    {
+      "Name": "Normal",
+      "Value": "normal",
+      "DisplayText": "通常"
+    },
+    {
+      "Name": "Correction",
+      "Value": "correction",
+      "DisplayText": "訂正"
+    },
+    {
+      "Name": "Reversal",
+      "Value": "reversal",
+      "DisplayText": "取消"
+    },
+    {
+      "Name": "Opening",
+      "Value": "opening",
+      "DisplayText": "期首残高"
+    },
+    {
+      "Name": "Closing",
+      "Value": "closing",
+      "DisplayText": "決算振替"
+    },
+    {
+      "Name": "Carryover",
+      "Value": "carryover",
+      "DisplayText": "繰越"
+    }
+  ]
+}

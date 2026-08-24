@@ -25,6 +25,7 @@
        AccountingCore 側は依存ゼロのまま（参照の向きはこちら → AccountingCore）。 -->
   <ItemGroup>
     <ProjectReference Include="..\BusinessApp.AccountingCore\BusinessApp.AccountingCore.csproj" />
+    <ProjectReference Include="..\BusinessApp.TestSupport\BusinessApp.TestSupport.csproj" />
   </ItemGroup>
 
 </Project>

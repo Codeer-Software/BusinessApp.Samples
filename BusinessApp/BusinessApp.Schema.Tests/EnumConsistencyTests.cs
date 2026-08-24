@@ -1,5 +1,7 @@
 namespace BusinessApp.Schema.Tests;
 
+using BusinessApp.TestSupport;
+
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -29,10 +31,9 @@ public class EnumConsistencyTests
         { "用途区分（仕訳明細）",       "journal_lines.tax_treatment",         "TaxTreatments",     "ConsumptionTax.TaxTreatment" },
         { "締めの状態（会計年度）",     "fiscal_years.status",                 "PeriodStatuses",    "Periods.PeriodStatus" },
         { "締めの状態（会計期間）",     "accounting_periods.status",           "PeriodStatuses",    "Periods.PeriodStatus" },
-        // 仕訳の画面はまだ無いので CLB 側の enum も無い。作るときに足す。
-        { "仕訳の状態",                "journal_entries.status",              null,                "Journals.EntryStatus" },
-        { "仕訳の種別",                "journal_entries.entry_type",          null,                "Journals.EntryType" },
-        { "借方貸方",                  "journal_lines.debit_credit",          null,                "Shared.DebitCredit" },
+        { "仕訳の状態",                "journal_entries.status",              "EntryStatuses",     "Journals.EntryStatus" },
+        { "仕訳の種別",                "journal_entries.entry_type",          "EntryTypes",        "Journals.EntryType" },
+        { "借方貸方",                  "journal_lines.debit_credit",          "DebitCredits",      "Shared.DebitCredit" },
     };
 
     [Theory]
