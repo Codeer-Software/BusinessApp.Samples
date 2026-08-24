@@ -9,18 +9,15 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
-  <!-- カバレッジのゲート（ADR-0012）。`dotnet test` を打つだけで計測と閾値判定が走る。
-       AccountingCore は依存ゼロの純粋ドメインなので、到達不能なコードが原理的に無い。
-       100% に届かないなら「テストしていないロジック」か「要らないコード」のどちらかである。
-       SkipAutoProps: 未設定の init プロパティを穴に数えない。
-       ExcludeByAttribute の CompilerGeneratedAttribute: record のコピーコンストラクタ
-       （`with` を使わない型では呼ばれない、自分で書いていないコード）を除く。
-       実測でラムダは 1 つも除外されないことを確認済み。 -->
+  <!-- カバレッジのゲート（ADR-0012）。AccountingCore と同じ 100% を敷く。
+       ここは DB と CLB に触る層なので「テストしにくいから外す」誘惑が働くが、
+       本物の DDL に本物の SQL を流す土台（BusinessApp.TestSupport）がある以上、
+       到達できないコードは残らない。届かないなら、それは要らないコードである。 -->
   <PropertyGroup>
     <CollectCoverage>true</CollectCoverage>
     <CoverletOutputFormat>cobertura</CoverletOutputFormat>
     <CoverletOutput>$(MSBuildThisFileDirectory)TestResults/</CoverletOutput>
-    <Include>[BusinessApp.AccountingCore]*</Include>
+    <Include>[BusinessApp.AccountingCore.Server]*</Include>
     <SkipAutoProps>true</SkipAutoProps>
     <ExcludeByAttribute>CompilerGeneratedAttribute</ExcludeByAttribute>
     <Threshold>100</Threshold>
@@ -43,7 +40,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\BusinessApp.AccountingCore\BusinessApp.AccountingCore.csproj" />
+    <ProjectReference Include="..\BusinessApp.AccountingCore.Server\BusinessApp.AccountingCore.Server.csproj" />
     <ProjectReference Include="..\BusinessApp.TestSupport\BusinessApp.TestSupport.csproj" />
   </ItemGroup>
 

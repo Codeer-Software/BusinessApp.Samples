@@ -1,5 +1,7 @@
 namespace BusinessApp.Schema.Tests;
 
+using BusinessApp.TestSupport;
+
 using Microsoft.Data.Sqlite;
 
 /// <summary>制約の検査に要る最小限のデータ。会計年度 1 本・月次期間 1 本・マスタ数件。</summary>

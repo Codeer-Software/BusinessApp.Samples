@@ -49,8 +49,9 @@ public sealed class JournalSubmitGate(
 
         // 伝票と明細は同じ ModuleSubmitData の Add / Update に混ざって届く（qa/01 F-11・F-12）。
         // ModuleSubmitData.ModuleName ではなく ModuleData.Name で見分ける。
-        var added = transactionData.SelectMany(d => d.Add).Where(IsEntry).ToList();
-        var changed = added.Concat(transactionData.SelectMany(d => d.Update).Where(IsEntry)).ToList();
+        var added = EntriesIn(transactionData, d => d.Add);
+        var changed = new List<ModuleData>(added);
+        changed.AddRange(EntriesIn(transactionData, d => d.Update));
 
         // 入力年月日はシステムが決める。利用者からの値は採らない（docs/04 §2）。
         // 新規のときだけ打つ。既存の値は DB のトリガが変更を拒む。
@@ -125,7 +126,11 @@ public sealed class JournalSubmitGate(
                 $"計上する仕訳の ID を解決できない（送られてきた値: {submittedId}）。");
     }
 
-    private static bool IsEntry(ModuleData data) => data.Name == EntryModuleName;
+    /// <summary>保存内容から伝票だけを拾う。明細は同じ束に混ざっている（qa/01 F-11）。</summary>
+    private static List<ModuleData> EntriesIn(
+        IReadOnlyList<ModuleSubmitData> transactionData,
+        Func<ModuleSubmitData, List<ModuleData>> part)
+        => transactionData.SelectMany(part).Where(d => d.Name == EntryModuleName).ToList();
 
     private static string GetId(ModuleData data)
         => Field<IdFieldData>(data, "Id")?.Value ?? string.Empty;

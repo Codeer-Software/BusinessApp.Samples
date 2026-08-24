@@ -1,4 +1,4 @@
-namespace BusinessApp.Schema.Tests;
+namespace BusinessApp.TestSupport;
 
 using Microsoft.Data.Sqlite;
 
@@ -6,13 +6,18 @@ using Microsoft.Data.Sqlite;
 /// <c>Designer/ddl/</c> の DDL を使い捨ての SQLite に適用して返す。
 /// </summary>
 /// <remarks>
+/// <b>テストプロジェクトの外に置いてある。</b> スキーマの検査（<c>Schema.Tests</c>）と
+/// サーバ側部品の検査（<c>AccountingCore.Server.Tests</c>）の両方が使うので、
+/// どちらかの中に置くと、もう一方がテストプロジェクトを参照する歪んだ形になる。
+/// </remarks>
+/// <remarks>
 /// <para><b>本物の DDL ファイルをそのまま流す。</b> テスト用に書き写したスキーマを使うと、
 /// 写し間違いを検出できないうえ、DDL を直したときに両方を直す必要が出て必ず腐る。</para>
 /// <para>接続ごとにインメモリ DB を作るので、テストは互いに干渉しない。
 /// SQLite の外部キーは<b>接続ごと</b>に有効化する必要があるため、接続文字列で明示する
 /// （実際の稼働 DB でも有効になっていることは確認済み）。</para>
 /// </remarks>
-internal static class TestDatabase
+public static class TestDatabase
 {
     /// <summary>DDL を適用済みの、開いた接続を返す。閉じるとデータは消える。</summary>
     public static SqliteConnection Create()

@@ -1,4 +1,4 @@
-namespace BusinessApp.AccountingCore.Tests.Conventions;
+namespace BusinessApp.AccountingCore.Server.Tests.Conventions;
 
 using BusinessApp.TestSupport;
 
@@ -6,13 +6,13 @@ using BusinessApp.TestSupport;
 /// テストの置き場所の規約（ADR-0012）。判定は <see cref="TestLayoutConvention"/> が持つ。
 /// </summary>
 /// <remarks>
-/// この検査を CLI ではなくテストに置いたのは、<c>dotnet test</c> が必ず流れるからである。
-/// 別立ての CLI は「流し忘れ」で静かに形骸化する。
+/// サーバ側にも同じ規約を敷く。<b>規約を敷かないプロジェクトを 1 つでも作ると、
+/// 「ここは例外」が既定になる。</b>
 /// </remarks>
 public class TestLayoutTests
 {
     private static readonly TestLayoutConvention Convention =
-        new(ProjectPaths.TestProject, ProjectPaths.SourceProjectName);
+        new(TestLayoutConvention.FindProjectDirectory(), "BusinessApp.AccountingCore.Server");
 
     [Fact]
     public void テストファイルは対象と同じ場所と名前に置かれている()
@@ -31,7 +31,6 @@ public class TestLayoutTests
     [Fact]
     public void テストプロジェクトとソースプロジェクトを見つけられる()
     {
-        // 以降の検査が「ファイルが 1 つも見つからず素通り」で緑にならないための土台。
         Assert.True(Directory.Exists(Convention.SourceProject), $"{Convention.SourceProjectName} が見つからない");
         Assert.NotEmpty(Convention.MirroredTestFiles());
     }

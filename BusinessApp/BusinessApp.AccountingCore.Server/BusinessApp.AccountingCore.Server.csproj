@@ -9,6 +9,11 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
+  <!-- DB 境界の値変換（Shared/DbValue）は外に見せないが、検査はする。 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="BusinessApp.AccountingCore.Server.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\BusinessApp.AccountingCore\BusinessApp.AccountingCore.csproj" />
   </ItemGroup>

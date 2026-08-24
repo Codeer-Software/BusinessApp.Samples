@@ -1,5 +1,7 @@
 namespace BusinessApp.Schema.Tests;
 
+using BusinessApp.TestSupport;
+
 /// <summary>
 /// スキーマの形。CLB の規約から外れると<b>静かに壊れる</b>ものを検査する。
 /// </summary>

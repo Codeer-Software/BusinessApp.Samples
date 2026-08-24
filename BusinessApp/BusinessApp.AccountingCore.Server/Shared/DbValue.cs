@@ -24,9 +24,10 @@ internal static class DbValue
 
     public static int? ToNullableInt(object? value) => IsNull(value) ? null : ToInt(value);
 
-    public static string ToText(object? value) => IsNull(value) ? string.Empty : value!.ToString() ?? string.Empty;
-
     public static string? ToNullableText(object? value) => IsNull(value) ? null : value!.ToString();
+
+    /// <summary>無い値を空文字にする。「無い」と「空」を区別したいときは <see cref="ToNullableText"/>。</summary>
+    public static string ToText(object? value) => ToNullableText(value) ?? string.Empty;
 
     /// <summary>SQLite の <c>INTEGER</c> 真偽値。0 以外を true とする。</summary>
     public static bool ToBool(object? value) => !IsNull(value) && ToLong(value) != 0;

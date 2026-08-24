@@ -1,5 +1,7 @@
 namespace BusinessApp.Schema.Tests;
 
+using BusinessApp.TestSupport;
+
 using Microsoft.Data.Sqlite;
 
 /// <summary>
