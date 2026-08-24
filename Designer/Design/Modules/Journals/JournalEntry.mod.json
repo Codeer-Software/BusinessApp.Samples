@@ -601,7 +601,24 @@
     "ModuleName": ""
   },
   "DataWriteCondition": {
-    "ModuleName": ""
+    "ModuleName": "JournalEntry",
+    "Condition": {
+      "IsOrMatch": false,
+      "IsNot": false,
+      "Children": [
+        {
+          "SearchTargetVariable": "Status.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "draft",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+        }
+      ],
+      "Name": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+    }
   },
   "DataReadCondition": {
     "ModuleName": ""

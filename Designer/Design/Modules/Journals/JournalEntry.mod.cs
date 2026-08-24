@@ -10,6 +10,7 @@
 void Detail_OnAfterInitialization()
 {
     UpdateTotals();
+    ApplyPostedLock();
 
     if (!IsNewData) return;
 
@@ -21,6 +22,18 @@ void Detail_OnAfterInitialization()
     Status.Value = EntryStatuses.Draft;
     EntryType.Value = EntryTypes.Normal;
     SelectFiscalYear(today);
+}
+
+// 計上済みの伝票では操作ボタンを消す。
+//
+// **これは見た目の話であって、守りではない。** 不変性を守るのは DB のトリガと
+// サーバ側の関門（ADR-0004）で、ここで消さなくても計上済みは書き換わらない。
+// ボタンを残すと「押しても何も起きない」ことになり、静かな失敗に見える。
+void ApplyPostedLock()
+{
+    var posted = Status.Value == EntryStatuses.Posted;
+    PostButton.IsVisible = !posted;
+    SubmitButton.IsVisible = !posted;
 }
 
 // 明細の追加・変更・削除で発火する（ListField の OnDataChanged）。
