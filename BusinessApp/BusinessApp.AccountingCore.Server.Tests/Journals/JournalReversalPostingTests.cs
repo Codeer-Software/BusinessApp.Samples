@@ -20,13 +20,20 @@ public class JournalReversalPostingTests
     public async Task 原仕訳の貸借を入れ替えた明細をシステムが入れる()
     {
         using var server = new AccountingServer();
-        var original = server.InsertPosted(1, null, ("debit", "1100", 1000), ("credit", "2100", 1000));
+        // **原仕訳と取消で取引日を変える。** 同じ日にすると、取引日が書き戻されていない
+        // という欠陥がテストから見えなくなる（実際にそれで見逃した）。
+        var original = server.InsertPosted(
+            1, null, "2026-05-20", ("debit", "1100", 1000), ("credit", "2100", 1000));
         var reversal = server.InsertReversalDraft(original);
 
         await PostAsync(server, reversal);
 
         var posted = await server.EntryStore.LoadAsync(reversal);
         Assert.Equal(EntryStatus.Posted, posted.Status);
+
+        // 取引日は原仕訳のまま。計上日だけが後ろにずれる（docs/04 §5）。
+        Assert.Equal(new DateOnly(2026, 5, 20), posted.TransactionDate);
+        Assert.Equal(new DateOnly(2026, 8, 25), posted.PostingDate);
         Assert.Equal(2, posted.EntryNo);
         Assert.Equal(EntryType.Reversal, posted.EntryType);
         Assert.Equal(original, posted.OriginalEntryId);
@@ -44,7 +51,7 @@ public class JournalReversalPostingTests
     public async Task 画面から送られた明細は使わない()
     {
         using var server = new AccountingServer();
-        var original = server.InsertPosted(1, null, ("debit", "1100", 1000), ("credit", "2100", 1000));
+        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 1000), ("credit", "2100", 1000));
         var reversal = server.InsertReversalDraft(original);
 
         // でたらめな明細を入れておく。取消の中身は利用者が決められない。
@@ -55,13 +62,16 @@ public class JournalReversalPostingTests
         var posted = await server.EntryStore.LoadAsync(reversal);
         Assert.Equal(2, posted.Lines.Count);
         Assert.Equal([Yen.From(1000), Yen.From(1000)], posted.Lines.Select(l => l.Amount));
+
+        // でたらめ行の税区分（課税仕入）が残っていないこと。原仕訳の「対象外」に戻る。
+        Assert.All(posted.Lines, l => Assert.Equal(server.TaxCategoryOf("OUT"), l.TaxCategoryId));
     }
 
     [Fact]
     public async Task 摘要に何の取消かが残る()
     {
         using var server = new AccountingServer();
-        var original = server.InsertPosted(1, "5 月分の売上", ("debit", "1100", 500), ("credit", "2100", 500));
+        var original = server.InsertPosted(1, "5 月分の売上", "2026-05-20", ("debit", "1100", 500), ("credit", "2100", 500));
         var reversal = server.InsertReversalDraft(original);
 
         await PostAsync(server, reversal);
@@ -73,7 +83,7 @@ public class JournalReversalPostingTests
     public async Task 二重取消はできず_伝票も採番も残らない()
     {
         using var server = new AccountingServer();
-        var original = server.InsertPosted(1, null, ("debit", "1100", 1000), ("credit", "2100", 1000));
+        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 1000), ("credit", "2100", 1000));
         await PostAsync(server, server.InsertReversalDraft(original));
 
         var second = server.InsertReversalDraft(original);
@@ -92,9 +102,10 @@ public class JournalReversalPostingTests
         // 直接呼んで、通ってしまわないことを確かめる。
         using var server = new AccountingServer();
         var draft = Draft() with { Id = new JournalEntryId(1), OriginalEntryId = null };
+        var context = await server.MasterLoader.LoadAsync();
 
         var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
-            () => server.ReversalPosting.ApplyAsync(draft));
+            () => new JournalReversalPosting(server.EntryStore).ApplyAsync(draft, context));
 
         Assert.Contains(JournalViolationCodes.OriginalEntryMissing, error.Violations.Select(v => v.Code));
     }
@@ -104,8 +115,10 @@ public class JournalReversalPostingTests
     {
         using var server = new AccountingServer();
 
+        var context = await server.MasterLoader.LoadAsync();
+
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => server.ReversalPosting.ApplyAsync(Draft() with { Id = null }));
+            () => new JournalReversalPosting(server.EntryStore).ApplyAsync(Draft() with { Id = null }, context));
 
         Assert.Contains("保存されていない", error.Message, StringComparison.Ordinal);
     }

@@ -94,9 +94,12 @@ public static class JournalViolationCodes
     /// <summary>取消の計上日が原仕訳より前になっている。</summary>
     public const string ReversalBeforeOriginal = "E-REVERSAL-DATE";
 
-    /// <summary>取消の仕訳を取り消そうとした。</summary>
-    public const string ReversalOfReversal = "E-REVERSAL-CHAIN";
+    /// <summary>通常でない仕訳（取消・期首残高・決算振替・繰越）を取り消そうとした。</summary>
+    public const string ReversalTargetNotNormal = "E-REVERSAL-TARGET-TYPE";
 
     /// <summary>既に取り消されている仕訳を、もう一度取り消そうとした。</summary>
     public const string AlreadyReversed = "E-REVERSAL-DUPLICATE";
+
+    /// <summary>まだ実装していない種別の仕訳を計上しようとした。</summary>
+    public const string EntryTypeNotSupported = "E-ENTRY-TYPE";
 }

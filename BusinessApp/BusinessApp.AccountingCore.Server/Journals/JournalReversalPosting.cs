@@ -18,9 +18,20 @@ public sealed class JournalReversalPosting(JournalEntryStore entryStore)
     /// 取消の下書きに、原仕訳を反転した明細と摘要を書き込み、書き戻した姿を返す。
     /// 取り消せないときは例外にして保存全体を巻き戻す。
     /// </summary>
-    public async Task<JournalEntry> ApplyAsync(JournalEntry draft)
+    public async Task<JournalEntry> ApplyAsync(JournalEntry draft, PostingContext context)
     {
         ArgumentNullException.ThrowIfNull(draft);
+        ArgumentNullException.ThrowIfNull(context);
+
+        // **書く前に状態を見る。** 計上済みに書き込もうとするとトリガが生の SQLite 例外を出し、
+        // 業務のことばで差し戻せなくなる。
+        if (draft.Status != EntryStatus.Draft)
+        {
+            throw new JournalPostingRejectedException(
+            [
+                new Violation(JournalViolationCodes.AlreadyPosted, "計上済みの仕訳は、もう一度計上できない。"),
+            ]);
+        }
 
         if (draft.Id is not { } id)
         {
@@ -35,9 +46,22 @@ public sealed class JournalReversalPosting(JournalEntryStore entryStore)
             ]);
         }
 
+        // 会計年度は**取消の計上日**から引く。原仕訳の年度を写すと、年度をまたぐ取消が
+        // 「作れたのに計上できない」という一番読みにくい行き止まりになる。
+        if (context.Calendar.ResolvePeriod(draft.PostingDate) is not { } period)
+        {
+            throw new JournalPostingRejectedException(
+            [
+                new Violation(
+                    JournalViolationCodes.PeriodNotFound,
+                    $"計上日 {draft.PostingDate:yyyy-MM-dd} に対応する会計期間がない。"),
+            ]);
+        }
+
         var original = await entryStore.LoadAsync(originalId);
-        var context = new ReversalContext(await entryStore.HasReversalAsync(originalId));
-        var result = JournalReversal.Reverse(original, draft.PostingDate, draft.EnteredAt, context);
+        var reversalContext = new ReversalContext(
+            await entryStore.HasReversalAsync(originalId), period.FiscalYearId);
+        var result = JournalReversal.Reverse(original, draft.PostingDate, draft.EnteredAt, reversalContext);
 
         if (!result.Created)
         {
@@ -45,7 +69,7 @@ public sealed class JournalReversalPosting(JournalEntryStore entryStore)
         }
 
         await entryStore.ReplaceLinesAsync(id, result.Reversal!.Lines);
-        await entryStore.UpdateDescriptionAsync(id, result.Reversal.Description);
+        await entryStore.OverwriteReversalHeaderAsync(id, result.Reversal);
 
         // 書き戻した姿を読み直す。**検証にかけるのは DB に入っている内容**である。
         return await entryStore.LoadAsync(id);

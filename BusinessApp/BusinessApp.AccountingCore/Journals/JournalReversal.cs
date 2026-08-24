@@ -1,5 +1,6 @@
 namespace BusinessApp.AccountingCore.Journals;
 
+using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
@@ -23,13 +24,14 @@ public static class JournalReversal
     /// <param name="postingDate">反対仕訳の計上日。取り消すと決めた日。</param>
     /// <param name="enteredAt">入力年月日。システムが決める（docs/04 §2）。</param>
     /// <param name="context">
-    /// 伝票 1 本だけでは判定できないこと（既に取り消されているか）。呼び出し側が調べて渡す。
+    /// 伝票 1 本だけでは決まらないこと。呼び出し側が調べて渡す。
+    /// <b>省略可能にしない。</b> 既定値は「まだ取り消されていない」＝最も危険な側になる。
     /// </param>
     public static ReversalResult Reverse(
         JournalEntry original,
         DateOnly postingDate,
         DateTimeOffset enteredAt,
-        ReversalContext context = default)
+        ReversalContext context)
     {
         ArgumentNullException.ThrowIfNull(original);
 
@@ -41,7 +43,9 @@ public static class JournalReversal
 
         var reversal = new JournalEntry
         {
-            FiscalYearId = original.FiscalYearId,
+            // **計上日の属する会計年度**であって、原仕訳の年度ではない。
+            // 3 月の仕訳を 4 月に取り消せば、反対仕訳は新しい年度に載る。
+            FiscalYearId = context.FiscalYearId,
             // **取引日は原仕訳と同じにする**（訂正に気づいた日ではない）。帳簿の「取引年月日」は
             // 取引そのものを説明する欄であって、訂正作業の日ではないからである（docs/04 §5）。
             TransactionDate = original.TransactionDate,
@@ -96,13 +100,14 @@ public static class JournalReversal
                 $"取消の計上日 {postingDate:yyyy-MM-dd} が、原仕訳の計上日 {original.PostingDate:yyyy-MM-dd} より前になっている。");
         }
 
-        // 取消の取消は作らない（元に戻したいなら、原仕訳と同じ内容を計上し直す）。
-        // 取り消しの連鎖は帳簿を読めなくするだけで、何も表現できない。
-        if (original.EntryType == EntryType.Reversal)
+        // **取り消してよいのは通常の仕訳だけ。**
+        // 取消の取消は連鎖するだけで何も表現できない。期首残高・決算振替・繰越を
+        // 反対仕訳で打ち消すと、残高の前提（I-11・I-12）と繰越の再実行が噛み合わなくなる。
+        if (original.EntryType != EntryType.Normal)
         {
             yield return new Violation(
-                JournalViolationCodes.ReversalOfReversal,
-                "取消の仕訳は取り消せない。元に戻すなら、同じ内容の仕訳を計上し直す。");
+                JournalViolationCodes.ReversalTargetNotNormal,
+                $"種別が「{original.EntryType}」の仕訳は取り消せない。取り消せるのは通常の仕訳だけ。");
         }
     }
 
@@ -131,7 +136,11 @@ public static class JournalReversal
 /// 呼び出し側が調べて渡す（ADR-0008）。
 /// </remarks>
 /// <param name="IsAlreadyReversed">この原仕訳を取り消す計上済みの反対仕訳が既にあるか。</param>
-public readonly record struct ReversalContext(bool IsAlreadyReversed);
+/// <param name="FiscalYearId">
+/// 取消の計上日が属する会計年度。<b>原仕訳の年度ではない。</b>
+/// 年度をまたいで取り消すと、反対仕訳は新しい年度に載って新しい番号を採る。
+/// </param>
+public readonly record struct ReversalContext(bool IsAlreadyReversed, FiscalYearId FiscalYearId);
 
 /// <summary>
 /// 反対仕訳を作った結果。

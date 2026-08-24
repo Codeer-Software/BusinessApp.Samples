@@ -160,6 +160,15 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
     {
         ArgumentNullException.ThrowIfNull(lines);
 
+        // 下書きにしか当てない。計上済みの明細はトリガが止めるが、トリガに当てて
+        // 生の SQLite 例外を出すより、業務のことばで先に止めるほうがよい。
+        var draft = await QueryAsync(
+            "select 1 from journal_entries where id = @p1 and status = 'draft'", id.Value);
+        if (draft.Count != 1)
+        {
+            throw new InvalidOperationException($"仕訳 {id.Value} は下書きではないので明細を入れ替えられない。");
+        }
+
         await dbAccessor.ExecuteAsync(
             dataSourceName,
             "delete from journal_lines where journal_entry_id = @p1",
@@ -188,10 +197,10 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
                     { "@p6", line.DepartmentId?.Value },
                     { "@p7", line.PartnerId?.Value },
                     { "@p8", line.PartnerNameSnapshot },
-                    { "@p9", (long)line.Amount.Value },
+                    { "@p9", checked((long)line.Amount.Value) },
                     { "@p10", line.TaxCategoryId.Value },
                     { "@p11", line.TaxTreatment is { } treatment ? DbValue.ToSnakeCase(treatment) : null },
-                    { "@p12", line.TaxPoint?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) },
+                    { "@p12", line.TaxPoint is { } point ? DbValue.ToDbDate(point) : null },
                     { "@p13", line.AppliedRuleVersion?.Value },
                     { "@p14", line.IsTaxLine ? 1 : 0 },
                     { "@p15", line.ParentLineNo },
@@ -202,12 +211,39 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
         }
     }
 
-    /// <summary>下書きの摘要を差し替える（取消の摘要はシステムが決める）。</summary>
-    public async Task UpdateDescriptionAsync(JournalEntryId id, string? description)
-        => await dbAccessor.ExecuteAsync(
+    /// <summary>
+    /// 取消の伝票を、システムが決めた内容で置き換える。
+    /// </summary>
+    /// <remarks>
+    /// <b>取消は利用者が中身を決める操作ではない</b>ので、取引日・会計年度・取引先・摘要まで
+    /// 原仕訳から作り直したもので上書きする。外部投入の印は手入力の取消には付かないので落とす。
+    /// </remarks>
+    public async Task OverwriteReversalHeaderAsync(JournalEntryId id, JournalEntry reversal)
+    {
+        ArgumentNullException.ThrowIfNull(reversal);
+
+        var affected = await dbAccessor.ExecuteAsync(
             dataSourceName,
-            "update journal_entries set description = @p2 where id = @p1 and status = 'draft'",
-            new() { { "@p1", id.Value }, { "@p2", description } });
+            """
+            update journal_entries
+               set transaction_date = @p2, fiscal_year_id = @p3, partner_id = @p4, description = @p5,
+                   source_component = null, source_document_id = null, idempotency_key = null
+             where id = @p1 and status = 'draft'
+            """,
+            new()
+            {
+                { "@p1", id.Value },
+                { "@p2", DbValue.ToDbDate(reversal.TransactionDate) },
+                { "@p3", reversal.FiscalYearId.Value },
+                { "@p4", reversal.PartnerId?.Value },
+                { "@p5", reversal.Description },
+            });
+
+        if (affected != 1)
+        {
+            throw new InvalidOperationException($"仕訳 {id.Value} は下書きではないので取消の内容を書き込めない。");
+        }
+    }
 
     private async Task<IReadOnlyList<IDictionary<string, object>>> QueryAsync(string sql, long parameter)
         => await dbAccessor.QueryAsync(

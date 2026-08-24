@@ -144,10 +144,20 @@ public sealed class JournalSubmitGate(
     {
         var draft = await entryStore.LoadAsync(id);
 
-        if (draft.EntryType == EntryType.Reversal)
+        // **種別ごとに通ってよい経路を決める（ホワイトリスト）。** 未実装の種別
+        // （訂正・期首残高・決算振替・繰越）を素通りさせると、反対仕訳を起こさないまま
+        // 帳簿に取引が二重に載る。
+        draft = draft.EntryType switch
         {
-            draft = await reversalPosting.ApplyAsync(draft);
-        }
+            EntryType.Normal => draft,
+            EntryType.Reversal => await reversalPosting.ApplyAsync(draft, context),
+            _ => throw new JournalPostingRejectedException(
+            [
+                new Violation(
+                    JournalViolationCodes.EntryTypeNotSupported,
+                    $"種別「{draft.EntryType}」の仕訳はまだ計上できない。"),
+            ]),
+        };
 
         var sequence = await sequenceStore.ReadAsync(draft.FiscalYearId);
         var result = JournalPosting.Post(draft, context, sequence, timeProvider.GetUtcNow());

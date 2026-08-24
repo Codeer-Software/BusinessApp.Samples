@@ -50,9 +50,6 @@ internal sealed class AccountingServer : IDisposable
 
     public JournalSubmitGate Gate { get; }
 
-    /// <summary>取消の中身を決める部品。到達しない防御を直接呼んで確かめるために公開する。</summary>
-    public JournalReversalPosting ReversalPosting => new(EntryStore);
-
     /// <summary>
     /// 本番（<c>CustomizedModuleDataIO.SubmitAsync</c>）と同じ形で 1 回の保存を通す。
     /// <b>トランザクションで包む。</b> 例外で巻き戻ることまで含めて本番と同じにしないと、
@@ -197,9 +194,12 @@ internal sealed class AccountingServer : IDisposable
 
     /// <summary>計上済みの仕訳を 1 件作る（取消の相手として使う）。</summary>
     public JournalEntryId InsertPosted(
-        int entryNo, string? description, params (string DebitCredit, string AccountCode, long Amount)[] lines)
+        int entryNo,
+        string? description,
+        string transactionDate,
+        params (string DebitCredit, string AccountCode, long Amount)[] lines)
     {
-        var id = InsertDraft();
+        var id = InsertDraft(transactionDate: transactionDate, postingDate: transactionDate);
 
         // 摘要は下書きのうちに入れる。計上済みの変更はトリガが止める。
         if (description is not null)

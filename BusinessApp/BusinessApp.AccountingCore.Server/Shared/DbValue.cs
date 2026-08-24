@@ -91,6 +91,16 @@ internal static class DbValue
             ? parsed
             : throw new InvalidOperationException($"日時として読めない値が入っている: {text}");
 
+    /// <summary>
+    /// 日付を DB に書く形にする。
+    /// </summary>
+    /// <remarks>
+    /// <b>時刻まで付ける。</b> CLB が DATE 列に書く正規形は日付＋00:00:00 で、
+    /// 時刻なしで書いた行だけが範囲検索から落ちる（qa/01 A-04）。書式の決定はここに集める。
+    /// </remarks>
+    public static string ToDbDate(DateOnly date)
+        => date.ToDateTime(TimeOnly.MinValue).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+
     /// <summary>DB の snake_case を C# の列挙子名に戻す（ADR-0012 で決めた対応）。</summary>
     public static string ToPascalCase(string value)
         => string.Concat(value.Split('_')

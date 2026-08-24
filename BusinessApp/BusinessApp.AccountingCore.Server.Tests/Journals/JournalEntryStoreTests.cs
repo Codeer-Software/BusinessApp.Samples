@@ -1,7 +1,10 @@
 namespace BusinessApp.AccountingCore.Server.Tests.Journals;
 
 using BusinessApp.AccountingCore.ConsumptionTax;
+using BusinessApp.AccountingCore.Accounts;
+using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Journals;
+using BusinessApp.AccountingCore.Partners;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 using BusinessApp.AccountingCore.Shared;
 
@@ -163,5 +166,108 @@ public class JournalEntryStoreTests
 
         Assert.Contains("下書きではない", error.Message, StringComparison.Ordinal);
         Assert.Equal(1, server.Scalar<long>($"select entry_no from journal_entries where id = {id.Value}"));
+    }
+
+    [Fact]
+    public async Task 明細を入れ替えると_全項目がそのまま読み戻せる()
+    {
+        // **書いた値が読み戻せることを 1 件で固定する。** 列を 1 つ取り違えても、
+        // 貸借一致でも金額でも検出できない（NULL のまま静かに落ちる）。
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+        var partnerId = server.InsertPartner();
+        var subAccountId = server.InsertSubAccount("1200");
+
+        var line = new JournalLine
+        {
+            LineNo = 7,
+            DebitCredit = DebitCredit.Credit,
+            AccountId = server.AccountOf("1200"),
+            SubAccountId = new SubAccountId(subAccountId),
+            DepartmentId = server.DepartmentOf("20"),
+            PartnerId = new PartnerId(partnerId),
+            PartnerNameSnapshot = "株式会社れい",
+            Amount = Yen.From(12_345),
+            TaxCategoryId = server.TaxCategoryOf("TP"),
+            TaxTreatment = TaxTreatment.ForTaxableSales,
+            TaxPoint = new DateOnly(2026, 10, 1),
+            AppliedRuleVersion = new RuleVersion("tax-2026-10"),
+            IsTaxLine = false,
+            ParentLineNo = null,
+            ItemDescription = "事務用品",
+            BookOnlyDeduction = "public_transport",
+            EvidenceRef = "DOC-1",
+        };
+
+        await server.EntryStore.ReplaceLinesAsync(id, [line]);
+
+        Assert.Equal(line, Assert.Single((await server.EntryStore.LoadAsync(id)).Lines));
+    }
+
+    [Fact]
+    public async Task 消費税行も親行の番号ごと読み戻せる()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+
+        var body = new JournalLine
+        {
+            LineNo = 1,
+            DebitCredit = DebitCredit.Debit,
+            AccountId = server.AccountOf("6110"),
+            DepartmentId = server.DepartmentOf("20"),
+            Amount = Yen.From(10_000),
+            TaxCategoryId = server.TaxCategoryOf("TP"),
+        };
+        var tax = body with
+        {
+            LineNo = 2,
+            AccountId = server.AccountOf("1540"),
+            Amount = Yen.From(1_000),
+            IsTaxLine = true,
+            ParentLineNo = 1,
+        };
+
+        await server.EntryStore.ReplaceLinesAsync(id, [body, tax]);
+
+        Assert.Equal([body, tax], (await server.EntryStore.LoadAsync(id)).Lines);
+    }
+
+    [Fact]
+    public async Task 課税仕入れの時点は_CLB_が書く形で保存する()
+    {
+        // 時刻なしで書くと、その行だけが日付の範囲検索から落ちる（qa/01 A-04）。
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+
+        await server.EntryStore.ReplaceLinesAsync(id,
+        [
+            new JournalLine
+            {
+                LineNo = 1,
+                DebitCredit = DebitCredit.Debit,
+                AccountId = server.AccountOf("1100"),
+                Amount = Yen.From(100),
+                TaxCategoryId = server.TaxCategoryOf("OUT"),
+                TaxPoint = new DateOnly(2026, 10, 1),
+            },
+        ]);
+
+        Assert.Equal(
+            "2026-10-01 00:00:00",
+            server.Scalar<string>($"select tax_point from journal_lines where journal_entry_id = {id.Value}"));
+    }
+
+    [Fact]
+    public async Task 計上済みの明細は入れ替えられない()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 100), ("credit", "2100", 100));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => server.EntryStore.ReplaceLinesAsync(id, []));
+
+        Assert.Contains("下書きではない", error.Message, StringComparison.Ordinal);
+        Assert.Equal(2, server.Scalar<long>($"select count(*) from journal_lines where journal_entry_id = {id.Value}"));
     }
 }

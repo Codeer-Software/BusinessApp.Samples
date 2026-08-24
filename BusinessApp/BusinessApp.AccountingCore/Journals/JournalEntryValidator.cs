@@ -165,7 +165,7 @@ public static class JournalEntryValidator
             }
 
             ValidateTaxLine(line, entry, violations);
-            ValidateDepartment(line, context.Departments, violations);
+            ValidateDepartment(line, entry, context.Departments, violations);
 
             var account = context.Accounts.Find(line.AccountId);
             if (account is null)
@@ -182,7 +182,8 @@ public static class JournalEntryValidator
                 violations.Add(new Violation(
                     JournalViolationCodes.AccountInactive,
                     $"勘定科目「{account.Name}」は無効で、新たな計上には使えない。",
-                    line.LineNo));
+                    line.LineNo,
+                    InactiveSeverity(entry)));
             }
 
             if (account.Category.IsProfitAndLoss() && line.DepartmentId is null)
@@ -193,12 +194,12 @@ public static class JournalEntryValidator
                     line.LineNo));
             }
 
-            ValidateSubAccount(line, account, context.SubAccounts, violations);
+            ValidateSubAccount(line, entry, account, context.SubAccounts, violations);
         }
     }
 
     private static void ValidateDepartment(
-        JournalLine line, DepartmentCatalog departments, List<Violation> violations)
+        JournalLine line, JournalEntry entry, DepartmentCatalog departments, List<Violation> violations)
     {
         if (line.DepartmentId is not { } departmentId)
         {
@@ -220,12 +221,14 @@ public static class JournalEntryValidator
             violations.Add(new Violation(
                 JournalViolationCodes.DepartmentInactive,
                 $"部門「{department.Name}」は無効で、新たな計上には使えない。",
-                line.LineNo));
+                line.LineNo,
+                    InactiveSeverity(entry)));
         }
     }
 
     private static void ValidateSubAccount(
-        JournalLine line, AccountDefinition account, SubAccountCatalog subAccounts, List<Violation> violations)
+        JournalLine line, JournalEntry entry, AccountDefinition account, SubAccountCatalog subAccounts,
+        List<Violation> violations)
     {
         if (line.SubAccountId is not { } subAccountId)
         {
@@ -265,9 +268,22 @@ public static class JournalEntryValidator
             violations.Add(new Violation(
                 JournalViolationCodes.SubAccountInactive,
                 $"補助科目「{subAccount.Name}」は無効で、新たな計上には使えない。",
-                line.LineNo));
+                line.LineNo,
+                    InactiveSeverity(entry)));
         }
     }
+
+    /// <summary>
+    /// 無効にしたマスタを使っていることの重さ。
+    /// </summary>
+    /// <remarks>
+    /// <b>取消では止めない。</b> 新たな計上には使えないが、取消は「過去に計上したものを
+    /// そのまま反転する」操作なので、後からマスタを無効にしたせいで
+    /// <b>訂正も取消もできない仕訳が帳簿に残る</b>という最悪の状態を作ってはいけない
+    /// （docs/04 §6・ADR-0004）。
+    /// </remarks>
+    private static ViolationSeverity InactiveSeverity(JournalEntry entry)
+        => entry.EntryType == EntryType.Reversal ? ViolationSeverity.Warning : ViolationSeverity.Error;
 
     private static void ValidateTaxLine(JournalLine line, JournalEntry entry, List<Violation> violations)
     {

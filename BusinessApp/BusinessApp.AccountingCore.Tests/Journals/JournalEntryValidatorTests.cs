@@ -331,6 +331,35 @@ public class JournalEntryValidatorTests
     }
 
     [Fact]
+    public void 取消では無効なマスタでも止めない()
+    {
+        // **後からマスタを無効にしたせいで、訂正も取消もできない仕訳が帳簿に残ってはいけない**
+        // （docs/04 §6・ADR-0004）。新たな計上には使えないが、取消は過去の反転である。
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.RetiredExpense, 1_000,
+                department: AccountingFixture.RetiredDepartment),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.BankAccount, 1_000,
+                subAccountId: AccountingFixture.RetiredBank))
+            with { EntryType = EntryType.Reversal, OriginalEntryId = new JournalEntryId(9) };
+
+        var violations = Validate(entry);
+
+        foreach (var code in new[]
+                 {
+                     JournalViolationCodes.AccountInactive,
+                     JournalViolationCodes.DepartmentInactive,
+                     JournalViolationCodes.SubAccountInactive,
+                 })
+        {
+            Assert.Equal(ViolationSeverity.Warning, AssertViolation(code, violations).Severity);
+        }
+
+        // 警告は返るが、計上はできる。
+        Assert.False(violations.HasError());
+    }
+
+    [Fact]
     public void マスタにない勘定科目は使えない()
     {
         var entry = AccountingFixture.Entry(
