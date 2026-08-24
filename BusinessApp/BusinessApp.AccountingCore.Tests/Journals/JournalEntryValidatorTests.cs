@@ -159,7 +159,9 @@ public class JournalEntryValidatorTests
             AccountingFixture.Line(0, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
             AccountingFixture.Line(-1, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
 
-        AssertViolation(JournalViolationCodes.LineNoInvalid, Validate(entry));
+        // **0 と -1 のそれぞれが弾かれること**を数える。「違反が 1 件以上ある」だけを見ると、
+        // 境界（0）の検査が死んでいても -1 が通してしまう（ミューテーションテストで発覚）。
+        Assert.Equal(2, Validate(entry).Count(v => v.Code == JournalViolationCodes.LineNoInvalid));
     }
 
     [Fact]
@@ -183,7 +185,11 @@ public class JournalEntryValidatorTests
             AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Sales, 1_000,
                 department: AccountingFixture.RetiredDepartment));
 
-        AssertViolation(JournalViolationCodes.DepartmentInactive, Validate(entry));
+        // 通常の仕訳では**計上を止める重さ**であること（取消では警告に落ちる）。
+        // 重さを見ないと、全部を警告に変えても緑のまま計上が通ってしまう。
+        var violations = Validate(entry);
+        Assert.Equal(ViolationSeverity.Error, AssertViolation(JournalViolationCodes.DepartmentInactive, violations).Severity);
+        Assert.True(violations.HasError());
     }
 
     [Fact]
@@ -327,7 +333,9 @@ public class JournalEntryValidatorTests
                 department: AccountingFixture.SalesDepartment),
             AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Cash, 1_000));
 
-        AssertViolation(JournalViolationCodes.AccountInactive, Validate(entry));
+        var violations = Validate(entry);
+        Assert.Equal(ViolationSeverity.Error, AssertViolation(JournalViolationCodes.AccountInactive, violations).Severity);
+        Assert.True(violations.HasError());
     }
 
     [Fact]
