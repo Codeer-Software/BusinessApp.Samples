@@ -30,6 +30,7 @@ public class JournalEntryStoreTests
         Assert.Equal(new DateOnly(2026, 8, 24), entry.PostingDate);
         Assert.Equal(EntryStatus.Draft, entry.Status);
         Assert.Equal(EntryType.Normal, entry.EntryType);
+        // JST 固定で読む（AccountingTimeZone）。マシンのタイムゾーンに依存させない。
         Assert.Equal(new DateTimeOffset(2026, 8, 24, 13, 0, 0, TimeSpan.FromHours(9)), entry.EnteredAt);
         Assert.True(entry.IsBalanced);
         Assert.Equal([1, 2], entry.Lines.Select(l => l.LineNo));
@@ -139,13 +140,15 @@ public class JournalEntryStoreTests
         using var server = new AccountingServer();
         var id = server.InsertDraft();
 
-        await server.EntryStore.MarkPostedAsync(id, 7, AccountingServer.Now);
+        await server.EntryStore.MarkPostedAsync(id, new EntryNumber(AccountingServer.FiscalYear, 7), AccountingServer.Now);
 
         var entry = await server.EntryStore.LoadAsync(id);
         Assert.Equal(EntryStatus.Posted, entry.Status);
         Assert.Equal(7, entry.EntryNo);
         Assert.Equal(AccountingServer.Now, entry.PostedAt);
-        Assert.Equal(1, server.Scalar<long>($"select optimistic_locking from journal_entries where id = {id.Value}"));
+
+        // 版は CLB が進めるもの。ここで進めると 1 回の保存で 2 つ進み、画面が古い版を握る。
+        Assert.Equal(0, server.Scalar<long>($"select optimistic_locking from journal_entries where id = {id.Value}"));
     }
 
     [Fact]
@@ -153,10 +156,10 @@ public class JournalEntryStoreTests
     {
         using var server = new AccountingServer();
         var id = server.InsertDraft();
-        await server.EntryStore.MarkPostedAsync(id, 1, AccountingServer.Now);
+        await server.EntryStore.MarkPostedAsync(id, new EntryNumber(AccountingServer.FiscalYear, 1), AccountingServer.Now);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => server.EntryStore.MarkPostedAsync(id, 2, AccountingServer.Now));
+            () => server.EntryStore.MarkPostedAsync(id, new EntryNumber(AccountingServer.FiscalYear, 2), AccountingServer.Now));
 
         Assert.Contains("下書きではない", error.Message, StringComparison.Ordinal);
         Assert.Equal(1, server.Scalar<long>($"select entry_no from journal_entries where id = {id.Value}"));

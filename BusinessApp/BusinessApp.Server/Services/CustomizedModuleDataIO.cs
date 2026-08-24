@@ -14,6 +14,9 @@ namespace BusinessApp.Server.Services
         //-1 (コア既定) で無効
         static CustomizedModuleDataIO() => BulkAddThreshold = 100;
 
+        //モジュール定義 (*.mod.json) の DataSourceName と一致していなければならない。
+        const string AccountingDataSourceName = "BusinessAppSQLite";
+
         readonly DesignData _designData;
         readonly JournalSubmitGate _journalGate;
 
@@ -23,27 +26,22 @@ namespace BusinessApp.Server.Services
             _designData = designData;
 
             //会計の関門 (ADR-0008)。仕訳の計上はここを必ず通る。
-            var dataSourceName = SystemConfig.Instance.DataSources[0].Name;
-            _journalGate = new JournalSubmitGate(
-                new AccountingMasterLoader(dbAccess, dataSourceName),
-                new JournalEntryStore(dbAccess, dataSourceName),
-                new EntryNumberSequenceStore(dbAccess, dataSourceName),
-                TimeProvider.System);
+            //データソースは名前で引く。添字だと 2 件目が増えた瞬間に、
+            //会計コアだけが別の DB を読み書きして静かに壊れる。
+            var dataSourceName = SystemConfig.Instance.DataSources
+                .FirstOrDefault(e => e.Name == AccountingDataSourceName)?.Name
+                ?? throw LowCodeException.Create($"データソース {AccountingDataSourceName} が設定にない");
+            _journalGate = JournalSubmitGate.Create(dbAccess, dataSourceName, TimeProvider.System);
         }
 
         //トランザクション単位の入口。伝票の更新だけを見る UpdateAsync では、
         //同じ保存で送られてきた明細がまだ見えず、貸借一致を判定できない。
         //
-        //保存を挟んで二段で通す (JournalSubmitGate 参照)。CLB は変更されたフィールドしか
-        //送ってこないので、検証は「送られてきた差分」ではなく「書かれた姿」に対して行う。
-        //違反があれば CompleteAsync が例外を投げ、この保存ごと巻き戻る。
-        public override async Task<List<ModuleSubmitResult>> SubmitAsync(Guid transactionId, List<ModuleSubmitData> transactionData)
-        {
-            var pending = _journalGate.Prepare(transactionData);
-            var results = await base.SubmitAsync(transactionId, transactionData);
-            await _journalGate.CompleteAsync(pending, results);
-            return results;
-        }
+        //関門が保存そのものを包む (JournalSubmitGate 参照)。順番は関門が持つので、
+        //ここから呼び忘れも並べ替えもできない。違反があれば関門が例外を投げ、
+        //この保存ごと巻き戻る。
+        public override Task<List<ModuleSubmitResult>> SubmitAsync(Guid transactionId, List<ModuleSubmitData> transactionData)
+            => _journalGate.SubmitAsync(transactionData, () => base.SubmitAsync(transactionId, transactionData));
 
         protected override async Task<string> AddAsync(Guid transactionId, Guid moduleSubmitId, ModuleData data)
         {

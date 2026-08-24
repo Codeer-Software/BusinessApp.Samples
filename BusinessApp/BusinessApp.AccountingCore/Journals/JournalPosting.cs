@@ -45,6 +45,6 @@ public static class JournalPosting
             PostedAt = postedAt,
         };
 
-        return new PostingResult(violations, posted, next);
+        return new PostingResult(violations, posted, number, next);
     }
 }

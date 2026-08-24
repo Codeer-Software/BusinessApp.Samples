@@ -76,7 +76,8 @@
       "IsFocusSkip": false,
       "NextFocusField": "",
       "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign",
+      "MaxFractionDigits": 0
     },
     {
       "DbColumn": "transaction_date",
@@ -998,7 +999,8 @@
                   "Color": "",
                   "Name": "",
                   "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign",
+                  "IsViewOnly": true
                 }
               },
               {

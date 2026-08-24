@@ -87,4 +87,48 @@ public class JournalImmutabilityTests
         Assert.Equal(2L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM journal_entries"));
         Assert.Equal(1L, TestDatabase.ScalarOf<long>(db, "SELECT original_entry_id FROM journal_entries WHERE id = 2"));
     }
+
+    /// <summary>
+    /// 計上は「下書きとして書いてから状態を進める」経路しか無い。
+    /// </summary>
+    /// <remarks>
+    /// ここが開いていると、貸借不一致・明細ゼロの計上済み伝票を直接書き込めてしまう。
+    /// しかも他のトリガが UPDATE も DELETE も明細の追加も止めるので、
+    /// <b>訂正も取消もできない行が恒久的に残る</b>（ADR-0004 が最も避けたい状態）。
+    /// </remarks>
+    [Fact]
+    public void 最初から計上済みとして仕訳を作れない()
+    {
+        using var db = SchemaSeed.Create();
+
+        Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
+            INSERT INTO journal_entries (fiscal_year_id, entry_no, transaction_date, posting_date, status, entry_type, entered_at, posted_at)
+                VALUES (1, 99, '2026-05-20', '2026-05-20', 'posted', 'normal', '2026-05-20 10:00:00', '2026-05-20 10:00:00');
+            """));
+
+        Assert.Equal(0L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM journal_entries"));
+    }
+
+    /// <summary>
+    /// 金額は整数円でなければならない（docs/04 §3）。
+    /// </summary>
+    /// <remarks>
+    /// <b>INTEGER と書くだけでは整数にならない。</b> SQLite の型親和性は 100.5 を整数に落とせず、
+    /// REAL のまま格納する。貸借一致の判定と保存値がずれる（I-01）ので DB でも拒む。
+    /// </remarks>
+    [Fact]
+    public void 小数の金額は保存できない()
+    {
+        using var db = SchemaSeed.Create();
+
+        TestDatabase.Execute(db, """
+            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES (1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');
+            """);
+
+        Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (1, 1, 'debit', 1, 100.5, 1);
+            """));
+    }
 }

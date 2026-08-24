@@ -2,6 +2,7 @@ namespace BusinessApp.AccountingCore.Server.Journals;
 
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Periods;
+using BusinessApp.AccountingCore.Server.Shared;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
 /// <summary>
@@ -28,12 +29,21 @@ public sealed class EntryNumberSequenceStore(IDbAccessor dbAccessor, string data
         var row = rows.FirstOrDefault();
         return row is null
             ? EntryNumberSequence.StartOf(fiscalYearId)
-            : new EntryNumberSequence(fiscalYearId, Convert.ToInt32(row["next_entry_no"], System.Globalization.CultureInfo.InvariantCulture));
+            : new EntryNumberSequence(fiscalYearId, DbValue.ToInt(row["next_entry_no"]));
     }
 
     /// <summary>進めた採番を書き戻す。読んだ値から変わっていたら書き込まない（同時計上の検出）。</summary>
     public async Task SaveAsync(EntryNumberSequence previous, EntryNumberSequence next)
     {
+        // 引数は同じ型が 2 つ並ぶので、取り違えてもコンパイルは通る。
+        // 取り違えると UPDATE も INSERT も 0 行になり、「競合した」という**嘘の理由**で落ちる。
+        if (previous.FiscalYearId != next.FiscalYearId || next.NextValue != previous.NextValue + 1)
+        {
+            throw new ArgumentException(
+                $"採番の進め方が壊れている（{previous} → {next}）。読んだ値と、それを 1 つ進めた値の順で渡す。",
+                nameof(next));
+        }
+
         var affected = await dbAccessor.ExecuteAsync(
             dataSourceName,
             """

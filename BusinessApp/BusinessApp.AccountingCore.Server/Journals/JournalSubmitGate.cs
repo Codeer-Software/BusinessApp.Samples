@@ -1,19 +1,26 @@
 namespace BusinessApp.AccountingCore.Server.Journals;
 
 using BusinessApp.AccountingCore.Journals;
+using BusinessApp.AccountingCore.Server.Shared;
 using Codeer.LowCode.Blazor.DataIO;
+using Codeer.LowCode.Blazor.DataIO.Db;
 using Codeer.LowCode.Blazor.Repository.Data;
 
 /// <summary>
 /// 保存時の関門（ADR-0008）。仕訳の計上を捕まえて <see cref="JournalPosting"/> を通す。
 /// </summary>
 /// <remarks>
-/// <para><b>保存を挟んで二段で動く。</b></para>
+/// <para><b>入口は <see cref="SubmitAsync"/> の 1 本だけにしてある。</b> 保存の前後で
+/// やることがあるが、それを 2 つの公開メソッドに分けると、順番を入れ替えても片方を
+/// 呼び忘れてもコンパイルが通ってしまう。<b>呼び忘れた場合に起きるのは「計上したつもりの
+/// 下書きが残る」ではなく「検証を一切通らずに計上済みが書かれる」</b>ので、
+/// ADR-0004 の関門がまるごと迂回される。順番は型で保証する。</para>
+/// <para>中でやっていること。</para>
 /// <list type="number">
-///   <item><see cref="Prepare"/> — 保存の前。入力年月日を打ち、
-///     「計上済み」で送られてきた伝票をいったん<b>下書きに戻す</b>。</item>
-///   <item><see cref="CompleteAsync"/> — 保存の後。書かれた伝票を丸ごと読み直して検証し、
-///     通れば採番して計上済みにする。違反があれば例外にして保存全体を巻き戻す。</item>
+///   <item>保存の前 — 入力年月日を打ち、「計上済み」で送られてきた伝票を<b>下書きに戻す</b>。</item>
+///   <item>保存（呼び出し側から渡された処理）。</item>
+///   <item>保存の後 — 書かれた伝票を丸ごと読み直して検証し、通れば採番して計上済みにする。
+///     違反があれば例外にして保存全体を巻き戻す。</item>
 /// </list>
 /// <para>いったん下書きとして書かせるのには理由が 2 つある。</para>
 /// <list type="bullet">
@@ -34,34 +41,72 @@ public sealed class JournalSubmitGate(
 {
     public const string EntryModuleName = "JournalEntry";
 
-    private const string DraftStatus = "draft";
-    private const string PostedStatus = "posted";
+    /// <summary>
+    /// 部品の組み立て。<b>本番もテストもここを通す。</b>
+    /// それぞれが手で組み立てると、本番の配線とテストの配線がずれても誰も気づけない。
+    /// </summary>
+    public static JournalSubmitGate Create(
+        IDbAccessor dbAccessor, string dataSourceName, TimeProvider timeProvider)
+        => new(new AccountingMasterLoader(dbAccessor, dataSourceName),
+               new JournalEntryStore(dbAccessor, dataSourceName),
+               new EntryNumberSequenceStore(dbAccessor, dataSourceName),
+               timeProvider);
 
-    /// <summary>計上を待っている伝票。<see cref="SubmittedId"/> は保存前の値（仮 ID のことがある）。</summary>
-    public readonly record struct PendingPosting(string SubmittedId);
+    // 状態の文字列は列挙子から導く。手で "posted" と書くと、列挙子や DB の値を変えたときに
+    // 黙って一致しなくなり、計上ボタンが下書き保存に化ける（qa/01 の静かな失敗そのもの）。
+    private static readonly string DraftStatus = DbValue.ToSnakeCase(EntryStatus.Draft);
+    private static readonly string PostedStatus = DbValue.ToSnakeCase(EntryStatus.Posted);
 
     /// <summary>
-    /// 保存の前に呼ぶ。計上として送られてきた伝票を下書きに戻し、後段に渡す控えを返す。
+    /// 保存を包む。<paramref name="save"/> は CLB 本来の保存処理。
     /// </summary>
-    public IReadOnlyList<PendingPosting> Prepare(IReadOnlyList<ModuleSubmitData> transactionData)
+    /// <remarks>
+    /// <paramref name="save"/> を呼ぶ前と後にやることがあるので、呼び出し側に順番を委ねず
+    /// ここで組み立てる。呼び出し側は「保存する処理」を渡すだけでよい。
+    /// </remarks>
+    public async Task<List<ModuleSubmitResult>> SubmitAsync(
+        IReadOnlyList<ModuleSubmitData> transactionData,
+        Func<Task<List<ModuleSubmitResult>>> save)
     {
         ArgumentNullException.ThrowIfNull(transactionData);
+        ArgumentNullException.ThrowIfNull(save);
 
+        var pending = RewriteForDraftSave(transactionData);
+        var results = await save();
+        await PostAllAsync(pending, results);
+
+        return results;
+    }
+
+    /// <summary>計上を待っている伝票。<see cref="SubmittedId"/> は保存前の値（仮 ID のことがある）。</summary>
+    private readonly record struct PendingPosting(string SubmittedId);
+
+    /// <summary>
+    /// 送られてきた保存内容を<b>書き換える</b>。計上として送られてきた伝票を下書きに戻し、
+    /// 入力年月日をシステムの値に差し替えて、計上待ちの控えを返す。
+    /// </summary>
+    private IReadOnlyList<PendingPosting> RewriteForDraftSave(IReadOnlyList<ModuleSubmitData> transactionData)
+    {
         // 伝票と明細は同じ ModuleSubmitData の Add / Update に混ざって届く（qa/01 F-11・F-12）。
         // ModuleSubmitData.ModuleName ではなく ModuleData.Name で見分ける。
         var added = EntriesIn(transactionData, d => d.Add);
-        var changed = new List<ModuleData>(added);
-        changed.AddRange(EntriesIn(transactionData, d => d.Update));
+        var updated = EntriesIn(transactionData, d => d.Update);
 
         // 入力年月日はシステムが決める。利用者からの値は採らない（docs/04 §2）。
-        // 新規のときだけ打つ。既存の値は DB のトリガが変更を拒む。
         foreach (var data in added)
         {
-            SetDateTime(data, "EnteredAt", timeProvider.GetUtcNow().LocalDateTime);
+            SetDateTime(data, "EnteredAt", AccountingTimeZone.ToWallClock(timeProvider.GetUtcNow()));
+        }
+
+        // 更新では**送られてきた入力年月日を捨てる**。DB のトリガも変更を拒むが、
+        // 正常系でトリガに当てない。トリガは最後の砦であって、日常の分岐ではない。
+        foreach (var data in updated)
+        {
+            data.Fields.Remove("EnteredAt");
         }
 
         var pending = new List<PendingPosting>();
-        foreach (var data in changed.Where(d => GetSelect(d, "Status") == PostedStatus))
+        foreach (var data in added.Concat(updated).Where(d => GetSelect(d, "Status") == PostedStatus))
         {
             SetSelect(data, "Status", DraftStatus);
             pending.Add(new PendingPosting(GetId(data)));
@@ -70,27 +115,16 @@ public sealed class JournalSubmitGate(
         return pending;
     }
 
-    /// <summary>
-    /// 保存の後に呼ぶ。書かれた伝票を読み直して検証し、通れば計上済みにする。
-    /// </summary>
-    public async Task CompleteAsync(
-        IReadOnlyList<PendingPosting> pending,
-        IReadOnlyList<ModuleSubmitResult> results)
+    /// <summary>書かれた伝票を読み直して検証し、通れば計上済みにする。</summary>
+    private async Task PostAllAsync(
+        IReadOnlyList<PendingPosting> pending, IReadOnlyList<ModuleSubmitResult> results)
     {
-        ArgumentNullException.ThrowIfNull(pending);
-        ArgumentNullException.ThrowIfNull(results);
-
         if (pending.Count == 0)
         {
             return;
         }
 
-        var idMap = results
-            .Where(r => r.TemporaryIdMap is not null)
-            .SelectMany(r => r.TemporaryIdMap)
-            .DistinctBy(pair => pair.Key, StringComparer.Ordinal)
-            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
-
+        var idMap = TemporaryIdMap(results);
         var context = await masterLoader.LoadAsync();
 
         foreach (var item in pending)
@@ -111,8 +145,29 @@ public sealed class JournalSubmitGate(
         }
 
         await sequenceStore.SaveAsync(sequence, result.NextSequence!.Value);
-        await entryStore.MarkPostedAsync(
-            id, result.PostedEntry!.EntryNo!.Value, result.PostedEntry.PostedAt!.Value);
+        await entryStore.MarkPostedAsync(id, result.EntryNo!.Value, result.PostedEntry!.PostedAt!.Value);
+    }
+
+    /// <summary>
+    /// 仮 ID から本物の ID への対応表。
+    /// <b>同じ仮 ID が二重に来たら止める。</b> 先勝ちで捨てると、片方が黙って別の伝票に化ける。
+    /// </summary>
+    private static Dictionary<string, string> TemporaryIdMap(IReadOnlyList<ModuleSubmitResult> results)
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var (temporary, real) in results.SelectMany(r => r.TemporaryIdMap))
+        {
+            if (map.TryGetValue(temporary, out var existing) && existing != real)
+            {
+                throw new InvalidOperationException(
+                    $"仮 ID {temporary} に本物の ID が 2 つ対応している（{existing} と {real}）。");
+            }
+
+            map[temporary] = real;
+        }
+
+        return map;
     }
 
     /// <summary>新規保存では ID が仮のままなので、保存結果の対応表で本物に置き換える。</summary>

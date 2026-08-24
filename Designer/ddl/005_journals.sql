@@ -51,6 +51,8 @@ CREATE TABLE journal_entries (
     CHECK (status = 'draft' OR (entry_no IS NOT NULL AND posted_at IS NOT NULL)),
     -- 下書きに伝票番号を与えない（番号の先食いを防ぐ）
     CHECK (status = 'posted' OR entry_no IS NULL),
+    -- 伝票番号は整数の連番である（金額と同じ理由で typeof を要求する）
+    CHECK (entry_no IS NULL OR typeof(entry_no) = 'integer'),
     -- I-17 会計年度の中で伝票番号は一意
     UNIQUE (fiscal_year_id, entry_no)
 );
@@ -63,7 +65,7 @@ CREATE TABLE journal_lines (
     id                          INTEGER PRIMARY KEY AUTOINCREMENT,
 
     journal_entry_id            INTEGER NOT NULL REFERENCES journal_entries(id),
-    line_no                     INTEGER NOT NULL CHECK (line_no > 0),
+    line_no                     INTEGER NOT NULL CHECK (line_no > 0 AND typeof(line_no) = 'integer'),
 
     -- 借方貸方は符号ではなく区分で持ち、金額は常に正（docs/04 §3）。
     debit_credit                TEXT NOT NULL CHECK (debit_credit IN ('debit', 'credit')),
@@ -78,7 +80,9 @@ CREATE TABLE journal_lines (
     partner_name_snapshot       TEXT,
 
     -- 税抜・正の整数円。REAL を使わない。
-    amount                      INTEGER NOT NULL CHECK (amount > 0),
+    -- **INTEGER と書くだけでは整数にならない。** SQLite の型親和性は 100.5 を整数に落とせず、
+    -- REAL のまま格納する。typeof で明示的に拒まないと、貸借一致の判定と保存値がずれる（I-01）。
+    amount                      INTEGER NOT NULL CHECK (amount > 0 AND typeof(amount) = 'integer'),
 
     -- 税に意味のない行にも「対象外」を明示する。NULL と対象外を 2 通りで表さない（docs/06 §1）。
     tax_category_id             INTEGER NOT NULL REFERENCES tax_categories(id),
@@ -124,6 +128,17 @@ CREATE TABLE journal_entry_sequences (
 -- 下書き → 計上（status が draft から posted へ変わる UPDATE）は通す。
 -- 計上済みの行に対する UPDATE / DELETE だけを止める。
 --------------------------------------------------------------------------------
+
+-- 計上は「下書きとして書いてから status を進める」経路しか無い。
+-- **最初から計上済みとして INSERT する道を塞ぐ。** ここが開いていると、
+-- 貸借不一致・明細ゼロの計上済み伝票を直接書き込めてしまい、しかも他のトリガが
+-- UPDATE も DELETE も明細の追加も止めるので、**訂正も取消もできない行が恒久的に残る**。
+CREATE TRIGGER trg_journal_entries_no_posted_insert
+BEFORE INSERT ON journal_entries
+FOR EACH ROW WHEN NEW.status = 'posted'
+BEGIN
+    SELECT RAISE(ABORT, '仕訳は下書きとして作る。計上は検証を通してから状態を進める。');
+END;
 
 -- 入力年月日は「システムに記録された日時」であり、**下書きの間も含めて後から変えられない**。
 -- 「通常の業務処理期間の経過後に入力した事実を確認できる」という優良な電子帳簿の要件

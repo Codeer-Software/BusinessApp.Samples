@@ -85,7 +85,9 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
             PartnerId = DbValue.ToNullableLong(row["partner_id"]) is { } partner
                 ? new PartnerId(partner) : null,
             PartnerNameSnapshot = DbValue.ToNullableText(row["partner_name_snapshot"]),
-            Amount = Yen.From(DbValue.ToLong(row["amount"])),
+            // **decimal のまま Yen に渡す。** long で受けると小数が黙って丸まり、
+            // Yen が持っている「整数円でなければ例外」というガードを迂回する（I-01）。
+            Amount = Yen.From(DbValue.ToDecimal(row["amount"])),
             TaxCategoryId = new TaxCategoryId(DbValue.ToLong(row["tax_category_id"])),
             TaxTreatment = DbValue.ToNullableEnum<TaxTreatment>(row["tax_treatment"]),
             TaxPoint = DbValue.ToNullableDate(row["tax_point"]),
@@ -103,21 +105,27 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
     /// 下書きに計上の印を付ける。<b>下書きにしか当たらない</b> ので、
     /// 二重計上も計上済みの書き換えもこの 1 文が防ぐ。
     /// </summary>
-    public async Task MarkPostedAsync(JournalEntryId id, int entryNo, DateTimeOffset postedAt)
+    /// <remarks>
+    /// <para><b>版（<c>optimistic_locking</c>）は触らない。</b> 版は CLB が
+    /// <c>OptimisticLockingFieldDesign</c> で進めるものなので、ここでも進めると
+    /// 1 回の保存で 2 つ進み、画面が握っている版が保存直後から古くなる（qa/01 F-09）。</para>
+    /// <para>採番は <see cref="EntryNumber"/> で受ける。生の <c>int</c> で受けると、
+    /// 会計年度と組で意味を持つ番号が境界で裸になる（ADR-0014）。</para>
+    /// </remarks>
+    public async Task MarkPostedAsync(JournalEntryId id, EntryNumber entryNo, DateTimeOffset postedAt)
     {
         var affected = await dbAccessor.ExecuteAsync(
             dataSourceName,
             """
             update journal_entries
-               set status = 'posted', entry_no = @p2, posted_at = @p3,
-                   optimistic_locking = optimistic_locking + 1
+               set status = 'posted', entry_no = @p2, posted_at = @p3
              where id = @p1 and status = 'draft'
             """,
             new()
             {
                 { "@p1", id.Value },
-                { "@p2", entryNo },
-                { "@p3", postedAt.LocalDateTime },
+                { "@p2", entryNo.Value },
+                { "@p3", AccountingTimeZone.ToWallClock(postedAt) },
             });
 
         if (affected != 1)

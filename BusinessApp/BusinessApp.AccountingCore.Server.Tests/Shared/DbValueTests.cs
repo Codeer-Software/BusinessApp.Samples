@@ -1,5 +1,6 @@
 namespace BusinessApp.AccountingCore.Server.Tests.Shared;
 
+using BusinessApp.AccountingCore;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Server.Shared;
 
@@ -40,6 +41,39 @@ public class DbValueTests
         Assert.Equal(7, DbValue.ToNullableInt(7L));
         Assert.Equal("abc", DbValue.ToText("abc"));
         Assert.Equal("abc", DbValue.ToNullableText("abc"));
+    }
+
+    [Fact]
+    public void 整数のはずの列に小数が入っていたら丸めずに止める()
+    {
+        // **丸めてはいけない。** 金額でこれが起きると、検証は丸めた値で貸借一致と判定し、
+        // DB には丸める前の値が残る（I-01 が破れる）。
+        Assert.Throws<InvalidOperationException>(() => DbValue.ToLong(1000.5m));
+        Assert.Throws<InvalidOperationException>(() => DbValue.ToInt(1.5m));
+        Assert.Throws<InvalidOperationException>(() => DbValue.ToNullableLong(1000.5m));
+        Assert.Throws<InvalidOperationException>(() => DbValue.ToNullableInt(1.5m));
+
+        Assert.Equal(1000.5m, DbValue.ToDecimal(1000.5m));
+        Assert.Equal(1000L, DbValue.ToLong(1000.0m));
+    }
+
+    [Fact]
+    public void 読めない日時は黙って別の値にせず止める()
+    {
+        Assert.Throws<InvalidOperationException>(() => DbValue.ToDate("2026/08/24"));
+        Assert.Throws<InvalidOperationException>(() => DbValue.ToDateTimeOffset("なにか"));
+    }
+
+    [Fact]
+    public void 列挙子と_DB_の文字列は往復する()
+    {
+        Assert.Equal("open", DbValue.ToSnakeCase(PeriodStatus.Open));
+        Assert.Equal("for_taxable_sales", DbValue.ToSnakeCase(ConsumptionTax.TaxTreatment.ForTaxableSales));
+
+        foreach (var status in Enum.GetValues<PeriodStatus>())
+        {
+            Assert.Equal(status, DbValue.ToEnum<PeriodStatus>(DbValue.ToSnakeCase(status)));
+        }
     }
 
     [Theory]

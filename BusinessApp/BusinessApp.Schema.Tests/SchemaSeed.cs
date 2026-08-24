@@ -37,6 +37,14 @@ internal static class SchemaSeed
         UPDATE journal_entry_sequences SET next_entry_no = next_entry_no + 1 WHERE fiscal_year_id = 1;
         """;
 
+    /// <summary>マスタだけを入れた DB を返す。</summary>
+    public static SqliteConnection Create()
+    {
+        var db = TestDatabase.Create();
+        TestDatabase.Execute(db, Masters);
+        return db;
+    }
+
     /// <summary>マスタと計上済み仕訳 1 本を入れた DB を返す。</summary>
     public static SqliteConnection CreateWithPostedEntry()
     {

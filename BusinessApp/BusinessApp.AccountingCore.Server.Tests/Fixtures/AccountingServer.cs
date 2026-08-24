@@ -1,5 +1,6 @@
 namespace BusinessApp.AccountingCore.Server.Tests.Fixtures;
 
+using System.Globalization;
 using BusinessApp.AccountingCore.Accounts;
 using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Departments;
@@ -7,35 +8,38 @@ using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Server.Journals;
 using BusinessApp.TestSupport;
+using Codeer.LowCode.Blazor.DataIO;
+using Codeer.LowCode.Blazor.Repository.Data;
 using Microsoft.Data.Sqlite;
-using System.Globalization;
 
 /// <summary>
 /// 本物の DDL と初期データを載せた SQLite の上に、サーバ側部品を組み立てて渡す。
 /// </summary>
 /// <remarks>
-/// <b>組み立て方も検証の対象である。</b> テストごとに部品を手で繋ぐと、
-/// 本番の組み立て（<c>CustomizedModuleDataIO</c>）とずれても気づけない。
+/// <b>組み立ては本番と同じ <see cref="JournalSubmitGate.Create"/> を通す。</b>
+/// テストが部品を手で繋ぐと、本番の配線とずれても誰も気づけない。
 /// </remarks>
 internal sealed class AccountingServer : IDisposable
 {
-    /// <summary>計上の時刻。テストで日付をまたぐ話をしないので固定する。</summary>
-    public static readonly DateTimeOffset Now = new(2026, 8, 24, 13, 6, 46, TimeSpan.FromHours(9));
+    /// <summary>計上の時刻。日付をまたぐ話をしないので固定する。</summary>
+    public static readonly DateTimeOffset Now =
+        new(2026, 8, 24, 13, 6, 46, TimeSpan.FromHours(9));
 
     /// <summary>初期データの第 18 期（2026-04-01 〜 2027-03-31）。</summary>
     public static readonly FiscalYearId FiscalYear = new(1);
 
     private readonly SqliteConnection connection;
+    private readonly SqliteDbAccessor accessor;
 
     public AccountingServer()
     {
         connection = TestDatabase.CreateWithSeed();
-        var accessor = new SqliteDbAccessor(connection);
+        accessor = new SqliteDbAccessor(connection);
 
         MasterLoader = new AccountingMasterLoader(accessor, SqliteDbAccessor.DataSourceName);
         EntryStore = new JournalEntryStore(accessor, SqliteDbAccessor.DataSourceName);
         SequenceStore = new EntryNumberSequenceStore(accessor, SqliteDbAccessor.DataSourceName);
-        Gate = new JournalSubmitGate(MasterLoader, EntryStore, SequenceStore, new FixedTimeProvider(Now));
+        Gate = JournalSubmitGate.Create(accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now));
     }
 
     public AccountingMasterLoader MasterLoader { get; }
@@ -46,23 +50,87 @@ internal sealed class AccountingServer : IDisposable
 
     public JournalSubmitGate Gate { get; }
 
+    /// <summary>
+    /// 本番（<c>CustomizedModuleDataIO.SubmitAsync</c>）と同じ形で 1 回の保存を通す。
+    /// <b>トランザクションで包む。</b> 例外で巻き戻ることまで含めて本番と同じにしないと、
+    /// 会計コアが最も頼っている性質だけが検査されない。
+    /// </summary>
+    public async Task<List<ModuleSubmitResult>> SubmitAsync(
+        IReadOnlyList<ModuleSubmitData> transactionData,
+        Func<Task<List<ModuleSubmitResult>>> save)
+    {
+        accessor.StartTransaction();
+        try
+        {
+            var results = await Gate.SubmitAsync(transactionData, save);
+            await accessor.CommitAsync();
+            return results;
+        }
+        catch
+        {
+            await accessor.RollbackAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// CLB の保存の代わり。<b>関門が書き換えた <see cref="ModuleData"/> のとおりに書く。</b>
+    /// 状態も入力年月日も送られてきた値をそのまま使うので、関門が下書きに戻し忘れれば
+    /// DDL のトリガに弾かれ、入力年月日を打ち忘れれば NOT NULL に弾かれる。
+    /// </summary>
+    public Func<Task<List<ModuleSubmitResult>>> Saving(
+        ModuleData entry, params (string DebitCredit, string AccountCode, long Amount)[] lines)
+        => () =>
+        {
+            var status = (entry.Fields["Status"] as SelectFieldData)?.Value ?? "draft";
+            var enteredAt = (entry.Fields["EnteredAt"] as DateTimeFieldData)?.Value;
+            var id = InsertEntry(status, enteredAt);
+
+            var lineNo = 0;
+            foreach (var (debitCredit, accountCode, amount) in lines)
+            {
+                InsertLine(id, ++lineNo, debitCredit, accountCode, amount);
+            }
+
+            var result = new ModuleSubmitResult();
+            result.TemporaryIdMap[(entry.Fields["Id"] as IdFieldData)!.Value] = Text(id.Value);
+            return Task.FromResult(new List<ModuleSubmitResult> { result });
+        };
+
     /// <summary>下書きの伝票を 1 件入れて、その識別子を返す。</summary>
     public JournalEntryId InsertDraft(
         string transactionDate = "2026-08-24",
         string postingDate = "2026-08-24",
         string entryType = "normal",
-        JournalEntryId? originalEntryId = null)
+        JournalEntryId? originalEntryId = null,
+        FiscalYearId? fiscalYearId = null)
     {
         // 訂正・取消は原仕訳が要る（I-06）。DDL の CHECK は INSERT の時点で効くので、
         // 後から UPDATE で足すことはできない。
-        var original = originalEntryId is { } value ? value.Value.ToString(CultureInfo.InvariantCulture) : "null";
+        var original = originalEntryId is { } value ? Text(value.Value) : "null";
+        var year = (fiscalYearId ?? FiscalYear).Value;
 
         Execute($"""
             insert into journal_entries
                 (fiscal_year_id, transaction_date, posting_date, status, entry_type,
                  original_entry_id, entered_at)
-            values ({FiscalYear.Value}, '{transactionDate}', '{postingDate}', 'draft', '{entryType}',
+            values ({year}, '{transactionDate}', '{postingDate}', 'draft', '{entryType}',
                     {original}, '2026-08-24 13:00:00')
+            """);
+
+        return new JournalEntryId(Scalar<long>("select last_insert_rowid()"));
+    }
+
+    private JournalEntryId InsertEntry(string status, DateTime? enteredAt)
+    {
+        var entered = enteredAt is { } value
+            ? $"'{value.ToString("yyyy-MM-dd HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture)}'"
+            : "null";
+
+        Execute($"""
+            insert into journal_entries
+                (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            values ({FiscalYear.Value}, '2026-08-24', '2026-08-24', '{status}', 'normal', {entered})
             """);
 
         return new JournalEntryId(Scalar<long>("select last_insert_rowid()"));
@@ -91,6 +159,34 @@ internal sealed class AccountingServer : IDisposable
                     (select id from tax_categories where code = '{taxCategoryCode}'),
                     {department})
             """);
+    }
+
+    /// <summary>
+    /// 会計年度をもう 1 本足す。伝票番号が年度ごとの連番であること（I-17）の検査に使う。
+    /// <b>月次の会計期間も一緒に作る。</b> 期間が無い年度には計上できないので、
+    /// 年度だけ足しても検証を通らない（I-03）。
+    /// </summary>
+    public FiscalYearId InsertFiscalYear(string code, string startDate, string endDate)
+    {
+        Execute($"""
+            insert into fiscal_years (code, label, start_date, end_date, status)
+            values ('{code}', '{code} 期', '{startDate}', '{endDate}', 'open')
+            """);
+
+        var id = new FiscalYearId(Scalar<long>("select last_insert_rowid()"));
+        var start = DateOnly.Parse(startDate, CultureInfo.InvariantCulture);
+
+        for (var month = 0; month < 12; month++)
+        {
+            var from = start.AddMonths(month);
+            var to = from.AddMonths(1).AddDays(-1);
+            Execute($"""
+                insert into accounting_periods (fiscal_year_id, start_date, end_date, status)
+                values ({id.Value}, '{from:yyyy-MM-dd}', '{to:yyyy-MM-dd}', 'open')
+                """);
+        }
+
+        return id;
     }
 
     /// <summary>取引先を 1 件足す（初期データには 0 件しか無い）。</summary>
@@ -124,8 +220,7 @@ internal sealed class AccountingServer : IDisposable
 
     public T Scalar<T>(string sql) => TestDatabase.ScalarOf<T>(connection, sql);
 
-    /// <summary>NULL のときに既定値を返す照会（<c>entry_no</c> が未採番のときなど）。</summary>
-    public string TextOrEmpty(string sql) => TestDatabase.Query(connection, sql).FirstOrDefault() ?? string.Empty;
+    public string Text(long value) => value.ToString(CultureInfo.InvariantCulture);
 
     public void Dispose() => connection.Dispose();
 

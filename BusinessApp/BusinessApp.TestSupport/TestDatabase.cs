@@ -20,16 +20,36 @@ using Microsoft.Data.Sqlite;
 public static class TestDatabase
 {
     /// <summary>DDL を適用済みの、開いた接続を返す。閉じるとデータは消える。</summary>
+    /// <remarks>
+    /// <b>共有キャッシュの名前つきインメモリ DB を使う。</b> <c>:memory:</c> は接続ごとに
+    /// 別の DB になるので、同時実行（2 接続が同じ行を取り合う）を検査できない。
+    /// 名前はテストごとに変えて、テスト同士が干渉しないようにする。
+    /// </remarks>
     public static SqliteConnection Create()
     {
-        var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
-        connection.Open();
+        var name = $"testdb-{Guid.NewGuid():N}";
+        var connection = Connect(name);
 
         foreach (var file in DdlFiles())
         {
             Execute(connection, File.ReadAllText(file));
         }
 
+        return connection;
+    }
+
+    /// <summary>
+    /// 同じインメモリ DB への 2 本目の接続。同時実行の検査に使う。
+    /// <b>1 本目を閉じると DB ごと消える</b>ので、こちらを先に閉じること。
+    /// </summary>
+    public static SqliteConnection Connect(SqliteConnection existing)
+        => Connect(new SqliteConnectionStringBuilder(existing.ConnectionString).DataSource);
+
+    private static SqliteConnection Connect(string name)
+    {
+        var connection = new SqliteConnection(
+            $"Data Source={name};Mode=Memory;Cache=Shared;Foreign Keys=True");
+        connection.Open();
         return connection;
     }
 

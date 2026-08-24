@@ -11,10 +11,12 @@ using BusinessApp.AccountingCore.Shared;
 /// </remarks>
 /// <param name="Violations">見つかった違反（警告を含む）。</param>
 /// <param name="PostedEntry">計上できたときの伝票。できなかったときは null。</param>
+/// <param name="EntryNo">払い出した伝票番号。会計年度と組で意味を持つ（ADR-0014）。</param>
 /// <param name="NextSequence">採番を進めた後の状態。計上できなかったときは null。</param>
 public sealed record PostingResult(
     IReadOnlyList<Violation> Violations,
     JournalEntry? PostedEntry = null,
+    EntryNumber? EntryNo = null,
     EntryNumberSequence? NextSequence = null)
 {
     public bool IsPosted => PostedEntry is not null;
