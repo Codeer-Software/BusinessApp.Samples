@@ -92,8 +92,11 @@ internal sealed class AccountingServer : IDisposable
                 InsertLine(id, ++lineNo, debitCredit, accountCode, amount);
             }
 
+            var submittedId = (entry.Fields["Id"] as IdFieldData)?.Value
+                ?? throw new InvalidOperationException("保存する伝票に Id が無い。");
+
             var result = new ModuleSubmitResult();
-            result.TemporaryIdMap[(entry.Fields["Id"] as IdFieldData)!.Value] = Text(id.Value);
+            result.TemporaryIdMap[submittedId] = Text(id.Value);
             return Task.FromResult(new List<ModuleSubmitResult> { result });
         };
 
