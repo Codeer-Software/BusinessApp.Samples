@@ -119,6 +119,12 @@ void SelectFiscalYear(DateOnly postingDate)
 {
     var target = Iso(postingDate);
 
+    // **先に空にする。** 該当する年度が無いときに古い年度が残ると、
+    // 「計上日は翌年度なのに会計年度は前年度」という食い違った伝票ができ、
+    // サーバ側の検証で弾かれるまで気づけない。**空欄なら、その場で分かる。**
+    FiscalYear.Value = "";
+    FiscalYear.DisplayText = "";
+
     // 会計年度は多くて十数件なので、全件取って画面側で選ぶ。
     // 日付の大小はフィールド値のままでは比較できないので ISO 文字列に寄せる（qa/01 B-09）。
     foreach (var year in new ModuleSearcher<FiscalYear>().Execute())

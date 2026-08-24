@@ -43,11 +43,14 @@ REQUIRED_KEYS = ["title", "status", "scope", "audience", "updated"]
 
 LINE_LIMIT = 250
 
-# 検査対象外（生成物・ベンダー同梱・Git 追跡外）
+# 検査対象外（生成物・ベンダー同梱・Git 追跡外・別の規約に従うもの）
 EXCLUDE_PREFIXES = (
     "Designer/ClaudeCodeForDesigner/",
     "BusinessApp/",
     "LocalData/temp/",
+    # スキルのフロントマターは name / description が仕様で決まっており、
+    # 本プロジェクトの文書規約（title / status / scope / audience / updated）とは別物である。
+    ".claude/skills/",
 )
 
 # 追跡下にあるがデザイナが再生成する文書（手で直しても失われるので検査しない）
