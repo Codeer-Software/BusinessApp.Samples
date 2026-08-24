@@ -13,16 +13,26 @@ set -e
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
-echo "[pre-commit] 1/4 秘密の検査"
+echo "[pre-commit] 1/5 秘密の検査"
 python tools/docs/lint_secrets.py
 
-echo "[pre-commit] 2/4 ドキュメント規約の検査"
+echo "[pre-commit] 2/5 ドキュメント規約の検査"
 python tools/docs/lint_docs.py
 
-echo "[pre-commit] 3/4 CLB デザインの検査"
+echo "[pre-commit] 3/5 CLB デザインの検査"
 python tools/clb/lint_design.py
 
-echo "[pre-commit] 4/4 テスト・カバレッジ・スキーマ"
+echo "[pre-commit] 4/5 テスト・カバレッジ・スキーマ"
 dotnet test BusinessApp.slnx --nologo -v q
+
+# ミューテーションテスト（ADR-0012 §3-6）。カバレッジ 100% でも「壊したら気づくか」は
+# 別問題で、実際にここから実漏れが 3 件出た。スコアの下限は「現状の生き残り（許容ノイズ）」の
+# すぐ下に置くラチェットで、割れたら (a) テストを足して戻すか (b) 生き残りを読んで
+# 許容と判断した理由とともに下限を下げる。黙って下げない。
+echo "[pre-commit] 5/5 ミューテーションテスト"
+(cd BusinessApp/BusinessApp.AccountingCore.Tests \
+    && dotnet stryker --project BusinessApp.AccountingCore.csproj --break-at 75 --threshold-low 75 --reporter progress)
+(cd BusinessApp/BusinessApp.AccountingCore.Server.Tests \
+    && dotnet stryker --project BusinessApp.AccountingCore.Server.csproj --break-at 92 --threshold-low 92 --reporter progress)
 
 echo "[pre-commit] すべて緑"

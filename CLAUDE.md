@@ -194,6 +194,7 @@ CLB スクリプト（`*.mod.cs`）はツリーウォーク型インタプリタ
 | 稼働アプリへの反映    | `pwsh -NoProfile -File tools/clb/deploy.ps1` → FileWatcher が hot-reload |
 | 画面・挙動            | サーバ起動（`http://localhost:5085`）→ ブラウザで操作・スクショ          |
 | ドキュメント規約      | `python tools/docs/lint_docs.py`                                         |
+| テストの穴            | `dotnet stryker`（コミット前フックが毎回実行。ADR-0012 §3-6）            |
 | **公開前チェック**    | `python tools/docs/lint_secrets.py`（**コミット前に必ず流す**）          |
 | 上記の自動実行        | `git config core.hooksPath tools/git-hooks`（clone 後に 1 回。ADR-0012） |
 

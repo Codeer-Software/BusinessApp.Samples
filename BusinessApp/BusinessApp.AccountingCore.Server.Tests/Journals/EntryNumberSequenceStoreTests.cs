@@ -1,6 +1,7 @@
 namespace BusinessApp.AccountingCore.Server.Tests.Journals;
 
 using BusinessApp.AccountingCore.Journals;
+using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 
 /// <summary>
@@ -71,6 +72,30 @@ public class EntryNumberSequenceStoreTests
 
         Assert.Contains("競合", error.Message, StringComparison.Ordinal);
         Assert.Equal(2, await ReadNextAsync(server));
+    }
+
+    [Fact]
+    public async Task 別の年度の採番を書き戻そうとしたら止まる()
+    {
+        // 引数は同じ型が 2 つ並ぶので、取り違えてもコンパイルは通る（qa/03 L-02 の変種）。
+        // **条件は 1 つずつ独立に試す。** 両方同時に壊した入力だけだと、
+        // || を && に変えても緑のまま通る（ミューテーションテストで発覚）。
+        using var server = new AccountingServer();
+        var mine = await server.SequenceStore.ReadAsync(AccountingServer.FiscalYear);
+        var otherYear = new EntryNumberSequence(new FiscalYearId(99), mine.NextValue + 1);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => server.SequenceStore.SaveAsync(mine, otherYear));
+    }
+
+    [Fact]
+    public async Task 読んだ値から_1_つ進めた形でなければ止まる()
+    {
+        using var server = new AccountingServer();
+        var mine = await server.SequenceStore.ReadAsync(AccountingServer.FiscalYear);
+        var skipped = mine with { NextValue = mine.NextValue + 2 };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => server.SequenceStore.SaveAsync(mine, skipped));
+        Assert.Equal(mine.NextValue, await ReadNextAsync(server));
     }
 
     private static async Task<int> ReadNextAsync(AccountingServer server)
