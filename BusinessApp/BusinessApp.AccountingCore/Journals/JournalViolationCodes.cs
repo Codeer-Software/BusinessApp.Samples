@@ -84,4 +84,16 @@ public static class JournalViolationCodes
 
     /// <summary>消費税行が本体行から引き継ぐべき値を引き継いでいない。</summary>
     public const string TaxLineNotInherited = "E-TAX-INHERIT";
+
+    /// <summary>計上していない仕訳を取り消そうとした（docs/04 §5）。</summary>
+    public const string ReversalTargetNotPosted = "E-REVERSAL-NOT-POSTED";
+
+    /// <summary>保存されていない仕訳を取り消そうとした（原仕訳を特定できない）。</summary>
+    public const string ReversalTargetUnidentified = "E-REVERSAL-NO-ID";
+
+    /// <summary>取消の計上日が原仕訳より前になっている。</summary>
+    public const string ReversalBeforeOriginal = "E-REVERSAL-DATE";
+
+    /// <summary>取消の仕訳を取り消そうとした。</summary>
+    public const string ReversalOfReversal = "E-REVERSAL-CHAIN";
 }
