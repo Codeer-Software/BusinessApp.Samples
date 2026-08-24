@@ -77,7 +77,7 @@ public class FiscalCalendarTests
         var orphan = new AccountingPeriod(
             new AccountingPeriodId(99),
             new FiscalYearId(99),
-            new EffectivePeriod(new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 30)),
+            new DateRange(new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 30)),
             PeriodStatus.Open);
         var calendar = new FiscalCalendar([], [orphan]);
 
@@ -90,9 +90,9 @@ public class FiscalCalendarTests
         var april = new AccountingPeriod(
             new AccountingPeriodId(1),
             AccountingFixture.FiscalYear,
-            new EffectivePeriod(new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 30)),
+            new DateRange(new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 30)),
             PeriodStatus.Open);
-        var overlapping = april with { Id = new AccountingPeriodId(2), Period = new EffectivePeriod(new DateOnly(2026, 4, 30), new DateOnly(2026, 5, 31)) };
+        var overlapping = april with { Id = new AccountingPeriodId(2), Period = new DateRange(new DateOnly(2026, 4, 30), new DateOnly(2026, 5, 31)) };
 
         Assert.Throws<ArgumentException>(() => new FiscalCalendar([], [april, overlapping]));
     }

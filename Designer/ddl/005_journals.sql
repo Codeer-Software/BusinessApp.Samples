@@ -45,6 +45,8 @@ CREATE TABLE journal_entries (
 
     -- I-06 訂正・取消は原仕訳を一意に特定する情報を持つ
     CHECK (entry_type NOT IN ('correction', 'reversal') OR original_entry_id IS NOT NULL),
+    -- 自分自身を原仕訳にできない（自分を取り消す伝票は意味を成さない）
+    CHECK (original_entry_id IS NULL OR original_entry_id <> id),
     -- 計上済みには必ず伝票番号と計上日時がある
     CHECK (status = 'draft' OR (entry_no IS NOT NULL AND posted_at IS NOT NULL)),
     -- 下書きに伝票番号を与えない（番号の先食いを防ぐ）
@@ -61,7 +63,7 @@ CREATE TABLE journal_lines (
     id                          INTEGER PRIMARY KEY AUTOINCREMENT,
 
     journal_entry_id            INTEGER NOT NULL REFERENCES journal_entries(id),
-    line_no                     INTEGER NOT NULL,
+    line_no                     INTEGER NOT NULL CHECK (line_no > 0),
 
     -- 借方貸方は符号ではなく区分で持ち、金額は常に正（docs/04 §3）。
     debit_credit                TEXT NOT NULL CHECK (debit_credit IN ('debit', 'credit')),
@@ -81,7 +83,7 @@ CREATE TABLE journal_lines (
     -- 税に意味のない行にも「対象外」を明示する。NULL と対象外を 2 通りで表さない（docs/06 §1）。
     tax_category_id             INTEGER NOT NULL REFERENCES tax_categories(id),
     -- 用途区分は明細が持つ。同じ科目でも取引ごとに変わるため。
-    tax_treatment               TEXT CHECK (tax_treatment IN ('taxable_sales', 'common', 'exempt_sales')),
+    tax_treatment               TEXT CHECK (tax_treatment IN ('for_taxable_sales', 'common', 'for_exempt_sales')),
     tax_point                   DATE,                       -- 課税仕入れの時点。経過措置・税率の判定基準日
     applied_rule_version        TEXT,                       -- 適用した制度ルールの版（I-16）
 
@@ -122,6 +124,16 @@ CREATE TABLE journal_entry_sequences (
 -- 下書き → 計上（status が draft から posted へ変わる UPDATE）は通す。
 -- 計上済みの行に対する UPDATE / DELETE だけを止める。
 --------------------------------------------------------------------------------
+
+-- 入力年月日は「システムに記録された日時」であり、**下書きの間も含めて後から変えられない**。
+-- 「通常の業務処理期間の経過後に入力した事実を確認できる」という優良な電子帳簿の要件
+-- （規則 5 ⑤一イ(2)）は、この値が動かないことで初めて成り立つ。
+CREATE TRIGGER trg_journal_entries_entered_at_immutable
+BEFORE UPDATE ON journal_entries
+FOR EACH ROW WHEN NEW.entered_at IS NOT OLD.entered_at
+BEGIN
+    SELECT RAISE(ABORT, '入力年月日は変更できない。');
+END;
 
 CREATE TRIGGER trg_journal_entries_posted_no_update
 BEFORE UPDATE ON journal_entries

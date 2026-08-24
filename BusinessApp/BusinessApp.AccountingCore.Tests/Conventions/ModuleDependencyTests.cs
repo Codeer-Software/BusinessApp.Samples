@@ -31,8 +31,8 @@ public class ModuleDependencyTests
         // マスタ層。勘定科目は「既定税区分」を持つので、向きは Accounts → ConsumptionTax。
         // 逆向き（税区分が科目を知る）は許可しない。
         ["Accounts"] = ["Shared", "ConsumptionTax"],
-        ["Departments"] = ["Shared"],
-        ["Partners"] = ["Shared"],
+        ["Departments"] = [],
+        ["Partners"] = [],
         ["Periods"] = ["Shared"],
 
         // 記帳。マスタと制度の上に載る。
@@ -96,17 +96,55 @@ public class ModuleDependencyTests
     }
 
     /// <summary>
-    /// 純粋ドメインの依存ゼロ（ADR-0008）を、規約ではなくファイルの内容で確かめる。
-    /// WASM に載るのでサイズと起動時間に直接効く。
+    /// すべての C# ファイルがいずれかのモジュールに属している。
     /// </summary>
+    /// <remarks>
+    /// ルート直下に置いたファイルは、パスの先頭要素がモジュール名にならないので
+    /// 依存の検査を素通りする。「共通ヘルパを 1 枚ルートに置く」という最もありがちな行動が
+    /// 抜け道になるので、フォルダの有無ではなくファイルの位置で検査する。
+    /// </remarks>
     [Fact]
-    public void 純粋ドメインは外部パッケージに依存しない()
+    public void ルート直下にソースを置かない()
+    {
+        var atRoot = ProjectPaths.SourceFiles(ProjectPaths.SourceProject)
+            .Select(path => Path.GetRelativePath(ProjectPaths.SourceProject, path))
+            .Where(relative => !relative.Contains(Path.DirectorySeparatorChar))
+            .ToList();
+
+        Assert.Empty(atRoot);
+    }
+
+    /// <summary>
+    /// 純粋ドメインの依存ゼロ（ADR-0008）を、<b>ビルド後のアセンブリ</b>で確かめる。
+    /// </summary>
+    /// <remarks>
+    /// csproj のテキストを見るだけだと、Directory.Build.props・生アセンブリ参照・
+    /// 暗黙 using（<c>&lt;Using Include=...&gt;</c>）が素通りする。とくに暗黙 using は、
+    /// モジュール依存を「名前空間の文字列が出現するか」で見ている前提そのものを崩す。
+    /// </remarks>
+    [Fact]
+    public void 純粋ドメインは外部アセンブリに依存しない()
+    {
+        var referenced = typeof(AccountingCore.Shared.Yen).Assembly
+            .GetReferencedAssemblies()
+            .Select(a => a.Name!)
+            .Where(name => !name.StartsWith("System", StringComparison.Ordinal)
+                           && name is not ("netstandard" or "mscorlib"))
+            .ToList();
+
+        Assert.Empty(referenced);
+    }
+
+    /// <summary>暗黙 using が入ると名前空間の文字列検査をすり抜けるので、使わせない。</summary>
+    [Fact]
+    public void 純粋ドメインは暗黙usingを追加しない()
     {
         var csproj = File.ReadAllText(
             Path.Combine(ProjectPaths.SourceProject, $"{ProjectPaths.SourceProjectName}.csproj"));
 
         Assert.DoesNotContain("<PackageReference", csproj, StringComparison.Ordinal);
         Assert.DoesNotContain("<ProjectReference", csproj, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Using ", csproj, StringComparison.Ordinal);
     }
 
     private bool ReachesItself(string origin, string current, HashSet<string> visited)

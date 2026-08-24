@@ -22,6 +22,7 @@ import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DESIGN_DIR = os.path.join(REPO_ROOT, "Designer", "Design")
+DDL_DIR = os.path.join(REPO_ROOT, "Designer", "ddl")
 
 SEV_ERROR = "error"
 SEV_WARN = "warn"
@@ -39,6 +40,23 @@ RESERVED_FIELD_TYPES = {
 }
 
 LEGACY_ALIGNMENTS = {"Left", "Right"}
+
+
+def tables_with_optimistic_locking():
+    """DDL で optimistic_locking 列を持つテーブル。
+
+    認証部品の app_users のように、こちらが定義していないテーブルまで規約の対象にしない。
+    """
+    tables = set()
+    for path in sorted(glob.glob(os.path.join(DDL_DIR, "*.sql"))):
+        text = io.open(path, encoding="utf-8").read()
+        for match in re.finditer(r"CREATE TABLE (\w+) \((.*?)\);", text, re.DOTALL):
+            if "optimistic_locking" in match.group(2):
+                tables.add(match.group(1))
+    return tables
+
+
+OPTIMISTIC_LOCKING_TABLES = tables_with_optimistic_locking()
 
 
 def design_files(pattern):
@@ -78,12 +96,28 @@ def check_module(path, doc, findings):
             findings.append((SEV_ERROR, "F-01", relative(path),
                              f"{name}.OnValidateInput は使わない。関門はサーバ側に置く"))
 
+    # 更新できるモジュールに楽観ロックが無いと、ロスト・アップデートが黙って起きる。
+    # 「フィールドがあるとき型を見る」だけでは、最も危ない側（欠落）を見逃す。
+    if doc.get("CanUpdate", True) and doc.get("DbTable") in OPTIMISTIC_LOCKING_TABLES             and not any(f.get("Name") == "OptimisticLocking" for f in doc.get("Fields", [])):
+        findings.append((SEV_ERROR, "F-09", relative(path),
+                         f"{module}: 更新できるモジュールには OptimisticLocking フィールドが要る"))
+
     field_names = {f.get("Name", "") for f in doc.get("Fields", [])}
     for kind, layouts in (("Detail", doc.get("DetailLayouts", {})),
                           ("Search", doc.get("SearchLayouts", {}))):
         for layout_name, layout in layouts.items():
             check_layout(path, f"{module}/{kind}{'/' + layout_name if layout_name else ''}",
                          layout.get("Layout", {}), kind, field_names, findings)
+
+    # 一覧レイアウトにも揃えの旧値が入りうる（A-01 は Detail だけの話ではない）。
+    for layout_name, layout in doc.get("ListLayouts", {}).items():
+        where = f"{module}/List{'/' + layout_name if layout_name else ''}"
+        for row in layout.get("Elements", []):
+            for element in row:
+                for key in ("HorizontalAlignment", "VerticalAlignment"):
+                    if element.get(key) in LEGACY_ALIGNMENTS:
+                        findings.append((SEV_ERROR, "A-01", relative(path),
+                                         f"{where}: {key} の旧値 {element[key]} は Start / End に化ける"))
 
 
 def check_layout(path, where, layout, kind, field_names, findings):
@@ -96,6 +130,11 @@ def check_layout(path, where, layout, kind, field_names, findings):
         if kind == "Search" and placed and not row.get("IsWrap"):
             findings.append((SEV_WARN, "D-09", relative(path),
                              f"{where}: 検索レイアウトの行は IsWrap: true を標準にする"))
+
+        # 1 行は 3 組（ラベル＋入力）まで。それ以上は右に見切れる。
+        if kind == "Search" and len(placed) > 6:
+            findings.append((SEV_WARN, "D-09", relative(path),
+                             f"{where}: 検索の 1 行は 3 組（ラベル＋入力）までにする（今は {len(placed) // 2} 組）"))
 
         for column in columns:
             # A-01 旧値は静かに Start へ化ける
@@ -158,14 +197,38 @@ def check_script(path, text, findings):
                              f"{match.group(1)} のラムダは .Value まで書く（今は {match.group(2).strip()}）"))
 
 
+def load_json(path, findings):
+    """壊れた JSON があっても、そこで検査全体を終わらせない。"""
+    try:
+        return json.load(io.open(path, encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        findings.append((SEV_ERROR, "JSON", relative(path), f"読み込めない: {e}"))
+        return None
+
+
 def main() -> int:
     findings: list[tuple[str, str, str, str]] = []
 
-    for path in design_files("*.mod.json"):
-        check_module(path, json.load(io.open(path, encoding="utf-8")), findings)
-    for path in design_files("*.frm.json"):
-        check_page_frame(path, json.load(io.open(path, encoding="utf-8")), findings)
-    for path in design_files("*.mod.cs"):
+    modules = design_files("*.mod.json")
+    frames = design_files("*.frm.json")
+    scripts = design_files("*.mod.cs")
+
+    # 検査対象が 1 つも無いのに「error: 0」を出すと、緑を見て「見たはず」と誤解する。
+    if not modules or not frames:
+        print(f"error	SETUP	{DESIGN_DIR}	検査対象が見つからない（モジュール {len(modules)} / ページフレーム {len(frames)}）")
+        print("")
+        print("検査ファイル数: 0 / error: 1 / warn: 0")
+        return 1
+
+    for path in modules:
+        doc = load_json(path, findings)
+        if doc is not None:
+            check_module(path, doc, findings)
+    for path in frames:
+        doc = load_json(path, findings)
+        if doc is not None:
+            check_page_frame(path, doc, findings)
+    for path in scripts:
         check_script(path, io.open(path, encoding="utf-8").read(), findings)
 
     errors = [f for f in findings if f[0] == SEV_ERROR]

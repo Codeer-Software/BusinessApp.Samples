@@ -16,6 +16,6 @@ public sealed record FiscalYear(
     FiscalYearId Id,
     string Code,
     string Label,
-    EffectivePeriod Period,
+    DateRange Period,
     PeriodStatus Status,
     DateOnly? PremiumLedgerFrom = null);

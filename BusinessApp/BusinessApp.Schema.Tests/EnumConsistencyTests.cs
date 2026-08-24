@@ -53,26 +53,44 @@ public class EnumConsistencyTests
         }
     }
 
+    /// <summary>
+    /// 検査が「1 件も見つからず素通り」で緑にならないための土台。
+    /// DDL の整形を変えた拍子に正規表現が外れると、この検査は静かに形骸化する。
+    /// </summary>
+    [Fact]
+    public void 区分値を持つ列を実際に見つけられている()
+    {
+        Assert.NotEmpty(CheckConstraintColumns());
+        Assert.Contains("accounts.category", CheckConstraintColumns());
+    }
+
     /// <summary>対応表に載っていない CHECK 制約が増えていないか。増やしたら表に足す。</summary>
     [Fact]
     public void 区分値を持つ列はすべて対応表に載っている()
     {
         var declared = Mappings().Select(row => (string)row[1]!).ToHashSet(StringComparer.Ordinal);
 
+        Assert.Empty(CheckConstraintColumns().Where(c => !declared.Contains(c)));
+    }
+
+    /// <summary>DDL の中で「値の集合を CHECK で縛っている TEXT 列」を拾う。</summary>
+    private static IReadOnlyList<string> CheckConstraintColumns()
+    {
         var found = new List<string>();
         foreach (var file in TestDatabase.DdlFiles())
         {
             var text = File.ReadAllText(file);
-            var table = Regex.Match(text, @"CREATE TABLE (\w+)");
             foreach (Match match in Regex.Matches(text, @"^\s*(\w+)\s+TEXT[^,]*?CHECK \(\1 IN \(", RegexOptions.Multiline))
             {
-                var column = match.Groups[1].Value;
-                var owner = Regex.Matches(text[..match.Index], @"CREATE TABLE (\w+)").LastOrDefault()?.Groups[1].Value ?? table.Groups[1].Value;
-                found.Add($"{owner}.{column}");
+                var owner = Regex.Matches(text[..match.Index], @"CREATE TABLE (\w+)").LastOrDefault()?.Groups[1].Value;
+                if (owner is not null)
+                {
+                    found.Add($"{owner}.{match.Groups[1].Value}");
+                }
             }
         }
 
-        Assert.Empty(found.Where(c => !declared.Contains(c)));
+        return found;
     }
 
     /// <summary>CLB のデザイン enum は複数形で名づける（qa/01 J-01）。単数形だと同名フィールドと衝突する。</summary>

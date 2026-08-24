@@ -24,4 +24,30 @@ public class ViolationTests
 
         Assert.Equal("[I-13] 2 行目: 部門が要る。", violation.ToString());
     }
+
+    [Fact]
+    public void 既定は計上を止める重さである()
+    {
+        Assert.Equal(ViolationSeverity.Error, new Violation("I-01", "…").Severity);
+    }
+
+    /// <summary>
+    /// 「戻り値が空なら OK」と書かせないための判定。警告は返るが計上はできる。
+    /// </summary>
+    [Fact]
+    public void 警告だけなら計上を止めない()
+    {
+        var warnings = new[] { new Violation("W-1", "…", null, ViolationSeverity.Warning) };
+        var errors = new[] { new Violation("I-01", "…"), warnings[0] };
+
+        Assert.False(warnings.HasError());
+        Assert.True(errors.HasError());
+        Assert.False(Array.Empty<Violation>().HasError());
+    }
+
+    [Fact]
+    public void nullは判定できない()
+    {
+        Assert.Throws<ArgumentNullException>(() => ((IEnumerable<Violation>)null!).HasError());
+    }
 }

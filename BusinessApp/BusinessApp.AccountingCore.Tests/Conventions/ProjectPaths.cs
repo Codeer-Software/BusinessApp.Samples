@@ -8,7 +8,7 @@ namespace BusinessApp.AccountingCore.Tests.Conventions;
 /// <c>CallerFilePath</c> を使うとビルドしたマシンの絶対パスがアセンブリに焼き込まれるので使わない
 /// （CLAUDE.md §5）。
 /// </remarks>
-internal static class ProjectPaths
+public static class ProjectPaths
 {
     public const string TestProjectName = "BusinessApp.AccountingCore.Tests";
     public const string SourceProjectName = "BusinessApp.AccountingCore";

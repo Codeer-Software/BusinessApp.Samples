@@ -17,15 +17,4 @@ public class EntryTypeTests
         Assert.Equal(expected, type.RequiresOriginalEntry());
     }
 
-    [Theory]
-    [InlineData(EntryType.Opening, true)]
-    [InlineData(EntryType.Closing, true)]
-    [InlineData(EntryType.Carryover, true)]
-    [InlineData(EntryType.Normal, false)]
-    [InlineData(EntryType.Correction, false)]
-    [InlineData(EntryType.Reversal, false)]
-    public void システムが生成する種別を判定できる(EntryType type, bool expected)
-    {
-        Assert.Equal(expected, type.IsSystemGenerated());
-    }
 }

@@ -30,9 +30,6 @@ public static class AccountCategoryExtensions
     public static bool IsProfitAndLoss(this AccountCategory category)
         => category is AccountCategory.Revenue or AccountCategory.Expense;
 
-    /// <summary>貸借科目（資産・負債・純資産）か。期首残高・繰越の対象判定に使う（I-11）。</summary>
-    public static bool IsBalanceSheet(this AccountCategory category) => !category.IsProfitAndLoss();
-
     /// <summary>その科目区分の残高が増える側。借方残の科目（資産・費用）は借方。</summary>
     public static DebitCredit NormalBalance(this AccountCategory category) => category switch
     {

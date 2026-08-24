@@ -10,5 +10,5 @@ using BusinessApp.AccountingCore.Shared;
 public sealed record AccountingPeriod(
     AccountingPeriodId Id,
     FiscalYearId FiscalYearId,
-    EffectivePeriod Period,
+    DateRange Period,
     PeriodStatus Status);

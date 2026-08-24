@@ -21,7 +21,7 @@ public class SeedDataTests
         Assert.Equal(12L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounting_periods"));
         Assert.Equal(6L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM departments"));
         Assert.Equal(10L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM tax_categories"));
-        Assert.Equal(99L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounts"));
+        Assert.Equal(105L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounts"));
     }
 
     [Fact]
@@ -100,6 +100,82 @@ public class SeedDataTests
             """);
 
         Assert.Empty(withRate);
+    }
+
+    /// <summary>
+    /// 非課税にも売上／仕入の軸が通っていること。課税だけ分けて非課税を 1 つに潰すと、
+    /// 課税売上割合の分母（課税＋免税＋非課税の売上高）を税区分だけでは作れない（docs/06 §7）。
+    /// </summary>
+    [Fact]
+    public void 非課税にも売上と仕入の区別がある()
+    {
+        using var db = TestDatabase.CreateWithSeed();
+
+        Assert.Equal(1L, TestDatabase.ScalarOf<long>(db,
+            "SELECT COUNT(*) FROM tax_categories WHERE taxation_type = 'non_taxable_sales'"));
+        Assert.Equal(1L, TestDatabase.ScalarOf<long>(db,
+            "SELECT COUNT(*) FROM tax_categories WHERE taxation_type = 'non_taxable_purchase'"));
+    }
+
+    /// <summary>
+    /// 評価勘定（通常残高が科目区分と逆の科目）に印が付いていること。
+    /// 付いていないと、科目区分だけから借方残／貸方残を決める処理が必ず誤る。
+    /// </summary>
+    [Theory]
+    [InlineData("1350")]  // 貸倒引当金
+    [InlineData("1940")]  // 減価償却累計額
+    [InlineData("4090")]  // 売上値引・戻り高
+    [InlineData("5110")]  // 期末仕掛品棚卸高
+    public void 評価勘定に印が付いている(string code)
+    {
+        using var db = TestDatabase.CreateWithSeed();
+
+        Assert.Equal(1L, TestDatabase.ScalarOf<long>(db, $"SELECT is_contra FROM accounts WHERE code = '{code}'"));
+    }
+
+    [Fact]
+    public void 評価勘定以外に印は付いていない()
+    {
+        using var db = TestDatabase.CreateWithSeed();
+
+        Assert.Equal(4L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounts WHERE is_contra = 1"));
+    }
+
+    /// <summary>引当金は負債と費用が対で無いと計上仕訳が組めない。</summary>
+    [Theory]
+    [InlineData("2400", "6035")]  // 賞与引当金 ↔ 賞与引当金繰入額
+    [InlineData("2600", "6045")]  // 退職給付引当金 ↔ 退職給付費用
+    [InlineData("1350", "6285")]  // 貸倒引当金 ↔ 貸倒引当金繰入額
+    public void 引当金には相手勘定がある(string provision, string expense)
+    {
+        using var db = TestDatabase.CreateWithSeed();
+
+        Assert.Equal(2L, TestDatabase.ScalarOf<long>(db,
+            $"SELECT COUNT(*) FROM accounts WHERE code IN ('{provision}', '{expense}')"));
+    }
+
+    /// <summary>法人税等調整額を使うには繰延税金資産・負債が要る（相手勘定が無いと仮勘定に逃げる）。</summary>
+    [Fact]
+    public void 税効果会計の科目が揃っている()
+    {
+        using var db = TestDatabase.CreateWithSeed();
+
+        Assert.Equal(3L, TestDatabase.ScalarOf<long>(db,
+            "SELECT COUNT(*) FROM accounts WHERE code IN ('1700', '2700', '7920')"));
+    }
+
+    /// <summary>同じ性質の科目で既定税区分の扱いが割れていないこと。</summary>
+    [Fact]
+    public void 固定資産の取得はすべて課税仕入を既定にしている()
+    {
+        using var db = TestDatabase.CreateWithSeed();
+
+        Assert.Equal(0L, TestDatabase.ScalarOf<long>(db, """
+            SELECT COUNT(*) FROM accounts a
+            WHERE a.is_fixed_asset = 1
+              AND (a.default_tax_category_id IS NULL
+                   OR a.default_tax_category_id <> (SELECT id FROM tax_categories WHERE code = 'TP'))
+            """));
     }
 
     [Fact]

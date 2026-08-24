@@ -71,18 +71,28 @@ dotnet test BusinessApp.slnx
 [ADR-0004](../../docs/decisions/0004-優良な電子帳簿への準拠と仕訳の不変性.md) の
 「規則を迂回する経路を作らない」を、規約ではなく DB に守らせる。
 
-| 不変条件 | DB 側の担保 |
-|---|---|
-| I-05 計上済み仕訳は変更も削除もされない | `journal_entries` / `journal_lines` の `BEFORE UPDATE` / `BEFORE DELETE` トリガ |
-| I-06 訂正・取消は原仕訳を持つ | `journal_entries` の `CHECK` |
-| I-14 外部伝票の二重計上を防ぐ | `idempotency_key` の `UNIQUE` |
-| I-17 伝票番号を再利用しない | `UNIQUE (fiscal_year_id, entry_no)` ＋ 単調増加の採番表 |
-| 金額は正の整数円 | `journal_lines.amount` の `CHECK (amount > 0)` |
-| 部門「全社共通」は 1 件だけ | 部分 UNIQUE インデックス |
-| 単一法人（[ADR-0005](../../docs/decisions/0005-単一法人に徹する.md)） | `company_profile` の `CHECK (id = 1)` |
+**二重防御は「片方を緩めても、もう片方が残る」ことに意味がある。** 逆に**片方だけ厳しくすると気づけない**
+（C# だけ厳しくすると CSV 取込が抜け、DB だけ厳しくすると画面で通って保存で落ちる）ので、
+両側を 1 つの表で並べる。機械的な突き合わせは正規表現頼みで壊れやすく、壊れても気づけないため採らない。
 
-I-01（貸借一致）・I-03（有効な会計期間）・I-13（損益科目の部門）は
-**行をまたぐ判定**なので DB の `CHECK` では書けない。`JournalEntryValidator` が担保する。
+| 不変条件 | DB 側の担保 | C# 側の担保 |
+|---|---|---|
+| I-01 伝票単位で貸借一致 | — （行をまたぐので `CHECK` では書けない） | `I-01` |
+| I-03 有効な会計期間に属する | — | `I-03` ＋ `E-PERIOD-ORPHAN` |
+| I-04 締め済み期間に計上できない | — | `I-04` |
+| I-05 計上済み仕訳は変更も削除もされない | `journal_entries` / `journal_lines` の `BEFORE UPDATE` / `BEFORE DELETE` トリガ | `I-05` |
+| I-06 訂正・取消は原仕訳を持つ | `CHECK`（自己参照の禁止も） | `I-06` |
+| I-13 損益科目の明細には部門がある | — （科目区分が要る） | `I-13` |
+| I-14 外部伝票の二重計上を防ぐ | `idempotency_key` の `UNIQUE` | — （フェーズ 6 の投入 API） |
+| I-17 伝票番号を再利用しない | `UNIQUE (fiscal_year_id, entry_no)` ＋ 採番表 ＋ 下書きに番号を持たせない `CHECK` | `I-17` ＋ `E-FISCAL-YEAR` |
+| 入力年月日は変えられない | `BEFORE UPDATE` トリガ | — （サーバが値を決める） |
+| 金額は正の整数円 | `CHECK (amount > 0)` | `E-AMOUNT` |
+| 行番号は正の整数で伝票内に一意 | `CHECK (line_no > 0)` ＋ `UNIQUE` | `E-LINE-NO` |
+| 消費税行だけが親行を持つ | `CHECK` | `E-TAX-PARENT` ＋ `E-TAX-INHERIT` |
+| 部門「全社共通」は 1 件だけ | 部分 UNIQUE インデックス | — |
+| 単一法人（[ADR-0005](../../docs/decisions/0005-単一法人に徹する.md)） | `CHECK (id = 1)` | — |
+
+行をまたぐ判定・マスタを引く判定は DB の `CHECK` では書けないので、`JournalEntryValidator` だけが担保する。
 
 ### 伝票番号は会計年度ごとの連番にし、振り直さない
 

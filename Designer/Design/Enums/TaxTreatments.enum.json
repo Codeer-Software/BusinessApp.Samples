@@ -3,8 +3,8 @@
   "ValueType": "String",
   "Members": [
     {
-      "Name": "TaxableSales",
-      "Value": "taxable_sales",
+      "Name": "ForTaxableSales",
+      "Value": "for_taxable_sales",
       "DisplayText": "課税売上対応"
     },
     {
@@ -13,8 +13,8 @@
       "DisplayText": "共通対応"
     },
     {
-      "Name": "ExemptSales",
-      "Value": "exempt_sales",
+      "Name": "ForExemptSales",
+      "Value": "for_exempt_sales",
       "DisplayText": "非課税売上対応"
     }
   ]

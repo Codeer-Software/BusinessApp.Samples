@@ -95,6 +95,14 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
   一覧の削除ボタンは PageFrame の `Link.ListPageDesign.ListFieldDesign.CanDelete` でも切る。
 - 2026-08-24: 一覧の既定の並び順は PageFrame の `Link...SearchCondition.SortConditions` で指定する。
   指定しないと**降順で出る**（マスタでは使いものにならない）。
+- 2026-08-24: **ヘッダ＋明細（仕訳伝票と明細）の正典**（`Docs/AppPatterns/header_detail.md`）:
+  明細表は **`ListField`**（`DetailListField` ではない。名前に反するので最頻出の誤り）。
+  子の親 FK は **`IdFieldDesign` ＋ `IsManualInput: false`**（`NumberField` は不可）。
+  親の詳細レイアウトに `ListField` を置き、`SearchCondition.Condition` に
+  `FieldMatchCondition` → `FieldVariableMatchCondition`（`SearchTargetVariable` = 子の FK、
+  `Variable` = 親の `Id.Value`）を入れて逆引きする。**列定義は子モジュールの `ListLayouts[""].Elements`**。
+  親の Submit で子の Add/Update/Delete が 1 トランザクションにまとまる。
+  親詳細の `LimitCount` は全件（`0` にすると明細が消える）。
 - 2026-08-24: **LinkField の候補ダイアログは、一覧画面とは別に絞り込みと並び順を持つ。**
   フィールド側の `SearchCondition` に `SortConditions` と `Condition` を設定する。
   マスタを指す LinkField は `IsActive.Value = true` で絞る（`is_active` は「入力候補に出すか」の意味。ADR-0006）。

@@ -12,6 +12,7 @@ using BusinessApp.AccountingCore.Shared;
 public static class AccountingFixture
 {
     public static readonly FiscalYearId FiscalYear = new(18);
+    public static readonly FiscalYearId OtherFiscalYear = new(17);
 
     // 識別子（DB の主キー）と科目コードは別物である。
     // 前者はシステムが採番し、後者は利用者が見る自然キー。
@@ -20,12 +21,21 @@ public static class AccountingFixture
     public static readonly AccountId Sales = new(3);
     public static readonly AccountId SuppliesExpense = new(4);
     public static readonly AccountId RetiredExpense = new(5);
+    public static readonly AccountId BankAccount = new(6);
     public static readonly AccountId UnknownAccount = new(999);
 
-    public static readonly SubAccountId PettyCash = new(1);
+    public static readonly SubAccountId MainBank = new(1);
+    public static readonly SubAccountId RetiredBank = new(2);
+    public static readonly SubAccountId SubAccountOfCash = new(3);
+    public static readonly SubAccountId UnknownSubAccount = new(999);
+
     public static readonly DepartmentId SalesDepartment = new(1);
+    public static readonly DepartmentId RetiredDepartment = new(2);
+    public static readonly DepartmentId UnknownDepartment = new(999);
+
     public static readonly PartnerId Partner = new(1);
     public static readonly TaxCategoryId OutOfScope = new(1);
+    public static readonly TaxCategoryId TaxablePurchase = new(2);
 
     public static IReadOnlyList<AccountDefinition> Accounts { get; } =
     [
@@ -34,12 +44,29 @@ public static class AccountingFixture
         new(Sales, "4000", "売上高", AccountCategory.Revenue),
         new(SuppliesExpense, "5200", "消耗品費", AccountCategory.Expense),
         new(RetiredExpense, "5900", "廃止した費用科目", AccountCategory.Expense, IsActive: false),
+        new(BankAccount, "1200", "普通預金", AccountCategory.Asset, RequiresSubAccount: true),
+    ];
+
+    public static IReadOnlyList<SubAccountDefinition> SubAccounts { get; } =
+    [
+        new(MainBank, BankAccount, "01", "みずほ銀行"),
+        new(RetiredBank, BankAccount, "99", "解約した口座", IsActive: false),
+        new(SubAccountOfCash, Cash, "01", "レジ"),
+    ];
+
+    public static IReadOnlyList<DepartmentDefinition> Departments { get; } =
+    [
+        new(SalesDepartment, "20", "営業部"),
+        new(RetiredDepartment, "99", "廃止した部門", IsActive: false),
     ];
 
     public static PostingContext Context(
         PeriodStatus septemberStatus = PeriodStatus.Open,
         PeriodStatus fiscalYearStatus = PeriodStatus.Open)
-        => new(new AccountCatalog(Accounts), Calendar(septemberStatus, fiscalYearStatus));
+        => new(new AccountCatalog(Accounts),
+               new SubAccountCatalog(SubAccounts),
+               new DepartmentCatalog(Departments),
+               Calendar(septemberStatus, fiscalYearStatus));
 
     public static FiscalCalendar Calendar(
         PeriodStatus septemberStatus = PeriodStatus.Open,
@@ -49,7 +76,7 @@ public static class AccountingFixture
             FiscalYear,
             "FY18",
             "第 18 期（2026 年度）",
-            new EffectivePeriod(new DateOnly(2026, 4, 1), new DateOnly(2027, 3, 31)),
+            new DateRange(new DateOnly(2026, 4, 1), new DateOnly(2027, 3, 31)),
             fiscalYearStatus,
             PremiumLedgerFrom: new DateOnly(2026, 4, 1));
 
@@ -58,7 +85,7 @@ public static class AccountingFixture
             var start = new DateOnly(2026, 4, 1).AddMonths(offset);
             var end = start.AddMonths(1).AddDays(-1);
             var status = start.Month == 9 ? septemberStatus : PeriodStatus.Open;
-            return new AccountingPeriod(new AccountingPeriodId(offset + 1), FiscalYear, new EffectivePeriod(start, end), status);
+            return new AccountingPeriod(new AccountingPeriodId(offset + 1), FiscalYear, new DateRange(start, end), status);
         });
 
         return new FiscalCalendar([fiscalYear], periods);
@@ -89,12 +116,14 @@ public static class AccountingFixture
         AccountId accountId,
         long amount,
         DepartmentId? department = null,
-        TaxCategoryId? taxCategoryId = null)
+        TaxCategoryId? taxCategoryId = null,
+        SubAccountId? subAccountId = null)
         => new()
         {
             LineNo = lineNo,
             DebitCredit = side,
             AccountId = accountId,
+            SubAccountId = subAccountId,
             DepartmentId = department,
             Amount = Yen.From(amount),
             TaxCategoryId = taxCategoryId ?? OutOfScope,

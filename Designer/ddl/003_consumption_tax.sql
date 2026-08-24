@@ -15,16 +15,22 @@ CREATE TABLE tax_categories (
     code                        TEXT NOT NULL UNIQUE,
     name                        TEXT NOT NULL,
 
-    -- 課税区分。docs/06 §1 の 5 値。
-    --   taxable_sales    課税売上
-    --   taxable_purchase 課税仕入
-    --   non_taxable      非課税
-    --   export_exempt    免税（輸出）
-    --   out_of_scope     不課税（対象外）
+    -- 課税区分（docs/06 §1）。
+    --   taxable_sales        課税売上
+    --   taxable_purchase     課税仕入
+    --   non_taxable_sales    非課税売上
+    --   non_taxable_purchase 非課税仕入
+    --   export_exempt        免税（輸出）＝売上のみ
+    --   out_of_scope         不課税（対象外）
     -- 「未設定」を NULL と out_of_scope の 2 通りで表さないため NOT NULL にする。
+    --
+    -- **非課税にも売上／仕入の軸を通してある。** 課税だけ分けて非課税を 1 つに潰すと、
+    -- 課税売上割合の分母（課税＋免税＋非課税の売上高）を税区分だけでは作れず、
+    -- 勘定科目の科目区分に頼ることになる（docs/06 §7）。税の軸は税区分で完結させる。
     taxation_type               TEXT NOT NULL CHECK (taxation_type IN (
                                     'taxable_sales', 'taxable_purchase',
-                                    'non_taxable', 'export_exempt', 'out_of_scope')),
+                                    'non_taxable_sales', 'non_taxable_purchase',
+                                    'export_exempt', 'out_of_scope')),
 
     -- 税率の「種類」。**税率の数値はここに持たない。**
     -- 利用者が選ぶのは「標準税率か軽減税率か」であって、その日に何 % かは制度ルールが決める。
@@ -37,8 +43,10 @@ CREATE TABLE tax_categories (
 
     -- 入力時の初期値としての用途区分。明細の値が正であり、
     -- 「値が入っていない行の穴埋め」には使わない（docs/06 §1）。
+    -- 値を for_... にしてあるのは、課税区分の taxable_sales と**同じ値が別の意味で 2 か所に現れる**のを
+    -- 避けるためである。取り違えても値が同じだと実行時にも通ってしまう。
     default_tax_treatment       TEXT CHECK (default_tax_treatment IN (
-                                    'taxable_sales', 'common', 'exempt_sales')),
+                                    'for_taxable_sales', 'common', 'for_exempt_sales')),
 
     is_active                   INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
     display_order               INTEGER,

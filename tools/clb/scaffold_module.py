@@ -248,13 +248,48 @@ def build_search_layout(spec: dict) -> dict:
                                    width=label_width, vertical="Middle"))
         columns.append(grid_column(field_layout(field_name)))
 
-    # 検索行は 1 行 3 組までで折り返す（Designer/Project.md のレイアウト規約）
-    layout["Layout"]["Rows"] = [grid_row(columns, wrap=True)] if columns else []
+    # 検索行は 1 行 3 組（ラベル＋入力）までで折り返す（Designer/Project.md のレイアウト規約）。
+    # 文書に書くだけでなく生成器にも実装する。lint_design.py が同じ規約を検査する。
+    rows = [grid_row(columns[i:i + 6], wrap=True) for i in range(0, len(columns), 6)]
+    layout["Layout"]["Rows"] = rows
     return layout
+
+
+def validate_spec(spec: dict) -> None:
+    """生成器自身が「designcheck は通るが挙動が違う」ものを作らないようにする。"""
+    for key in ("module", "table", "fields"):
+        if key not in spec:
+            raise SystemExit(f"仕様に {key} がない")
+
+    names = []
+    for field in spec["fields"]:
+        for key in ("name", "type"):
+            if key not in field:
+                raise SystemExit(f"フィールドに {key} がない: {field}")
+        names.append(field["name"])
+
+    duplicated = {n for n in names if names.count(n) > 1}
+    if duplicated:
+        raise SystemExit(f"フィールド名が重複している: {', '.join(sorted(duplicated))}")
+
+    known = set(names)
+    for section in ("list", "search"):
+        for name in spec.get(section, []):
+            if name not in known:
+                raise SystemExit(f"{section} の {name} は fields にない")
+
+    placed = [name for row in spec.get("detail", []) for name in row]
+    for name in placed:
+        if name not in known:
+            raise SystemExit(f"detail の {name} は fields にない")
+    twice = {n for n in placed if placed.count(n) > 1}
+    if twice:
+        raise SystemExit(f"detail に同じフィールドが 2 回ある: {', '.join(sorted(twice))}")
 
 
 def main() -> None:
     spec = json.load(sys.stdin)
+    validate_spec(spec)
 
     labels = {f["name"]: f.get("label", f["name"]) for f in spec["fields"]}
 
@@ -288,6 +323,14 @@ def main() -> None:
     out_dir = os.path.join(MODULES_DIR, folder) if folder else MODULES_DIR
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, spec["module"] + ".mod.json")
+
+    # 生成後は Design/Modules/*.mod.json が正典であり、デザイナ GUI からも編集される。
+    # 黙って潰すと、再現に最も時間がかかる種類の作業（GUI での手作業）が失われる。
+    if os.path.exists(out_path):
+        raise SystemExit(
+            f"既にある: {os.path.relpath(out_path, REPO_ROOT)} / "
+            "生成後の .mod.json が正典なので上書きしない。作り直すなら先に消すこと。")
+
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(module, f, ensure_ascii=False, indent=2)
         f.write("\n")

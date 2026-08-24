@@ -21,26 +21,6 @@ public class AccountCategoryTests
     }
 
     [Theory]
-    [InlineData(AccountCategory.Asset, true)]
-    [InlineData(AccountCategory.Liability, true)]
-    [InlineData(AccountCategory.Equity, true)]
-    [InlineData(AccountCategory.Revenue, false)]
-    [InlineData(AccountCategory.Expense, false)]
-    public void 貸借科目を判定できる(AccountCategory category, bool expected)
-    {
-        Assert.Equal(expected, category.IsBalanceSheet());
-    }
-
-    [Fact]
-    public void 損益科目と貸借科目は排他で網羅している()
-    {
-        foreach (var category in Enum.GetValues<AccountCategory>())
-        {
-            Assert.NotEqual(category.IsProfitAndLoss(), category.IsBalanceSheet());
-        }
-    }
-
-    [Theory]
     [InlineData(AccountCategory.Asset, DebitCredit.Debit)]
     [InlineData(AccountCategory.Expense, DebitCredit.Debit)]
     [InlineData(AccountCategory.Liability, DebitCredit.Credit)]
@@ -49,6 +29,22 @@ public class AccountCategoryTests
     public void 残高が増える側を返す(AccountCategory category, DebitCredit expected)
     {
         Assert.Equal(expected, category.NormalBalance());
+    }
+
+    /// <summary>
+    /// 評価勘定は通常残高が科目区分と逆になる。科目区分だけから貸借を決めると必ず誤る。
+    /// </summary>
+    [Theory]
+    [InlineData(AccountCategory.Asset, false, DebitCredit.Debit)]
+    [InlineData(AccountCategory.Asset, true, DebitCredit.Credit)]    // 減価償却累計額・貸倒引当金
+    [InlineData(AccountCategory.Revenue, false, DebitCredit.Credit)]
+    [InlineData(AccountCategory.Revenue, true, DebitCredit.Debit)]   // 売上値引・戻り高
+    [InlineData(AccountCategory.Expense, true, DebitCredit.Credit)]  // 期末仕掛品棚卸高
+    public void 評価勘定の通常残高は科目区分と逆になる(AccountCategory category, bool isContra, DebitCredit expected)
+    {
+        var account = new AccountDefinition(new AccountId(1), "9999", "テスト", category, IsContra: isContra);
+
+        Assert.Equal(expected, account.NormalBalance);
     }
 
     [Fact]

@@ -20,6 +20,11 @@ CREATE TABLE accounts (
     -- 入力時の初期値。**値が入っていない行の穴埋めに使わない**（前回プロジェクトの実測で事故った）。
     default_tax_category_id     INTEGER REFERENCES tax_categories(id),
 
+    -- 評価勘定（控除科目）か。減価償却累計額・売上値引戻り高・期末仕掛品棚卸高のように、
+    -- **通常残高が科目区分と逆**の科目がある。この列が無いと、科目区分だけから
+    -- 借方残／貸方残を決める処理が必ず誤る（試算表の異常値判定・決算書の控除表示）。
+    is_contra                   INTEGER NOT NULL DEFAULT 0 CHECK (is_contra IN (0, 1)),
+
     requires_sub_account        INTEGER NOT NULL DEFAULT 0 CHECK (requires_sub_account IN (0, 1)),
     is_cash_equivalent          INTEGER NOT NULL DEFAULT 0 CHECK (is_cash_equivalent IN (0, 1)),
     is_fixed_asset              INTEGER NOT NULL DEFAULT 0 CHECK (is_fixed_asset IN (0, 1)),

@@ -9,7 +9,7 @@ namespace BusinessApp.AccountingCore.Shared;
 /// <para>比率の乗算は <see cref="Multiply"/> で端数処理を明示しないと書けない。
 /// 「どこかで暗黙に丸められていた」という事故を型で防ぐためである（docs/06 §4）。</para>
 /// </remarks>
-public readonly record struct Yen : IComparable<Yen>
+public readonly record struct Yen
 {
     private Yen(decimal value) => Value = value;
 
@@ -32,10 +32,6 @@ public readonly record struct Yen : IComparable<Yen>
 
     public bool IsPositive => Value > 0m;
 
-    public bool IsNegative => Value < 0m;
-
-    public bool IsZero => Value == 0m;
-
     /// <summary>比率を掛けて端数処理する。税額・控除額の計算はすべてこの経路を通す。</summary>
     public Yen Multiply(decimal ratio, RoundingMode mode) => From(Rounding.Apply(Value * ratio, mode));
 
@@ -43,31 +39,5 @@ public readonly record struct Yen : IComparable<Yen>
 
     public static Yen operator -(Yen left, Yen right) => new(left.Value - right.Value);
 
-    public static Yen operator -(Yen value) => new(-value.Value);
-
-    public static bool operator <(Yen left, Yen right) => left.Value < right.Value;
-
-    public static bool operator >(Yen left, Yen right) => left.Value > right.Value;
-
-    public static bool operator <=(Yen left, Yen right) => left.Value <= right.Value;
-
-    public static bool operator >=(Yen left, Yen right) => left.Value >= right.Value;
-
-    public int CompareTo(Yen other) => Value.CompareTo(other.Value);
-
     public override string ToString() => Value.ToString("0");
-}
-
-public static class YenEnumerableExtensions
-{
-    public static Yen Sum(this IEnumerable<Yen> source)
-    {
-        ArgumentNullException.ThrowIfNull(source);
-        var total = Yen.Zero;
-        foreach (var value in source)
-        {
-            total += value;
-        }
-        return total;
-    }
 }

@@ -27,8 +27,4 @@ public static class EntryTypeExtensions
     /// <summary>原仕訳の指定が必須の種別か（I-06）。</summary>
     public static bool RequiresOriginalEntry(this EntryType type)
         => type is EntryType.Correction or EntryType.Reversal;
-
-    /// <summary>システムが生成する種別か。利用者が直接作らない。</summary>
-    public static bool IsSystemGenerated(this EntryType type)
-        => type is EntryType.Opening or EntryType.Closing or EntryType.Carryover;
 }
