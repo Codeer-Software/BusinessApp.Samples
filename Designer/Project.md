@@ -81,7 +81,7 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
 - 2026-08-24: `sql` CLI は **`--out` を省くと結果 JSON が標準出力に来る**。PowerShell から呼ぶときは
   `ProcessStartInfo.ArgumentList` に 1 引数ずつ足して `RedirectStandardOutput` で受ける。
   `Start-Process -ArgumentList` だと `--query` 内の `'...'` が壊れて `incomplete input` になる。
-  この形なら SQL ファイルも結果ファイルも作らずに済む（CLAUDE.md §3-2-1）。
+  この形なら SQL ファイルも結果ファイルも作らずに済む（CLAUDE.md §3-2-2）。
 - 2026-08-24: デザイナ exe は WinExe なので、PowerShell の `&` で呼ぶと**待たずに戻る**。
   終了コードを見るには `Start-Process -Wait -PassThru` か `Process.WaitForExit()` を使う。
 - 2026-08-24: **デザイン enum は複数形で名づける**（`TaxationTypes` / `RateKinds`）。enum 名は
