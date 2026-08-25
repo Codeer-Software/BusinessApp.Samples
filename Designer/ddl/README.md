@@ -3,13 +3,14 @@ title: ddl — スキーマ定義
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-08-24
+updated: 2026-08-25
 supersedes: []
 related: [../Project.md, ../../docs/04_会計ドメイン設計.md, ../../docs/decisions/0019-マスタは会計が生んだ概念かで分ける.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---
 # ddl — スキーマ定義
 
-会計コアのテーブル定義。**適用は番号順**で、`sql` CLI から流す（自前で DB 接続しない）。
+会計コアのテーブル定義。**新規 DB を作るときは**番号順に `sql` CLI で流す（自前で DB 接続しない）。
+既にある DB へは直接流さず、マイグレーション（下記）で配る。
 
 ```powershell
 pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/001_organization.sql
@@ -20,10 +21,13 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/001_organization.sql
 
 **スキーマを変えたらサーバとデザイナの再起動が要る**（列定義が static にキャッシュされるため）。
 
-**既存 DB への変更の配布（マイグレーション）は
-[ADR-0020](../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md) で決定済み・未実装**
-（実装タスクは [docs/05 §1](../../docs/05_実装計画と現在地.md)）。本フォルダは仕組みができた後も
-**現在形の正典**であり続ける。仕組みができるまで、稼働 DB への変更は従来どおり手で当てる。
+**本フォルダは現在形の正典**であり、その場で書き換える
+（[ADR-0020](../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)）。
+**既存 DB への配布は [`../migrations/`](../migrations/README.md) が担う**。書き換えたら
+同じ変更をマイグレーションとしても書き、`tools/clb/migrate.ps1 -Apply` → `-Verify` で稼働 DB に当てる。
+マイグレーションの書き方の規約は migrations の README が持つ。
+網は 2 つ: **マイグレーションの書き忘れ・書き間違い**は同値テスト（`MigrationEquivalenceTests`）が、
+**稼働 DB そのもののスキーマのずれ**はコミット前フックの `-Verify` が捕まえる。
 
 ## テスト
 
