@@ -1,6 +1,7 @@
 namespace BusinessApp.AccountingCore.Server.Journals;
 
 using BusinessApp.AccountingCore.Journals;
+using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Server.Shared;
 using BusinessApp.AccountingCore.Shared;
 using Codeer.LowCode.Blazor.DataIO;
@@ -62,7 +63,7 @@ public sealed class JournalAmendmentService(
         var context = await masterLoader.LoadAsync();
         var today = DateOnly.FromDateTime(AccountingTimeZone.ToWallClock(timeProvider.GetUtcNow()));
 
-        if (context.Calendar.ResolvePeriod(today) is not { } period)
+        if (context.Calendar.ResolvePeriod(today) is not AccountingPeriod period)
         {
             return new AmendmentAvailability(
                 false, false, $"今日（{today:yyyy-MM-dd}）に対応する会計期間がありません。");
@@ -114,7 +115,7 @@ public sealed class JournalAmendmentService(
 
         var reversalContext = await ResolveReversalContextAsync(original, context, today);
         var result = JournalCorrection.Start(original, today, now, reversalContext);
-        if (result.Drafts is not { } drafts)
+        if (result.Drafts is not CorrectionDrafts drafts)
         {
             throw new JournalPostingRejectedException(result.Violations);
         }
@@ -154,7 +155,7 @@ public sealed class JournalAmendmentService(
     private async Task<ReversalContext> ResolveReversalContextAsync(
         JournalEntry original, PostingContext context, DateOnly today)
     {
-        if (context.Calendar.ResolvePeriod(today) is not { } period)
+        if (context.Calendar.ResolvePeriod(today) is not AccountingPeriod period)
         {
             throw new JournalPostingRejectedException(
             [

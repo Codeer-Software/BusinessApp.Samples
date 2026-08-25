@@ -44,7 +44,7 @@ public class EffectiveDatedRuleSetTests
         ]);
 
         Assert.Equal(
-            new[] { new RuleVersion("v1"), new RuleVersion("v2") },
+            (RuleVersion[])[new RuleVersion("v1"), new RuleVersion("v2")],
             set.Rules.Select(r => r.Version));
     }
 

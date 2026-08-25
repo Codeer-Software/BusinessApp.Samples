@@ -1,0 +1,246 @@
+# C# の記法規約（ADR-0021）。
+#
+# 目的は読みやすさであり、新しさそれ自体ではない。新しくても読みにくい記法（`is { }`）は採らない。
+# ここで表現できない禁止形は BusinessApp.TestSupport/CSharpStyleConvention.cs が正規表現で検査する。
+#
+# ------------------------------------------------------------------------------------------------
+# **重要（実測。2026-08-25）**: `option = value:warning` という書き方の severity は
+# **ビルドでは効かない**。EnforceCodeStyleInBuild で止めたい規則は、
+# `dotnet_diagnostic.IDEnnnn.severity = warning` を**明示的に**書かなければならない。
+# 前者だけを書くと、エディタには波線が出るのにビルドは素通りする——
+# 「機械で守っているつもりで何も見ていない」状態になる。
+#
+# そこで本ファイルは 2 段に分けてある。
+#   1. [*.cs] …… **好みの表明**（どちらの書き方が正か）。エディタの提案はここから出る。
+#   2. 下の「強制する」セクション …… **ビルドの関門**（規則 ID ごとの severity）。
+#      対象は ADR-0021 §3 のプロジェクトだけ。CLB スクリプトと CLB テンプレート由来の
+#      プロジェクトは、このセクションのパスに含めないことで対象外にしてある。
+# ------------------------------------------------------------------------------------------------
+
+root = true
+
+##############################################################################
+# 全ファイル共通
+##############################################################################
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+trim_trailing_whitespace = true
+
+[*.{json,js,css,html,yml,yaml}]
+indent_size = 2
+
+[*.md]
+# Markdown は行末の空白 2 つが改行の意味を持つ
+trim_trailing_whitespace = false
+
+[*.{ps1,psm1,py}]
+indent_size = 4
+
+##############################################################################
+# C# — 好みの表明（severity はここでは意味を持たない。上の「重要」を参照）
+##############################################################################
+[*.cs]
+indent_size = 4
+dotnet_sort_system_directives_first = true
+
+#---------------------------------------------------------------------------
+# ADR-0021 §2 の対応表
+#---------------------------------------------------------------------------
+
+# 名前空間は file-scoped
+csharp_style_namespace_declarations = file_scoped
+
+# null 検査は is null / is not null（`== null` は演算子の多重定義に左右される）
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true
+csharp_style_prefer_not_pattern = true
+
+# パターンマッチ
+csharp_style_pattern_matching_over_is_with_cast_check = true
+csharp_style_pattern_matching_over_as_with_null_check = true
+csharp_style_prefer_pattern_matching = true
+csharp_style_prefer_switch_expression = true
+csharp_style_prefer_extended_property_pattern = true
+
+# null 合体・null 条件
+dotnet_style_coalesce_expression = true
+dotnet_style_null_propagation = true
+csharp_style_throw_expression = true
+csharp_style_conditional_delegate_call = true
+
+# コレクションは初期化子とコレクション式で書く
+dotnet_style_object_initializer = true
+dotnet_style_collection_initializer = true
+dotnet_style_prefer_collection_expression = when_types_loosely_match
+csharp_style_prefer_index_operator = true
+csharp_style_prefer_range_operator = true
+
+# 型が左辺で明らかなら target-typed new
+csharp_style_implicit_object_creation_when_type_is_apparent = true
+
+# 依存の受け取りは primary constructor
+csharp_style_prefer_primary_constructors = true
+
+# 書き換えないフィールドは readonly
+dotnet_style_readonly_field = true
+
+# その他、意味が変わらず短くなるもの
+csharp_prefer_simple_using_statement = true
+csharp_style_prefer_method_group_conversion = true
+csharp_style_prefer_tuple_swap = true
+csharp_style_inlined_variable_declaration = true
+csharp_style_deconstructed_variable_declaration = true
+dotnet_style_prefer_simplified_boolean_expressions = true
+dotnet_style_prefer_compound_assignment = true
+dotnet_style_prefer_auto_properties = true
+dotnet_style_explicit_tuple_names = true
+dotnet_style_prefer_inferred_tuple_names = true
+dotnet_style_prefer_inferred_anonymous_type_member_names = true
+
+# 修飾子
+dotnet_style_require_accessibility_modifiers = for_non_interface_members
+csharp_prefer_static_local_function = true
+csharp_preferred_modifier_order = public,private,protected,internal,file,static,extern,new,virtual,abstract,sealed,override,readonly,unsafe,required,volatile,async
+
+#---------------------------------------------------------------------------
+# 敢えて強制しないもの（理由つき）
+#---------------------------------------------------------------------------
+
+# var の使い分けは読み手の判断に任せる。ADR-0021 の表に無く、
+# 一律にするとかえって型が読めなくなる場面がある。
+csharp_style_var_for_built_in_types = true
+csharp_style_var_when_type_is_apparent = true
+csharp_style_var_elsewhere = true
+
+# 式形式のメンバは既に多用しているが、複数行のロジックまで押し込むと読みにくい。
+csharp_style_expression_bodied_methods = when_on_single_line
+csharp_style_expression_bodied_constructors = when_on_single_line
+csharp_style_expression_bodied_operators = when_on_single_line
+csharp_style_expression_bodied_properties = true
+csharp_style_expression_bodied_indexers = true
+csharp_style_expression_bodied_accessors = true
+csharp_style_expression_bodied_lambdas = true
+csharp_style_expression_bodied_local_functions = when_on_single_line
+
+# 三項演算子への寄せ（IDE0045 / IDE0046）は、条件が長いと一行が読めなくなる。
+# ADR-0021 §1「初見の読み手が意味を一意に取れるか」で個別に判断する。
+dotnet_style_prefer_conditional_expression_over_assignment = true
+dotnet_style_prefer_conditional_expression_over_return = true
+
+# 波かっこの省略は禁止でも必須でもなく、既存コードは常に付けている。
+csharp_prefer_braces = true
+
+# `this.` は付けない慣行だが、既存コードに違反が無いので警告にする必要が無い。
+dotnet_style_qualification_for_field = false
+dotnet_style_qualification_for_property = false
+dotnet_style_qualification_for_method = false
+dotnet_style_qualification_for_event = false
+
+# 戻り値を捨てた式（IDE0058）は、テストの Act で頻出するので強制しない。
+csharp_style_unused_value_expression_statement_preference = discard_variable
+
+#---------------------------------------------------------------------------
+# 整形（IDE0055 が読む設定）
+#---------------------------------------------------------------------------
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_before_members_in_object_initializers = true
+csharp_new_line_before_members_in_anonymous_types = true
+csharp_new_line_between_query_expression_clauses = true
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_indent_labels = one_less_than_current
+csharp_space_after_cast = false
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_between_method_declaration_parameter_list_parentheses = false
+csharp_space_between_method_call_parameter_list_parentheses = false
+csharp_space_between_parentheses = false
+csharp_preserve_single_line_blocks = true
+csharp_preserve_single_line_statements = false
+
+##############################################################################
+# C# — 強制する（ADR-0021 §3 の対象プロジェクトだけ）
+#
+# ここに書いた規則だけが EnforceCodeStyleInBuild ＋ TreatWarningsAsErrors で
+# ビルドを止める。**規則を足すときは、上の好みの表明とここの両方に書く。**
+#
+# 対象外のパス（意図的に含めていない）:
+#   - Designer/ …… CLB スクリプト（*.mod.cs）。インタプリタが解釈できる範囲しか書けない（ADR-0008）
+#   - BusinessApp.{Server,Client,Client.Shared,Designer,LicenseRegisterCli}
+#     …… CLB テンプレート由来。テンプレート更新との差分を無用に増やさない（ADR-0021 §3）
+#
+# プロジェクトがこの一覧から漏れていないことは、規約テスト
+# （CSharpStyleTests.対象プロジェクトは記法の強制を宣言している）が検査する。
+##############################################################################
+[BusinessApp/BusinessApp.{AccountingCore,AccountingCore.Client,AccountingCore.Server,AccountingCore.Server.Tests,AccountingCore.Tests,Schema.Tests,SchemaVerifyCli,TestSupport}/**.cs]
+
+# 整形。乱れはレビューのノイズにしかならないので機械に任せる。
+dotnet_diagnostic.IDE0055.severity = warning
+
+# 名前空間は file-scoped
+dotnet_diagnostic.IDE0161.severity = warning
+
+# パターンマッチ・null 検査
+dotnet_diagnostic.IDE0016.severity = warning   # throw 式
+dotnet_diagnostic.IDE0019.severity = warning   # as + null 検査 → パターン
+dotnet_diagnostic.IDE0020.severity = warning   # is + キャスト → パターン（変数）
+dotnet_diagnostic.IDE0038.severity = warning   # is + キャスト → パターン（破棄）
+dotnet_diagnostic.IDE0041.severity = warning   # ReferenceEquals(x, null) → is null
+dotnet_diagnostic.IDE0066.severity = warning   # switch 文 → switch 式
+dotnet_diagnostic.IDE0075.severity = warning   # 条件式の単純化
+dotnet_diagnostic.IDE0078.severity = warning   # パターンマッチで書ける条件
+dotnet_diagnostic.IDE0083.severity = warning   # not パターン
+dotnet_diagnostic.IDE0170.severity = warning   # 拡張プロパティパターン
+
+# null 合体・null 条件
+dotnet_diagnostic.IDE0029.severity = warning   # ?? （null 許容でない値）
+dotnet_diagnostic.IDE0030.severity = warning   # ?? （null 許容の値）
+dotnet_diagnostic.IDE0031.severity = warning   # ?.
+dotnet_diagnostic.IDE0270.severity = warning   # null 検査の単純化
+dotnet_diagnostic.IDE1005.severity = warning   # デリゲート呼び出しの ?.Invoke
+
+# コレクション
+dotnet_diagnostic.IDE0017.severity = warning   # オブジェクト初期化子
+dotnet_diagnostic.IDE0028.severity = warning   # コレクション初期化子
+dotnet_diagnostic.IDE0056.severity = warning   # 添字の ^
+dotnet_diagnostic.IDE0057.severity = warning   # 範囲の ..
+dotnet_diagnostic.IDE0300.severity = warning   # コレクション式（配列）
+dotnet_diagnostic.IDE0301.severity = warning   # コレクション式（空）
+dotnet_diagnostic.IDE0302.severity = warning   # コレクション式（stackalloc）
+dotnet_diagnostic.IDE0303.severity = warning   # コレクション式（Create）
+dotnet_diagnostic.IDE0304.severity = warning   # コレクション式（builder）
+
+# IDE0305（LINQ の終端の .ToList() / .ToArray() を [.. 式] にする）は**強制しない**。
+# 複数行にわたる LINQ の連鎖の頭に `[..` が来ると、開き括弧と閉じ括弧が遠く離れ、
+# 「ここで実体化する」という意図も読み取りにくくなる。ADR-0021 §1 の
+# 「初見の読み手が意味を一意に取れるか」で落とした（2026-08-25。対象は 19 か所）。
+dotnet_diagnostic.IDE0305.severity = silent
+
+# 生成と宣言
+dotnet_diagnostic.IDE0018.severity = warning   # out 変数のインライン宣言
+dotnet_diagnostic.IDE0032.severity = warning   # 自動プロパティ
+dotnet_diagnostic.IDE0033.severity = warning   # タプル要素の明示名
+dotnet_diagnostic.IDE0037.severity = warning   # 推論できるメンバ名
+dotnet_diagnostic.IDE0042.severity = warning   # 分解宣言
+dotnet_diagnostic.IDE0090.severity = warning   # target-typed new
+dotnet_diagnostic.IDE0200.severity = warning   # メソッドグループへの変換
+dotnet_diagnostic.IDE0290.severity = warning   # primary constructor
+
+# 修飾子と可視性
+dotnet_diagnostic.IDE0036.severity = warning   # 修飾子の順序
+dotnet_diagnostic.IDE0040.severity = warning   # アクセシビリティ修飾子
+dotnet_diagnostic.IDE0044.severity = warning   # readonly フィールド
+dotnet_diagnostic.IDE0062.severity = warning   # static ローカル関数
+
+# 使われていないもの。**放置すると読み手が「使われている」と誤解する。**
+dotnet_diagnostic.IDE0051.severity = warning   # 使われていない private メンバ
+dotnet_diagnostic.IDE0052.severity = warning   # 読まれていない private メンバ
+dotnet_diagnostic.IDE0059.severity = warning   # 使われない代入
+dotnet_diagnostic.IDE0060.severity = warning   # 使われない引数
+dotnet_diagnostic.IDE0063.severity = warning   # using 宣言
+dotnet_diagnostic.IDE0079.severity = warning   # 不要な抑制
+dotnet_diagnostic.IDE0180.severity = warning   # タプルによる入れ替え

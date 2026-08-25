@@ -1,6 +1,7 @@
 namespace BusinessApp.AccountingCore.Server.Journals;
 
 using BusinessApp.AccountingCore.Journals;
+using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
@@ -33,12 +34,12 @@ public sealed class JournalReversalPosting(JournalEntryStore entryStore)
             ]);
         }
 
-        if (draft.Id is not { } id)
+        if (draft.Id is not JournalEntryId id)
         {
             throw new InvalidOperationException("保存されていない取消には書き込めない。");
         }
 
-        if (draft.OriginalEntryId is not { } originalId)
+        if (draft.OriginalEntryId is not JournalEntryId originalId)
         {
             throw new JournalPostingRejectedException(
             [
@@ -48,7 +49,7 @@ public sealed class JournalReversalPosting(JournalEntryStore entryStore)
 
         // 会計年度は**取消の計上日**から引く。原仕訳の年度を写すと、年度をまたぐ取消が
         // 「作れたのに計上できない」という一番読みにくい行き止まりになる。
-        if (context.Calendar.ResolvePeriod(draft.PostingDate) is not { } period)
+        if (context.Calendar.ResolvePeriod(draft.PostingDate) is not AccountingPeriod period)
         {
             throw new JournalPostingRejectedException(
             [

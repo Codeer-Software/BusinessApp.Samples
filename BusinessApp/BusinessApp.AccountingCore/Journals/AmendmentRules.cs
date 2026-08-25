@@ -45,8 +45,7 @@ internal static class AmendmentRules
         {
             yield return new Violation(
                 JournalViolationCodes.AmendmentBeforeOriginal,
-                $"{kind.Noun}の計上日（{postingDate:yyyy-MM-dd}）が、"
-                + $"元の伝票の計上日（{original.PostingDate:yyyy-MM-dd}）より前になっています。");
+                $"{kind.Noun}の計上日（{postingDate:yyyy-MM-dd}）が、元の伝票の計上日（{original.PostingDate:yyyy-MM-dd}）より前になっています。");
         }
 
         // **対象は通常の仕訳と訂正だけ。**
@@ -57,8 +56,7 @@ internal static class AmendmentRules
         {
             yield return new Violation(
                 JournalViolationCodes.AmendmentTargetNotAmendable,
-                $"種別が「{original.EntryType.DisplayName()}」の伝票は{kind.CannotVerb}。"
-                + "対象にできるのは通常の伝票と訂正だけです。");
+                $"種別が「{original.EntryType.DisplayName()}」の伝票は{kind.CannotVerb}。対象にできるのは通常の伝票と訂正だけです。");
         }
     }
 

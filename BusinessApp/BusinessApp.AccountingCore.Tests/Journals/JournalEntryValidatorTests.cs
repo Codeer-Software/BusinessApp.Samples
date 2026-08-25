@@ -1,8 +1,8 @@
 namespace BusinessApp.AccountingCore.Tests.Journals;
 
 using BusinessApp.AccountingCore.Accounts;
-using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.ConsumptionTax;
+using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
@@ -364,13 +364,13 @@ public class JournalEntryValidatorTests
         // **訂正を含めるのは 2026-08-25 の自己レビューで直した。** 訂正は取消を先に計上してから
         // 再計上の下書きを開くので（ADR-0015）、ここが Error だと
         // **取消だけが確定して再計上は永久にできない**——利用者から見れば詰む。
-        var entry = AccountingFixture.Entry(
+        var ordinary = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.RetiredExpense, 1_000,
                 department: AccountingFixture.RetiredDepartment),
             AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.BankAccount, 1_000,
-                subAccountId: AccountingFixture.RetiredBank))
-            with { EntryType = entryType, OriginalEntryId = new JournalEntryId(9) };
+                subAccountId: AccountingFixture.RetiredBank));
+        var entry = ordinary with { EntryType = entryType, OriginalEntryId = new JournalEntryId(9) };
 
         var violations = Validate(entry);
 

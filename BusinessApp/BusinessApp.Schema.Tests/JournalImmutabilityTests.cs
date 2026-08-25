@@ -240,7 +240,8 @@ public class JournalImmutabilityTests
         """;
 
     private static string Amendment(int id, int entryNo, string entryType, int originalEntryId = 1)
-        => AmendmentDraft(id, entryType, originalEntryId) + $"""
+        => $"""
+        {AmendmentDraft(id, entryType, originalEntryId)}
         UPDATE journal_entries SET status = 'posted', entry_no = {entryNo}, posted_at = '2026-05-21 10:00:00' WHERE id = {id};
         """;
 }

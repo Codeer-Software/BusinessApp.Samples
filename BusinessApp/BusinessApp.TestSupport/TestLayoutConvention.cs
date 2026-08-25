@@ -42,8 +42,7 @@ public sealed class TestLayoutConvention
         => MirroredTestFiles()
             .Select(file => (file.RelativePath, Expected: ExpectedSourcePath(file.RelativePath)))
             .Where(pair => !File.Exists(pair.Expected))
-            .Select(pair => $"{TestProjectName}/{pair.RelativePath} に対応する "
-                          + $"{SourceProjectName}/{Path.GetRelativePath(SourceProject, pair.Expected)} がない")
+            .Select(pair => $"{TestProjectName}/{pair.RelativePath} に対応する {SourceProjectName}/{Path.GetRelativePath(SourceProject, pair.Expected)} がない")
             .ToList();
 
     /// <summary>宣言した名前空間がフォルダ構造と合っていないテストファイル。</summary>

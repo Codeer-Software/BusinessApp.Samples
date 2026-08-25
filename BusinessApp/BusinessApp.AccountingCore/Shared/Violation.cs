@@ -18,7 +18,7 @@ public sealed record Violation(
     ViolationSeverity Severity = ViolationSeverity.Error)
 {
     public override string ToString()
-        => LineNo is { } no ? $"[{Code}] {no} 行目: {Message}" : $"[{Code}] {Message}";
+        => LineNo is int no ? $"[{Code}] {no} 行目: {Message}" : $"[{Code}] {Message}";
 }
 
 public static class ViolationEnumerableExtensions

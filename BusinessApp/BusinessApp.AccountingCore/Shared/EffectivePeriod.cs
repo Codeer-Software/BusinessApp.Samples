@@ -8,7 +8,7 @@ public readonly record struct EffectivePeriod
 {
     public EffectivePeriod(DateOnly from, DateOnly? to)
     {
-        if (to is { } end && end < from)
+        if (to is DateOnly end && end < from)
         {
             throw new ArgumentException($"終期が始期より前になっている: {from:yyyy-MM-dd} 〜 {end:yyyy-MM-dd}", nameof(to));
         }
@@ -22,10 +22,10 @@ public readonly record struct EffectivePeriod
     /// <summary>終期（この日を含む）。null は終期なし。</summary>
     public DateOnly? To { get; }
 
-    public bool Includes(DateOnly date) => date >= From && (To is not { } end || date <= end);
+    public bool Includes(DateOnly date) => date >= From && (To is not DateOnly end || date <= end);
 
     public bool Overlaps(EffectivePeriod other)
-        => (To is not { } end || end >= other.From) && (other.To is not { } otherEnd || otherEnd >= From);
+        => (To is not DateOnly end || end >= other.From) && (other.To is not DateOnly otherEnd || otherEnd >= From);
 
-    public override string ToString() => $"{From:yyyy-MM-dd}〜{(To is { } to ? to.ToString("yyyy-MM-dd") : string.Empty)}";
+    public override string ToString() => $"{From:yyyy-MM-dd}〜{(To is DateOnly to ? to.ToString("yyyy-MM-dd") : string.Empty)}";
 }

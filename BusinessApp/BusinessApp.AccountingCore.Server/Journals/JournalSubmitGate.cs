@@ -113,14 +113,13 @@ public sealed class JournalSubmitGate(
             }
 
             var stored = await entryStore.FindEntryTypeAsync(new JournalEntryId(id));
-            if (stored is { } current && DbValue.ToSnakeCase(current) != submitted)
+            if (stored is EntryType current && DbValue.ToSnakeCase(current) != submitted)
             {
                 throw new JournalPostingRejectedException(
                 [
                     new Violation(
                         JournalViolationCodes.EntryTypeImmutable,
-                        $"伝票の種別は変更できません（「{current.DisplayName()}」のままです）。"
-                        + "種別を変えるときは、下書きを作り直してください。"),
+                        $"伝票の種別は変更できません（「{current.DisplayName()}」のままです）。種別を変えるときは、下書きを作り直してください。"),
                 ]);
             }
         }
@@ -266,7 +265,7 @@ public sealed class JournalSubmitGate(
     /// </summary>
     private static T Ensure<T>(ModuleData data, string name) where T : FieldDataBase, new()
     {
-        if (Field<T>(data, name) is { } existing)
+        if (Field<T>(data, name) is T existing)
         {
             return existing;
         }
