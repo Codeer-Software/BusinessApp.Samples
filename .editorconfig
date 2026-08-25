@@ -24,8 +24,10 @@
 # = true があるからで、これを false にすると IDE0290 は逆に「primary constructor をやめろ」と言う）。
 # 規則を足すときも消すときも、上段と下段の両方を直す。
 #
-# **強制セクションのプロジェクト一覧は、規約テストが CSharpStyleConvention.EnforcedProjects と
-# 突き合わせている**（CSharpStyleTests.editorconfig_の強制セクションと表が一致している）。
+# **このファイルは規約テストが 3 通りに検査している。**
+#   1. 強制セクションのプロジェクト一覧が CSharpStyleConvention.EnforcedProjects と一致するか
+#   2. **規則の実効 severity**（Roslyn に解釈させて引く。行を消しても後ろから打ち消しても鳴る）
+#   3. **上段の option の値**（severity は「報告するか」しか決めないので、こちらも見る）
 # ここに足し忘れると、csproj が EnforceCodeStyleInBuild を宣言していても
 # **severity を上げる指定が 1 つも当たらず、ビルドが素通りする**。
 # ------------------------------------------------------------------------------------------------
@@ -187,9 +189,6 @@ csharp_preserve_single_line_statements = false
 #   - Designer/ …… CLB スクリプト（*.mod.cs）。インタプリタが解釈できる範囲しか書けない（ADR-0008）
 #   - BusinessApp.{Server,Client,Client.Shared,Designer,LicenseRegisterCli}
 #     …… CLB テンプレート由来。テンプレート更新との差分を無用に増やさない（ADR-0021 §3）
-#
-# プロジェクトがこの一覧から漏れていないことは、規約テスト
-# （CSharpStyleTests.対象プロジェクトは記法の強制を宣言している）が検査する。
 ##############################################################################
 [BusinessApp/BusinessApp.{AccountingCore,AccountingCore.Client,AccountingCore.Server,AccountingCore.Server.Tests,AccountingCore.Tests,Schema.Tests,SchemaVerifyCli,TestSupport}/**.cs]
 

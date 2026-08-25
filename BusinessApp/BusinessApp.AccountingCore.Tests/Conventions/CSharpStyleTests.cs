@@ -8,9 +8,10 @@ namespace BusinessApp.AccountingCore.Tests.Conventions;
 /// <c>.editorconfig</c> で表現できるものは <c>EnforceCodeStyleInBuild</c> がビルドで止める
 /// （<c>TreatWarningsAsErrors</c> と組でエラーになる）。</para>
 /// <para><b>「違反 0 件」を表明するだけのテストは、検査そのものが壊れても緑になる。</b>
-/// 実際、最初はそうなっていた——判定の中身を空にしても 6 つのうち 5 つは落ちなかった
-/// （qa/02 R8-11）。そこで<b>すべての検査に「壊した入力を食わせて赤になる」対</b>を置いてある。
-/// 通す経路は本番と同じ関数である（テストだけが通る別の道を作らない）。</para>
+/// 実際、最初はそうなっていた——判定の中身を空にしても、当時の 6 つのうち 5 つは落ちなかった
+/// （qa/02 R8-11）。そこで<b>すべての判定に「壊した入力を食わせて赤になる」対</b>を置き、
+/// <b>ディスクを読むのは「どこを読むか」だけ</b>にしてある。読む場所と判定を混ぜた皮を作ると、
+/// そこに残った判断が誰にも見られない（qa/02 R8-33）。</para>
 /// <para>リポジトリ全体を見るのでこのプロジェクトの外まで検査するが、
 /// このためにテストプロジェクトを 1 つ増やすほうが高くつくのでここに置く。</para>
 /// </remarks>
@@ -25,11 +26,16 @@ public class CSharpStyleTests
 
     [Fact]
     public void 禁止された記法を使っていない()
-        => AssertNone(Convention.ForbiddenFormUsages());
+        => AssertNone(Convention.ForbiddenFormUsagesIn(Convention.FilesToScan()));
 
     [Fact]
     public void 対象プロジェクトは記法の強制を宣言している()
-        => AssertNone(Convention.ProjectsWithoutEnforcement());
+        => AssertNone(
+        [
+            .. CSharpStyleConvention.EnforcedProjects.SelectMany(project =>
+                CSharpStyleConvention.EnforcementProblems(
+                    project, Convention.ProjectFile(project), Convention.ImplicitBuildProperties())),
+        ]);
 
     /// <summary>
     /// 強制対象を黙って減らせない。
@@ -37,7 +43,7 @@ public class CSharpStyleTests
     /// <remarks>
     /// 3 つの表（csproj・<c>.editorconfig</c>・<c>EnforcedProjects</c>）は互いだけを照合しているので、
     /// <b>3 か所を揃えて動かすと、整合したまま関門だけが消える</b>（qa/02 R8-12）。
-    /// ミューテーションスコアと同じ作法で下限を置く。<b>下げるときは理由を書いて下げる。</b>
+    /// ミューテーションスコアと同じ作法で下限を置く。<b>下げるときは qa/02 に理由を書いて下げる。</b>
     /// </remarks>
     [Fact]
     public void 強制対象を黙って減らせない()
@@ -48,28 +54,36 @@ public class CSharpStyleTests
 
     [Fact]
     public void すべてのプロジェクトがどちらかの表に載っている()
-        => AssertNone(Convention.ProjectsMissingFromTable());
+        => AssertNone(CSharpStyleConvention.UnlistedProjects(Convention.SolutionProjects()));
 
     [Fact]
     public void editorconfig_の強制セクションと表が一致している()
-        => AssertNone(Convention.EditorConfigMismatches());
+        => AssertNone(CSharpStyleConvention.EditorConfigMismatches(Convention.EditorConfigFiles()[0].Text));
 
     /// <summary>
-    /// 規則がビルドで実際に警告になる。
+    /// 規則がビルドで実際に警告になり、かつ「何を正とするか」も揃っている。
     /// </summary>
     /// <remarks>
     /// <b>見出しの照合だけでは、中身の severity 行が全部消えても緑になる</b>（qa/02 R8-10）。
-    /// ここは Roslyn に <c>.editorconfig</c> を解釈させて<b>実効の severity</b> を引く。
-    /// 対象外のプロジェクトで警告に<b>ならない</b>ことも同時に見る。
+    /// さらに severity は「報告するか」しか決めず、<b>何を正とするかは上段の option が決める</b>
+    /// （qa/02 R8-25）。Roslyn に <c>.editorconfig</c> を解釈させて両方を引く。
     /// </remarks>
     [Fact]
     public void 規則はビルドで実際に警告になる()
-        => AssertNone(Convention.EffectiveSeverityProblems());
+        => AssertNone(CSharpStyleConvention.EffectiveSeverityProblems(
+            Convention.EditorConfigFiles(), Convention.ProjectsDirectory));
 
     /// <summary>改行が LF に固定されていて、実際に LF である。</summary>
+    /// <remarks>
+    /// <b>2 つは別々に壊れる。</b> 固定を消しても既にある作業コピーは LF のままなので
+    /// CRLF の検査は緑を返す（qa/02 R8-15）。だから 2 つとも表明する。
+    /// </remarks>
     [Fact]
     public void ソースの改行は_LF_に固定されている()
-        => AssertNone(Convention.LineEndingProblems());
+    {
+        AssertNone(CSharpStyleConvention.GitAttributesProblems(Convention.GitAttributesFiles()));
+        AssertNone(CSharpStyleConvention.CarriageReturnProblems(Convention.FilesToScan()));
+    }
 
     /// <summary>
     /// 検査が実際にソースを読んでいる。
@@ -79,12 +93,10 @@ public class CSharpStyleTests
     /// 「違反が無い」と「何も見ていない」は、結果の見た目が同じである。
     /// </remarks>
     [Fact]
-    public void リポジトリのルートを見つけて実際にソースを読んでいる()
+    public void 読む場所を間違えていない()
     {
         Assert.True(Directory.Exists(Convention.ProjectsDirectory), "BusinessApp/ が見つからない");
         Assert.True(File.Exists(Convention.SolutionFile), "BusinessApp.slnx が見つからない");
-        Assert.True(File.Exists(Convention.EditorConfigFile), ".editorconfig が見つからない");
-        Assert.True(File.Exists(Convention.GitAttributesFile), ".gitattributes が見つからない");
 
         // 表に書いた名前がソリューションに実在すること。
         var actual = Convention.SolutionProjects().Select(project => project.Name).ToHashSet(StringComparer.Ordinal);
@@ -93,14 +105,19 @@ public class CSharpStyleTests
             .Where(project => !actual.Contains(project))
             .ToList();
         Assert.True(missing.Count == 0, $"表にあるがソリューションに無い: {string.Join(" / ", missing)}");
+        Assert.All(Convention.SolutionProjects(), project =>
+            Assert.StartsWith("BusinessApp/", project.Path, StringComparison.Ordinal));
 
-        // 実際に読めている証拠として、この検査自身のソースを見つけられること。
-        var files = CSharpStyleConvention.SourceFiles(Convention.RepositoryRoot).ToList();
-        Assert.Contains(files, path => path.EndsWith("CSharpStyleTests.cs", StringComparison.Ordinal));
+        // 走査は BusinessApp/ の外（CLB スクリプト）まで届いていること。
+        // **ここを 1 語変えると Designer/*.mod.cs が黙って対象外になる**（qa/02 R8-33）。
+        var files = Convention.FilesToScan();
+        Assert.Contains(files, file => file.Path.EndsWith("CSharpStyleTests.cs", StringComparison.Ordinal));
+        Assert.Contains(files, file => CSharpStyleConvention.IsClbScript(file.Path));
         Assert.True(files.Count > 100, $"読めた C# が {files.Count} 本しかない（除外の指定が広すぎないか）");
 
-        // CLB スクリプト（*.mod.cs）も検査の対象である（ADR-0021 §2 の禁止形は場所によらない）。
-        Assert.Contains(files, CSharpStyleConvention.IsClbScript);
+        // 設定ファイルも全部見つけていること（下の階層に置いて打ち消せないようにするため）。
+        Assert.NotEmpty(Convention.EditorConfigFiles());
+        Assert.NotEmpty(Convention.GitAttributesFiles());
     }
 
     // =====================================================================
@@ -184,7 +201,7 @@ public class CSharpStyleTests
     }
 
     /// <summary>
-    /// null の比較は、括弧・キャスト・Yoda 形で包んでも捕まる。
+    /// null の比較は、括弧・キャスト・Yoda 形・null 許容の抑制で包んでも捕まる。
     /// </summary>
     /// <remarks>
     /// <c>x == (object)null</c> は<b>演算子の多重定義を迂回するために人が書く形</b>であり、
@@ -197,6 +214,7 @@ public class CSharpStyleTests
     [InlineData("if (null != x) { }", true)]
     [InlineData("if ((x) == (null)) { }", true)]
     [InlineData("if (x == (object)null) { }", true)]
+    [InlineData("if (x == null!) { }", true)]
     [InlineData("if (x is null) { }", false)]
     [InlineData("if (x is not null) { }", false)]
     [InlineData("if (x == default) { }", false)]                 // 値型の正しい比較が実在する
@@ -210,19 +228,21 @@ public class CSharpStyleTests
     /// </summary>
     /// <remarks>
     /// <b><c>#if</c> の中は構文木から消える</b>ので、そこに書かれた禁止形は検査を素通りし、
-    /// 「違反 0 件」と見分けが付かない（qa/02 R8-17）。分岐の網羅という難問を持ち込むより、
-    /// 条件付きコンパイルそのものを使わない。
+    /// 「違反 0 件」と見分けが付かない（qa/02 R8-17）。
+    /// <b>この理屈は適用範囲の広い <c>Everywhere</c> にこそ当てはまる</b>ので、そちらに置いてある
+    /// （qa/02 R8-30）。CLB スクリプトとテンプレート由来のコードにも効く。
     /// </remarks>
     [Fact]
     public void 条件付きコンパイルは使わない()
     {
         var source = """
-            #if DEBUG
+            #if NEVER_DEFINED
             var x = 1;
             #endif
             """;
 
-        Assert.NotEmpty(Find(source, ForbiddenFormSet.EnforcedProject));
+        Assert.NotEmpty(Find(source));
+        Assert.NotEmpty(Find(source, ForbiddenFormSet.Everywhere, isClbScript: true));
     }
 
     [Theory]
@@ -239,16 +259,20 @@ public class CSharpStyleTests
     /// 文言の中に CR を書かない。
     /// </summary>
     /// <remarks>
-    /// <c>Environment.NewLine</c> を禁じても、CR を含む文字列リテラルを書けば同じ結果になる
-    /// （qa/02 R8-21）。ファイルの実バイトを見る CRLF 検査には、この形は当たらない。
+    /// <c>Environment.NewLine</c> を禁じても、CR を含むリテラルを書けば同じ結果になる
+    /// （qa/02 R8-21）。ファイルの実バイトを見る検査には当たらないので、<b>ここが唯一の網</b>である。
+    /// 通常の文字列だけを見ていると<b>補間文字列・文字リテラル・UTF-8 リテラルがすり抜けた</b>
+    /// （qa/02 R8-31）。
     /// </remarks>
     [Fact]
     public void 文言の中に_CR_を書かない()
     {
-        var carriageReturn = ((char)13).ToString();
-        var source = $"var s = string.Join(\"{carriageReturn}\", lines);";
+        var cr = ((char)13).ToString();
 
-        Assert.NotEmpty(Find(source, ForbiddenFormSet.MessageLayer));
+        Assert.NotEmpty(Find($"var s = string.Join(\"{cr}\", lines);", ForbiddenFormSet.MessageLayer));
+        Assert.NotEmpty(Find($"var s = $\"1 行目{cr}{{n}} 行目\";", ForbiddenFormSet.MessageLayer));
+        Assert.NotEmpty(Find($"var s = string.Join('{cr}', lines);", ForbiddenFormSet.MessageLayer));
+        Assert.NotEmpty(Find($"var s = \"a{cr}b\"u8;", ForbiddenFormSet.MessageLayer));
         Assert.Empty(Find("var s = string.Join(\"x\", lines);", ForbiddenFormSet.MessageLayer));
     }
 
@@ -318,7 +342,6 @@ public class CSharpStyleTests
     /// </summary>
     /// <remarks>
     /// <b>判定が正しくても、配線を間違えれば何も見ない。</b>
-    /// ディスクを読む側にしか経路が無いと、ここが壊れても誰も気づかない（qa/02 R8-11）。
     /// </remarks>
     [Fact]
     public void 走査は置き場所に応じた禁止形を当てる()
@@ -335,9 +358,6 @@ public class CSharpStyleTests
             (script, "void M() { if (y is { } v) { } }"),
         ]);
 
-        // 会計コアは 3 つとも効く。BusinessApp.Server は `is { }` と改行の 2 つ
-        // （テンプレート由来だが文面を画面へ返す層なので MessageLayer に入っている）。
-        // CLB スクリプトは `is { }` だけ。
         Assert.Equal(3, found.Count(message => message.StartsWith(core, StringComparison.Ordinal)));
         Assert.Equal(2, found.Count(message => message.StartsWith(template, StringComparison.Ordinal)));
         Assert.Equal(1, found.Count(message => message.StartsWith(script, StringComparison.Ordinal)));
@@ -383,13 +403,8 @@ public class CSharpStyleTests
     /// <c>NoWarn</c> を 1 行足せば、宣言を残したまま関門を殺せる（qa/02 R8-13）。
     /// </remarks>
     [Theory]
-    [InlineData(
-        "<Project><PropertyGroup><TreatWarningsAsErrors>true</TreatWarningsAsErrors>"
-        + "<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild></PropertyGroup></Project>",
-        0)]
-    [InlineData(
-        "<Project><PropertyGroup><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup></Project>",
-        1)]
+    [InlineData(Declared, 0)]
+    [InlineData("<Project><PropertyGroup><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup></Project>", 1)]
     [InlineData("<Project><PropertyGroup /></Project>", 2)]
     [InlineData(
         "<Project><PropertyGroup><!-- <TreatWarningsAsErrors>true</TreatWarningsAsErrors> -->"
@@ -418,6 +433,24 @@ public class CSharpStyleTests
     public void csproj_の宣言の検査は消す形も打ち消す形も鳴る(string csproj, int expected)
         => Assert.Equal(expected, CSharpStyleConvention.EnforcementProblems("Probe", csproj).Count);
 
+    /// <summary>
+    /// <c>Directory.Build.props</c> に書いた抑制も見る。
+    /// </summary>
+    /// <remarks>
+    /// MSBuild はこれを暗黙に読み込むので、<b>csproj を 1 文字も触らずに関門を殺せる</b>
+    /// （qa/02 R8-27）。必要プロパティの側は集約されると誤検知（＝安全側）だが、
+    /// <b>抑制の側は逆向きに壊れる</b>ので非対称に見る。
+    /// </remarks>
+    [Fact]
+    public void 暗黙に読み込まれる設定の抑制も鳴る()
+    {
+        Assert.Empty(CSharpStyleConvention.EnforcementProblems("Probe", Declared, []));
+        Assert.NotEmpty(CSharpStyleConvention.EnforcementProblems(
+            "Probe", Declared, ["<Project><PropertyGroup><NoWarn>$(NoWarn);IDE0161</NoWarn></PropertyGroup></Project>"]));
+        Assert.Empty(CSharpStyleConvention.EnforcementProblems(
+            "Probe", Declared, ["<Project><PropertyGroup><NoWarn>CS1591</NoWarn></PropertyGroup></Project>"]));
+    }
+
     [Fact]
     public void csproj_が無ければ報告する()
         => Assert.Single(CSharpStyleConvention.EnforcementProblems("Probe", null));
@@ -429,54 +462,63 @@ public class CSharpStyleTests
         var all = string.Join(',', CSharpStyleConvention.EnforcedProjects.Select(Suffix));
 
         Assert.Empty(CSharpStyleConvention.EditorConfigMismatches(Section(all)));
-        Assert.NotEmpty(CSharpStyleConvention.EditorConfigMismatches(Section(all.Replace("AccountingCore,", "", StringComparison.Ordinal))));
+        Assert.NotEmpty(CSharpStyleConvention.EditorConfigMismatches(
+            Section(all.Replace("AccountingCore,", "", StringComparison.Ordinal))));
         Assert.NotEmpty(CSharpStyleConvention.EditorConfigMismatches(Section(all + ",Nonexistent")));
         Assert.NotEmpty(CSharpStyleConvention.EditorConfigMismatches("root = true"));
         Assert.NotEmpty(CSharpStyleConvention.EditorConfigMismatches(null));
-
-        static string Suffix(string project) => project["BusinessApp.".Length..];
-        static string Section(string names) => $"[BusinessApp/BusinessApp.{{{names}}}/**.cs]";
     }
 
     /// <summary>
-    /// 実効 severity の検査は、severity 行が消えても・打ち消されても鳴る。
+    /// 実効 severity の検査は、消しても・打ち消しても・上段を反転しても鳴る。
     /// </summary>
     /// <remarks>
-    /// <b>これが今回いちばん危なかった穴である。</b> 見出しの照合だけを持っていたときは、
-    /// <c>.editorconfig</c> の <c>dotnet_diagnostic</c> 行を全部消しても 44 件緑のままだった
-    /// （qa/02 R8-10。レビュアが実測した）。
+    /// <b>ここが今回いちばん危なかった穴である。</b> 見出しの照合だけを持っていたときは、
+    /// <c>dotnet_diagnostic</c> 行を全部消しても緑のままだった（qa/02 R8-10）。
+    /// さらに<b>上段の option を 6 行反転しただけで 10 個のビルドエラーが消えたのに、
+    /// テストは全部緑</b>だった（qa/02 R8-25）。どちらもレビュアが実測している。
     /// </remarks>
     [Fact]
-    public void 実効_severity_の検査は消しても打ち消しても鳴る()
+    public void 実効_severity_の検査は消しても打ち消しても上段を反転しても鳴る()
     {
-        var root = Convention.RepositoryRoot;
+        var good = EditorConfig();
+        var path = Path.Combine(Convention.RepositoryRoot, ".editorconfig");
         var projects = Convention.ProjectsDirectory;
-        var editorConfig = Path.Combine(root, ".editorconfig");
-        var section = $"[BusinessApp/BusinessApp.{{{string.Join(',', CSharpStyleConvention.EnforcedProjects.Select(p => p["BusinessApp.".Length..]))}}}/**.cs]";
-        var warnings = string.Join('\n', CSharpStyleConvention.MustBeWarnings.Select(r => $"dotnet_diagnostic.{r}.severity = warning"));
-        var silents = string.Join('\n', CSharpStyleConvention.MustNotBeWarnings.Select(r => $"dotnet_diagnostic.{r}.severity = silent"));
-        var good = $"root = true\n\n{section}\n{warnings}\n{silents}\n";
 
-        Assert.Empty(CSharpStyleConvention.EffectiveSeverityProblems(good, editorConfig, projects));
+        Assert.Empty(Problems(good));
 
         // severity 行をまるごと消す
-        Assert.NotEmpty(CSharpStyleConvention.EffectiveSeverityProblems(
-            $"root = true\n\n{section}\n", editorConfig, projects));
+        Assert.NotEmpty(Problems($"root = true\n\n{Header()}\n"));
 
         // 後ろに広いセクションを足して打ち消す
-        Assert.NotEmpty(CSharpStyleConvention.EffectiveSeverityProblems(
-            good + "\n[BusinessApp/**.cs]\ndotnet_diagnostic.IDE0055.severity = none\n", editorConfig, projects));
+        Assert.NotEmpty(Problems(good + "\n[BusinessApp/**.cs]\ndotnet_diagnostic.IDE0055.severity = none\n"));
 
         // 強制しないと決めた規則が警告に格上げされている
-        Assert.NotEmpty(CSharpStyleConvention.EffectiveSeverityProblems(
-            good + $"\n{section}\ndotnet_diagnostic.IDE0305.severity = warning\n", editorConfig, projects));
+        Assert.NotEmpty(Problems(good + $"\n{Header()}\ndotnet_diagnostic.IDE0305.severity = warning\n"));
 
         // 対象外のはずのプロジェクトにまで当たっている
-        Assert.NotEmpty(CSharpStyleConvention.EffectiveSeverityProblems(
-            good + "\n[BusinessApp/BusinessApp.Server/**.cs]\ndotnet_diagnostic.IDE0055.severity = warning\n",
-            editorConfig, projects));
+        Assert.NotEmpty(Problems(
+            good + "\n[BusinessApp/BusinessApp.Server/**.cs]\ndotnet_diagnostic.IDE0055.severity = warning\n"));
 
-        Assert.NotEmpty(CSharpStyleConvention.EffectiveSeverityProblems(null, editorConfig, projects));
+        // **上段の option を反転する**（severity はそのまま。ビルドの関門だけが消える）
+        Assert.NotEmpty(Problems(good.Replace(
+            "csharp_style_namespace_declarations = file_scoped",
+            "csharp_style_namespace_declarations = block_scoped",
+            StringComparison.Ordinal)));
+
+        // 下の階層に置いて打ち消す
+        Assert.NotEmpty(CSharpStyleConvention.EffectiveSeverityProblems(
+            [
+                (path, good),
+                (Path.Combine(projects, "BusinessApp.AccountingCore", ".editorconfig"),
+                 "[*.cs]\ndotnet_diagnostic.IDE0161.severity = none\n"),
+            ],
+            projects));
+
+        Assert.NotEmpty(CSharpStyleConvention.EffectiveSeverityProblems([], projects));
+
+        IReadOnlyList<string> Problems(string text)
+            => CSharpStyleConvention.EffectiveSeverityProblems([(path, text)], projects);
     }
 
     /// <summary>ソリューションから漏れたプロジェクトの検査は、入れ子でも鳴る。</summary>
@@ -509,19 +551,25 @@ public class CSharpStyleTests
     }
 
     /// <summary>
-    /// <c>.gitattributes</c> の改行の固定そのものを見る。
+    /// <c>.gitattributes</c> の改行の固定は、消しても・後ろから打ち消しても・別ファイルで上書きしても鳴る。
     /// </summary>
     /// <remarks>
-    /// この行を消しても、既にある作業コピーは LF のままなので CRLF 検査は緑を返す。
-    /// <b>壊れが出るのは、別のマシンが clone した後である</b>（qa/02 R8-15）。
+    /// この行を消しても、既にある作業コピーは LF のままなので CRLF 検査は緑を返す（qa/02 R8-15）。
+    /// <b>打ち消しは、消すのと結果が同じで、字面は残るぶん更に気づけない</b>（qa/02 R8-28）。
     /// </remarks>
-    [Theory]
-    [InlineData("* text=auto\n*.cs text eol=lf\n", 0)]
-    [InlineData("* text=auto\n", 1)]
-    [InlineData("* text=auto\n*.cs text\n", 1)]
-    [InlineData(null, 1)]
-    public void gitattributes_が改行を固定していないと鳴る(string? gitAttributes, int expected)
-        => Assert.Equal(expected, CSharpStyleConvention.GitAttributesProblems(gitAttributes).Count);
+    [Fact]
+    public void gitattributes_の改行の固定は消しても打ち消しても鳴る()
+    {
+        const string Root = "/repo/.gitattributes";
+        const string Good = "* text=auto eol=lf\n*.cs text eol=lf\n";
+
+        Assert.Empty(CSharpStyleConvention.GitAttributesProblems([(Root, Good)]));
+        Assert.NotEmpty(CSharpStyleConvention.GitAttributesProblems([(Root, "* text=auto\n")]));
+        Assert.NotEmpty(CSharpStyleConvention.GitAttributesProblems([(Root, Good + "*.cs text eol=crlf\n")]));
+        Assert.NotEmpty(CSharpStyleConvention.GitAttributesProblems(
+            [(Root, Good), ("/repo/BusinessApp/.gitattributes", "*.cs text eol=crlf\n")]));
+        Assert.NotEmpty(CSharpStyleConvention.GitAttributesProblems([]));
+    }
 
     /// <summary>CRLF の走査は、CR のあるソースで鳴り、無ければ黙る。</summary>
     [Fact]
@@ -530,7 +578,40 @@ public class CSharpStyleTests
         var crlf = "namespace X;" + ((char)13) + ((char)10) + "class Y { }";
 
         Assert.NotEmpty(CSharpStyleConvention.CarriageReturnProblems([("X.cs", crlf)]));
-        Assert.Empty(CSharpStyleConvention.CarriageReturnProblems([("X.cs", "namespace X;" + ((char)10) + "class Y { }")]));
+        Assert.Empty(CSharpStyleConvention.CarriageReturnProblems(
+            [("X.cs", "namespace X;" + ((char)10) + "class Y { }")]));
+    }
+
+    /// <summary>宣言だけを持つ最小の csproj。</summary>
+    private const string Declared =
+        "<Project><PropertyGroup><TreatWarningsAsErrors>true</TreatWarningsAsErrors>"
+        + "<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild></PropertyGroup></Project>";
+
+    private static string Suffix(string project) => project["BusinessApp.".Length..];
+
+    private static string Section(string names) => $"[BusinessApp/BusinessApp.{{{names}}}/**.cs]";
+
+    private static string Header()
+        => Section(string.Join(',', CSharpStyleConvention.EnforcedProjects.Select(Suffix)));
+
+    /// <summary>検査を満たす最小の <c>.editorconfig</c>。</summary>
+    private static string EditorConfig()
+    {
+        var options = string.Join('\n', CSharpStyleConvention.RuleOptions
+            .Select(pair => $"{pair.Option} = {pair.Value}"));
+        var warnings = string.Join('\n', Enumerable
+            .Range(0, CSharpStyleConvention.MinimumWarnRules)
+            .Select(index => $"dotnet_diagnostic.{RuleId(index)}.severity = warning"));
+        var silents = string.Join('\n', CSharpStyleConvention.MustNotBeWarnings
+            .Select(rule => $"dotnet_diagnostic.{rule}.severity = silent"));
+
+        return $"root = true\n\n[*.cs]\n{options}\n\n{Header()}\n{warnings}\n{silents}\n";
+
+        // 下限を満たすだけの数を並べる。名指しの 10 件を先に置く。
+        static string RuleId(int index)
+            => index < CSharpStyleConvention.MustBeWarnings.Length
+                ? CSharpStyleConvention.MustBeWarnings[index]
+                : $"IDE9{index:D3}";
     }
 
     private static IReadOnlyList<(int Line, string Message)> Find(

@@ -54,7 +54,7 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// <remarks>
     /// 3 つの表（csproj・<c>.editorconfig</c>・<see cref="EnforcedProjects"/>）は互いだけを
     /// 照合しているので、<b>3 か所を揃えて動かすと、整合したまま関門だけが消える</b>（qa/02 R8-12）。
-    /// ミューテーションスコアと同じ作法で下限を置く（[ADR-0012](../decisions) §3-6）。
+    /// ミューテーションスコアの下限（ADR-0012）と同じ作法で置く。
     /// <b>下げるときは黙って下げず、理由を書いて下げる。</b>
     /// </remarks>
     public const int MinimumEnforcedProjects = 8;
@@ -87,14 +87,16 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     ];
 
     /// <summary>
-    /// <b>ビルドで必ず警告になっていなければならない</b>規則（ADR-0021 §2 の表に対応するもの）。
+    /// <b>ビルドで必ず警告になっていなければならない</b>規則。
     /// </summary>
     /// <remarks>
     /// <para><c>.editorconfig</c> の見出しだけを照合しても、<b>中身の severity 行が
     /// 全部消えていることには気づけない</b>（qa/02 R8-10）。ここに挙げた規則について、
     /// Roslyn に <c>.editorconfig</c> を解釈させ、<b>実効の severity</b> を突き合わせる。</para>
-    /// <para>全規則を写すと二重管理になるので、<b>ADR の表が決めた代表だけ</b>を挙げる。
-    /// セクションごと消える・後ろに広いセクションを足して打ち消す、といった壊し方はこれで捕まる。</para>
+    /// <para>選び方は「ADR-0021 §2 の対応表が決めたもの」＋
+    /// 「読み手のコストを直接下げる整形と未使用の検出」である。
+    /// 全規則を写すと二重管理になるので<b>代表だけ</b>を名指しし、
+    /// 名指ししていない分は <see cref="MinimumWarnRules"/> の数で押さえる。</para>
     /// </remarks>
     public static readonly string[] MustBeWarnings =
     [
@@ -109,6 +111,38 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
         "IDE0044",   // readonly フィールド
         "IDE0060",   // 使われない引数
     ];
+
+    /// <summary>
+    /// 規則と、<b>それが「何を正とするか」を決める option</b>（ADR-0021 §4-1 の 2 段）。
+    /// </summary>
+    /// <remarks>
+    /// severity は「報告するか」しか決めない。<c>csharp_style_namespace_declarations</c> を
+    /// <c>block_scoped</c> にすると、<c>IDE0161</c> は warning のまま**逆のこと**を言う。
+    /// <b>上段の option を 6 行反転しただけで、10 個のビルドエラーが消えたのにテストは全部緑だった</b>
+    /// （qa/02 R8-25。レビュアが実測）。だから両方を見る。
+    /// </remarks>
+    public static readonly (string Rule, string Option, string Value)[] RuleOptions =
+    [
+        ("IDE0161", "csharp_style_namespace_declarations", "file_scoped"),
+        ("IDE0290", "csharp_style_prefer_primary_constructors", "true"),
+        ("IDE0090", "csharp_style_implicit_object_creation_when_type_is_apparent", "true"),
+        ("IDE0300", "dotnet_style_prefer_collection_expression", "when_types_loosely_match"),
+        ("IDE0044", "dotnet_style_readonly_field", "true"),
+        ("IDE0066", "csharp_style_prefer_switch_expression", "true"),
+        ("IDE0083", "csharp_style_prefer_not_pattern", "true"),
+        ("IDE0040", "dotnet_style_require_accessibility_modifiers", "for_non_interface_members"),
+    ];
+
+    /// <summary>
+    /// 強制対象で警告になっている規則数の下限。<b>ラチェットである。</b>
+    /// </summary>
+    /// <remarks>
+    /// 名指しで守っているのは <see cref="MustBeWarnings"/> の 10 件だけで、
+    /// <c>.editorconfig</c> にはその 4 倍以上の規則がある。**名指ししていない分を全部消しても
+    /// 検査は緑になる**ので、プロジェクト数と同じ作法で数に下限を置く（qa/02 R8-29）。
+    /// <b>下げるときは黙って下げず、qa/02 に理由を書いて下げる。</b>
+    /// </remarks>
+    public const int MinimumWarnRules = 45;
 
     /// <summary>検討して<b>強制しないと決めた</b>規則（ADR-0021 §4-1）。</summary>
     /// <remarks>黙って警告に格上げされると、決めたことが崩れたのに誰も気づかない。</remarks>
@@ -133,9 +167,10 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
         new(@"^\[BusinessApp/BusinessApp\.\{(?<names>[^}]+)\}/\*\*\.cs\]$",
             RegexOptions.Multiline | RegexOptions.CultureInvariant);
 
-    /// <summary><c>.gitattributes</c> が C# の改行を固定していること。</summary>
+    /// <summary><c>.gitattributes</c> の C# の改行の指定（<b>後勝ち</b>なので最後のものが効く）。</summary>
     private static readonly Regex CSharpEolRule =
-        new(@"^\*\.cs\s+text\s+eol=lf\s*$", RegexOptions.Multiline | RegexOptions.CultureInvariant);
+        new(@"^" + Regex.Escape("*.cs") + @"\s+text\s+eol=(?<eol>" + @"\S+)\s*$",
+            RegexOptions.Multiline | RegexOptions.CultureInvariant);
 
     public string RepositoryRoot { get; } = repositoryRoot;
 
@@ -145,62 +180,58 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// <summary>ソリューション（＝ビルドされるものの正典）。</summary>
     public string SolutionFile => Path.Combine(RepositoryRoot, "BusinessApp.slnx");
 
-    /// <summary>記法の強制の土台。</summary>
-    public string EditorConfigFile => Path.Combine(RepositoryRoot, ".editorconfig");
-
-    /// <summary>改行コードの固定。</summary>
-    public string GitAttributesFile => Path.Combine(RepositoryRoot, ".gitattributes");
-
     // -----------------------------------------------------------------------
-    // ディスクを読む皮（中身は下の純粋な判定に委ねる）
+    // ディスクから読むもの（**判定は持たない。**「どこを読むか」だけを持つ）
     // -----------------------------------------------------------------------
+    //
+    // 判定と読み取りを混ぜた「薄い皮」を作らないこと。皮には「どこを読むか」と
+    // 「何と何を足すか」という判断が残り、そこは中身を空にしても緑のまま通る
+    // （qa/02 R8-33。走査範囲を 1 語変えると Designer/*.mod.cs が黙って外れた）。
+    // ここに置いたものはすべてテストが表明する。
 
-    /// <summary>禁止形を使っている箇所。</summary>
-    public IReadOnlyList<string> ForbiddenFormUsages()
-        => ForbiddenFormUsagesIn(SourceFiles(RepositoryRoot).Select(file => (file, File.ReadAllText(file))));
-
-    /// <summary>記法の強制を宣言していないプロジェクト。</summary>
-    public IReadOnlyList<string> ProjectsWithoutEnforcement()
-        => [
-            .. EnforcedProjects.SelectMany(name => EnforcementProblems(
-                name, ReadIfExists(Path.Combine(ProjectsDirectory, name, name + ".csproj")))),
-        ];
-
-    /// <summary>どちらの表にも載っていないプロジェクト（＝黙って検査の外にいるもの）。</summary>
-    public IReadOnlyList<string> ProjectsMissingFromTable()
-        => UnlistedProjects(SolutionProjects());
-
-    /// <summary><c>.editorconfig</c> の強制セクションと <see cref="EnforcedProjects"/> のずれ。</summary>
-    public IReadOnlyList<string> EditorConfigMismatches()
-        => EditorConfigMismatches(ReadIfExists(EditorConfigFile));
+    /// <summary>検査するソース（パスと中身）。</summary>
+    public IReadOnlyList<(string Path, string Source)> FilesToScan()
+        => [.. SourceFiles(RepositoryRoot).Select(file => (file, File.ReadAllText(file)))];
 
     /// <summary>
-    /// <c>.editorconfig</c> を Roslyn に解釈させた<b>実効の severity</b> のずれ。
+    /// リポジトリ内のすべての <c>.editorconfig</c>（浅い順）。
     /// </summary>
     /// <remarks>
-    /// 見出しの照合だけでは、<b>中身の severity 行が全部消えても・後ろに広いセクションを足して
-    /// 打ち消しても緑になる</b>（qa/02 R8-10。実測で確認した壊れ方）。
-    /// ここは「この規則がこのファイルで最終的に何になるか」を引いて突き合わせる。
+    /// <b>ルートの 1 本だけを見てはいけない。</b> コンパイラはソースから上へ全部を積むので、
+    /// 下の階層に 3 行置くだけで関門を殺せる（qa/02 R8-26）。
     /// </remarks>
-    public IReadOnlyList<string> EffectiveSeverityProblems()
-        => EffectiveSeverityProblems(ReadIfExists(EditorConfigFile), EditorConfigFile, ProjectsDirectory);
+    public IReadOnlyList<(string Path, string Text)> EditorConfigFiles()
+        => [.. ConfigFiles(".editorconfig")];
 
-    /// <summary>改行が CRLF になっている C#、および改行コードの固定そのもののずれ。</summary>
+    /// <summary>リポジトリ内のすべての <c>.gitattributes</c>（浅い順）。</summary>
+    public IReadOnlyList<(string Path, string Text)> GitAttributesFiles()
+        => [.. ConfigFiles(".gitattributes")];
+
+    /// <summary>
+    /// MSBuild が暗黙に読み込む設定（<c>Directory.Build.props</c> / <c>.targets</c>）。
+    /// </summary>
     /// <remarks>
-    /// <c>.gitattributes</c> の <c>eol=lf</c> は checkout のときにしか効かず、
-    /// <b>既に CRLF で持っている作業コピーは直らない</b>。IDE0055 も改行コードを見ない。
-    /// しかも<b>その <c>.gitattributes</c> の行を消しても、この機の作業コピーは LF のままなので
-    /// CRLF 検査は緑を返す</b>（qa/02 R8-15）。だから両方を見る。
+    /// ここに <c>&lt;NoWarn&gt;</c> を書けば、csproj を 1 文字も触らずに関門を殺せる（qa/02 R8-27）。
     /// </remarks>
-    public IReadOnlyList<string> LineEndingProblems()
-        => [
-            .. GitAttributesProblems(ReadIfExists(GitAttributesFile)),
-            .. CarriageReturnProblems(SourceFiles(RepositoryRoot).Select(file => (file, File.ReadAllText(file)))),
-        ];
+    public IReadOnlyList<string> ImplicitBuildProperties()
+        => [.. ConfigFiles("Directory.Build.props").Concat(ConfigFiles("Directory.Build.targets"))
+            .Select(file => file.Text)];
+
+    /// <summary>プロジェクトの csproj（無ければ null）。</summary>
+    public string? ProjectFile(string project)
+        => ReadIfExists(Path.Combine(ProjectsDirectory, project, project + ".csproj"));
 
     /// <summary>ソリューションに載っているプロジェクト。</summary>
     public IReadOnlyList<(string Name, string Path)> SolutionProjects()
         => SolutionProjectsIn(File.ReadAllText(SolutionFile));
+
+    private IEnumerable<(string Path, string Text)> ConfigFiles(string name)
+        => Directory.Exists(RepositoryRoot)
+            ? Directory.EnumerateFiles(RepositoryRoot, name, SearchOption.AllDirectories)
+                .Where(path => !IsExcluded(Path.GetRelativePath(RepositoryRoot, path)))
+                .OrderBy(path => path.Length).ThenBy(path => path, StringComparer.Ordinal)
+                .Select(path => (path, File.ReadAllText(path)))
+            : [];
 
     // -----------------------------------------------------------------------
     // 純粋な判定（テストは必ずこちらを通る）
@@ -251,6 +282,14 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
                 root.DescendantNodes().OfType<RecursivePatternSyntax>().Where(IsEmptyPropertyPattern),
                 "is { }",
                 "null 検査であることが字面から読めない。型パターン（is int v）を使う（ADR-0021 §2）");
+
+            // `#if` の中は構文木から消えるので、**そこに書かれた禁止形は検査を素通りする**。
+            // 分岐の網羅という難問を持ち込むより、条件付きコンパイルそのものを使わない。
+            // **理屈は適用範囲の広い Everywhere にこそ当てはまる**（qa/02 R8-30）。
+            ReportLines(
+                root.DescendantTrivia().Where(IsConditionalDirective).Select(Line),
+                "#if / #elif / #else",
+                "条件付きコンパイルの中は構文木から消え、記法の検査が素通りする（ADR-0021 §4-2）");
         }
 
         if (sets.HasFlag(ForbiddenFormSet.EnforcedProject))
@@ -260,13 +299,6 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
                 root.DescendantNodes().OfType<BinaryExpressionSyntax>().Where(IsNullComparison),
                 "== null / != null",
                 "演算子の多重定義に左右される。is null / is not null を使う（ADR-0021 §2）");
-
-            // `#if` の中は構文木から消えるので、**そこに書かれた禁止形は検査を素通りする**。
-            // 分岐の網羅という難問を持ち込むより、条件付きコンパイルそのものを使わない。
-            ReportLines(
-                root.DescendantTrivia().Where(IsConditionalDirective).Select(Line),
-                "#if / #elif / #else",
-                "条件付きコンパイルの中は構文木から消え、記法の検査が素通りする（ADR-0021 §4-2）");
         }
 
         if (sets.HasFlag(ForbiddenFormSet.MessageLayer))
@@ -278,8 +310,8 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
 
             // `Environment.NewLine` を禁じても、CR を書いた文字列リテラルなら同じ結果になる。
             ReportNodes(
-                root.DescendantNodes().OfType<LiteralExpressionSyntax>().Where(HasCarriageReturn),
-                "文字列リテラルの中の CR",
+                CarriageReturnLiterals(root),
+                "リテラルの中の CR",
                 "利用者に見せる文言の改行は LF に統一する（ADR-0021 §2）");
         }
 
@@ -312,7 +344,15 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     }
 
     /// <summary>csproj が記法の強制を宣言し、かつそれを打ち消していないか。</summary>
-    public static IReadOnlyList<string> EnforcementProblems(string project, string? csproj)
+    /// <param name="project">プロジェクト名。</param>
+    /// <param name="csproj">csproj の中身（無ければ null）。</param>
+    /// <param name="implicitProperties">
+    /// MSBuild が暗黙に読み込む設定（<c>Directory.Build.props</c> など）の中身。
+    /// <b>ここに <c>&lt;NoWarn&gt;</c> を書けば、csproj を 1 文字も触らずに関門を殺せる</b>（qa/02 R8-27）。
+    /// 必要プロパティの側は集約されると誤検知（＝安全側）だが、<b>抑制の側は逆向きに壊れる</b>。
+    /// </param>
+    public static IReadOnlyList<string> EnforcementProblems(
+        string project, string? csproj, IEnumerable<string>? implicitProperties = null)
     {
         if (csproj is null)
         {
@@ -334,12 +374,9 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
                     .Any(element => string.Equals(element.Value.Trim(), "true", StringComparison.OrdinalIgnoreCase)))
                 .Select(property =>
                     $"{project}: <{property}>true</{property}> が Condition 無しの PropertyGroup に無い（ADR-0021 §4-1）"),
-            .. from element in properties
-               where SuppressingProperties.Contains(element.Name.LocalName, StringComparer.Ordinal)
-               from id in element.Value.Split([';', ',', ' '], StringSplitOptions.RemoveEmptyEntries)
-               where id.StartsWith("IDE", StringComparison.Ordinal)
-               select $"{project}: <{element.Name.LocalName}> が {id} を抑制している。"
-                    + "関門が死ぬので、抑制するなら #pragma で 1 か所ずつ（ADR-0021 §4-1）",
+            .. Suppressions(project, properties, "csproj"),
+            .. (implicitProperties ?? []).SelectMany(text => Suppressions(
+                project, AllProperties(text), "暗黙に読み込まれる設定")),
         ];
     }
 
@@ -375,23 +412,25 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// <summary>
     /// <c>.editorconfig</c> を Roslyn に解釈させ、規則の<b>実効の severity</b> を突き合わせる。
     /// </summary>
-    /// <param name="editorConfig"><c>.editorconfig</c> の中身。</param>
-    /// <param name="editorConfigPath">その置き場所（絶対パス）。区間の判定に使う。</param>
+    /// <param name="editorConfigs">リポジトリ内のすべての <c>.editorconfig</c>（浅い順）。</param>
     /// <param name="projectsDirectory">プロジェクトを置いてあるディレクトリ（絶対パス）。</param>
     public static IReadOnlyList<string> EffectiveSeverityProblems(
-        string? editorConfig, string editorConfigPath, string projectsDirectory)
+        IEnumerable<(string Path, string Text)> editorConfigs, string projectsDirectory)
     {
-        if (editorConfig is null)
+        ArgumentNullException.ThrowIfNull(editorConfigs);
+
+        var configs = editorConfigs.Select(file => AnalyzerConfig.Parse(file.Text, file.Path)).ToImmutableArray();
+        if (configs.Length == 0)
         {
             return [".editorconfig が無い。記法の強制はこのファイルが土台である（ADR-0021 §4-1）"];
         }
 
-        var set = AnalyzerConfigSet.Create(ImmutableArray.Create(AnalyzerConfig.Parse(editorConfig, editorConfigPath)));
+        var set = AnalyzerConfigSet.Create(configs);
         var problems = new List<string>();
 
         foreach (var project in EnforcedProjects)
         {
-            var options = SeverityOf(Path.Combine(projectsDirectory, project, "Probe.cs"));
+            var options = set.GetOptionsForSourcePath(Path.Combine(projectsDirectory, project, "Probe.cs"));
 
             problems.AddRange(MustBeWarnings
                 .Where(rule => Severity(options, rule) != ReportDiagnostic.Warn)
@@ -401,24 +440,40 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
             problems.AddRange(MustNotBeWarnings
                 .Where(rule => Severity(options, rule) == ReportDiagnostic.Warn)
                 .Select(rule => $"{project}: {rule} は強制しないと決めた規則なのに警告になっている（ADR-0021 §4-1）"));
+
+            // **severity は「報告するか」しか決めない。** 何を正とするかは option が決める。
+            problems.AddRange(RuleOptions
+                .Where(pair => Option(options, pair.Option) != pair.Value)
+                .Select(pair => $"{project}: {pair.Option} が {pair.Value} でない"
+                              + $"（実効 {Option(options, pair.Option) ?? "（未設定）"}）。"
+                              + $"{pair.Rule} は警告のまま逆のことを言う（ADR-0021 §4-1）"));
+
+            var warned = options.TreeOptions.Count(entry => entry.Value == ReportDiagnostic.Warn);
+            if (warned < MinimumWarnRules)
+            {
+                problems.Add($"{project}: 警告になっている規則が {warned} 件しかない"
+                           + $"（下限 {MinimumWarnRules}）。黙って外していないか（ADR-0021 §4-1）");
+            }
         }
 
         // 対象外の側も見る。**「効いていること」と「効いていないこと」は別々に壊れる。**
         foreach (var project in TemplateDerivedProjects)
         {
-            var options = SeverityOf(Path.Combine(projectsDirectory, project, "Probe.cs"));
-            problems.AddRange(MustBeWarnings
-                .Where(rule => Severity(options, rule) == ReportDiagnostic.Warn)
-                .Select(rule => $"{project}: CLB テンプレート由来なのに {rule} が警告になっている（ADR-0021 §3）"));
+            var options = set.GetOptionsForSourcePath(Path.Combine(projectsDirectory, project, "Probe.cs"));
+            var warned = options.TreeOptions.Count(entry => entry.Value == ReportDiagnostic.Warn);
+            if (warned != 0)
+            {
+                problems.Add($"{project}: CLB テンプレート由来なのに {warned} 件の規則が警告になっている（ADR-0021 §3）");
+            }
         }
 
         return [.. problems.Order(StringComparer.Ordinal)];
 
-        ImmutableDictionary<string, ReportDiagnostic> SeverityOf(string path)
-            => set.GetOptionsForSourcePath(path).TreeOptions;
+        static ReportDiagnostic Severity(AnalyzerConfigOptionsResult options, string rule)
+            => options.TreeOptions.TryGetValue(rule, out var severity) ? severity : ReportDiagnostic.Default;
 
-        static ReportDiagnostic Severity(ImmutableDictionary<string, ReportDiagnostic> options, string rule)
-            => options.TryGetValue(rule, out var severity) ? severity : ReportDiagnostic.Default;
+        static string? Option(AnalyzerConfigOptionsResult options, string name)
+            => options.AnalyzerOptions.TryGetValue(name, out var value) ? value : null;
     }
 
     /// <summary>どちらの表にも載っていないプロジェクト。</summary>
@@ -456,14 +511,48 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     }
 
     /// <summary><c>.gitattributes</c> が C# の改行を LF に固定しているか。</summary>
-    public static IReadOnlyList<string> GitAttributesProblems(string? gitAttributes)
-        => gitAttributes is null
-            ? [".gitattributes が無い（ADR-0021 §4-3）"]
-            : CSharpEolRule.IsMatch(gitAttributes.ReplaceLineEndings("\n"))
-                ? []
-                : [".gitattributes に `*.cs text eol=lf` が無い。"
-                   + "raw string literal の改行はソースの改行そのものなので、"
-                   + "clone した機ごとに文言の改行コードが変わる（ADR-0021 §4-3）"];
+    /// <remarks>
+    /// <b>「その行が在るか」では足りない。</b> Git の属性は後勝ちで、
+    /// しかも下の階層の <c>.gitattributes</c> が優先される。**打ち消しは、消すのと結果が同じで、
+    /// 字面は残るぶん更に気づけない**（qa/02 R8-28）。
+    /// そこで①ファイルが 1 本だけであること②その中の最後の指定が <c>lf</c> であることを見る。
+    /// 属性の意味論を再現するより、<b>打ち消せない形に保つ</b>ほうが確かで安い。
+    /// </remarks>
+    public static IReadOnlyList<string> GitAttributesProblems(IEnumerable<(string Path, string Text)> files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+        var all = files.ToList();
+
+        if (all.Count == 0)
+        {
+            return [".gitattributes が無い（ADR-0021 §4-3）"];
+        }
+
+        if (all.Count > 1)
+        {
+            return
+            [
+                $".gitattributes が {all.Count} 本ある（{string.Join(" / ", all.Select(file => file.Path))}）。"
+                + "下の階層のものが優先されるので、改行の固定を黙って打ち消せる。1 本に保つ（ADR-0021 §4-3）",
+            ];
+        }
+
+        var declarations = CSharpEolRule.Matches(all[0].Text.ReplaceLineEndings("\n"));
+        if (declarations.Count == 0)
+        {
+            return
+            [
+                ".gitattributes に `*.cs text eol=lf` が無い。"
+                + "raw string literal の改行はソースの改行そのものなので、"
+                + "clone した機ごとに文言の改行コードが変わる（ADR-0021 §4-3）",
+            ];
+        }
+
+        var effective = declarations[^1].Groups["eol"].Value;
+        return effective == "lf"
+            ? []
+            : [$".gitattributes の C# の改行が最後に eol={effective} で上書きされている（ADR-0021 §4-3）"];
+    }
 
     /// <summary>ソリューションに載っているプロジェクト。</summary>
     public static IReadOnlyList<(string Name, string Path)> SolutionProjectsIn(string solution)
@@ -582,6 +671,9 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
         {
             ParenthesizedExpressionSyntax parenthesized => Unwrap(parenthesized.Expression),
             CastExpressionSyntax cast => Unwrap(cast.Expression),
+            PostfixUnaryExpressionSyntax suppression
+                when suppression.IsKind(SyntaxKind.SuppressNullableWarningExpression)
+                => Unwrap(suppression.Operand),
             _ => expression,
         };
 
@@ -598,6 +690,8 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// <c>using static System.Environment;</c> のあとの裸の <c>NewLine</c>・
     /// <c>using Env = System.Environment;</c> の <c>Env.NewLine</c> がすべて抜ける（qa/02 R8-16）。
     /// <b>この層は狭いので、<c>NewLine</c> という名前そのものを疑ってよい。</b>
+    /// <c>TextWriter.NewLine</c> のような無関係なメンバも当たる（qa/02 R8-32）。
+    /// 赤が出たら誤検知を疑い、<c>#pragma</c> ではなく**書き方を変えて**避ける。
     /// </remarks>
     private static IEnumerable<SyntaxNode> EnvironmentNewLineUsages(SyntaxNode root)
         => root.DescendantNodes()
@@ -612,10 +706,23 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
                 _ => false,
             });
 
-    /// <summary>文字列リテラルに CR が入っている（<c>"\r\n"</c> と書いた場合を含む）。</summary>
-    private static bool HasCarriageReturn(LiteralExpressionSyntax literal)
-        => literal.IsKind(SyntaxKind.StringLiteralExpression)
-           && literal.Token.ValueText.Contains('\r');
+    /// <summary>リテラルに CR が入っている。</summary>
+    /// <remarks>
+    /// 通常の文字列だけを見ていると、<b>補間文字列・文字リテラル・UTF-8 リテラルがすり抜ける</b>
+    /// （qa/02 R8-31）。ファイルの実バイトを見る検査にも当たらないので、ここが唯一の網である。
+    /// raw string literal は値の段階で CRLF が LF に正規化されるので、実バイト側の検査に任せる。
+    /// </remarks>
+    private static IEnumerable<SyntaxNode> CarriageReturnLiterals(SyntaxNode root)
+        => root.DescendantNodes().Where(node => node switch
+        {
+            LiteralExpressionSyntax literal =>
+                (literal.IsKind(SyntaxKind.StringLiteralExpression)
+                 || literal.IsKind(SyntaxKind.Utf8StringLiteralExpression)
+                 || literal.IsKind(SyntaxKind.CharacterLiteralExpression))
+                && literal.Token.ValueText.Contains('\r'),
+            InterpolatedStringTextSyntax text => text.TextToken.ValueText.Contains('\r'),
+            _ => false,
+        });
 
     private static int Line(SyntaxNode node)
         => node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
@@ -625,6 +732,20 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
 
     private static string? ReadIfExists(string path)
         => File.Exists(path) ? File.ReadAllText(path) : null;
+
+    /// <summary>規則を抑制しているプロパティ。</summary>
+    private static IEnumerable<string> Suppressions(
+        string project, IEnumerable<XElement> properties, string where)
+        => from element in properties
+           where SuppressingProperties.Contains(element.Name.LocalName, StringComparer.Ordinal)
+           from id in element.Value.Split([';', ',', ' '], StringSplitOptions.RemoveEmptyEntries)
+           where id.StartsWith("IDE", StringComparison.Ordinal)
+           select $"{project}: {where} の <{element.Name.LocalName}> が {id} を抑制している。"
+                + "関門が死ぬので、抑制するなら #pragma で 1 か所ずつ（ADR-0021 §4-1）";
+
+    /// <summary>Condition の有無によらず、すべての PropertyGroup の中身。</summary>
+    private static IReadOnlyList<XElement> AllProperties(string xml)
+        => [.. XDocument.Parse(xml).Descendants("PropertyGroup").SelectMany(group => group.Elements())];
 
     private static bool IsExcluded(string relativePath)
     {
