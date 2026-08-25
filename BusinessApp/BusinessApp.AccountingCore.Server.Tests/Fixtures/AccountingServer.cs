@@ -7,6 +7,7 @@ using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Server.Journals;
+using BusinessApp.AccountingCore.Server.Shared;
 using BusinessApp.TestSupport;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
@@ -52,6 +53,8 @@ internal sealed class AccountingServer : IDisposable
             accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
         AmendmentService = JournalAmendmentService.Create(
             accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
+        Amendment = JournalAmendmentEndpoint.Create(
+            accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
     }
 
     /// <summary>
@@ -71,30 +74,36 @@ internal sealed class AccountingServer : IDisposable
 
     public JournalSubmitGate Gate { get; }
 
-    /// <summary>「訂正する」「取り消す」の入口（画面のボタンから Web API 経由で呼ばれるもの）。</summary>
+    /// <summary>「訂正する」「取り消す」の会計側（識別子は型、トランザクションは呼び出し側）。</summary>
     public JournalAmendmentService AmendmentService { get; }
 
     /// <summary>
-    /// 本番（<c>CustomizedModuleDataIO.SubmitAsync</c>）と同じ形で 1 回の保存を通す。
-    /// <b>トランザクションで包む。</b> 例外で巻き戻ることまで含めて本番と同じにしないと、
+    /// 「訂正する」「取り消す」の入口。<b>コントローラが呼ぶのと同じもの</b>で、
+    /// 識別子の解釈・トランザクション・結果への写像まで含む（ADR-0016）。
+    /// </summary>
+    public JournalAmendmentEndpoint Amendment { get; }
+
+    /// <summary>
+    /// SQL を流す直前に呼ばれる。<b>例外を返すとその 1 文が失敗する</b>（途中で落とす仕掛け）。
+    /// </summary>
+    public Func<string, Exception?>? FailBeforeStatement
+    {
+        get => accessor.FailBeforeStatement;
+        set => accessor.FailBeforeStatement = value;
+    }
+
+    /// <summary>
+    /// 本番（<c>CustomizedModuleDataIO.SubmitAsync</c>）を<b>模した</b>形で 1 回の保存を通す。
+    /// <b>トランザクションで包む。</b> 例外で巻き戻ることまで含めないと、
     /// 会計コアが最も頼っている性質だけが検査されない。
+    /// <b>ただし本番でこれを張るのは CLB 側</b>で、<c>DbTransactionScope</c> は通らない。
+    /// ここは「同じ形」ではなく「同じ結果になるように模したもの」である。
     /// </summary>
     public async Task<List<ModuleSubmitResult>> SubmitAsync(
         IReadOnlyList<ModuleSubmitData> transactionData,
         Func<Task<List<ModuleSubmitResult>>> save)
     {
-        accessor.StartTransaction();
-        try
-        {
-            var results = await Gate.SubmitAsync(transactionData, save);
-            await accessor.CommitAsync();
-            return results;
-        }
-        catch
-        {
-            await accessor.RollbackAsync();
-            throw;
-        }
+        return await DbTransactionScope.RunAsync(accessor, () => Gate.SubmitAsync(transactionData, save));
     }
 
     /// <summary>
@@ -108,19 +117,7 @@ internal sealed class AccountingServer : IDisposable
     public async Task<T> AmendAsync<T>(Func<JournalAmendmentService, Task<T>> operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
-
-        accessor.StartTransaction();
-        try
-        {
-            var result = await operation(AmendmentService);
-            await accessor.CommitAsync();
-            return result;
-        }
-        catch
-        {
-            await accessor.RollbackAsync();
-            throw;
-        }
+        return await DbTransactionScope.RunAsync(accessor, () => operation(AmendmentService));
     }
 
     /// <summary>
@@ -145,9 +142,13 @@ internal sealed class AccountingServer : IDisposable
             var submittedId = (entry.Fields["Id"] as IdFieldData)?.Value
                 ?? throw new InvalidOperationException("保存する伝票に Id が無い。");
 
-            var result = new ModuleSubmitResult();
-            result.TemporaryIdMap[submittedId] = Text(id.Value);
-            return Task.FromResult(new List<ModuleSubmitResult> { result });
+            // **本物の CLB は SourceId / DestinationId で返す。** TemporaryIdMap には入らない。
+            // ここを取り違えていたせいで、新規作成の画面から計上すると必ず落ちる不具合を
+            // テストが 1 度も捕まえられなかった（qa/03 L-10）。
+            return Task.FromResult(new List<ModuleSubmitResult>
+            {
+                new() { SourceId = submittedId, DestinationId = Text(id.Value) },
+            });
         };
 
     /// <summary>下書きの伝票を 1 件入れて、その識別子を返す。</summary>

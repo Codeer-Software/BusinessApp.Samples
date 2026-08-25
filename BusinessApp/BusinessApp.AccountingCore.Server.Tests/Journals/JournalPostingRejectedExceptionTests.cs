@@ -20,15 +20,34 @@ public class JournalPostingRejectedExceptionTests
             new Violation("I-13", "部門が要る。", LineNo: 2),
         ]);
 
-        // **完全一致で固定する。** 部分一致だと、見出しと各行の「間」＝改行そのものを
-        // 一度も表明していないことになり、raw string literal の閉じデリミタのインデントを
-        // ずらしても、行を束ねる区切りを消しても緑のままになる（qa/02 R8-09）。
+        // **完全一致で固定する。** 部分一致だと、項目を束ねる区切りが無防備になる（qa/02 R8-09）。
+        // **改行を入れない。** トースト内の文字列は改行できないので（qa/01 D-12）、
+        // 件数と番号で区切る——1 行に繋がっても「あと何を直すか」が読み取れる。
         Assert.Equal(
-            """
-            計上できません。
-            ・借方合計と貸方合計が一致していない。
-            ・2 行目: 部門が要る。
-            """,
+            "計上できません（2 件）。①借方合計と貸方合計が一致していない。②2 行目: 部門が要る。",
+            error.Message);
+        Assert.DoesNotContain("\n", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void 違反が_1_件なら件数を数えない()
+    {
+        var error = new JournalPostingRejectedException([new Violation("I-01", "貸借が合っていない。")]);
+
+        // 1 件のときに「（1 件）」と見せても読み手の役に立たない。番号だけ付ける。
+        Assert.Equal("計上できません。①貸借が合っていない。", error.Message);
+    }
+
+    [Fact]
+    public void 番号を使い切ったら番号なしで続ける()
+    {
+        var error = new JournalPostingRejectedException(
+            [.. Enumerable.Range(1, 11).Select(i => new Violation($"I-{i:D2}", $"{i} 件目。"))]);
+
+        // **番号は 10 個すべてを固定する。** 端だけ見ていると、間の記号が化けても気づけない。
+        Assert.Equal(
+            "計上できません（11 件）。①1 件目。②2 件目。③3 件目。④4 件目。⑤5 件目。"
+            + "⑥6 件目。⑦7 件目。⑧8 件目。⑨9 件目。⑩10 件目。11 件目。",
             error.Message);
     }
 

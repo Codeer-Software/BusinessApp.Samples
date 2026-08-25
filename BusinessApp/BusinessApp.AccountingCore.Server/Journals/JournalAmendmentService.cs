@@ -19,7 +19,8 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 /// <b>再計上を下書きのまま返す</b>。中身は利用者が決めるものだからである。</para>
 /// <para>途中で放棄して「取消だけ」が残るのは<b>正当な状態</b>である（ADR-0015）。
 /// 単なる取消と区別が付かないが、区別する必要も無い。</para>
-/// <para>呼び出し側（コントローラ）がトランザクションを張る。例外はそこで巻き戻る。</para>
+/// <para>呼び出し側（<see cref="JournalAmendmentEndpoint"/>）がトランザクションを張る。
+/// <b>ここでは張らない</b>——呼び出しを組み合わせる余地を残すため（ADR-0016）。</para>
 /// </remarks>
 public sealed class JournalAmendmentService(
     AccountingMasterLoader masterLoader,

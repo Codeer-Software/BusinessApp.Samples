@@ -3,7 +3,7 @@ title: ADR-0016 画面から呼ぶサーバ処理は Web API に置く
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-08-25
+updated: 2026-08-26
 supersedes: []
 related: [0008-CLBとCSharpライブラリの責務分担.md, 0013-機能単位のモジュール分割と依存方向.md, 0015-訂正は取消と再計上の組で表し更新履歴方式を採らない.md]
 ---
@@ -72,18 +72,28 @@ related: [0008-CLBとCSharpライブラリの責務分担.md, 0013-機能単位�
 |---|---|---|
 | `AccountingCore` | 会計の判断（純粋関数） | `JournalCorrection` |
 | `AccountingCore.Server` | DB を触る手順。**機能フォルダに置く**（ADR-0013） | `JournalAmendmentService`（`Journals/`） |
-| `BusinessApp.Server/Controllers` | **HTTP の殻だけ。** 認証・トランザクション・エラーの整形 | `JournalsController` |
+| `AccountingCore.Server`（**入口**） | **識別子の解釈・トランザクション・結果への写像・画面との受け渡しの型** | `JournalAmendmentEndpoint`（`Journals/`） |
+| `BusinessApp.Server/Controllers` | **HTTP の殻だけ。** 認証・経路・データソース名の解決 | `JournalsController` |
 | `*.mod.cs` | 呼んで、結果で画面を動かすだけ | `WebApiService.Post` → `NavigationService.NavigateTo` |
 
-**コントローラに業務のロジックを書かない。** 書いた瞬間にテストできない場所へ判断が移る。
-コントローラの本体は 1〜2 行（サービスを呼ぶ）に保ち、増えたらサービス側へ押し戻す。
+**コントローラに業務のロジックを書かない。** 書いた瞬間にテストできない場所へ判断が移る
+（下の約束ごとを参照）。
 
 ### 約束ごと
 
 - **`[Authorize]` と `[AutoValidateAntiforgeryToken]` を必ず付ける。** 既存のコントローラと同じ。
   会計コアの API を認証なしで開けない
-- **トランザクションはコントローラが張る。** 例外が出たら丸ごと巻き戻す。
-  サービスは張らない（呼び出しを組み合わせる余地を残す）
+- **トランザクションは入口（`JournalAmendmentEndpoint`）が張る。** 例外が出たら丸ごと巻き戻す。
+  `JournalAmendmentService` は張らない（呼び出しを組み合わせる余地を残す）。
+
+  **当初は「コントローラが張る」と決めていたが、2026-08-26 に入口の層へ移した。**
+  決め手は「**1 回の HTTP 呼び出しの中で 1 つのトランザクションを張れること**」であって、
+  張る主体がコントローラであることではない。決め手は満たしたまま、
+  **`BusinessApp.Server` はカバレッジにもミューテーションにも載らない**（ADR-0012 §3 の
+  `Include` から外れている）ので、コントローラに置くかぎり**その行は永久に検査の外**に残る。
+  実際「取消だけが残らない」——本 ADR が A 案を選んだ決め手そのもの——を、
+  移すまで誰も検査できていなかった（[qa/02](../qa/02_自己レビュー記録.md) R4-05）
+- **コントローラの本体は 1〜2 行に保つ。** 増えたら入口の層へ押し戻す
 - **業務の差し戻しは 200、想定外は 500。** 成否は HTTP の状態コードではなく
   **本文の `status`**（`ok` / `rejected`）で表し、差し戻しでは違反コードの配列を添える。
   画面はコードで分岐でき、文言はそのまま出せる。

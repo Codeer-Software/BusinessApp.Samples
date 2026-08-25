@@ -46,17 +46,18 @@ internal static class SubmitData
         return data;
     }
 
-    /// <summary>保存結果。仮 ID から本物の ID への対応表を持つ。</summary>
-    public static ModuleSubmitResult Result(params (string Temporary, string Real)[] idMap)
-    {
-        var result = new ModuleSubmitResult();
-        foreach (var (temporary, real) in idMap)
-        {
-            result.TemporaryIdMap[temporary] = real;
-        }
+    /// <summary>
+    /// 保存結果。<b>本物の CLB は「送った仮 ID → 採番された本物の ID」を
+    /// <c>SourceId</c> / <c>DestinationId</c> で返す</b>（qa/03 L-10）。
+    /// </summary>
+    public static ModuleSubmitResult Result(string temporary, string real)
+        => new() { SourceId = temporary, DestinationId = real };
 
-        return result;
-    }
+    /// <summary>
+    /// 保存が失敗した結果。<b>CLB は保存の失敗を例外ではなくこの項目に詰めて返す。</b>
+    /// </summary>
+    public static ModuleSubmitResult Failure(string message)
+        => new() { ExceptionMessage = message };
 
     public static string? SelectValue(ModuleData data, string name)
         => (data.Fields[name] as SelectFieldData)?.Value;

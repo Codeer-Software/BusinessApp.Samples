@@ -86,6 +86,17 @@ public sealed class JournalSubmitGate(
         var pending = RewriteForDraftSave(transactionData);
         await RejectEntryTypeChangeAsync(transactionData);
         var results = await save();
+
+        // **保存が失敗していたら、計上へ進まない。**
+        // CLB は保存の失敗を例外ではなく ExceptionMessage に詰めて返す。見ずに先へ進むと、
+        // 「仮 ID を解決できない」という二次的な内部エラーに化けて、**本当の理由が利用者に届かない**
+        // （2026-08-26 の実機操作テストで発見。qa/03 L-10）。
+        // ここで返せば、保存の失敗は CLB 本来の経路がそのまま報告する。
+        if (results.Exists(result => !string.IsNullOrEmpty(result.ExceptionMessage)))
+        {
+            return results;
+        }
+
         await PostAllAsync(pending, results);
 
         return results;
@@ -206,21 +217,29 @@ public sealed class JournalSubmitGate(
 
     /// <summary>
     /// 仮 ID から本物の ID への対応表。
-    /// <b>同じ仮 ID が二重に来たら止める。</b> 先勝ちで捨てると、片方が黙って別の伝票に化ける。
     /// </summary>
+    /// <remarks>
+    /// <para><b>対応は <c>SourceId</c>（送った仮 ID）→ <c>DestinationId</c>（採番された本物の ID）で返る。</b>
+    /// 同じ型が持つ <c>TemporaryIdMap</c> のほうには**入らない**（実測。2026-08-26）。</para>
+    /// <para><b>ここを取り違えると、新規作成の画面から計上したときだけ落ちる</b>——
+    /// 下書き保存を挟めば本物の ID で送られてくるので通ってしまい、
+    /// 「保存してから計上する」経路しか試していないと気づけない
+    /// （実機操作テストで発見。qa/03 L-10）。</para>
+    /// <para><b>同じ仮 ID が二重に来たら止める。</b> 先勝ちで捨てると、片方が黙って別の伝票に化ける。</para>
+    /// </remarks>
     private static Dictionary<string, string> TemporaryIdMap(IReadOnlyList<ModuleSubmitResult> results)
     {
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        foreach (var (temporary, real) in results.SelectMany(r => r.TemporaryIdMap))
+        foreach (var result in results.Where(r => !string.IsNullOrEmpty(r.SourceId)))
         {
-            if (map.TryGetValue(temporary, out var existing) && existing != real)
+            if (map.TryGetValue(result.SourceId, out var existing) && existing != result.DestinationId)
             {
                 throw new InvalidOperationException(
-                    $"仮 ID {temporary} に本物の ID が 2 つ対応している（{existing} と {real}）。");
+                    $"仮 ID {result.SourceId} に本物の ID が 2 つ対応している（{existing} と {result.DestinationId}）。");
             }
 
-            map[temporary] = real;
+            map[result.SourceId] = result.DestinationId;
         }
 
         return map;

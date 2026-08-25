@@ -1,5 +1,7 @@
 namespace BusinessApp.AccountingCore.Shared;
 
+using System.Globalization;
+
 /// <summary>
 /// 整数円の金額（docs/04 §3）。
 /// </summary>
@@ -39,5 +41,12 @@ public readonly record struct Yen
 
     public static Yen operator -(Yen left, Yen right) => new(left.Value - right.Value);
 
-    public override string ToString() => Value.ToString("0");
+    /// <summary>3 桁区切りの文字列。小数点は持たない。</summary>
+    /// <remarks>
+    /// <para><b>利用者に見せる文言へ金額を埋める経路はここを通る</b>ので、区切りは型が持つ。
+    /// 呼ぶ側に書式を選ばせると、<b>画面が「1,000」でトーストが「1000」</b>という食い違いが起きる
+    /// （実機操作テストで発見。qa/04 の 2026-08-26）。</para>
+    /// <para>DB へ渡すのは <see cref="Value"/> なので、この書式は保存にも比較にも影響しない。</para>
+    /// </remarks>
+    public override string ToString() => Value.ToString("#,0", CultureInfo.InvariantCulture);
 }
