@@ -81,7 +81,7 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
             select line_no, debit_credit, account_id, sub_account_id, department_id, partner_id,
                    partner_name_snapshot, amount, tax_category_id, tax_treatment, tax_point,
                    applied_rule_version, is_tax_line, parent_line_no, item_description,
-                   book_only_deduction, evidence_ref
+                   book_only_deduction, evidence_ref, registration_no_snapshot
             from journal_lines where journal_entry_id = @p1 order by line_no
             """,
             id.Value);
@@ -98,6 +98,7 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
             PartnerId = DbValue.ToNullableLong(row["partner_id"]) is long partner
                 ? new PartnerId(partner) : null,
             PartnerNameSnapshot = DbValue.ToNullableText(row["partner_name_snapshot"]),
+            RegistrationNoSnapshot = DbValue.ToNullableText(row["registration_no_snapshot"]),
             // **decimal のまま Yen に渡す。** long で受けると小数が黙って丸まり、
             // Yen が持っている「整数円でなければ例外」というガードを迂回する（I-01）。
             Amount = Yen.From(DbValue.ToDecimal(row["amount"])),
@@ -284,9 +285,9 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
                     (journal_entry_id, line_no, debit_credit, account_id, sub_account_id,
                      department_id, partner_id, partner_name_snapshot, amount, tax_category_id,
                      tax_treatment, tax_point, applied_rule_version, is_tax_line, parent_line_no,
-                     item_description, book_only_deduction, evidence_ref)
+                     item_description, book_only_deduction, evidence_ref, registration_no_snapshot)
                 values (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10,
-                        @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18)
+                        @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18, @p19)
                 """,
                 new()
                 {
@@ -310,6 +311,7 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
                     { "@p16", line.ItemDescription },
                     { "@p17", line.BookOnlyDeduction },
                     { "@p18", line.EvidenceRef },
+                    { "@p19", line.RegistrationNoSnapshot },
                 });
         }
     }

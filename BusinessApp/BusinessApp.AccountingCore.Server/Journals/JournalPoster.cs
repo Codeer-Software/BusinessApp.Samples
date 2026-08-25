@@ -3,6 +3,9 @@ namespace BusinessApp.AccountingCore.Server.Journals;
 using System.Globalization;
 
 using BusinessApp.AccountingCore.Journals;
+using BusinessApp.AccountingCore.Server.Partners;
+
+using Codeer.LowCode.Blazor.DataIO.Db;
 
 using Codeer.LowCode.Blazor.DataIO;
 
@@ -10,7 +13,7 @@ using Codeer.LowCode.Blazor.DataIO;
 /// 下書きを計上して DB に印を付ける。<b>計上する経路はここ 1 本だけにする。</b>
 /// </summary>
 /// <remarks>
-/// <para>「検証 → 採番 → 計上済みにする」の 3 つは必ず組で起きる。呼び出し側ごとに
+/// <para>「検証 → 写しを焼く → 採番 → 計上済みにする」の 4 つは必ず組で起きる。呼び出し側ごとに
 /// 並べ直せる形にしておくと、<b>1 か所で採番を書き戻し忘れただけで伝票番号が重複する</b>し、
 /// 検証を飛ばした計上が 1 経路でも生まれれば ADR-0004 の関門がまるごと迂回される。</para>
 /// <para>使うのは 2 か所。画面の保存を包む関門（<see cref="JournalSubmitGate"/>）と、
@@ -19,9 +22,27 @@ using Codeer.LowCode.Blazor.DataIO;
 public sealed class JournalPoster(
     JournalEntryStore entryStore,
     EntryNumberSequenceStore sequenceStore,
+    LedgerSnapshotWriter snapshotWriter,
     TimeProvider timeProvider,
     IAuthenticationContext authenticationContext)
 {
+    /// <summary>
+    /// 部品の組み立て。<b>本番もテストもここを通す。</b>
+    /// </summary>
+    /// <remarks>
+    /// 計上する経路は 2 つある（保存の関門と、取消・訂正）。<b>組み立てを両方に書くと、
+    /// 片方にだけ新しい部品を足したときに「その経路だけ写しが焼かれない」</b>という形で静かにずれる。
+    /// </remarks>
+    public static JournalPoster Create(
+        IDbAccessor dbAccessor, string dataSourceName, JournalEntryStore entryStore,
+        TimeProvider timeProvider, IAuthenticationContext authenticationContext)
+        => new(entryStore,
+               new EntryNumberSequenceStore(dbAccessor, dataSourceName),
+               new LedgerSnapshotWriter(
+                   dbAccessor, dataSourceName, new PartnerRegistrationStore(dbAccessor, dataSourceName)),
+               timeProvider,
+               authenticationContext);
+
     /// <summary>
     /// 下書きを計上する。違反があれば例外にして保存全体を巻き戻す。
     /// </summary>
@@ -46,6 +67,11 @@ public sealed class JournalPoster(
         }
 
         var postedBy = await ResolvePostedByAsync();
+
+        // **計上済みにする前に焼く。** 計上済みの明細は DDL のトリガが UPDATE を止めるので、
+        // 順番を入れ替えると写しが書けないのではなく、**計上そのものが落ちる**（ADR-0018）。
+        await snapshotWriter.BurnAsync(draft);
+
         await sequenceStore.SaveAsync(sequence, result.NextSequence!.Value);
         await entryStore.MarkPostedAsync(id, result.EntryNo!.Value, result.PostedEntry!.PostedAt!.Value, postedBy);
 

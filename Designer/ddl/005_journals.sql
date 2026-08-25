@@ -119,6 +119,16 @@ CREATE TABLE journal_lines (
     book_only_deduction         TEXT,                       -- 帳簿のみ保存で控除する類型
     evidence_ref                TEXT,                       -- 証憑部品への参照キー
 
+    -- 計上時点の登録番号の写し（docs/07 §4・ADR-0018）。
+    -- **帳簿の法定記載事項ではない**（消法 30 ⑧に相手方の登録番号は含まれない）。
+    -- 持つ理由は「判定の根拠の記録」——CSV の入出力と監査追跡が当時の値を要求するため。
+    -- 現在のマスタから引くと、登録を取り消した相手で当時と違う値が出る。
+    -- 帳簿には印字しない。**この行の「取引先」の番号であって、自社の番号ではない**
+    -- （適格請求書に載る登録番号は売手＝自社のもの。消法 57 の 4 ①）。
+    -- 引く日付は tax_point（課税仕入れを行った日）。**tax_point が空なら伝票の取引日で引く**
+    -- （docs/07 §4-1。画面が tax_point を入力させないので、無ければ写さないにすると永久に空になる）。
+    registration_no_snapshot    TEXT,
+
     UNIQUE (journal_entry_id, line_no),
     -- 消費税行だけが親行を持ち、消費税行は必ず親行を持つ
     CHECK (is_tax_line = 1 OR parent_line_no IS NULL),

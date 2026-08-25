@@ -4,7 +4,7 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 using Codeer.LowCode.Blazor.DesignLogic;
 using Codeer.LowCode.Blazor.Extras.Services;
 using Codeer.LowCode.Blazor.Repository.Data;
-using BusinessApp.AccountingCore.Server.Journals;
+using BusinessApp.AccountingCore.Server;
 
 namespace BusinessApp.Server.Services
 {
@@ -18,7 +18,7 @@ namespace BusinessApp.Server.Services
         const string AccountingDataSourceName = "BusinessAppSQLite";
 
         readonly DesignData _designData;
-        readonly JournalSubmitGate _journalGate;
+        readonly AccountingSubmitPipeline _accounting;
 
         public CustomizedModuleDataIO(DesignData designData, IAuthenticationContext authenticationContext, IDbAccessor dbAccess, ITemporaryFileManager temporaryFileManager)
             : base(designData, authenticationContext, dbAccess, temporaryFileManager)
@@ -32,17 +32,19 @@ namespace BusinessApp.Server.Services
                 .FirstOrDefault(e => e.Name == AccountingDataSourceName)?.Name
                 ?? throw LowCodeException.Create($"データソース {AccountingDataSourceName} が設定にない");
             //認証コンテキストは posted_by（計上した人）の記録に使う（qa/02 R2-05）。
-            _journalGate = JournalSubmitGate.Create(dbAccess, dataSourceName, TimeProvider.System, authenticationContext);
+            //**つなぎ方はここに書かない。** このファイルはカバレッジにもミューテーションにも
+            //載らないので、ここで組み立てると配線の間違いを誰も検査できない（AccountingSubmitPipeline）。
+            _accounting = AccountingSubmitPipeline.Create(
+                dbAccess, dataSourceName, TimeProvider.System, authenticationContext);
         }
 
         //トランザクション単位の入口。伝票の更新だけを見る UpdateAsync では、
         //同じ保存で送られてきた明細がまだ見えず、貸借一致を判定できない。
         //
-        //関門が保存そのものを包む (JournalSubmitGate 参照)。順番は関門が持つので、
-        //ここから呼び忘れも並べ替えもできない。違反があれば関門が例外を投げ、
-        //この保存ごと巻き戻る。
+        //関門が保存そのものを包む。順番も入れ子も AccountingSubmitPipeline が持つので、
+        //ここから呼び忘れも並べ替えもできない。違反があれば関門が例外を投げ、この保存ごと巻き戻る。
         public override Task<List<ModuleSubmitResult>> SubmitAsync(Guid transactionId, List<ModuleSubmitData> transactionData)
-            => _journalGate.SubmitAsync(transactionData, () => base.SubmitAsync(transactionId, transactionData));
+            => _accounting.SubmitAsync(transactionData, () => base.SubmitAsync(transactionId, transactionData));
 
         protected override async Task<string> AddAsync(Guid transactionId, Guid moduleSubmitId, ModuleData data)
         {

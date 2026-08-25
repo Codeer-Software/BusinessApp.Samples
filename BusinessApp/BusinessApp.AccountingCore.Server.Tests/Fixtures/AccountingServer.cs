@@ -6,7 +6,9 @@ using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Periods;
+using BusinessApp.AccountingCore.Server;
 using BusinessApp.AccountingCore.Server.Journals;
+using BusinessApp.AccountingCore.Server.Partners;
 using BusinessApp.AccountingCore.Server.Shared;
 using BusinessApp.TestSupport;
 using Codeer.LowCode.Blazor.DataIO;
@@ -49,7 +51,13 @@ internal sealed class AccountingServer : IDisposable
         MasterLoader = new AccountingMasterLoader(accessor, SqliteDbAccessor.DataSourceName);
         EntryStore = new JournalEntryStore(accessor, SqliteDbAccessor.DataSourceName);
         SequenceStore = new EntryNumberSequenceStore(accessor, SqliteDbAccessor.DataSourceName);
+        PartnerStore = new PartnerRegistrationStore(accessor, SqliteDbAccessor.DataSourceName);
+        SnapshotWriter = new LedgerSnapshotWriter(accessor, SqliteDbAccessor.DataSourceName, PartnerStore);
+        Poster = JournalPoster.Create(
+            accessor, SqliteDbAccessor.DataSourceName, EntryStore, new FixedTimeProvider(Now), authentication);
         Gate = JournalSubmitGate.Create(
+            accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
+        Pipeline = AccountingSubmitPipeline.Create(
             accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
         AmendmentService = JournalAmendmentService.Create(
             accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
@@ -72,7 +80,19 @@ internal sealed class AccountingServer : IDisposable
 
     public EntryNumberSequenceStore SequenceStore { get; }
 
+    /// <summary>取引先の名称と登録を読む口。</summary>
+    public PartnerRegistrationStore PartnerStore { get; }
+
+    /// <summary>計上のときに帳簿の記載事項を写す部品（ADR-0018）。</summary>
+    public LedgerSnapshotWriter SnapshotWriter { get; }
+
+    /// <summary>計上そのもの。<b>本番と同じ組み立て</b>（<see cref="JournalPoster.Create"/>）。</summary>
+    public JournalPoster Poster { get; }
+
     public JournalSubmitGate Gate { get; }
+
+    /// <summary>保存の関門を本番と同じ順につないだもの（<see cref="AccountingSubmitPipeline.Create"/>）。</summary>
+    public AccountingSubmitPipeline Pipeline { get; }
 
     /// <summary>「訂正する」「取り消す」の会計側（識別子は型、トランザクションは呼び出し側）。</summary>
     public JournalAmendmentService AmendmentService { get; }
@@ -103,7 +123,7 @@ internal sealed class AccountingServer : IDisposable
         IReadOnlyList<ModuleSubmitData> transactionData,
         Func<Task<List<ModuleSubmitResult>>> save)
     {
-        return await DbTransactionScope.RunAsync(accessor, () => Gate.SubmitAsync(transactionData, save));
+        return await DbTransactionScope.RunAsync(accessor, () => Pipeline.SubmitAsync(transactionData, save));
     }
 
     /// <summary>
@@ -151,6 +171,16 @@ internal sealed class AccountingServer : IDisposable
             });
         };
 
+    /// <summary>
+    /// 日付の列に、<b>CLB と同じ形</b>で書く。
+    /// </summary>
+    /// <remarks>
+    /// CLB は日付の列に <c>"2023-10-01 00:00:00"</c> と<b>時刻付き</b>で書く（2026-08-26 実測）。
+    /// テストが素の <c>"2023-10-01"</c> を入れると、
+    /// <b>文字列で比べている検査が本番では外れるのにテストでは通る</b>（qa/03 L-12）。
+    /// </remarks>
+    public static string DateLiteral(string date) => $"'{date} 00:00:00'";
+
     /// <summary>下書きの伝票を 1 件入れて、その識別子を返す。</summary>
     public JournalEntryId InsertDraft(
         string transactionDate = "2026-08-24",
@@ -168,7 +198,7 @@ internal sealed class AccountingServer : IDisposable
             insert into journal_entries
                 (fiscal_year_id, transaction_date, posting_date, status, entry_type,
                  original_entry_id, entered_at)
-            values ({year}, '{transactionDate}', '{postingDate}', 'draft', '{entryType}',
+            values ({year}, {DateLiteral(transactionDate)}, {DateLiteral(postingDate)}, 'draft', '{entryType}',
                     {original}, '2026-08-24 13:00:00')
             """);
 
@@ -184,7 +214,7 @@ internal sealed class AccountingServer : IDisposable
         Execute($"""
             insert into journal_entries
                 (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-            values ({FiscalYear.Value}, '2026-08-24', '2026-08-24', '{status}', 'normal', {entered})
+            values ({FiscalYear.Value}, {DateLiteral("2026-08-24")}, {DateLiteral("2026-08-24")}, '{status}', 'normal', {entered})
             """);
 
         return new JournalEntryId(Scalar<long>("select last_insert_rowid()"));
