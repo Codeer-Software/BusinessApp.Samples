@@ -107,9 +107,29 @@ CREATE TABLE partners (
     -- 会計コアが認証部品なしでは立ち上がらなくなる。CLB の予約名として値は自動で入る。
     creator                     INTEGER,
     updater                     INTEGER,
-    optimistic_locking          INTEGER NOT NULL DEFAULT 0
+    optimistic_locking          INTEGER NOT NULL DEFAULT 0,
+
+    -- 取引先の素性（docs/07 §1-2）。新しい列は末尾に置く（migrations/README の規約）。
+    -- 所在地は 1 列で持つ。都道府県・市区町村に分割しない。
+    address                     TEXT,
+    -- 種別。法人（設立登記法人）／個人事業者／人格のない社団等／その他。
+    -- **画面では必須、DB は NULL 可。** 既存の行と「まだ分類していない」を
+    -- 偽の値で埋めないため（posted_by と同じ規律）。NULL は「未分類」を表す。
+    entity_type                 TEXT CHECK (entity_type IN ('corporation', 'sole_proprietor', 'unincorporated_association', 'other')),
+    -- 法人番号（13 桁）。任意（docs/07 §2-3。必須にすると迂回のダミー値が入る）。
+    -- 検査数字の検証はアプリ側。DB は桁と数字だけを見る。
+    corporate_number            TEXT CHECK (corporate_number IS NULL OR corporate_number GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'),
+    -- 名寄せの手動キー（docs/07 §2-2）。自分自身は束ねられない。
+    -- 2 段より深い連鎖（A→B→C）や循環（A→B→A）は行をまたぐので DB では見ない。
+    -- 解決の順序（法人番号 → 親 → 自分）はアプリ側が持つ。
+    parent_partner_id           INTEGER REFERENCES partners(id) CHECK (parent_partner_id IS NULL OR parent_partner_id <> id),
+
+    -- 個人事業者に法人番号は指定されない（法人番号の指定対象の列挙に個人事業者が無い。
+    -- docs/research の取引先リサーチ §1 からの導出）。
+    -- 矛盾した行を許すと、法人番号が自然キーとして名寄せされ、誤束ねが黙って起こる。
+    CHECK (entity_type IS NULL OR entity_type <> 'sole_proprietor' OR corporate_number IS NULL)
 );
 
 -- 適格請求書発行事業者としての登録状況はここに列で持たない。
--- 登録・取消には日付があり、1 列では「いつ時点で登録事業者だったか」を表せない（docs/06 §1）。
--- 有効期間つきの partner_invoice_registrations をフェーズ 3 で追加する。
+-- 登録・取消には日付があり、1 列では「いつ時点で登録事業者だったか」を表せない（docs/07 §3-1）。
+-- 有効期間つきの partner_invoice_registrations は 006_partner_registrations.sql が持つ。

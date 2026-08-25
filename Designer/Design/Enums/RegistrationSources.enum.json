@@ -1,0 +1,21 @@
+{
+  "Name": "RegistrationSources",
+  "ValueType": "String",
+  "Members": [
+    {
+      "Name": "Manual",
+      "Value": "manual",
+      "DisplayText": "手入力"
+    },
+    {
+      "Name": "NtaApi",
+      "Value": "nta_api",
+      "DisplayText": "公表システム（Web-API）"
+    },
+    {
+      "Name": "NtaDownload",
+      "Value": "nta_download",
+      "DisplayText": "公表システム（ダウンロード）"
+    }
+  ]
+}

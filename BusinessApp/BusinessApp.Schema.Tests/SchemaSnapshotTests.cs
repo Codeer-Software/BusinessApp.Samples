@@ -21,12 +21,38 @@ public class SchemaSnapshotTests
     // ---- NormalizeSql ----
 
     [Theory]
-    [InlineData("CREATE TABLE t (\n  id INTEGER, -- コメント\n  v TEXT\n)", "CREATE TABLE t ( id INTEGER, v TEXT )")]
-    [InlineData("CREATE TABLE t (id INTEGER /* ブロック\nコメント */, v TEXT)", "CREATE TABLE t (id INTEGER , v TEXT)")]
+    [InlineData("CREATE TABLE t (\n  id INTEGER, -- コメント\n  v TEXT\n)", "CREATE TABLE t (id INTEGER, v TEXT)")]
+    [InlineData("CREATE TABLE t (id INTEGER /* ブロック\nコメント */, v TEXT)", "CREATE TABLE t (id INTEGER, v TEXT)")]
     [InlineData("SELECT  1\t+\n 2", "SELECT 1 + 2")]
     public void 正規化はコメントを除き空白を1つに潰す(string input, string expected)
     {
         Assert.Equal(expected, SchemaSnapshot.NormalizeSql(input));
+    }
+
+    /// <summary>
+    /// SQLite の ADD COLUMN は「<c>DEFAULT 0\n)</c>」の改行位置に「<c>, 列</c>」を挿し込むので、
+    /// 正典と「カンマの前の空白」だけが違うテキストになる（2026-08-25 実測）。
+    /// 区切り記号の前後の空白は 0 個に正規化して、この差を差と数えない。
+    /// </summary>
+    [Theory]
+    [InlineData("CREATE TABLE t (a INTEGER DEFAULT 0 , b TEXT )", "CREATE TABLE t (a INTEGER DEFAULT 0, b TEXT)")]
+    [InlineData("SELECT 1 ;", "SELECT 1;")]
+    public void 正規化は区切り記号の前後の空白を落とす(string input, string expected)
+    {
+        Assert.Equal(expected, SchemaSnapshot.NormalizeSql(input));
+    }
+
+    /// <summary>
+    /// 消える方向だけでなく<b>消えてはいけない方向</b>を固定する。引用の中の区切り記号と空白は
+    /// 値の一部であり、潰すと「本当は違うスキーマ」（既定値の違い等）が同値と誤認される。
+    /// </summary>
+    [Fact]
+    public void 正規化は引用内の区切り記号と空白を潰さない()
+    {
+        Assert.Equal("SELECT 'a , b'", SchemaSnapshot.NormalizeSql("SELECT 'a , b'"));
+        Assert.NotEqual(
+            SchemaSnapshot.NormalizeSql("x TEXT DEFAULT 'a ,b'"),
+            SchemaSnapshot.NormalizeSql("x TEXT DEFAULT 'a,b'"));
     }
 
     [Theory]

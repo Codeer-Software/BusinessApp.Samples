@@ -84,8 +84,13 @@ DROP TABLE x_rebuild;
 -- ⑧ AUTOINCREMENT の表は採番の現在値を復元する（DROP で sqlite_sequence の行が消え、
 --    書き戻しでは「現存する最大 id」までしか戻らない。末尾の行が過去に消されていた場合、
 --    復元しないと消えた id が再利用され、帳簿間のリンクが別の伝票を指す）。
---    ⑤ で 1 行も書き戻していないと sqlite_sequence に行が無いので、そのときは INSERT にする
-UPDATE sqlite_sequence SET seq = max(seq, (SELECT seq FROM x_rebuild_seq)) WHERE name = 'x';
+--    ⑤ で 1 行も書き戻していないと sqlite_sequence に行が無く UPDATE が空振りするので、
+--    **必ずこの 2 文の形で書く**（片方だけだと採番が黙って戻る）
+UPDATE sqlite_sequence SET seq = max(seq, (SELECT seq FROM x_rebuild_seq))
+ WHERE name = 'x' AND EXISTS (SELECT 1 FROM x_rebuild_seq);
+INSERT INTO sqlite_sequence (name, seq)
+    SELECT 'x', seq FROM x_rebuild_seq
+    WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'x');
 DROP TABLE x_rebuild_seq;
 ```
 
@@ -93,6 +98,11 @@ DROP TABLE x_rebuild_seq;
 ③〜⑤ が I-05 のトリガを一時的に外した状態でデータを動かすことに注意する。
 レシピの中でデータを**変えない**こと（変えるならそれは別のデータマイグレーションであり、
 I-05 の例外を作る決定として ADR が要る）。
+
+**制約を後付けする作り直しでは、既存の行が新しい制約に反していると ⑤ の書き戻しで失敗して
+丸ごと巻き戻る**（データは失われないが、適用できない）。マイグレーションのヘッダに
+「適用前に矛盾行を数える SELECT」を書いておき、当たった人が手で直してから適用できるようにする
+（DML マイグレーションはフェーズ 3 まで無いので、直す正規の経路が他に無い）。
 
 ## baseline/ — 同値テストの起点
 
