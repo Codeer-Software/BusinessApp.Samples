@@ -78,7 +78,7 @@ public class SchemaShapeTests
     }
 
     /// <summary>
-    /// 論理削除の列を置かない（ADR-0006・Designer/ddl/README）。
+    /// 論理削除の列を置かない（ADR-0019・Designer/ddl/README）。
     /// 仕訳は消せず、マスタは無効化する。列があること自体が誤った経路になる。
     /// </summary>
     [Fact]
@@ -139,7 +139,7 @@ public class SchemaShapeTests
     /// </summary>
     /// <remarks>
     /// <para>とくに<b>認証部品の <c>app_users</c> に外部キーを張らない</b>。
-    /// ユーザーは会計コアの責務ではなく別部品のものであり（ADR-0006）、DB 制約で結ぶと
+    /// ユーザーは会計コアの責務ではなく別部品のものであり（ADR-0019）、DB 制約で結ぶと
     /// 会計コアが認証部品なしでは立ち上がらなくなる。</para>
     /// <para>C# のモジュール依存（ADR-0013）と同じ規律を、DB のスキーマにも当てる。</para>
     /// </remarks>
