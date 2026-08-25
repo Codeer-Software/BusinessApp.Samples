@@ -76,5 +76,21 @@
             "Read(**/*.pfx)",
             "Read(**/*.snk)"
         ]
+    },
+    "_README_hooks": "PreToolUse フックでコミット前フックの迂回（--no-verify / git commit -n / -c core.hooksPath）を機械的に拒む（開発者の指示。2026-08-25）。判定は tools/claude/block_no_verify.py。",
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash|PowerShell",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python \"$CLAUDE_PROJECT_DIR/tools/claude/block_no_verify.py\"",
+                        "shell": "bash",
+                        "timeout": 15
+                    }
+                ]
+            }
+        ]
     }
 }
