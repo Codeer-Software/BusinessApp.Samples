@@ -4,6 +4,7 @@ using System.Text.Json;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Server.Journals;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
+using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
 /// 「取り消す」「訂正する」の入口（<see cref="JournalAmendmentEndpoint"/>）。
@@ -53,6 +54,11 @@ public class JournalAmendmentEndpointTests
             [JournalViolationCodes.AmendmentTargetNotFound],
             result.Violations.Select(v => v.Code));
 
+        // **内訳の文言も見る。** 画面はコードで分岐し、文言はそのまま出すので、
+        // ここが空になると「何か駄目だった」しか伝わらない。
+        Assert.Equal("対象の伝票が指定されていません。", result.Violations[0].Message);
+        Assert.Null(result.Violations[0].LineNo);
+
         // **何も書いていない。** 読めない識別子で伝票が増えては困る。
         Assert.Equal(1, server.Scalar<long>("select count(*) from journal_entries"));
     }
@@ -77,11 +83,21 @@ public class JournalAmendmentEndpointTests
 
     // --- できること ---
 
+    /// <summary>
+    /// できることを返す。<b>そして何も書かない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 画面は<b>伝票を開くたびに</b>これを叩く（`JournalEntry.mod.cs` の
+    /// <c>ApplyAmendmentAvailability</c>）。ここが書くようになると、
+    /// <b>画面を開いただけで伝票が取り消される</b>。doc コメントに「何も書かない」と
+    /// 3 か所で書いてあっても、表明が無ければ何も守っていない。
+    /// </remarks>
     [Fact]
-    public async Task できることを返す()
+    public async Task できることを返すだけで何も書かない()
     {
         using var server = new AccountingServer();
         var original = Original(server);
+        var before = server.Scalar<long>("select count(*) from journal_entries");
 
         var result = await server.Amendment.AvailabilityAsync(server.Text(original.Value));
 
@@ -91,6 +107,8 @@ public class JournalAmendmentEndpointTests
         Assert.True(result.CanCorrect);
         Assert.Equal(string.Empty, result.Message);
         Assert.Equal(0, result.OpenEntryId);
+
+        Assert.Equal(before, server.Scalar<long>("select count(*) from journal_entries"));
     }
 
     [Fact]
@@ -103,7 +121,11 @@ public class JournalAmendmentEndpointTests
         var result = await server.Amendment.AvailabilityAsync(server.Text(original.Value));
 
         Assert.Equal(AmendResult.Succeeded, result.Status);
+
+        // **2 つを別々に見る。** 今はどちらも false だが、
+        // 「片方だけできる状態が将来生まれうるから 2 つに分けた」のが設計意図である。
         Assert.False(result.CanReverse);
+        Assert.False(result.CanCorrect);
         Assert.NotEqual(string.Empty, result.Message);
     }
 
@@ -124,6 +146,12 @@ public class JournalAmendmentEndpointTests
         Assert.Equal(result.ReversalId, result.OpenEntryId);
         Assert.Equal(1, server.CountAmendments(original, "reversal"));
         Assert.Equal("posted", server.StatusOf(new JournalEntryId(result.ReversalId)));
+
+        // **入口が組み立てた TimeProvider が効いていること。** 計上日は「取り消すと決めた日」で、
+        // ここを表明しないと `Create` が渡された時刻を握りつぶしても緑になる。
+        // しかも実時刻がたまたま第 18 期に入っているせいで、当分そのまま通ってしまう。
+        var reversal = await server.EntryStore.LoadAsync(new JournalEntryId(result.ReversalId));
+        Assert.Equal(DateOnly.FromDateTime(AccountingServer.Now.DateTime), reversal.PostingDate);
     }
 
     /// <summary>
@@ -131,6 +159,8 @@ public class JournalAmendmentEndpointTests
     /// </summary>
     /// <remarks>
     /// 差し戻しを戻り値で表すからといって、途中まで書いたものが残ってよいわけではない。
+    /// <b>ただしこの経路は 1 行も書く前に止まる</b>ので、巻き戻しそのものを見てはいない。
+    /// 書いた後に差し戻す経路は <c>訂正が途中で失敗したら取消だけが残らない</c> が見る。
     /// </remarks>
     [Fact]
     public async Task 二重の取消は差し戻して何も残さない()
@@ -144,6 +174,11 @@ public class JournalAmendmentEndpointTests
 
         Assert.Equal(AmendResult.RejectedStatus, result.Status);
         Assert.NotEmpty(result.Violations);
+
+        // 差し戻しでは開く伝票が無い。**0 以外が入ると画面が知らない伝票を開きにいく。**
+        Assert.Equal(0, result.OpenEntryId);
+        Assert.Equal(0, result.ReversalId);
+
         Assert.Equal(before, server.Scalar<long>("select count(*) from journal_entries"));
     }
 
@@ -186,17 +221,37 @@ public class JournalAmendmentEndpointTests
         var original = Original(server);
         var before = server.Scalar<long>("select count(*) from journal_entries");
 
-        var inserts = 0;
+        // **落とす地点を「何回目か」で決めない。** 実装が変わって落下点が前へずれると、
+        // この検査は「何も書く前に止まった」ことしか見ていない状態へ静かに退化し、
+        // **緑のまま無意味**になる（2 回目 → 1 回目に変えても緑だった。2026-08-26 の自己レビュー）。
+        // 取消を計上し**終えた**ことを見てから落とし、そこで落ちたことを最後に表明する。
+        var reversalPosted = false;
+        var droppedAfterPosting = false;
         server.FailBeforeStatement = sql =>
-            sql.Contains("insert into journal_entries", StringComparison.OrdinalIgnoreCase) && ++inserts == 2
-                ? new InvalidOperationException("再計上の下書きを書く直前で落とす")
-                : null;
+        {
+            if (sql.Contains("set status = 'posted'", StringComparison.OrdinalIgnoreCase))
+            {
+                reversalPosted = true;
+            }
+
+            if (reversalPosted && sql.Contains("insert into journal_entries", StringComparison.OrdinalIgnoreCase))
+            {
+                droppedAfterPosting = true;
+                return new InvalidOperationException("再計上の下書きを書く直前で落とす");
+            }
+
+            return null;
+        };
 
         // 想定外の失敗なので、業務の差し戻しではなくそのまま投げ直す（ADR-0016）。
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => server.Amendment.CorrectAsync(server.Text(original.Value)));
 
         server.FailBeforeStatement = null;
+
+        Assert.True(
+            droppedAfterPosting,
+            "取消を計上し終える前に落ちている。この検査は意図した地点を見ていない。");
 
         // **取消が残っていない。** ここが 1 件でも残ると、この機能は成立していない。
         Assert.Equal(0, server.CountAmendments(original, "reversal"));
@@ -236,15 +291,66 @@ public class JournalAmendmentEndpointTests
             ["code", "message", "lineNo"],
             root.GetProperty("violations")[0].EnumerateObject().Select(property => property.Name));
 
-        Assert.Equal(AmendResult.RejectedStatus, root.GetProperty("status").GetString());
+        // **値もリテラルで固定する。** 定数どうしを比べると、値を書き換えても緑のまま通る。
+        // 画面は `"ok"` を**リテラルで**比較しているので（JournalEntry.mod.cs）、
+        // ここを変えると成功しているのにエラーのトーストが出て、しかも message は空文字なので
+        // **空のトーストが出るだけ**になる（qa/01 K-03 の形）。
+        Assert.Equal("rejected", root.GetProperty("status").GetString());
         Assert.Equal("E-01", root.GetProperty("violations")[0].GetProperty("code").GetString());
         Assert.Equal(2, root.GetProperty("violations")[0].GetProperty("lineNo").GetInt32());
+
+        using var succeeded = JsonDocument.Parse(JsonSerializer.Serialize(AmendResult.Ok(1, 2)));
+        Assert.Equal("ok", succeeded.RootElement.GetProperty("status").GetString());
+
+        // 成功したときは文言も内訳も空。**何か入っていると画面がエラーとして出しかねない。**
+        Assert.Equal(string.Empty, succeeded.RootElement.GetProperty("message").GetString());
+        Assert.Empty(succeeded.RootElement.GetProperty("violations").EnumerateArray());
+        Assert.Equal(2, succeeded.RootElement.GetProperty("openEntryId").GetInt64());
+        Assert.Equal(1, succeeded.RootElement.GetProperty("reversalId").GetInt64());
+
+        using var available = JsonDocument.Parse(
+            JsonSerializer.Serialize(AmendResult.Available(true, false, "理由")));
+        Assert.Equal("ok", available.RootElement.GetProperty("status").GetString());
+        Assert.True(available.RootElement.GetProperty("canReverse").GetBoolean());
+        Assert.False(available.RootElement.GetProperty("canCorrect").GetBoolean());
     }
 
+    /// <summary>
+    /// ドメインの違反を、<b>3 項目とも</b>写す。
+    /// </summary>
+    /// <remarks>
+    /// <c>LineNo</c> を捨てても、以前は全件緑だった——<c>From</c> を通る唯一の経路が
+    /// 行番号なしの違反しか流していなかったため。<b>画面が明細行を指すための情報が黙って落ちる。</b>
+    /// </remarks>
     [Fact]
-    public void 要求の項目名も画面との約束である()
+    public void 違反は行番号まで写す()
     {
-        var request = JsonSerializer.Deserialize<AmendRequest>("""{"originalEntryId":"12"}""");
+        var written = AmendViolation.From(new Violation("E-99", "2 行目が変です。", LineNo: 3));
+
+        Assert.Equal("E-99", written.Code);
+        Assert.Equal("2 行目が変です。", written.Message);
+        Assert.Equal(3, written.LineNo);
+
+        Assert.Null(AmendViolation.From(new Violation("E-98", "伝票全体の話です。")).LineNo);
+        Assert.Throws<ArgumentNullException>(() => AmendViolation.From(null!));
+    }
+
+    /// <summary>
+    /// 要求の項目名。
+    /// </summary>
+    /// <remarks>
+    /// <b>画面が実際に送るのは先頭大文字の <c>OriginalEntryId</c></b>
+    /// （`JournalEntry.mod.cs` の <c>body.OriginalEntryId</c>）で、通っているのは
+    /// ASP.NET Core の既定が大文字小文字を無視するからである。
+    /// <b>実物と、属性で決めた形の両方</b>を通す。
+    /// </remarks>
+    [Theory]
+    [InlineData("""{"OriginalEntryId":"12"}""")]
+    [InlineData("""{"originalEntryId":"12"}""")]
+    public void 要求の項目名も画面との約束である(string body)
+    {
+        var request = JsonSerializer.Deserialize<AmendRequest>(
+            body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
         Assert.Equal("12", request!.OriginalEntryId);
     }

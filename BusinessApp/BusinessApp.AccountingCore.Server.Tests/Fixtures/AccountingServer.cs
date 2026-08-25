@@ -93,9 +93,11 @@ internal sealed class AccountingServer : IDisposable
     }
 
     /// <summary>
-    /// 本番（<c>CustomizedModuleDataIO.SubmitAsync</c>）と同じ形で 1 回の保存を通す。
-    /// <b>トランザクションで包む。</b> 例外で巻き戻ることまで含めて本番と同じにしないと、
+    /// 本番（<c>CustomizedModuleDataIO.SubmitAsync</c>）を<b>模した</b>形で 1 回の保存を通す。
+    /// <b>トランザクションで包む。</b> 例外で巻き戻ることまで含めないと、
     /// 会計コアが最も頼っている性質だけが検査されない。
+    /// <b>ただし本番でこれを張るのは CLB 側</b>で、<c>DbTransactionScope</c> は通らない。
+    /// ここは「同じ形」ではなく「同じ結果になるように模したもの」である。
     /// </summary>
     public async Task<List<ModuleSubmitResult>> SubmitAsync(
         IReadOnlyList<ModuleSubmitData> transactionData,

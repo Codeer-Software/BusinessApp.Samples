@@ -15,7 +15,7 @@ namespace BusinessApp.Server.Controllers
     /// 書かない。中身は AccountingCore.Server の JournalAmendmentEndpoint が持ち、
     /// 普通の C# として単体テストしてある (ADR-0008)。</para>
     /// <para><b>ここに増やさない。</b> このプロジェクトは CLB テンプレート由来なので
-    /// カバレッジにもミューテーションにも載らない (ADR-0021 §3)。
+    /// カバレッジにもミューテーションにも載らない (ADR-0012 §3 の Include から外れている)。
     /// ここに書いた行は誰にも検査されない。</para>
     /// </remarks>
     [Authorize, AutoValidateAntiforgeryToken]

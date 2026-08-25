@@ -63,7 +63,7 @@ related: [0012-テスト方針とカバレッジのゲート.md, 0008-CLBとCSha
 
 | ファイル | 何か | 行き先 |
 |---|---|---|
-| `Controllers/JournalsController.cs` | 取消・訂正の Web API（[ADR-0016](0016-画面から呼ぶサーバ処理はWebAPIに置く.md)） | HTTP でない部分は[実装計画](../05_実装計画と現在地.md)の次のタスクで `AccountingCore.Server` へ移す |
+| `Controllers/JournalsController.cs` | 取消・訂正の Web API（[ADR-0016](0016-画面から呼ぶサーバ処理はWebAPIに置く.md)） | **移動済み**（2026-08-26）。残るのは認証・経路・データソース名の解決だけ |
 | `Services/CustomizedModuleDataIO.cs` | 計上の関門の入口 | **移らない。** CLB の `ModuleDataIO` の override なのでホスト側にしか置けない |
 | `Services/ExceptionHandlerUtils.cs` | 例外の文面を組み立てて画面へ返す | 移らない。§2 の改行の規則だけ規約テストが見る |
 
