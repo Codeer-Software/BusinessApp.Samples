@@ -142,9 +142,13 @@ internal sealed class AccountingServer : IDisposable
             var submittedId = (entry.Fields["Id"] as IdFieldData)?.Value
                 ?? throw new InvalidOperationException("保存する伝票に Id が無い。");
 
-            var result = new ModuleSubmitResult();
-            result.TemporaryIdMap[submittedId] = Text(id.Value);
-            return Task.FromResult(new List<ModuleSubmitResult> { result });
+            // **本物の CLB は SourceId / DestinationId で返す。** TemporaryIdMap には入らない。
+            // ここを取り違えていたせいで、新規作成の画面から計上すると必ず落ちる不具合を
+            // テストが 1 度も捕まえられなかった（qa/03 L-10）。
+            return Task.FromResult(new List<ModuleSubmitResult>
+            {
+                new() { SourceId = submittedId, DestinationId = Text(id.Value) },
+            });
         };
 
     /// <summary>下書きの伝票を 1 件入れて、その識別子を返す。</summary>

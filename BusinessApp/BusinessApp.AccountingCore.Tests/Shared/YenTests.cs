@@ -38,9 +38,11 @@ public class YenTests
 
     [Theory]
     [InlineData(0, "0")]
-    [InlineData(1234, "1234")]
-    [InlineData(-1234, "-1234")]
-    public void 文字列表現は小数点を持たない(long value, string expected)
+    [InlineData(999, "999")]
+    [InlineData(1234, "1,234")]
+    [InlineData(-1234, "-1,234")]
+    [InlineData(1234567, "1,234,567")]
+    public void 文字列表現は小数点を持たず_3_桁で区切る(long value, string expected)
     {
         Assert.Equal(expected, Yen.From(value).ToString());
     }

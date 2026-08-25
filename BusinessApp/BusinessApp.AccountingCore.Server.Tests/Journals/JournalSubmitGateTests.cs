@@ -262,12 +262,45 @@ public class JournalSubmitGateTests
                 [SubmitData.Adding(entry)],
                 () => Task.FromResult(new List<ModuleSubmitResult>
                 {
-                    SubmitData.Result((TemporaryId, "1")),
-                    SubmitData.Result((TemporaryId, "2")),
+                    SubmitData.Result(TemporaryId, "1"),
+                    SubmitData.Result(TemporaryId, "2"),
                 })));
 
         // 先勝ちで捨てると、片方が黙って別の伝票に化ける。
         Assert.Contains(TemporaryId, error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 保存が失敗していたら、計上へ進まない。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>CLB は保存の失敗を例外ではなく <c>ExceptionMessage</c> に詰めて返す。</b>
+    /// 見ずに先へ進むと、まだ書けていない伝票を計上しようとして
+    /// 「仮 ID を解決できない」という二次的な内部エラーに化け、<b>本当の理由が利用者に届かない</b>。</para>
+    /// <para>実機で踏んだ形である——明細の勘定科目を空のまま計上すると、
+    /// 保存が NOT NULL 違反で失敗しているのに、画面には ID の話が出ていた
+    /// （2026-08-26。[qa/03](../../../docs/qa/03_テストで漏らした実例.md) L-10）。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 保存が失敗していたら計上へ進まない()
+    {
+        using var server = new AccountingServer();
+        var entry = SubmitData.Entry(TemporaryId, status: "posted");
+
+        var results = await server.SubmitAsync(
+            [SubmitData.Adding(entry)],
+            () => Task.FromResult(new List<ModuleSubmitResult>
+            {
+                SubmitData.Failure("NOT NULL constraint failed: journal_lines.account_id"),
+            }));
+
+        // **保存の失敗をそのまま返す。** CLB 本来の経路が理由を報告する。
+        Assert.Equal(
+            ["NOT NULL constraint failed: journal_lines.account_id"],
+            results.Select(r => r.ExceptionMessage));
+
+        // 計上へ進んでいない（進むと ID を解決できずに InvalidOperationException になる）。
+        Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries where status = 'posted'"));
     }
 
     /// <summary>
