@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 稼働 DB のスキーマ検証（migrate.ps1 -Verify の比較エンジン。ADR-0020）。
+       稼働 DB には触らない。稼働側の sqlite_master は標準入力の JSON で受け取り
+       （DB アクセスは sql CLI のみ、という境界を守る）、正典（Designer/ddl/）を
+       インメモリ SQLite に再生した正解と突き合わせる。 -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BusinessApp.TestSupport\BusinessApp.TestSupport.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -47,6 +47,17 @@ function Invoke-Designer {
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false
+    # exe はリダイレクト先に OS のレガシーコードページ（日本語 Windows では CP932）で書く
+    # （2026-08-25 実測。CLB 1.3.20。改善提案は docs/11 の FB-003）。pwsh 7 の既定は UTF-8 読みなので、
+    # 指定しないと日本語（トリガの文言など）が化け、CP932 の後続バイト 0x5C（\）が JSON を壊す。
+    # FB-003 が実現して exe が UTF-8 で書くようになったら、この指定は逆に文字化けの原因になる。
+    # CLB を上げて出力が化けたら、まずここを疑って外すこと。
+    # なお ja-JP は ANSI も OEM も 932 なので、exe がどちらで書いているかはこの環境では
+    # 区別できない（他ロケールの開発機では未検証。化けたら ANSICodePage も試すこと）。
+    $legacy = [System.Text.Encoding]::GetEncoding(
+        [System.Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage)
+    $psi.StandardOutputEncoding = $legacy
+    $psi.StandardErrorEncoding = $legacy
     foreach ($a in $Arguments) { $psi.ArgumentList.Add($a) }
 
     $proc = [System.Diagnostics.Process]::Start($psi)

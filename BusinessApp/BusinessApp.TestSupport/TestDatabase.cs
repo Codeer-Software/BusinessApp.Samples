@@ -25,12 +25,18 @@ public static class TestDatabase
     /// 別の DB になるので、同時実行（2 接続が同じ行を取り合う）を検査できない。
     /// 名前はテストごとに変えて、テスト同士が干渉しないようにする。
     /// </remarks>
-    public static SqliteConnection Create()
+    public static SqliteConnection Create() => CreateFromFiles(DdlFiles());
+
+    /// <summary>
+    /// 指定した SQL ファイルを順に適用した接続を返す。マイグレーションの同値検査
+    /// （baseline ＋ migrations の再生。ADR-0020）が使う。
+    /// </summary>
+    public static SqliteConnection CreateFromFiles(IEnumerable<string> sqlFiles)
     {
         var name = $"testdb-{Guid.NewGuid():N}";
         var connection = Connect(name);
 
-        foreach (var file in DdlFiles())
+        foreach (var file in sqlFiles)
         {
             Execute(connection, File.ReadAllText(file));
         }
@@ -71,6 +77,15 @@ public static class TestDatabase
     /// <summary>番号順の初期データファイル。</summary>
     public static IReadOnlyList<string> SeedFiles() => NumberedSqlFiles(SeedDirectory);
 
+    /// <summary>
+    /// 番号順のマイグレーションファイル（<c>Designer/migrations/</c> 直下のみ。
+    /// <c>baseline/</c> は含まない）。
+    /// </summary>
+    public static IReadOnlyList<string> MigrationFiles() => NumberedSqlFiles(MigrationsDirectory);
+
+    /// <summary>同値検査の起点（<c>ddl/</c> の凍結コピー）。番号順。</summary>
+    public static IReadOnlyList<string> BaselineFiles() => NumberedSqlFiles(BaselineDirectory);
+
     private static IReadOnlyList<string> NumberedSqlFiles(string directory)
         => Directory.GetFiles(directory, "*.sql")
             .OrderBy(Path.GetFileName, StringComparer.Ordinal)
@@ -79,6 +94,10 @@ public static class TestDatabase
     public static string DdlDirectory { get; } = Path.Combine(RepositoryRoot(), "Designer", "ddl");
 
     public static string SeedDirectory { get; } = Path.Combine(RepositoryRoot(), "Designer", "seed");
+
+    public static string MigrationsDirectory { get; } = Path.Combine(RepositoryRoot(), "Designer", "migrations");
+
+    public static string BaselineDirectory { get; } = Path.Combine(RepositoryRoot(), "Designer", "migrations", "baseline");
 
     /// <summary>
     /// CLB のモジュール定義の置き場。<b>帳簿のクエリ（<c>*.Query.sql</c>）を本物のまま検査する</b>ために使う。
