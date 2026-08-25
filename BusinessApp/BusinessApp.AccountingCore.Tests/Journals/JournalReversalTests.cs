@@ -259,7 +259,22 @@ public class JournalReversalTests
 
         Assert.Contains("取り消せません", Message(result, JournalViolationCodes.AmendmentTargetNotPosted), StringComparison.Ordinal);
         Assert.Contains("取り消せません", Message(result, JournalViolationCodes.AmendmentTargetUnidentified), StringComparison.Ordinal);
-        Assert.StartsWith("取消の計上日", Message(result, JournalViolationCodes.AmendmentBeforeOriginal), StringComparison.Ordinal);
+        // **完全一致で固定する。** 前半だけを見ていると、日付をはさんだ後半
+        //（＝文をつないでいる側）が無防備になる（qa/02 R8-09）。
+        Assert.Equal(
+            "取消の計上日（2026-05-19）が、元の伝票の計上日（2026-05-22）より前になっています。",
+            Message(result, JournalViolationCodes.AmendmentBeforeOriginal));
+    }
+
+    [Fact]
+    public void 対象にできない種別の差し戻しには種別名と対象が出る()
+    {
+        var result = JournalReversal.Reverse(
+            Posted(entryType: EntryType.Reversal), ReversedOn, EnteredAt, Context());
+
+        Assert.Equal(
+            "種別が「取消」の伝票は取り消せません。対象にできるのは通常の伝票と訂正だけです。",
+            Message(result, JournalViolationCodes.AmendmentTargetNotAmendable));
     }
 
     private static string Message(ReversalResult result, string code)

@@ -307,6 +307,9 @@ public class JournalCorrectionTests
             correction, original, PostingContext(reversedOn: new DateOnly(2026, 6, 10)));
 
         Assert.Contains(JournalViolationCodes.CorrectionBeforeReversal, violations.Select(v => v.Code));
+        Assert.Equal(
+            "訂正の計上日（2026-06-01）が、元の伝票を取り消した日（2026-06-10）より前になっています。",
+            violations.Single(v => v.Code == JournalViolationCodes.CorrectionBeforeReversal).Message);
     }
 
     [Fact]
@@ -374,7 +377,10 @@ public class JournalCorrectionTests
 
         Assert.Contains("訂正できません", Message(violations, JournalViolationCodes.AmendmentTargetNotPosted), StringComparison.Ordinal);
         Assert.Contains("訂正できません", Message(violations, JournalViolationCodes.AmendmentTargetUnidentified), StringComparison.Ordinal);
-        Assert.StartsWith("訂正の計上日", Message(violations, JournalViolationCodes.AmendmentBeforeOriginal), StringComparison.Ordinal);
+        // **完全一致で固定する**（qa/02 R8-09）。
+        Assert.Equal(
+            "訂正の計上日（2026-05-19）が、元の伝票の計上日（2026-05-22）より前になっています。",
+            Message(violations, JournalViolationCodes.AmendmentBeforeOriginal));
     }
 
     private static string Message(IReadOnlyList<Violation> violations, string code)

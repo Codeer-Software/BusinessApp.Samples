@@ -318,6 +318,9 @@ public class JournalSubmitGateTests
             () => server.SubmitAsync([SubmitData.Updating(entry)], NothingSaved));
 
         Assert.Contains(JournalViolationCodes.EntryTypeImmutable, error.Violations.Select(v => v.Code));
+        Assert.Equal(
+            "伝票の種別は変更できません（「訂正」のままです）。種別を変えるときは、下書きを作り直してください。",
+            error.Violations.Single(v => v.Code == JournalViolationCodes.EntryTypeImmutable).Message);
         Assert.Equal("correction", server.Scalar<string>(
             $"select entry_type from journal_entries where id = {correction.Value}"));
     }
