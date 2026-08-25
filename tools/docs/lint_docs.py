@@ -4,9 +4,11 @@
 
 仕様書: docs/00_ドキュメント規約.md
 
-長期開発でドキュメントが腐り、肥大化するのを防ぐ。検査するのは次の 2 点である。
+長期開発でドキュメントが腐り、肥大化するのを防ぐ。検査するのは次の 3 点である。
   1. 読まなくていい文書を判別できるか（フロントマターと status）
   2. 索引・ADR 台帳と実ファイルが食い違っていないか
+  3. current でない文書をコード（コメント）が参照していないか
+     （開発者の提案。2026-08-25。意図的な歴史参照は行に lint-docs:ignore を書く）
 
 使い方:
     python tools/docs/lint_docs.py          # 規約違反の検査（error / warn）
@@ -58,6 +60,16 @@ EXCLUDE_FILES = ("Designer/CLAUDE.md",)
 
 # 「引くもの」であって通読しない文書。行数の警告と指標の対象から外す
 REFERENCE_PREFIXES = ("docs/decisions/", "docs/research/")
+
+# コード参照検査（check_code_references）の対象拡張子と除外。
+# Designer/migrations/ は適用済みがチェックサムで凍結される歴史文書なので、
+# 後から文書が superseded になっても直せない（直させない）。
+CODE_EXTENSIONS = (".cs", ".sql", ".ps1", ".psm1", ".py", ".js", ".css")
+CODE_EXCLUDE_PREFIXES = (
+    "Designer/ClaudeCodeForDesigner/",
+    "Designer/migrations/",
+    "LocalData/",
+)
 
 INLINE_IGNORE = "lint-docs:ignore"
 
@@ -243,6 +255,49 @@ def check_adr_ledger(docs: List[Doc], findings: List[Tuple[str, str, str]]) -> N
         findings.append((SEV_ERROR, ledger_rel, "台帳の行に対応する ADR がありません: {}".format(ghost)))
 
 
+def check_code_references(docs: List[Doc], findings: List[Tuple[str, str, str]]) -> None:
+    """current でない文書（superseded / historical）をコードのコメントが参照していたら error。
+
+    参照の形は 3 つを見る: ファイル名（basename）・ADR 番号（ADR-0007）・
+    番号つき文書の短縮形（docs/07）。コードのコメントは実装と一緒に読まれるので、
+    腐った参照は後継文書へ張り替える。歴史として意図的に参照する行には
+    lint-docs:ignore を書く。
+    """
+    stale_docs = [d for d in docs if d.meta and d.status and d.status != "current"]
+    if not stale_docs:
+        return
+
+    patterns: List[Tuple[str, str, "re.Pattern[str]"]] = []
+    for d in stale_docs:
+        pats = [re.escape(os.path.basename(d.rel))]
+        m = re.match(r"docs/decisions/(\d{4})-", d.rel)
+        if m:
+            pats.append(r"ADR-" + m.group(1) + r"\b")
+        m = re.match(r"docs/(\d{2})_", d.rel)
+        if m:
+            pats.append(r"docs/" + m.group(1) + r"\b")
+        patterns.append((d.rel, d.status, re.compile("|".join(pats))))
+
+    for rel in run_git(["ls-files"]):
+        rel_posix = rel.replace("\\", "/")
+        if not rel_posix.endswith(CODE_EXTENSIONS) or rel_posix.startswith(CODE_EXCLUDE_PREFIXES):
+            continue
+        path = os.path.join(REPO_ROOT, rel)
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            continue
+        for i, line in enumerate(lines):
+            if INLINE_IGNORE in line:
+                continue
+            for doc_rel, status, pattern in patterns:
+                if pattern.search(line):
+                    findings.append((SEV_ERROR, rel_posix,
+                                     "{}行目: {} な文書を参照しています: {}（後継へ張り替えるか、"
+                                     "歴史参照なら行に {} を書く）".format(i + 1, status, doc_rel, INLINE_IGNORE)))
+
+
 def check_docs_index(docs: List[Doc], findings: List[Tuple[str, str, str]]) -> None:
     index_rel = "docs/README.md"
     index = next((d for d in docs if d.rel == index_rel), None)
@@ -304,6 +359,7 @@ def main() -> int:
         check_body(d, findings)
     check_adr_ledger(docs, findings)
     check_docs_index(docs, findings)
+    check_code_references(docs, findings)
 
     errors = [f for f in findings if f[0] == SEV_ERROR]
     warns = [f for f in findings if f[0] == SEV_WARN]

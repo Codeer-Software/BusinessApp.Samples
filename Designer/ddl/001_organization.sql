@@ -1,4 +1,4 @@
--- 001 事業所情報（ADR-0006 ② 会計設定）
+-- 001 事業所情報（ADR-0019 ② 会計設定）
 --
 -- 単一法人に徹する（ADR-0005）ので 1 行しか持たない。
 -- CHECK (id = 1) で 2 行目の INSERT を DB が拒む。
@@ -20,7 +20,7 @@ CREATE TABLE company_profile (
     created_at                  DATETIME,
     updated_at                  DATETIME,
     -- 認証部品（app_users）の識別子。**外部キーを張らない。**
-    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0006）、DB 制約で結ぶと
+    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0019）、DB 制約で結ぶと
     -- 会計コアが認証部品なしでは立ち上がらなくなる。CLB の予約名として値は自動で入る。
     creator                     INTEGER,
     updater                     INTEGER,

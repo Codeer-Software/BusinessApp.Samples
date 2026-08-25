@@ -10,8 +10,8 @@ CREATE TABLE partner_invoice_registrations (
 
     partner_id                  INTEGER NOT NULL REFERENCES partners(id),
 
-    -- 登録番号。書式の検査はアプリ側で行う（「T ＋ 13 桁」という通念は一次情報で未確認。
-    -- リサーチ §5。確認してから検査を書く。DB で中途半端な書式を強制しない）
+    -- 登録番号。書式は「T ＋ 数字 13 桁」（計 14 桁）で確認済み（リサーチ §3-3）。
+    -- 検査は入力画面・取込を作るときにアプリ側で行う（DB は書式を強制しない）。
     registration_no             TEXT NOT NULL,
 
     -- 登録年月日（公表システムの registrationDate）
@@ -21,8 +21,8 @@ CREATE TABLE partner_invoice_registrations (
     -- 提供された日付をそのまま持ち、判定の規則をデータに焼き込まない
     ended_on                    DATE,
     -- expired ＝ expireDate（失効年月日）由来、revoked ＝ disposalDate（取消年月日）由来。
-    -- 公表システムが別項目で提供するとおり別の事象として持つ。
-    -- **それぞれが指す法的事象（届出・職権・事業廃止など）の対応は未確認**（リサーチ §5）。
+    -- 公表システムの履歴は 1 行につきいずれかの日付なので、日付 1 列＋理由 1 列で提供の形と一致する
+    -- （リサーチ §5-6）。**それぞれが指す法的事象（届出・職権・事業廃止など）の対応は未確認**（リサーチ §5）。
     end_reason                  TEXT CHECK (end_reason IN ('expired', 'revoked')),
 
     -- 出所。手で入れた値を自動同期（フェーズ 6）が黙って上書きしないため
@@ -31,8 +31,7 @@ CREATE TABLE partner_invoice_registrations (
     nta_updated_on              DATE,               -- 公表システム側の更新年月日（updateDate）
 
     -- 公表名（name）。マスタ名とずれることがあり（略称で登録している等）、突合の結果として残す。
-    -- 個人のダウンロード提供では値が削除される項目があるため（どの項目かは未確認。リサーチ §5）、
-    -- 空で来ることがある
+    -- 個人のダウンロード提供では氏名又は名称が空文字になる（●項目。リサーチ §3-3）ため NULL 可。
     published_name              TEXT,
 
     created_at                  DATETIME,

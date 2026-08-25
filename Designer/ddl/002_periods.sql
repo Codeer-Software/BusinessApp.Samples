@@ -1,4 +1,4 @@
--- 002 会計年度・会計期間（ADR-0006 ② 会計設定）
+-- 002 会計年度・会計期間（ADR-0019 ② 会計設定）
 --
 -- 「マスタ」ではなく状態を持つ台帳として扱う。締め状態（open / closed）が動くため、
 -- 静的な参照データとは性質が違う（docs/04 §7）。
@@ -22,7 +22,7 @@ CREATE TABLE fiscal_years (
     created_at                  DATETIME,
     updated_at                  DATETIME,
     -- 認証部品（app_users）の識別子。**外部キーを張らない。**
-    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0006）、DB 制約で結ぶと
+    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0019）、DB 制約で結ぶと
     -- 会計コアが認証部品なしでは立ち上がらなくなる。CLB の予約名として値は自動で入る。
     creator                     INTEGER,
     updater                     INTEGER,
@@ -42,7 +42,7 @@ CREATE TABLE accounting_periods (
     created_at                  DATETIME,
     updated_at                  DATETIME,
     -- 認証部品（app_users）の識別子。**外部キーを張らない。**
-    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0006）、DB 制約で結ぶと
+    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0019）、DB 制約で結ぶと
     -- 会計コアが認証部品なしでは立ち上がらなくなる。CLB の予約名として値は自動で入る。
     creator                     INTEGER,
     updater                     INTEGER,
