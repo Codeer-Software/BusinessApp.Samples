@@ -38,6 +38,21 @@ namespace BusinessApp.Server.Controllers
         public async ValueTask DisposeAsync()
             => await _dataService.DisposeAsync();
 
+        /// <summary>
+        /// この伝票にできること（取り消せるか・訂正できるか）を返す。**何も書かない。**
+        /// </summary>
+        /// <remarks>
+        /// 画面がボタンを出すかどうかを決めるために呼ぶ。可否の規則をスクリプトに写さないための
+        /// エンドポイントであり、守り自体は reverse / correct が同じ規則で行う (ADR-0008)。
+        /// </remarks>
+        [HttpPost("availability")]
+        public Task<IActionResult> AvailabilityAsync(AmendRequest request)
+            => RunAsync(request, async (service, originalId) =>
+            {
+                var available = await service.DescribeAsync(originalId);
+                return AmendResult.Available(available.CanReverse, available.CanCorrect, available.Reason);
+            });
+
         /// <summary>取り消す。反対仕訳を作って計上まで進め、その伝票の識別子を返す。</summary>
         [HttpPost("reverse")]
         public Task<IActionResult> ReverseAsync(AmendRequest request)
@@ -81,8 +96,8 @@ namespace BusinessApp.Server.Controllers
             if (!long.TryParse(request?.OriginalEntryId, out var originalEntryId))
             {
                 return Ok(AmendResult.Rejected(
-                    "対象の仕訳が指定されていない。",
-                    [new AmendViolation(JournalViolationCodes.AmendmentTargetNotFound, "対象の仕訳が指定されていない。", null)]));
+                    "対象の伝票が指定されていません。",
+                    [new AmendViolation(JournalViolationCodes.AmendmentTargetNotFound, "対象の伝票が指定されていません。", null)]));
             }
 
             var dataSourceName = SystemConfig.Instance.DataSources
@@ -138,13 +153,19 @@ namespace BusinessApp.Server.Controllers
         [property: JsonPropertyName("openEntryId")] long OpenEntryId,
         [property: JsonPropertyName("reversalId")] long ReversalId,
         [property: JsonPropertyName("message")] string Message,
-        [property: JsonPropertyName("violations")] IReadOnlyList<AmendViolation> Violations)
+        [property: JsonPropertyName("violations")] IReadOnlyList<AmendViolation> Violations,
+        [property: JsonPropertyName("canReverse")] bool CanReverse = false,
+        [property: JsonPropertyName("canCorrect")] bool CanCorrect = false)
     {
         public static AmendResult Ok(long reversalId, long openEntryId)
             => new("ok", openEntryId, reversalId, string.Empty, []);
 
         public static AmendResult Rejected(string message, IReadOnlyList<AmendViolation> violations)
             => new("rejected", 0, 0, message, violations);
+
+        /// <summary>できること。**成否ではないので status は ok** で、内容は 2 つの真偽値で表す。</summary>
+        public static AmendResult Available(bool canReverse, bool canCorrect, string reason)
+            => new("ok", 0, 0, reason, [], canReverse, canCorrect);
     }
 
     public record AmendViolation(

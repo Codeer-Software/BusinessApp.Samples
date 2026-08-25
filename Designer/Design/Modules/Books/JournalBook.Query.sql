@@ -15,18 +15,13 @@ SELECT
     e.entry_no                  AS entry_no,
     e.transaction_date          AS transaction_date,
     e.posting_date              AS posting_date,
-    CASE e.entry_type
-        WHEN 'normal'     THEN '通常'
-        WHEN 'correction' THEN '訂正'
-        WHEN 'reversal'   THEN '取消'
-        WHEN 'opening'    THEN '期首残高'
-        WHEN 'closing'    THEN '決算振替'
-        WHEN 'carryover'  THEN '繰越'
-        ELSE e.entry_type
-    END                         AS entry_type_name,
+    -- **区分値は生のまま返す。** 日本語の見出しは CLB のデザイン enum が持っており
+    -- （C# の列挙型・DDL の CHECK と 3 者一致を機械で検査している）、
+    -- ここで CASE を書くと 4 つ目の写しになる。種別を足したときにここだけ漏れる。
+    e.entry_type                AS entry_type,
     orig.entry_no               AS original_entry_no,
     l.line_no                   AS line_no,
-    CASE l.debit_credit WHEN 'debit' THEN '借方' ELSE '貸方' END AS debit_credit_name,
+    l.debit_credit              AS debit_credit,
     a.name                      AS account_name,
     sa.name                     AS sub_account_name,
     d.name                      AS department_name,

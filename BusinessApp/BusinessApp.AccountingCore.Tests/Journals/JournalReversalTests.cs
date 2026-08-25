@@ -257,8 +257,8 @@ public class JournalReversalTests
         var result = JournalReversal.Reverse(
             AccountingFixture.CashSale(TransactionDate), TransactionDate.AddDays(-1), EnteredAt, Context());
 
-        Assert.Contains("取り消せない", Message(result, JournalViolationCodes.AmendmentTargetNotPosted), StringComparison.Ordinal);
-        Assert.Contains("取り消せない", Message(result, JournalViolationCodes.AmendmentTargetUnidentified), StringComparison.Ordinal);
+        Assert.Contains("取り消せません", Message(result, JournalViolationCodes.AmendmentTargetNotPosted), StringComparison.Ordinal);
+        Assert.Contains("取り消せません", Message(result, JournalViolationCodes.AmendmentTargetUnidentified), StringComparison.Ordinal);
         Assert.StartsWith("取消の計上日", Message(result, JournalViolationCodes.AmendmentBeforeOriginal), StringComparison.Ordinal);
     }
 

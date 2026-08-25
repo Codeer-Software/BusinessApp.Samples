@@ -119,6 +119,108 @@ public class JournalAmendmentServiceTests
         Assert.Equal(0L, server.CountAmendments(original, "reversal", status: "draft"));
     }
 
+    // --- できることを調べる（画面のボタンの出し分け）---
+
+    [Fact]
+    public async Task 計上済みの通常の伝票は取消も訂正もできる()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        var available = await server.AmendmentService.DescribeAsync(original);
+
+        Assert.True(available.CanReverse);
+        Assert.True(available.CanCorrect);
+        Assert.Equal(string.Empty, available.Reason);
+    }
+
+    [Fact]
+    public async Task 取消の伝票は取消も訂正もできず_理由が返る()
+    {
+        // **押しても失敗するボタンを出さないための API である**（2026-08-25 の指摘）。
+        using var server = new AccountingServer();
+        var reversalId = await server.AmendAsync(s => s.ReverseAsync(Original(server)));
+
+        var available = await server.AmendmentService.DescribeAsync(reversalId);
+
+        Assert.False(available.CanReverse);
+        Assert.False(available.CanCorrect);
+        Assert.Contains("取消", available.Reason, StringComparison.Ordinal);
+
+        // **内部表現を出さない**（CLAUDE.md §2-7）。
+        Assert.DoesNotContain("Reversal", available.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task 取り消し済みの伝票は取消も訂正もできない()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        await server.AmendAsync(s => s.ReverseAsync(original));
+
+        var available = await server.AmendmentService.DescribeAsync(original);
+
+        Assert.False(available.CanReverse);
+        Assert.False(available.CanCorrect);
+        Assert.Contains("既に取り消されています", available.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task 訂正した伝票そのものは_また訂正できる()
+    {
+        // 直した内容がまた誤っていたときに詰まないこと（ADR-0015）。
+        // **訂正された「元の伝票」ではなく、訂正の伝票のほうが次の入口になる。**
+        using var server = new AccountingServer();
+        var original = Original(server);
+        var started = await server.AmendAsync(s => s.CorrectAsync(original));
+        await PostAsync(server, started.CorrectionId);
+
+        Assert.False((await server.AmendmentService.DescribeAsync(original)).CanCorrect);
+
+        var available = await server.AmendmentService.DescribeAsync(started.CorrectionId);
+        Assert.True(available.CanReverse);
+        Assert.True(available.CanCorrect);
+    }
+
+    [Fact]
+    public async Task 下書きは取消も訂正もできない()
+    {
+        using var server = new AccountingServer();
+
+        var available = await server.AmendmentService.DescribeAsync(server.InsertDraft());
+
+        Assert.False(available.CanReverse);
+        Assert.False(available.CanCorrect);
+    }
+
+    [Fact]
+    public async Task 存在しない伝票は取消も訂正もできない()
+    {
+        using var server = new AccountingServer();
+
+        var available = await server.AmendmentService.DescribeAsync(new JournalEntryId(999));
+
+        Assert.False(available.CanReverse);
+        Assert.False(available.CanCorrect);
+        Assert.Contains("見つかりません", available.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task 今日に対応する会計期間がなければ何もできない()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        server.Execute(
+            "delete from accounting_periods "
+            + "where date(start_date) <= '2026-08-24' and date(end_date) >= '2026-08-24'");
+
+        var available = await server.AmendmentService.DescribeAsync(original);
+
+        Assert.False(available.CanReverse);
+        Assert.False(available.CanCorrect);
+        Assert.Contains("会計期間がありません", available.Reason, StringComparison.Ordinal);
+    }
+
     // --- 訂正する ---
 
     [Fact]

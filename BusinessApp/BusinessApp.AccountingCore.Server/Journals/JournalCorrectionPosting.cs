@@ -30,7 +30,7 @@ public sealed class JournalCorrectionPosting(JournalEntryStore entryStore)
         {
             throw new JournalPostingRejectedException(
             [
-                new Violation(JournalViolationCodes.AlreadyPosted, "計上済みの仕訳は、もう一度計上できない。"),
+                new Violation(JournalViolationCodes.AlreadyPosted, "計上済みの伝票は、もう一度計上できません。"),
             ]);
         }
 
@@ -38,7 +38,7 @@ public sealed class JournalCorrectionPosting(JournalEntryStore entryStore)
         {
             throw new JournalPostingRejectedException(
             [
-                new Violation(JournalViolationCodes.OriginalEntryMissing, "訂正には、訂正する原仕訳が要る。"),
+                new Violation(JournalViolationCodes.OriginalEntryMissing, "訂正には、訂正する元の伝票の指定が必要です。"),
             ]);
         }
 

@@ -2182,5 +2182,5 @@
   },
   "CanBulkDataUpdate": false,
   "CanBulkDataDownload": false,
-  "PageTitle": "仕訳伝票"
+  "PageTitle": "振替伝票"
 }

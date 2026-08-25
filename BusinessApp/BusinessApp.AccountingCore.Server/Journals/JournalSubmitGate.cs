@@ -116,7 +116,8 @@ public sealed class JournalSubmitGate(
                 [
                     new Violation(
                         JournalViolationCodes.EntryTypeImmutable,
-                        $"仕訳の種別は変更できない（「{current}」のまま）。種別を変えるなら下書きを作り直す。"),
+                        $"伝票の種別は変更できません（「{current.DisplayName()}」のままです）。"
+                        + "種別を変えるときは、下書きを作り直してください。"),
                 ]);
             }
         }
@@ -194,7 +195,7 @@ public sealed class JournalSubmitGate(
             [
                 new Violation(
                     JournalViolationCodes.EntryTypeNotSupported,
-                    $"種別「{draft.EntryType}」の仕訳はまだ計上できない。"),
+                    $"種別が「{draft.EntryType.DisplayName()}」の伝票は、まだ計上できません。"),
             ]),
         };
 

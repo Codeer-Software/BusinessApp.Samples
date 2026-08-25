@@ -38,6 +38,51 @@ public sealed class JournalAmendmentService(
     }
 
     /// <summary>
+    /// この伝票を取り消せるか・訂正できるかを調べる。<b>何も書かない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>画面がボタンを出すかどうかを決めるために使う。
+    /// <b>できない操作のボタンを出さない</b>ためであって、守りではない
+    /// （守りは <see cref="ReverseAsync"/> / <see cref="CorrectAsync"/> が同じ規則で行う）。</para>
+    /// <para><b>可否の判断を画面に写さないための API である。</b> 種別・取消済みかどうか・
+    /// 期間が開いているかを画面が自前で見ると、規則が 2 か所に分かれて片方だけ古くなる（ADR-0008）。</para>
+    /// </remarks>
+    public async Task<AmendmentAvailability> DescribeAsync(JournalEntryId originalId)
+    {
+        var original = await entryStore.FindAsync(originalId);
+        if (original is null)
+        {
+            return new AmendmentAvailability(false, false, "対象の伝票が見つかりません。");
+        }
+
+        var context = await masterLoader.LoadAsync();
+        var today = DateOnly.FromDateTime(AccountingTimeZone.ToWallClock(timeProvider.GetUtcNow()));
+
+        if (context.Calendar.ResolvePeriod(today) is not { } period)
+        {
+            return new AmendmentAvailability(
+                false, false, $"今日（{today:yyyy-MM-dd}）に対応する会計期間がありません。");
+        }
+
+        var reversedOn = await entryStore.FindReversedOnAsync(original.Id!.Value);
+        var reversal = JournalReversal.Reverse(
+            original, today, timeProvider.GetUtcNow(),
+            new ReversalContext(reversedOn is not null, period.FiscalYearId));
+
+        // **訂正は「取消 ＋ 再計上」なので、取り消せる伝票と訂正できる伝票は今のところ同じである。**
+        // 「既に訂正されている」を別に見る必要は無い——訂正があるなら必ず取消もあるので、
+        // 取消の判定（既に取り消されている）で先に落ちる。
+        // 2 つの値に分けてあるのは、片方だけできる状態が将来生まれうるからである。
+        return new AmendmentAvailability(reversal.Created, reversal.Created, Describe(reversal));
+    }
+
+    /// <summary>できない理由。<b>できるときは空</b>にして、画面が出し分けなくてよいようにする。</summary>
+    private static string Describe(ReversalResult reversal)
+        => string.Join(
+            string.Empty,
+            reversal.Violations.Where(v => v.Severity == ViolationSeverity.Error).Select(v => v.Message));
+
+    /// <summary>
     /// 原仕訳を取り消す。反対仕訳を作って<b>計上まで進める</b>。
     /// </summary>
     /// <returns>計上した反対仕訳の識別子。</returns>
@@ -88,7 +133,7 @@ public sealed class JournalAmendmentService(
             [
                 new Violation(
                     JournalViolationCodes.AmendmentTargetNotFound,
-                    $"仕訳 {originalId.Value} が見つからない。"),
+                    "対象の伝票が見つかりません。"),
             ]);
 
         var now = timeProvider.GetUtcNow();
@@ -111,7 +156,7 @@ public sealed class JournalAmendmentService(
             [
                 new Violation(
                     JournalViolationCodes.PeriodNotFound,
-                    $"今日（{today:yyyy-MM-dd}）に対応する会計期間がない。"),
+                    $"今日（{today:yyyy-MM-dd}）に対応する会計期間がありません。"),
             ]);
         }
 
@@ -129,6 +174,14 @@ public sealed class JournalAmendmentService(
         return id;
     }
 }
+
+/// <summary>
+/// この伝票にできること。<b>画面のボタンの出し分けに使う。</b>
+/// </summary>
+/// <param name="CanReverse">取り消せるか。</param>
+/// <param name="CanCorrect">訂正できるか。</param>
+/// <param name="Reason">できない理由。できるときは空文字。</param>
+public readonly record struct AmendmentAvailability(bool CanReverse, bool CanCorrect, string Reason);
 
 /// <summary>訂正を始めた結果。画面は再計上の下書きを開く。</summary>
 /// <param name="ReversalId">計上した取消の識別子。</param>

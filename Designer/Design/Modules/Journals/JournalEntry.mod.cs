@@ -37,13 +37,39 @@ void ApplyPostedLock()
 
     // 訂正・取消は「計上済みの伝票に対する操作」なので、下書きでは出さない。
     // 下書きは自由に直せるし、いらなければ削除すればよい。
-    CorrectButton.IsVisible = posted;
-    ReverseButton.IsVisible = posted;
+    CorrectButton.IsVisible = false;
+    ReverseButton.IsVisible = false;
 
     // **押せる状態に戻す。** 計上済みの伝票は書き込み条件（Status = draft）から外れており、
     // そのままだとボタンが残ったまま無反応になる（qa/01 D-01・F-14）。
     CorrectButton.IsViewOnly = false;
     ReverseButton.IsViewOnly = false;
+
+    if (posted) ApplyAmendmentAvailability();
+}
+
+// できない操作のボタンは出さない。
+//
+// **可否はサーバに聞く。** 種別・取消済みかどうか・会計期間が開いているかを画面で判定すると、
+// 同じ規則がサーバと画面の 2 か所に分かれ、片方だけ古くなる（ADR-0008）。
+// 出さない理由も一緒に返るので、ここでは表示するだけでよい。
+void ApplyAmendmentAvailability()
+{
+    var body = new JsonObject();
+    body.OriginalEntryId = $"{Id.Value}";
+
+    var result = WebApiService.Post("/api/journals/availability", body);
+    if (result.StatusCode != 200) return;   // 分からないときは出さない（安全側）
+
+    CorrectButton.IsVisible = $"{result.JsonObject.canCorrect}".ToLower() == "true";
+    ReverseButton.IsVisible = $"{result.JsonObject.canReverse}".ToLower() == "true";
+
+    // 両方できないなら、その理由を出す。押せないボタンを探させない。
+    if (!CorrectButton.IsVisible && !ReverseButton.IsVisible)
+    {
+        var reason = $"{result.JsonObject.message}";
+        if (!string.IsNullOrEmpty(reason)) TotalsLabel.Text = $"{TotalsLabel.Text}　（{reason}）";
+    }
 }
 
 // 計上日を変えたら会計年度を付け直す。
@@ -211,7 +237,7 @@ void Amend(string operation, string noun, string message)
     // そのとき本文は読めないので定型の文言にする。
     if (result.StatusCode != 200)
     {
-        Toaster.Error($"{noun}できませんでした（サーバ応答 {result.StatusCode}）。");
+        Toaster.Error($"{noun}できませんでした。しばらくしてからもう一度お試しください（サーバ応答 {result.StatusCode}）。");
         return;
     }
 

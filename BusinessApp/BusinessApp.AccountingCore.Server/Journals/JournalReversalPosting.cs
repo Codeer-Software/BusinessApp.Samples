@@ -29,7 +29,7 @@ public sealed class JournalReversalPosting(JournalEntryStore entryStore)
         {
             throw new JournalPostingRejectedException(
             [
-                new Violation(JournalViolationCodes.AlreadyPosted, "計上済みの仕訳は、もう一度計上できない。"),
+                new Violation(JournalViolationCodes.AlreadyPosted, "計上済みの伝票は、もう一度計上できません。"),
             ]);
         }
 
@@ -42,7 +42,7 @@ public sealed class JournalReversalPosting(JournalEntryStore entryStore)
         {
             throw new JournalPostingRejectedException(
             [
-                new Violation(JournalViolationCodes.OriginalEntryMissing, "取消には、取り消す原仕訳が要る。"),
+                new Violation(JournalViolationCodes.OriginalEntryMissing, "取消には、取り消す元の伝票の指定が必要です。"),
             ]);
         }
 
@@ -54,7 +54,7 @@ public sealed class JournalReversalPosting(JournalEntryStore entryStore)
             [
                 new Violation(
                     JournalViolationCodes.PeriodNotFound,
-                    $"計上日 {draft.PostingDate:yyyy-MM-dd} に対応する会計期間がない。"),
+                    $"計上日（{draft.PostingDate:yyyy-MM-dd}）に対応する会計期間がありません。"),
             ]);
         }
 

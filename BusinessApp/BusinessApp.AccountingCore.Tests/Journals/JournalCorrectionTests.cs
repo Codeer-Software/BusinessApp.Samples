@@ -372,8 +372,8 @@ public class JournalCorrectionTests
             AccountingFixture.CashSale(TransactionDate),
             PostingContext());
 
-        Assert.Contains("訂正できない", Message(violations, JournalViolationCodes.AmendmentTargetNotPosted), StringComparison.Ordinal);
-        Assert.Contains("訂正できない", Message(violations, JournalViolationCodes.AmendmentTargetUnidentified), StringComparison.Ordinal);
+        Assert.Contains("訂正できません", Message(violations, JournalViolationCodes.AmendmentTargetNotPosted), StringComparison.Ordinal);
+        Assert.Contains("訂正できません", Message(violations, JournalViolationCodes.AmendmentTargetUnidentified), StringComparison.Ordinal);
         Assert.StartsWith("訂正の計上日", Message(violations, JournalViolationCodes.AmendmentBeforeOriginal), StringComparison.Ordinal);
     }
 

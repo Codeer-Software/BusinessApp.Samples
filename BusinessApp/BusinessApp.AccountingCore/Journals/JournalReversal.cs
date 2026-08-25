@@ -74,7 +74,7 @@ public static class JournalReversal
         {
             yield return new Violation(
                 JournalViolationCodes.AlreadyReversed,
-                "この仕訳は既に取り消されている。");
+                "この伝票は既に取り消されています。");
         }
 
         // 原仕訳の側に求めることは訂正と同じなので、規則は 1 か所にまとめてある。
