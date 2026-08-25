@@ -5,6 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
@@ -32,6 +35,11 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <!-- 記法規約の検査（ADR-0021 §4-2）。禁止形と .editorconfig の実効 severity を
+         構文木と AnalyzerConfigSet で見る。**テストプロジェクトにだけ置く。**
+         TestSupport に置くと、それを参照する SchemaVerifyCli（migrate.ps1 -Verify が呼ぶ
+         実行ファイル）の出力に 9 MB の DLL が載る。版はリポジトリ内の他プロジェクトに揃えてある。 -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />

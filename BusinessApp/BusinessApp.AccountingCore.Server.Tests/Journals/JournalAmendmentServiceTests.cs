@@ -112,9 +112,10 @@ public class JournalAmendmentServiceTests
         var original = Original(server);
 
         // 「今日」（2026-08-24）を含む会計期間を消す。年度末の翌日に取り消そうとした状況と同じ。
-        server.Execute(
-            "delete from accounting_periods "
-            + "where date(start_date) <= '2026-08-24' and date(end_date) >= '2026-08-24'");
+        server.Execute("""
+            delete from accounting_periods
+            where date(start_date) <= '2026-08-24' and date(end_date) >= '2026-08-24'
+            """);
 
         var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
             () => server.AmendAsync(s => s.ReverseAsync(original)));
@@ -214,9 +215,10 @@ public class JournalAmendmentServiceTests
     {
         using var server = new AccountingServer();
         var original = Original(server);
-        server.Execute(
-            "delete from accounting_periods "
-            + "where date(start_date) <= '2026-08-24' and date(end_date) >= '2026-08-24'");
+        server.Execute("""
+            delete from accounting_periods
+            where date(start_date) <= '2026-08-24' and date(end_date) >= '2026-08-24'
+            """);
 
         var available = await server.AmendmentService.DescribeAsync(original);
 

@@ -34,7 +34,7 @@ public sealed class JournalCorrectionPosting(JournalEntryStore entryStore)
             ]);
         }
 
-        if (draft.OriginalEntryId is not { } originalId)
+        if (draft.OriginalEntryId is not JournalEntryId originalId)
         {
             throw new JournalPostingRejectedException(
             [

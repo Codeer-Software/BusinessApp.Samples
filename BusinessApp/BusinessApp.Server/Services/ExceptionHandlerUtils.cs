@@ -31,7 +31,10 @@ namespace BusinessApp.Server.Services
                 list.Add(ex.Message);
                 ex = ex.InnerException;
             }
-            return string.Join(Environment.NewLine, list);
+            //利用者に見せる文言なので改行は LF に揃える (ADR-0021 §2)。
+            //例外の中身は raw string literal の改行 (LF) で作られており、
+            //ここだけ CRLF で繋ぐと 1 つの文言の中で改行コードが割れる。
+            return string.Join("\n", list);
         }
     }
 }

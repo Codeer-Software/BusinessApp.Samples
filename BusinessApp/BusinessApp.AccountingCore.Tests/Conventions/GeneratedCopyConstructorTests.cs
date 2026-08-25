@@ -39,7 +39,8 @@ public class GeneratedCopyConstructorTests
         _ = AccountingFixture.Calendar().FindFiscalYear(AccountingFixture.FiscalYear)! with { };
         _ = AccountingFixture.Departments[0] with { };
         _ = AccountingFixture.SubAccounts[0] with { };
-        _ = new TransitionalDeductionRate(
-            new EffectivePeriod(new DateOnly(2026, 10, 1), null), 0.5m, new RuleVersion("v1")) with { };
+        var rate = new TransitionalDeductionRate(
+            new EffectivePeriod(new DateOnly(2026, 10, 1), null), 0.5m, new RuleVersion("v1"));
+        _ = rate with { };
     }
 }

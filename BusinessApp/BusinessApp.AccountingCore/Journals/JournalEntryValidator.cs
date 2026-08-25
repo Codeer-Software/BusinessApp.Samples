@@ -201,7 +201,7 @@ public static class JournalEntryValidator
     private static void ValidateDepartment(
         JournalLine line, JournalEntry entry, DepartmentCatalog departments, List<Violation> violations)
     {
-        if (line.DepartmentId is not { } departmentId)
+        if (line.DepartmentId is not DepartmentId departmentId)
         {
             return;
         }
@@ -230,7 +230,7 @@ public static class JournalEntryValidator
         JournalLine line, JournalEntry entry, AccountDefinition account, SubAccountCatalog subAccounts,
         List<Violation> violations)
     {
-        if (line.SubAccountId is not { } subAccountId)
+        if (line.SubAccountId is not SubAccountId subAccountId)
         {
             if (account.RequiresSubAccount)
             {

@@ -32,7 +32,7 @@ public sealed class JournalPoster(
     {
         ArgumentNullException.ThrowIfNull(draft);
 
-        if (draft.Id is not { } id)
+        if (draft.Id is not JournalEntryId id)
         {
             throw new InvalidOperationException("保存されていない仕訳は計上できない。");
         }

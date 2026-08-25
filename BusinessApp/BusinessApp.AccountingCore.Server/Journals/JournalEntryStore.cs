@@ -43,10 +43,12 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
             """,
             id.Value);
 
-        if (rows.FirstOrDefault() is not { } row)
+        if (rows.Count == 0)
         {
             return null;
         }
+
+        var row = rows[0];
 
         return new JournalEntry
         {
@@ -57,10 +59,10 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
             PostingDate = DbValue.ToDate(row["posting_date"]),
             Status = DbValue.ToEnum<EntryStatus>(row["status"]),
             EntryType = DbValue.ToEnum<EntryType>(row["entry_type"]),
-            OriginalEntryId = DbValue.ToNullableLong(row["original_entry_id"]) is { } original
+            OriginalEntryId = DbValue.ToNullableLong(row["original_entry_id"]) is long original
                 ? new JournalEntryId(original) : null,
             Description = DbValue.ToNullableText(row["description"]),
-            PartnerId = DbValue.ToNullableLong(row["partner_id"]) is { } partner
+            PartnerId = DbValue.ToNullableLong(row["partner_id"]) is long partner
                 ? new PartnerId(partner) : null,
             SourceComponent = DbValue.ToNullableText(row["source_component"]),
             SourceDocumentId = DbValue.ToNullableText(row["source_document_id"]),
@@ -89,11 +91,11 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
             LineNo = DbValue.ToInt(row["line_no"]),
             DebitCredit = DbValue.ToEnum<DebitCredit>(row["debit_credit"]),
             AccountId = new AccountId(DbValue.ToLong(row["account_id"])),
-            SubAccountId = DbValue.ToNullableLong(row["sub_account_id"]) is { } sub
+            SubAccountId = DbValue.ToNullableLong(row["sub_account_id"]) is long sub
                 ? new SubAccountId(sub) : null,
-            DepartmentId = DbValue.ToNullableLong(row["department_id"]) is { } department
+            DepartmentId = DbValue.ToNullableLong(row["department_id"]) is long department
                 ? new DepartmentId(department) : null,
-            PartnerId = DbValue.ToNullableLong(row["partner_id"]) is { } partner
+            PartnerId = DbValue.ToNullableLong(row["partner_id"]) is long partner
                 ? new PartnerId(partner) : null,
             PartnerNameSnapshot = DbValue.ToNullableText(row["partner_name_snapshot"]),
             // **decimal のまま Yen に渡す。** long で受けると小数が黙って丸まり、
@@ -102,7 +104,7 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
             TaxCategoryId = new TaxCategoryId(DbValue.ToLong(row["tax_category_id"])),
             TaxTreatment = DbValue.ToNullableEnum<TaxTreatment>(row["tax_treatment"]),
             TaxPoint = DbValue.ToNullableDate(row["tax_point"]),
-            AppliedRuleVersion = DbValue.ToNullableText(row["applied_rule_version"]) is { } version
+            AppliedRuleVersion = DbValue.ToNullableText(row["applied_rule_version"]) is string version
                 ? new RuleVersion(version) : null,
             IsTaxLine = DbValue.ToBool(row["is_tax_line"]),
             ParentLineNo = DbValue.ToNullableInt(row["parent_line_no"]),
@@ -300,8 +302,8 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
                     // OverflowException を投げる（C# の言語仕様）。付けても何も変わらないので置かない。
                     { "@p9", (long)line.Amount.Value },
                     { "@p10", line.TaxCategoryId.Value },
-                    { "@p11", line.TaxTreatment is { } treatment ? DbValue.ToSnakeCase(treatment) : null },
-                    { "@p12", line.TaxPoint is { } point ? DbValue.ToDbDate(point) : null },
+                    { "@p11", line.TaxTreatment is TaxTreatment treatment ? DbValue.ToSnakeCase(treatment) : null },
+                    { "@p12", line.TaxPoint is DateOnly point ? DbValue.ToDbDate(point) : null },
                     { "@p13", line.AppliedRuleVersion?.Value },
                     { "@p14", line.IsTaxLine ? 1 : 0 },
                     { "@p15", line.ParentLineNo },

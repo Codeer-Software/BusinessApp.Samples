@@ -8,21 +8,22 @@ using BusinessApp.AccountingCore.Shared;
 /// <remarks>
 /// 違反を<b>全件</b>持って投げる。1 件だけ見せると、利用者は直しては弾かれを繰り返す。
 /// </remarks>
-public sealed class JournalPostingRejectedException : Exception
+public sealed class JournalPostingRejectedException(IReadOnlyList<Violation> violations)
+    : Exception(BuildMessage(violations))
 {
-    public JournalPostingRejectedException(IReadOnlyList<Violation> violations)
-        : base(BuildMessage(violations))
-        => Violations = violations;
-
-    public IReadOnlyList<Violation> Violations { get; }
+    public IReadOnlyList<Violation> Violations { get; } = violations;
 
     private static string BuildMessage(IReadOnlyList<Violation> violations)
     {
-        var errors = violations.Where(v => v.Severity == ViolationSeverity.Error).ToList();
-        return "計上できません。" + Environment.NewLine
-            + string.Join(Environment.NewLine, errors.Select(v => "・" + Describe(v)));
+        var errorMessages = violations
+            .Where(v => v.Severity == ViolationSeverity.Error)
+            .Select(v => $"・{Describe(v)}");
+        return $"""
+            計上できません。
+            {string.Join("\n", errorMessages)}
+            """;
     }
 
     private static string Describe(Violation violation)
-        => violation.LineNo is { } lineNo ? $"{lineNo} 行目: {violation.Message}" : violation.Message;
+        => violation.LineNo is int lineNo ? $"{lineNo} 行目: {violation.Message}" : violation.Message;
 }

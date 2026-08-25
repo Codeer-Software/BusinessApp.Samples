@@ -275,8 +275,8 @@ public class JournalBookQueryTests
 
         foreach (var name in Parameters)
         {
-            var given = parameters.FirstOrDefault(p => p.Name == name);
-            command.Parameters.AddWithValue(name, given.Name is null ? DBNull.Value : given.Value);
+            var (givenName, givenValue) = parameters.FirstOrDefault(p => p.Name == name);
+            command.Parameters.AddWithValue(name, givenName is null ? DBNull.Value : givenValue);
         }
 
         using var reader = command.ExecuteReader();

@@ -12,14 +12,12 @@ namespace BusinessApp.AccountingCore.Shared;
 public sealed class EffectiveDatedRuleSet<TRule>
     where TRule : IEffectiveDatedRule
 {
-    private readonly IReadOnlyList<TRule> _rules;
-
     public EffectiveDatedRuleSet(IEnumerable<TRule> rules)
     {
         ArgumentNullException.ThrowIfNull(rules);
-        _rules = rules.OrderBy(r => r.Period.From).ToList();
+        Rules = rules.OrderBy(r => r.Period.From).ToList();
 
-        foreach (var (earlier, later) in _rules.Zip(_rules.Skip(1)))
+        foreach (var (earlier, later) in Rules.Zip(Rules.Skip(1)))
         {
             if (earlier.Period.Overlaps(later.Period))
             {
@@ -31,11 +29,11 @@ public sealed class EffectiveDatedRuleSet<TRule>
     }
 
     /// <summary>有効期間の早い順に並んだルール。</summary>
-    public IReadOnlyList<TRule> Rules => _rules;
+    public IReadOnlyList<TRule> Rules { get; }
 
     /// <summary>指定日に有効なルールを返す。どの期間にも当たらなければ null。</summary>
-    public TRule? ResolveAt(DateOnly date) => _rules.FirstOrDefault(r => r.Period.Includes(date));
+    public TRule? ResolveAt(DateOnly date) => Rules.FirstOrDefault(r => r.Period.Includes(date));
 
     /// <summary>版でルールを引く。過去の仕訳を再現するときは日付ではなく保存された版で引く（I-16）。</summary>
-    public TRule? ResolveByVersion(RuleVersion version) => _rules.FirstOrDefault(r => r.Version == version);
+    public TRule? ResolveByVersion(RuleVersion version) => Rules.FirstOrDefault(r => r.Version == version);
 }

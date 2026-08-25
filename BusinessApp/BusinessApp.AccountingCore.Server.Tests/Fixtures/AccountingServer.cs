@@ -160,7 +160,7 @@ internal sealed class AccountingServer : IDisposable
     {
         // 訂正・取消は原仕訳が要る（I-06）。DDL の CHECK は INSERT の時点で効くので、
         // 後から UPDATE で足すことはできない。
-        var original = originalEntryId is { } value ? Text(value.Value) : "null";
+        var original = originalEntryId is JournalEntryId value ? Text(value.Value) : "null";
         var year = (fiscalYearId ?? FiscalYear).Value;
 
         Execute($"""
@@ -176,7 +176,7 @@ internal sealed class AccountingServer : IDisposable
 
     private JournalEntryId InsertEntry(string status, DateTime? enteredAt)
     {
-        var entered = enteredAt is { } value
+        var entered = enteredAt is DateTime value
             ? $"'{value.ToString("yyyy-MM-dd HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture)}'"
             : "null";
 
@@ -266,7 +266,7 @@ internal sealed class AccountingServer : IDisposable
             Execute($"update journal_entries set description = '{description}' where id = {id.Value}");
         }
 
-        if (partnerId is { } partner)
+        if (partnerId is long partner)
         {
             Execute($"update journal_entries set partner_id = {partner} where id = {id.Value}");
         }
@@ -315,9 +315,10 @@ internal sealed class AccountingServer : IDisposable
 
     /// <summary>この原仕訳を指す伝票の件数（種別・状態ごと）。</summary>
     public long CountAmendments(JournalEntryId originalId, string entryType, string status = "posted")
-        => Scalar<long>(
-            "select count(*) from journal_entries where original_entry_id = "
-            + $"{originalId.Value} and entry_type = '{entryType}' and status = '{status}'");
+        => Scalar<long>($"""
+            select count(*) from journal_entries
+            where original_entry_id = {originalId.Value} and entry_type = '{entryType}' and status = '{status}'
+            """);
 
     /// <summary>取引先を 1 件足す（初期データには 0 件しか無い）。</summary>
     public long InsertPartner(string code = "P001", string name = "株式会社れい")

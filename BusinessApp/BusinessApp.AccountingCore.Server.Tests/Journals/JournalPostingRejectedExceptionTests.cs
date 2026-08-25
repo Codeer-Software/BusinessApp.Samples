@@ -20,9 +20,16 @@ public class JournalPostingRejectedExceptionTests
             new Violation("I-13", "部門が要る。", LineNo: 2),
         ]);
 
-        Assert.Contains("計上できません。", error.Message, StringComparison.Ordinal);
-        Assert.Contains("・借方合計と貸方合計が一致していない。", error.Message, StringComparison.Ordinal);
-        Assert.Contains("・2 行目: 部門が要る。", error.Message, StringComparison.Ordinal);
+        // **完全一致で固定する。** 部分一致だと、見出しと各行の「間」＝改行そのものを
+        // 一度も表明していないことになり、raw string literal の閉じデリミタのインデントを
+        // ずらしても、行を束ねる区切りを消しても緑のままになる（qa/02 R8-09）。
+        Assert.Equal(
+            """
+            計上できません。
+            ・借方合計と貸方合計が一致していない。
+            ・2 行目: 部門が要る。
+            """,
+            error.Message);
     }
 
     [Fact]
