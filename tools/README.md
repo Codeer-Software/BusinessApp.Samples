@@ -20,6 +20,7 @@ related: [../docs/README.md]
 | スクリプト | 用途 |
 |---|---|
 | [`clb/deploy.ps1`](clb/deploy.ps1) | `Designer/Design` を zip 化して `LocalData/designs/App.zip` に配置する（デザイナ GUI「送信」の代替。FileWatcher が hot-reload） |
+| [`claude/guard_delete.py`](claude/guard_delete.py) | 削除の当たり先を絞る PreToolUse フック。**Git 追跡外（＝戻せないもの）は拒み**、スクラッチパッド配下だけの削除は通す。`--selftest` で仕様表を検査する（コミット前フックが毎回流す） |
 | [`server/wait-server.ps1`](server/wait-server.ps1) | 開発サーバ（`http://localhost:5085`）の起動を待つ |
 | [`clb/sql.ps1`](clb/sql.ps1) | `sql` CLI のラッパ。結果 JSON を標準出力に返し、**一時ファイルを作らない** |
 | [`clb/migrate.ps1`](clb/migrate.ps1) | **DB マイグレーションのランナー**（ADR-0020）。`-Adopt` / `-Apply` / `-Status` / `-Verify`。書き方は [`Designer/migrations/README`](../Designer/migrations/README.md) |

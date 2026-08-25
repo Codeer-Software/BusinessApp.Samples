@@ -77,7 +77,7 @@
             "Read(**/*.snk)"
         ]
     },
-    "_README_hooks": "PreToolUse フックでコミット前フックの迂回（--no-verify / git commit -n / -c core.hooksPath）を機械的に拒む（開発者の指示。2026-08-25）。判定は tools/claude/block_no_verify.py。",
+    "_README_hooks": "PreToolUse フックで 2 つを機械的に守る。① コミット前フックの迂回（--no-verify / git commit -n / -c core.hooksPath）を拒む（開発者の指示。2026-08-25。判定は tools/claude/block_no_verify.py）。② 削除の当たり先を絞る（開発者の指示。2026-08-26。Git 追跡外＝戻せないものは拒み、スクラッチパッド配下だけの削除は通す。判定は tools/claude/guard_delete.py）。**許可リストではなくフックにしてある**——Bash の権限はコマンド文字列の前方一致なので、cd を挟む・変数展開する、といった書き方を絞れない。",
     "hooks": {
         "PreToolUse": [
             {
@@ -86,6 +86,12 @@
                     {
                         "type": "command",
                         "command": "python \"$CLAUDE_PROJECT_DIR/tools/claude/block_no_verify.py\"",
+                        "shell": "bash",
+                        "timeout": 15
+                    },
+                    {
+                        "type": "command",
+                        "command": "python \"$CLAUDE_PROJECT_DIR/tools/claude/guard_delete.py\"",
                         "shell": "bash",
                         "timeout": 15
                     }
