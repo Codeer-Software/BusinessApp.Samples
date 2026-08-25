@@ -37,9 +37,7 @@ public sealed class JournalAmendmentService(
         return new JournalAmendmentService(
             new AccountingMasterLoader(dbAccessor, dataSourceName),
             entryStore,
-            new JournalPoster(
-                entryStore, new EntryNumberSequenceStore(dbAccessor, dataSourceName),
-                timeProvider, authenticationContext),
+            JournalPoster.Create(dbAccessor, dataSourceName, entryStore, timeProvider, authenticationContext),
             timeProvider);
     }
 

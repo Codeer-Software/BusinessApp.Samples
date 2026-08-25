@@ -129,4 +129,15 @@ public static class JournalViolationCodes
     /// <b>種別ごとの関門が丸ごと外れる</b>ので、下書きのうちでも変えさせない。
     /// </summary>
     public const string EntryTypeImmutable = "E-ENTRY-TYPE-IMMUTABLE";
+
+    /// <summary>
+    /// 取引先の登録が同じ日から 2 件あり、明細へ写す登録番号を決められない。
+    /// </summary>
+    /// <remarks>
+    /// 入力の時点で止めるのが本筋（<c>PartnerRegistrationSubmitGate</c>）だが、
+    /// 取込（フェーズ 6）など別の経路で入った場合の最後の砦としてここでも止める。
+    /// <b>黙ってどちらかを選ばない</b>——計上済みは不変（ADR-0004）なので、
+    /// 誤った番号は永久に残る。
+    /// </remarks>
+    public const string AmbiguousRegistration = "E-REGISTRATION-AMBIGUOUS";
 }

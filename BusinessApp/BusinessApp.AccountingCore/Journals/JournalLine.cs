@@ -31,6 +31,16 @@ public sealed record JournalLine
     /// </summary>
     public string? PartnerNameSnapshot { get; init; }
 
+    /// <summary>
+    /// 計上時点の登録番号の写し（適格請求書発行事業者。docs/07 §4）。
+    /// </summary>
+    /// <remarks>
+    /// <b>帳簿の法定記載事項ではない</b>（消法 30 ⑧に相手方の登録番号は含まれない）。
+    /// 持つのは判定の根拠の記録のためで、帳簿には印字しない。
+    /// <b>この行の「取引先」の番号であって、自社の番号ではない。</b>
+    /// </remarks>
+    public string? RegistrationNoSnapshot { get; init; }
+
     /// <summary>金額（税抜・正）。</summary>
     public required Yen Amount { get; init; }
 

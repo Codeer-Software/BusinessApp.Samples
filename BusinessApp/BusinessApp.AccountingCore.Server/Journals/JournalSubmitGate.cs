@@ -2,6 +2,7 @@ namespace BusinessApp.AccountingCore.Server.Journals;
 
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Shared;
+using BusinessApp.AccountingCore.Server.Partners;
 using BusinessApp.AccountingCore.Server.Shared;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
@@ -58,9 +59,7 @@ public sealed class JournalSubmitGate(
             entryStore,
             new JournalReversalPosting(entryStore),
             new JournalCorrectionPosting(entryStore),
-            new JournalPoster(
-                entryStore, new EntryNumberSequenceStore(dbAccessor, dataSourceName),
-                timeProvider, authenticationContext),
+            JournalPoster.Create(dbAccessor, dataSourceName, entryStore, timeProvider, authenticationContext),
             timeProvider);
     }
 

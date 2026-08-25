@@ -1,5 +1,7 @@
 namespace BusinessApp.TestSupport;
 
+using System.Globalization;
+
 using Microsoft.Data.Sqlite;
 
 /// <summary>
@@ -117,11 +119,30 @@ public static class TestDatabase
         command.ExecuteNonQuery();
     }
 
+    /// <summary>1 つの値を読む。</summary>
+    /// <remarks>
+    /// <para><b>NULL を空文字に化けさせない。</b> <c>Convert.ChangeType(DBNull.Value, typeof(string))</c> は
+    /// 例外ではなく <c>""</c> を返す。そのまま返していたので、
+    /// <b>「この列は NULL のはず」と書いた表明が、実際には値が入っていても必ず通っていた</b>
+    /// （2026-08-26 実測。qa/03 L-11）。</para>
+    /// <para>NULL を表せない型（<c>long</c> など）で NULL を読んだら<b>止める</b>。
+    /// 既定値（0）を返すと、今度は「0 のはず」という表明が黙って通る。</para>
+    /// </remarks>
     public static T ScalarOf<T>(SqliteConnection connection, string sql)
     {
         using var command = connection.CreateCommand();
         command.CommandText = sql;
-        return (T)Convert.ChangeType(command.ExecuteScalar()!, typeof(T));
+        var value = command.ExecuteScalar();
+
+        if (value is null or DBNull)
+        {
+            return default(T) is null
+                ? default!
+                : throw new InvalidOperationException(
+                    $"値が NULL だが {typeof(T).Name} は NULL を表せない。{typeof(T).Name}? で受けること: {sql}");
+        }
+
+        return (T)Convert.ChangeType(value, typeof(T), CultureInfo.InvariantCulture);
     }
 
     public static IReadOnlyList<string> Query(SqliteConnection connection, string sql)
