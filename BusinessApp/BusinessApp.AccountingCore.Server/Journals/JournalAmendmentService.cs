@@ -3,6 +3,7 @@ namespace BusinessApp.AccountingCore.Server.Journals;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Server.Shared;
 using BusinessApp.AccountingCore.Shared;
+using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
 /// <summary>
@@ -27,13 +28,16 @@ public sealed class JournalAmendmentService(
 {
     /// <summary>本番もテストもここで組み立てる（<see cref="JournalSubmitGate.Create"/> と同じ理由）。</summary>
     public static JournalAmendmentService Create(
-        IDbAccessor dbAccessor, string dataSourceName, TimeProvider timeProvider)
+        IDbAccessor dbAccessor, string dataSourceName, TimeProvider timeProvider,
+        IAuthenticationContext authenticationContext)
     {
         var entryStore = new JournalEntryStore(dbAccessor, dataSourceName);
         return new JournalAmendmentService(
             new AccountingMasterLoader(dbAccessor, dataSourceName),
             entryStore,
-            new JournalPoster(entryStore, new EntryNumberSequenceStore(dbAccessor, dataSourceName), timeProvider),
+            new JournalPoster(
+                entryStore, new EntryNumberSequenceStore(dbAccessor, dataSourceName),
+                timeProvider, authenticationContext),
             timeProvider);
     }
 

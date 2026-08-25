@@ -105,8 +105,9 @@ namespace BusinessApp.Server.Controllers
                 ?? throw LowCodeException.Create($"データソース {AccountingDataSourceName} が設定にない");
 
             //トランザクションの API は IDbAccessor 側にある。
+            //DataService は IAuthenticationContext を実装しており、posted_by（計上した人）の記録に使う。
             IDbAccessor accessor = _dataService.DbAccess;
-            var service = JournalAmendmentService.Create(accessor, dataSourceName, TimeProvider.System);
+            var service = JournalAmendmentService.Create(accessor, dataSourceName, TimeProvider.System, _dataService);
 
             accessor.StartTransaction();
             try

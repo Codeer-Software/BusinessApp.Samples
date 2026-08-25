@@ -17,7 +17,8 @@ public class JournalPosterTests
     public async Task 保存されていない仕訳は計上できない()
     {
         using var server = new AccountingServer();
-        var poster = new JournalPoster(server.EntryStore, server.SequenceStore, TimeProvider.System);
+        var poster = new JournalPoster(
+            server.EntryStore, server.SequenceStore, TimeProvider.System, server.Authentication);
         var draft = new JournalEntry
         {
             Id = null,

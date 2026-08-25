@@ -38,7 +38,7 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
             """
             select id, fiscal_year_id, entry_no, transaction_date, posting_date, status, entry_type,
                    original_entry_id, description, partner_id, source_component, source_document_id,
-                   idempotency_key, entered_at, posted_at
+                   idempotency_key, entered_at, posted_at, posted_by
             from journal_entries where id = @p1
             """,
             id.Value);
@@ -67,6 +67,7 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
             IdempotencyKey = DbValue.ToNullableText(row["idempotency_key"]),
             EnteredAt = DbValue.ToDateTimeOffset(row["entered_at"]),
             PostedAt = DbValue.ToNullableDateTimeOffset(row["posted_at"]),
+            PostedBy = DbValue.ToNullableLong(row["posted_by"]),
             Lines = await LoadLinesAsync(id),
         };
     }
@@ -122,13 +123,14 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
     /// <para>採番は <see cref="EntryNumber"/> で受ける。生の <c>int</c> で受けると、
     /// 会計年度と組で意味を持つ番号が境界で裸になる（ADR-0014）。</para>
     /// </remarks>
-    public async Task MarkPostedAsync(JournalEntryId id, EntryNumber entryNo, DateTimeOffset postedAt)
+    public async Task MarkPostedAsync(
+        JournalEntryId id, EntryNumber entryNo, DateTimeOffset postedAt, long? postedBy)
     {
         var affected = await dbAccessor.ExecuteAsync(
             dataSourceName,
             """
             update journal_entries
-               set status = 'posted', entry_no = @p2, posted_at = @p3
+               set status = 'posted', entry_no = @p2, posted_at = @p3, posted_by = @p4
              where id = @p1 and status = 'draft'
             """,
             new()
@@ -136,6 +138,7 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
                 { "@p1", id.Value },
                 { "@p2", entryNo.Value },
                 { "@p3", AccountingTimeZone.ToWallClock(postedAt) },
+                { "@p4", postedBy },
             });
 
         if (affected != 1)

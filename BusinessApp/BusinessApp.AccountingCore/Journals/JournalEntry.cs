@@ -55,6 +55,17 @@ public sealed record JournalEntry
     /// <summary>計上日時。システムが付ける。下書きでは null。</summary>
     public DateTimeOffset? PostedAt { get; init; }
 
+    /// <summary>
+    /// 計上した人（認証部品のユーザー識別子）。システムが付ける。下書きでは null。
+    /// 計上済みでも null がありうる（この列より前に計上された伝票）。
+    /// </summary>
+    /// <remarks>
+    /// 型付き識別子（ADR-0014）にしない。ユーザーは会計コアの実体ではなく（ADR-0019）、
+    /// 会計コアはこの値を解釈せず、外部キーも張らずに（ddl/README）書き写すだけである。
+    /// <c>creator</c> / <c>updater</c>（CLB の予約列）と同じ扱い。
+    /// </remarks>
+    public long? PostedBy { get; init; }
+
     public required IReadOnlyList<JournalLine> Lines { get; init; }
 
     /// <summary>借方合計。</summary>

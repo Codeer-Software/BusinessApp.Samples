@@ -43,6 +43,11 @@ CREATE TABLE journal_entries (
     updater                     INTEGER,
     optimistic_locking          INTEGER NOT NULL DEFAULT 0,
 
+    -- 計上した人（認証部品のユーザー識別子。creator と同じ理由で外部キーを張らない）。
+    -- 計上時にサーバが書く。下書きは NULL。この列より前に計上された伝票も NULL のまま。
+    -- 新しい列は末尾（テーブル制約の前）に置く規約（migrations/README。ADD COLUMN と同値になる位置）。
+    posted_by                   INTEGER,
+
     -- I-06 訂正・取消は原仕訳を一意に特定する情報を持つ
     CHECK (entry_type NOT IN ('correction', 'reversal') OR original_entry_id IS NOT NULL),
     -- 自分自身を原仕訳にできない（自分を取り消す伝票は意味を成さない）

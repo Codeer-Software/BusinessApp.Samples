@@ -31,7 +31,8 @@ namespace BusinessApp.Server.Services
             var dataSourceName = SystemConfig.Instance.DataSources
                 .FirstOrDefault(e => e.Name == AccountingDataSourceName)?.Name
                 ?? throw LowCodeException.Create($"データソース {AccountingDataSourceName} が設定にない");
-            _journalGate = JournalSubmitGate.Create(dbAccess, dataSourceName, TimeProvider.System);
+            //認証コンテキストは posted_by（計上した人）の記録に使う（qa/02 R2-05）。
+            _journalGate = JournalSubmitGate.Create(dbAccess, dataSourceName, TimeProvider.System, authenticationContext);
         }
 
         //トランザクション単位の入口。伝票の更新だけを見る UpdateAsync では、

@@ -49,7 +49,8 @@ public sealed class JournalSubmitGate(
     /// それぞれが手で組み立てると、本番の配線とテストの配線がずれても誰も気づけない。
     /// </summary>
     public static JournalSubmitGate Create(
-        IDbAccessor dbAccessor, string dataSourceName, TimeProvider timeProvider)
+        IDbAccessor dbAccessor, string dataSourceName, TimeProvider timeProvider,
+        IAuthenticationContext authenticationContext)
     {
         var entryStore = new JournalEntryStore(dbAccessor, dataSourceName);
         return new JournalSubmitGate(
@@ -57,7 +58,9 @@ public sealed class JournalSubmitGate(
             entryStore,
             new JournalReversalPosting(entryStore),
             new JournalCorrectionPosting(entryStore),
-            new JournalPoster(entryStore, new EntryNumberSequenceStore(dbAccessor, dataSourceName), timeProvider),
+            new JournalPoster(
+                entryStore, new EntryNumberSequenceStore(dbAccessor, dataSourceName),
+                timeProvider, authenticationContext),
             timeProvider);
     }
 
