@@ -34,6 +34,16 @@ void ApplyPostedLock()
     var posted = Status.Value == EntryStatuses.Posted;
     PostButton.IsVisible = !posted;
     SubmitButton.IsVisible = !posted;
+
+    // 訂正・取消は「計上済みの伝票に対する操作」なので、下書きでは出さない。
+    // 下書きは自由に直せるし、いらなければ削除すればよい。
+    CorrectButton.IsVisible = posted;
+    ReverseButton.IsVisible = posted;
+
+    // **押せる状態に戻す。** 計上済みの伝票は書き込み条件（Status = draft）から外れており、
+    // そのままだとボタンが残ったまま無反応になる（qa/01 D-01・F-14）。
+    CorrectButton.IsViewOnly = false;
+    ReverseButton.IsViewOnly = false;
 }
 
 // 計上日を変えたら会計年度を付け直す。
@@ -164,4 +174,55 @@ void PostButton_OnClick()
         // 失敗したら画面の状態を戻す。戻さないと「計上済みに見える下書き」が残る。
         Status.Value = EntryStatuses.Draft;
     }
+}
+
+// 訂正する。サーバが取消を計上し、原仕訳を写した訂正の下書きを作って返す（ADR-0015・ADR-0016）。
+//
+// **会計の判断はここに 1 行も無い。** 取り消せるか・二重訂正でないか・年度はどれかは、
+// すべてサーバ側の AccountingCore が決める。ここがするのは、頼むことと開くことだけ。
+void CorrectButton_OnClick()
+{
+    Amend("correct", "訂正",
+        "この伝票を訂正します。取消を計上し、内容を写した訂正の下書きを開きます。よろしいですか？");
+}
+
+// 取り消す。サーバが反対仕訳を作って計上まで進める。
+void ReverseButton_OnClick()
+{
+    Amend("reverse", "取消",
+        "この伝票を取り消します。取消は帳簿に残り、あとから消せません。よろしいですか？");
+}
+
+// 確認 → サーバに依頼 → 返ってきた伝票を開く。
+//
+// 取消は「計上済みの反対仕訳」、訂正は「これから直す下書き」を開く。
+// どちらを開くかはサーバが決めて openEntryId で返すので、ここでは分岐しない。
+void Amend(string operation, string noun, string message)
+{
+    if (MessageBox.ShowWithTitle($"{noun}の確認", message, "はい", "いいえ") != "はい") return;
+
+    var body = new JsonObject();
+    // Id は文字列で持つ。数値に直してから渡すと、桁と型の解釈が 2 か所に分かれる。
+    body.OriginalEntryId = $"{Id.Value}";
+
+    var result = WebApiService.Post($"/api/journals/{operation}", body);
+
+    // **業務の差し戻しも 200 で返ってくる**（qa/01 K-01）。200 以外はサーバ側の想定外で、
+    // そのとき本文は読めないので定型の文言にする。
+    if (result.StatusCode != 200)
+    {
+        Toaster.Error($"{noun}できませんでした（サーバ応答 {result.StatusCode}）。");
+        return;
+    }
+
+    // 成否は本文の status で分かる。**キーが無いと JsonObject 自身が返る**ので
+    // （型名が画面に出る）、"ok" と一致するかで判定し、それ以外は差し戻しとして扱う。
+    if ($"{result.JsonObject.status}" != "ok")
+    {
+        Toaster.Error($"{result.JsonObject.message}");
+        return;
+    }
+
+    NavigationService.NavigateTo(
+        NavigationService.GetModuleDataUrl("JournalEntry", $"{result.JsonObject.openEntryId}"));
 }

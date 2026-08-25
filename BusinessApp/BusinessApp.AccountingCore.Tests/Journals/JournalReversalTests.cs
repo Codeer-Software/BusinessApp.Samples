@@ -97,7 +97,7 @@ public class JournalReversalTests
         var result = JournalReversal.Reverse(AccountingFixture.CashSale(TransactionDate), ReversedOn, EnteredAt, Context());
 
         Assert.False(result.Created);
-        Assert.Contains(JournalViolationCodes.ReversalTargetNotPosted, result.Violations.Select(v => v.Code));
+        Assert.Contains(JournalViolationCodes.AmendmentTargetNotPosted, result.Violations.Select(v => v.Code));
     }
 
     public static TheoryData<JournalEntry> Unidentifiable => new()
@@ -115,7 +115,7 @@ public class JournalReversalTests
         var result = JournalReversal.Reverse(original, ReversedOn, EnteredAt, Context());
 
         Assert.False(result.Created);
-        Assert.Contains(JournalViolationCodes.ReversalTargetUnidentified, result.Violations.Select(v => v.Code));
+        Assert.Contains(JournalViolationCodes.AmendmentTargetUnidentified, result.Violations.Select(v => v.Code));
     }
 
     [Fact]
@@ -124,32 +124,58 @@ public class JournalReversalTests
         var result = JournalReversal.Reverse(Posted(), TransactionDate.AddDays(-1), EnteredAt, Context());
 
         Assert.False(result.Created);
-        Assert.Contains(JournalViolationCodes.ReversalBeforeOriginal, result.Violations.Select(v => v.Code));
+        Assert.Contains(JournalViolationCodes.AmendmentBeforeOriginal, result.Violations.Select(v => v.Code));
     }
 
     [Fact]
-    public void 同じ日に取り消すのは通る()
+    public void 計上したその日に取り消すのは通る()
     {
         // 計上したその日に気づいて取り消すのは、ごく普通の操作である。
-        var result = JournalReversal.Reverse(Posted(), TransactionDate, EnteredAt, Context());
+        // 比べるのは**計上日**であって取引日ではない（フィクスチャは 2 日ずらしてある）。
+        var original = Posted();
+
+        var result = JournalReversal.Reverse(original, original.PostingDate, EnteredAt, Context());
 
         Assert.True(result.Created);
     }
 
+    [Fact]
+    public void 取引日には戻れない()
+    {
+        // 取引日と計上日を取り違えていると、ここが通ってしまう
+        // （取引日は計上日より前なので、取消を原仕訳より前に載せられることになる）。
+        var original = Posted();
+
+        var result = JournalReversal.Reverse(original, original.TransactionDate, EnteredAt, Context());
+
+        Assert.False(result.Created);
+        Assert.Contains(JournalViolationCodes.AmendmentBeforeOriginal, result.Violations.Select(v => v.Code));
+    }
+
     [Theory]
     [InlineData(EntryType.Reversal)]
-    [InlineData(EntryType.Correction)]
     [InlineData(EntryType.Opening)]
     [InlineData(EntryType.Closing)]
     [InlineData(EntryType.Carryover)]
-    public void 通常でない仕訳は取り消せない(EntryType entryType)
+    public void 対象にできない種別の仕訳は取り消せない(EntryType entryType)
     {
         // 取消の連鎖は帳簿を読めなくするだけ。期首残高・決算振替・繰越を反対仕訳で打ち消すと、
         // 残高の前提（I-11・I-12）と繰越の再実行が噛み合わなくなる。
         var result = JournalReversal.Reverse(Posted(entryType: entryType), ReversedOn, EnteredAt, Context());
 
         Assert.False(result.Created);
-        Assert.Contains(JournalViolationCodes.ReversalTargetNotNormal, result.Violations.Select(v => v.Code));
+        Assert.Contains(JournalViolationCodes.AmendmentTargetNotAmendable, result.Violations.Select(v => v.Code));
+    }
+
+    [Fact]
+    public void 訂正の伝票は取り消せる()
+    {
+        // 訂正を間違えたときに、その訂正を取り消せないと詰む（ADR-0015）。
+        var result = JournalReversal.Reverse(
+            Posted(entryType: EntryType.Correction), ReversedOn, EnteredAt, Context());
+
+        Assert.True(result.Created);
+        Assert.Equal(EntryType.Reversal, result.Reversal!.EntryType);
     }
 
     [Fact]
@@ -196,11 +222,11 @@ public class JournalReversalTests
         // 件数だけ見ると、規則が 1 つ消えて別の 1 つが増えても気づけない。
         Assert.Equal(
             [
-                JournalViolationCodes.ReversalBeforeOriginal,
+                JournalViolationCodes.AmendmentBeforeOriginal,
+                JournalViolationCodes.AmendmentTargetUnidentified,
+                JournalViolationCodes.AmendmentTargetNotPosted,
+                JournalViolationCodes.AmendmentTargetNotAmendable,
                 JournalViolationCodes.AlreadyReversed,
-                JournalViolationCodes.ReversalTargetUnidentified,
-                JournalViolationCodes.ReversalTargetNotPosted,
-                JournalViolationCodes.ReversalTargetNotNormal,
             ],
             result.Violations.Select(v => v.Code).OrderBy(c => c, StringComparer.Ordinal));
     }
@@ -222,6 +248,22 @@ public class JournalReversalTests
         Assert.Equal(2, posted.PostedEntry!.EntryNo);
         Assert.Equal(original.Id, posted.PostedEntry.OriginalEntryId);
     }
+
+    [Fact]
+    public void 差し戻しの文言は取消のことばで書かれる()
+    {
+        // 規則は訂正と共有しているので、**共有した先で操作を取り違えると**
+        // 「取り消す」を押したのに「訂正できない」と出る。文言まで含めて固定する。
+        var result = JournalReversal.Reverse(
+            AccountingFixture.CashSale(TransactionDate), TransactionDate.AddDays(-1), EnteredAt, Context());
+
+        Assert.Contains("取り消せない", Message(result, JournalViolationCodes.AmendmentTargetNotPosted), StringComparison.Ordinal);
+        Assert.Contains("取り消せない", Message(result, JournalViolationCodes.AmendmentTargetUnidentified), StringComparison.Ordinal);
+        Assert.StartsWith("取消の計上日", Message(result, JournalViolationCodes.AmendmentBeforeOriginal), StringComparison.Ordinal);
+    }
+
+    private static string Message(ReversalResult result, string code)
+        => result.Violations.Single(v => v.Code == code).Message;
 
     [Fact]
     public void 原仕訳は何も変わらない()

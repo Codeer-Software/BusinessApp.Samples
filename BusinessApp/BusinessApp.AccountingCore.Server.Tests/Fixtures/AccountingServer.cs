@@ -40,6 +40,8 @@ internal sealed class AccountingServer : IDisposable
         EntryStore = new JournalEntryStore(accessor, SqliteDbAccessor.DataSourceName);
         SequenceStore = new EntryNumberSequenceStore(accessor, SqliteDbAccessor.DataSourceName);
         Gate = JournalSubmitGate.Create(accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now));
+        AmendmentService = JournalAmendmentService.Create(
+            accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now));
     }
 
     public AccountingMasterLoader MasterLoader { get; }
@@ -49,6 +51,9 @@ internal sealed class AccountingServer : IDisposable
     public EntryNumberSequenceStore SequenceStore { get; }
 
     public JournalSubmitGate Gate { get; }
+
+    /// <summary>「訂正する」「取り消す」の入口（画面のボタンから Web API 経由で呼ばれるもの）。</summary>
+    public JournalAmendmentService AmendmentService { get; }
 
     /// <summary>
     /// 本番（<c>CustomizedModuleDataIO.SubmitAsync</c>）と同じ形で 1 回の保存を通す。
@@ -65,6 +70,32 @@ internal sealed class AccountingServer : IDisposable
             var results = await Gate.SubmitAsync(transactionData, save);
             await accessor.CommitAsync();
             return results;
+        }
+        catch
+        {
+            await accessor.RollbackAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// 「訂正する」「取り消す」を本番（コントローラ）と同じ形で呼ぶ。
+    /// </summary>
+    /// <remarks>
+    /// <b>トランザクションで包む。</b> 訂正は「取消を計上する」「再計上の下書きを作る」の
+    /// 2 つを 1 操作として行うので、途中で失敗したときに<b>取消だけが残らない</b>ことが
+    /// この機能の要件そのものである。オートコミットで走らせるとそこだけ検査されない。
+    /// </remarks>
+    public async Task<T> AmendAsync<T>(Func<JournalAmendmentService, Task<T>> operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        accessor.StartTransaction();
+        try
+        {
+            var result = await operation(AmendmentService);
+            await accessor.CommitAsync();
+            return result;
         }
         catch
         {
@@ -198,6 +229,15 @@ internal sealed class AccountingServer : IDisposable
         string? description,
         string transactionDate,
         params (string DebitCredit, string AccountCode, long Amount)[] lines)
+        => InsertPosted(entryNo, description, transactionDate, null, lines);
+
+    /// <summary>取引先つきの計上済み仕訳（取消・訂正で取引先が写ることの検査に使う）。</summary>
+    public JournalEntryId InsertPosted(
+        int entryNo,
+        string? description,
+        string transactionDate,
+        long? partnerId,
+        params (string DebitCredit, string AccountCode, long Amount)[] lines)
     {
         var id = InsertDraft(transactionDate: transactionDate, postingDate: transactionDate);
 
@@ -205,6 +245,11 @@ internal sealed class AccountingServer : IDisposable
         if (description is not null)
         {
             Execute($"update journal_entries set description = '{description}' where id = {id.Value}");
+        }
+
+        if (partnerId is { } partner)
+        {
+            Execute($"update journal_entries set partner_id = {partner} where id = {id.Value}");
         }
 
         var lineNo = 0;
@@ -232,6 +277,28 @@ internal sealed class AccountingServer : IDisposable
     /// <summary>取消の下書きを 1 件作る（明細は入れない。中身はサーバが決める）。</summary>
     public JournalEntryId InsertReversalDraft(JournalEntryId originalId, string postingDate = "2026-08-25")
         => InsertDraft(postingDate: postingDate, entryType: "reversal", originalEntryId: originalId);
+
+    /// <summary>
+    /// 再計上（訂正）の下書きを 1 件作る。
+    /// <b>中身は利用者が決める</b>ので、明細は呼び出し側が入れる。
+    /// </summary>
+    public JournalEntryId InsertCorrectionDraft(
+        JournalEntryId originalId, string postingDate = "2026-08-25", string transactionDate = "2026-08-24")
+        => InsertDraft(
+            transactionDate: transactionDate,
+            postingDate: postingDate,
+            entryType: "correction",
+            originalEntryId: originalId);
+
+    /// <summary>伝票の現在の状態（計上されたか・巻き戻ったかの確認に使う）。</summary>
+    public string StatusOf(JournalEntryId id)
+        => Scalar<string>($"select status from journal_entries where id = {id.Value}");
+
+    /// <summary>この原仕訳を指す伝票の件数（種別・状態ごと）。</summary>
+    public long CountAmendments(JournalEntryId originalId, string entryType, string status = "posted")
+        => Scalar<long>(
+            "select count(*) from journal_entries where original_entry_id = "
+            + $"{originalId.Value} and entry_type = '{entryType}' and status = '{status}'");
 
     /// <summary>取引先を 1 件足す（初期データには 0 件しか無い）。</summary>
     public long InsertPartner(string code = "P001", string name = "株式会社れい")

@@ -38,7 +38,8 @@ public sealed class JournalSubmitGate(
     AccountingMasterLoader masterLoader,
     JournalEntryStore entryStore,
     JournalReversalPosting reversalPosting,
-    EntryNumberSequenceStore sequenceStore,
+    JournalCorrectionPosting correctionPosting,
+    JournalPoster poster,
     TimeProvider timeProvider)
 {
     public const string EntryModuleName = "JournalEntry";
@@ -55,7 +56,8 @@ public sealed class JournalSubmitGate(
             new AccountingMasterLoader(dbAccessor, dataSourceName),
             entryStore,
             new JournalReversalPosting(entryStore),
-            new EntryNumberSequenceStore(dbAccessor, dataSourceName),
+            new JournalCorrectionPosting(entryStore),
+            new JournalPoster(entryStore, new EntryNumberSequenceStore(dbAccessor, dataSourceName), timeProvider),
             timeProvider);
     }
 
@@ -79,10 +81,45 @@ public sealed class JournalSubmitGate(
         ArgumentNullException.ThrowIfNull(save);
 
         var pending = RewriteForDraftSave(transactionData);
+        await RejectEntryTypeChangeAsync(transactionData);
         var results = await save();
         await PostAllAsync(pending, results);
 
         return results;
+    }
+
+    /// <summary>
+    /// 既にある伝票の<b>種別を変える保存を、書く前に止める</b>。
+    /// </summary>
+    /// <remarks>
+    /// <para>種別が変えられると、種別ごとの関門（<see cref="PostAsync"/> のホワイトリスト）が
+    /// 丸ごと外れる。とくに「訂正」を「通常」に変えると、原仕訳との関係を見る検証を通らずに計上でき、
+    /// しかも二重訂正の検出は <c>correction</c> の行しか数えないので、
+    /// <b>同じ原仕訳にもう 1 本訂正を計上できてしまう</b>（＝取引が帳簿に 2 回載る）。</para>
+    /// <para>DDL のトリガも同じことを止めるが、<b>トリガは最後の砦であって日常の分岐ではない</b>。
+    /// 正常系でトリガに当てると、利用者には生の SQLite 例外しか届かない。</para>
+    /// </remarks>
+    private async Task RejectEntryTypeChangeAsync(IReadOnlyList<ModuleSubmitData> transactionData)
+    {
+        foreach (var data in EntriesIn(transactionData, d => d.Update))
+        {
+            var submitted = GetSelect(data, "EntryType");
+            if (submitted.Length == 0 || !long.TryParse(GetId(data), out var id))
+            {
+                continue;
+            }
+
+            var stored = await entryStore.FindEntryTypeAsync(new JournalEntryId(id));
+            if (stored is { } current && DbValue.ToSnakeCase(current) != submitted)
+            {
+                throw new JournalPostingRejectedException(
+                [
+                    new Violation(
+                        JournalViolationCodes.EntryTypeImmutable,
+                        $"仕訳の種別は変更できない（「{current}」のまま）。種別を変えるなら下書きを作り直す。"),
+                ]);
+            }
+        }
     }
 
     /// <summary>計上を待っている伝票。<see cref="SubmittedId"/> は保存前の値（仮 ID のことがある）。</summary>
@@ -145,12 +182,14 @@ public sealed class JournalSubmitGate(
         var draft = await entryStore.LoadAsync(id);
 
         // **種別ごとに通ってよい経路を決める（ホワイトリスト）。** 未実装の種別
-        // （訂正・期首残高・決算振替・繰越）を素通りさせると、反対仕訳を起こさないまま
-        // 帳簿に取引が二重に載る。
+        // （期首残高・決算振替・繰越）を素通りさせると、それぞれの前提を満たさないまま
+        // 帳簿に載る。訂正を素通りさせた場合はもっと直接的で、原仕訳が生きたまま
+        // 再計上が載り、取引が二重に計上される。
         draft = draft.EntryType switch
         {
             EntryType.Normal => draft,
             EntryType.Reversal => await reversalPosting.ApplyAsync(draft, context),
+            EntryType.Correction => await correctionPosting.ApplyAsync(draft),
             _ => throw new JournalPostingRejectedException(
             [
                 new Violation(
@@ -159,16 +198,7 @@ public sealed class JournalSubmitGate(
             ]),
         };
 
-        var sequence = await sequenceStore.ReadAsync(draft.FiscalYearId);
-        var result = JournalPosting.Post(draft, context, sequence, timeProvider.GetUtcNow());
-
-        if (!result.IsPosted)
-        {
-            throw new JournalPostingRejectedException(result.Violations);
-        }
-
-        await sequenceStore.SaveAsync(sequence, result.NextSequence!.Value);
-        await entryStore.MarkPostedAsync(id, result.EntryNo!.Value, result.PostedEntry!.PostedAt!.Value);
+        await poster.PostAsync(draft, context);
     }
 
     /// <summary>

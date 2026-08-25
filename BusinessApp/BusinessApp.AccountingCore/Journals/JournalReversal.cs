@@ -53,9 +53,12 @@ public static class JournalReversal
             Status = EntryStatus.Draft,
             EntryType = EntryType.Reversal,
             OriginalEntryId = original.Id,
-            Description = Describe(original),
+            Description = AmendmentRules.Describe(original, AmendmentKind.Reversal),
             PartnerId = original.PartnerId,
             EnteredAt = enteredAt,
+            // **投入元の情報は写す。** 一意なのは冪等キーだけで（I-14）、それだけを落とせばよい。
+            SourceComponent = original.SourceComponent,
+            SourceDocumentId = original.SourceDocumentId,
             Lines = [.. original.Lines.Select(Reverse)],
         };
 
@@ -74,40 +77,10 @@ public static class JournalReversal
                 "この仕訳は既に取り消されている。");
         }
 
-        // 下書きは帳簿ではないので、取り消すのではなく消せばよい（docs/04 §5）。
-        // 下書きに反対仕訳を立てられると、帳簿に「取り消された何か」が増えるだけになる。
-        if (original.Status != EntryStatus.Posted)
+        // 原仕訳の側に求めることは訂正と同じなので、規則は 1 か所にまとめてある。
+        foreach (var violation in AmendmentRules.ValidateOriginal(original, postingDate, AmendmentKind.Reversal))
         {
-            yield return new Violation(
-                JournalViolationCodes.ReversalTargetNotPosted,
-                "計上していない仕訳は取り消せない。下書きはそのまま削除する。");
-        }
-
-        // 原仕訳を特定できなければ、帳簿の相互関連性（規則 5 ⑤一ロ）が切れる。
-        // 伝票番号は帳簿の側から原仕訳を指す手段なので、識別子と同じく無いと取り消せない。
-        if (original.Id is null || original.EntryNo is null)
-        {
-            yield return new Violation(
-                JournalViolationCodes.ReversalTargetUnidentified,
-                "原仕訳を特定できないので取り消せない（保存されていないか、伝票番号が無い）。");
-        }
-
-        // 取消は取消であって、新しい取引ではない。原仕訳より前に計上できない。
-        if (postingDate < original.PostingDate)
-        {
-            yield return new Violation(
-                JournalViolationCodes.ReversalBeforeOriginal,
-                $"取消の計上日 {postingDate:yyyy-MM-dd} が、原仕訳の計上日 {original.PostingDate:yyyy-MM-dd} より前になっている。");
-        }
-
-        // **取り消してよいのは通常の仕訳だけ。**
-        // 取消の取消は連鎖するだけで何も表現できない。期首残高・決算振替・繰越を
-        // 反対仕訳で打ち消すと、残高の前提（I-11・I-12）と繰越の再実行が噛み合わなくなる。
-        if (original.EntryType != EntryType.Normal)
-        {
-            yield return new Violation(
-                JournalViolationCodes.ReversalTargetNotNormal,
-                $"種別が「{original.EntryType}」の仕訳は取り消せない。取り消せるのは通常の仕訳だけ。");
+            yield return violation;
         }
     }
 
@@ -115,17 +88,6 @@ public static class JournalReversal
     private static JournalLine Reverse(JournalLine line)
         => line with { DebitCredit = line.DebitCredit.Opposite() };
 
-    /// <summary>
-    /// 摘要に「何の取消か」を残す。<b>原仕訳の摘要を消さない。</b>
-    /// 帳簿を読む人は、取消だけを見て何が起きたかを追えなければならない。
-    /// </summary>
-    /// <remarks>
-    /// 伝票番号がある前提で書いてよい。無い伝票は <see cref="Validate"/> が先に止めている。
-    /// </remarks>
-    private static string Describe(JournalEntry original)
-        => string.IsNullOrWhiteSpace(original.Description)
-            ? $"伝票番号 {original.EntryNo} の取消"
-            : $"伝票番号 {original.EntryNo} の取消: {original.Description}";
 }
 
 /// <summary>

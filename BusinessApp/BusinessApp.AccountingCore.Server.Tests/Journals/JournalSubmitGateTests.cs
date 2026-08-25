@@ -230,6 +230,102 @@ public class JournalSubmitGateTests
         Assert.Contains(TemporaryId, error.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// まだ作っていない種別は計上させない（種別のホワイトリスト）。
+    /// </summary>
+    /// <remarks>
+    /// 期首残高・決算振替・繰越は、それぞれ固有の前提（I-11・I-12・繰越の再実行）を持つ。
+    /// 素通りさせると、その前提を満たさない伝票が普通の仕訳として帳簿に載る。
+    /// </remarks>
+    [Theory]
+    [InlineData("opening")]
+    [InlineData("closing")]
+    [InlineData("carryover")]
+    public async Task 未実装の種別は計上できない(string entryType)
+    {
+        using var server = new AccountingServer();
+        var draft = server.InsertDraft(entryType: entryType);
+        server.InsertLine(draft, 1, "debit", "1100", 100);
+        server.InsertLine(draft, 2, "credit", "2100", 100);
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => PostSavedAsync(server, draft));
+
+        Assert.Contains(JournalViolationCodes.EntryTypeNotSupported, error.Violations.Select(v => v.Code));
+        Assert.Equal("draft", server.StatusOf(draft));
+        Assert.Equal(1, server.Scalar<long>("select next_entry_no from journal_entry_sequences"));
+    }
+
+    /// <summary>
+    /// 既にある伝票の種別は変えられない。
+    /// </summary>
+    /// <remarks>
+    /// **ここが開いていると取引が帳簿に 2 回載る。** 訂正の下書きを「通常」に変えて計上すると、
+    /// 種別ごとの関門を通らないうえ、二重訂正の検出は `correction` の行しか数えないので、
+    /// 同じ原仕訳にもう 1 本訂正を計上できる（2026-08-25 の自己レビューで発見）。
+    /// </remarks>
+    [Fact]
+    public async Task 既にある伝票の種別は変えられない()
+    {
+        using var server = new AccountingServer();
+        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 100), ("credit", "2100", 100));
+        var correction = server.InsertCorrectionDraft(original);
+
+        var entry = SubmitData.Entry(server.Text(correction.Value), status: "draft");
+        entry.Fields["EntryType"] = new SelectFieldData { Value = "normal" };
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([SubmitData.Updating(entry)], NothingSaved));
+
+        Assert.Contains(JournalViolationCodes.EntryTypeImmutable, error.Violations.Select(v => v.Code));
+        Assert.Equal("correction", server.Scalar<string>(
+            $"select entry_type from journal_entries where id = {correction.Value}"));
+    }
+
+    [Fact]
+    public async Task 同じ種別を送り直すのは通る()
+    {
+        // 画面は変更した項目だけを送ってくるとは限らない（qa/01 F-12）。
+        // 「同じ値が来た」を変更と誤判定すると、普通の保存が止まる。
+        using var server = new AccountingServer();
+        var draft = server.InsertDraft();
+
+        var entry = SubmitData.Entry(server.Text(draft.Value), status: "draft");
+        entry.Fields["EntryType"] = new SelectFieldData { Value = "normal" };
+
+        await server.SubmitAsync([SubmitData.Updating(entry)], NothingSaved);
+
+        Assert.Equal("draft", server.StatusOf(draft));
+    }
+
+    [Fact]
+    public async Task 仮_ID_のまま種別を送ってきても止めない()
+    {
+        // 新規は保存が済むまで本物の ID を持たない（qa/01 C-08）。
+        // ここで止めると、種別を選んで新規保存する普通の操作ができなくなる。
+        using var server = new AccountingServer();
+        var entry = SubmitData.Entry(TemporaryId, status: "draft");
+        entry.Fields["EntryType"] = new SelectFieldData { Value = "normal" };
+
+        await server.SubmitAsync([SubmitData.Updating(entry)], NothingSaved);
+
+        Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
+    }
+
+    [Fact]
+    public async Task 存在しない伝票の種別は判定しない()
+    {
+        // 種別の検査は「変えたかどうか」だけを見る。**伝票があるかどうかは保存側の仕事**で、
+        // ここで落とすと「存在しない」ことが種別の違反として届く（コードの意味がずれる）。
+        using var server = new AccountingServer();
+        var entry = SubmitData.Entry("999", status: "draft");
+        entry.Fields["EntryType"] = new SelectFieldData { Value = "reversal" };
+
+        await server.SubmitAsync([SubmitData.Updating(entry)], NothingSaved);
+
+        Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
+    }
+
     /// <summary>保存が済んでいる下書きを、保存経路を通して計上させる。</summary>
     private static Task PostSavedAsync(AccountingServer server, JournalEntryId id)
     {

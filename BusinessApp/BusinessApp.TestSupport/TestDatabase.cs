@@ -80,6 +80,17 @@ public static class TestDatabase
 
     public static string SeedDirectory { get; } = Path.Combine(RepositoryRoot(), "Designer", "seed");
 
+    /// <summary>
+    /// CLB のモジュール定義の置き場。<b>帳簿のクエリ（<c>*.Query.sql</c>）を本物のまま検査する</b>ために使う。
+    /// </summary>
+    /// <remarks>
+    /// クエリモジュールの SQL は JSON ではなく別ファイルにあり（<c>_specs/QueryAndSql.md</c>）、
+    /// <c>designcheck</c> は中身を実行しない。列名の綴り違いも結合の誤りも、
+    /// <b>実機で画面を開くまで分からない</b>。ここで本物の DDL に流して潰す。
+    /// </remarks>
+    public static string ModulesDirectory { get; } =
+        Path.Combine(RepositoryRoot(), "Designer", "Design", "Modules");
+
     public static void Execute(SqliteConnection connection, string sql)
     {
         using var command = connection.CreateCommand();

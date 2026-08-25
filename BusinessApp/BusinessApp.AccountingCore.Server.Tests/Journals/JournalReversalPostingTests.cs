@@ -68,6 +68,22 @@ public class JournalReversalPostingTests
     }
 
     [Fact]
+    public async Task 取引先も原仕訳から写る()
+    {
+        // 帳簿の法定記載事項①（取引先）が取消で落ちると、
+        // 取引先から辿ったときに反対仕訳だけが見つからなくなる。
+        using var server = new AccountingServer();
+        var partner = server.InsertPartner();
+        var original = server.InsertPosted(
+            1, null, "2026-05-20", partner, ("debit", "1100", 300), ("credit", "2100", 300));
+        var reversal = server.InsertReversalDraft(original);
+
+        await PostAsync(server, reversal);
+
+        Assert.Equal(partner, (await server.EntryStore.LoadAsync(reversal)).PartnerId!.Value.Value);
+    }
+
+    [Fact]
     public async Task 摘要に何の取消かが残る()
     {
         using var server = new AccountingServer();
@@ -111,6 +127,34 @@ public class JournalReversalPostingTests
     }
 
     [Fact]
+    public async Task 計上済みの取消はもう一度計上できない()
+    {
+        // 通してもトリガが生の SQLite 例外を出すだけで、利用者には何も伝わらない。
+        using var server = new AccountingServer();
+        var context = await server.MasterLoader.LoadAsync();
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => new JournalReversalPosting(server.EntryStore)
+                .ApplyAsync(Draft() with { Status = EntryStatus.Posted }, context));
+
+        Assert.Contains(JournalViolationCodes.AlreadyPosted, error.Violations.Select(v => v.Code));
+    }
+
+    [Fact]
+    public async Task 計上日に対応する会計期間がなければ取り消せない()
+    {
+        // 会計年度は**取消の計上日**から引く。年度の外に落ちる日付では取り消せない。
+        using var server = new AccountingServer();
+        var context = await server.MasterLoader.LoadAsync();
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => new JournalReversalPosting(server.EntryStore)
+                .ApplyAsync(Draft() with { PostingDate = new DateOnly(2030, 1, 1) }, context));
+
+        Assert.Contains(JournalViolationCodes.PeriodNotFound, error.Violations.Select(v => v.Code));
+    }
+
+    [Fact]
     public async Task 保存されていない取消には書き込めない()
     {
         using var server = new AccountingServer();
@@ -149,7 +193,7 @@ public class JournalReversalPostingTests
         var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
             () => PostAsync(server, server.InsertReversalDraft(draft)));
 
-        Assert.Contains(JournalViolationCodes.ReversalTargetNotPosted, error.Violations.Select(v => v.Code));
+        Assert.Contains(JournalViolationCodes.AmendmentTargetNotPosted, error.Violations.Select(v => v.Code));
     }
 
     private static Task PostAsync(AccountingServer server, JournalEntryId id)

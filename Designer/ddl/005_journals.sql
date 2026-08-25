@@ -69,6 +69,14 @@ CREATE UNIQUE INDEX ux_journal_entries_single_reversal
     ON journal_entries (original_entry_id)
     WHERE entry_type = 'reversal' AND status = 'posted';
 
+-- 1 本の仕訳を訂正する再計上も 1 本まで（ADR-0015）。
+-- **再計上が 2 本載ると、直した内容がそのまま二重に計上される。**
+-- 訂正をやり直したいときは、その訂正の伝票を訂正する（訂正は訂正できる）。
+-- 取消と同じく、アプリ側の検査は同時実行に勝てないので最後は DB が止める。
+CREATE UNIQUE INDEX ux_journal_entries_single_correction
+    ON journal_entries (original_entry_id)
+    WHERE entry_type = 'correction' AND status = 'posted';
+
 CREATE TABLE journal_lines (
     id                          INTEGER PRIMARY KEY AUTOINCREMENT,
 
@@ -163,6 +171,43 @@ BEFORE UPDATE ON journal_entries
 FOR EACH ROW WHEN OLD.status = 'posted'
 BEGIN
     SELECT RAISE(ABORT, '計上済みの仕訳は変更できない。訂正・取消は反対仕訳で行う。');
+END;
+
+-- 種別は伝票を作るときに決まるもので、**後から変えてよいものではない**。
+--
+-- 変えられると、種別ごとの関門（JournalSubmitGate のホワイトリスト）が丸ごと外れる。
+-- とくに「訂正」を「通常」に変えると、原仕訳との関係を見る検証を通らないまま計上でき、
+-- しかも二重訂正の検出（下の部分ユニークインデックスと HasCorrectionAsync）は
+-- entry_type = 'correction' の行しか数えないので、**同じ原仕訳にもう 1 本訂正を計上できる**。
+-- 取引が帳簿に 2 回載る（2026-08-25 の自己レビューで発見）。
+--
+-- 直したいなら下書きを作り直す。下書きは自由に消せる。
+CREATE TRIGGER trg_journal_entries_entry_type_immutable
+BEFORE UPDATE ON journal_entries
+FOR EACH ROW WHEN NEW.entry_type IS NOT OLD.entry_type
+BEGIN
+    SELECT RAISE(ABORT, '仕訳の種別は変更できない。種別を変えるなら下書きを作り直す。');
+END;
+
+-- 原仕訳を指してよいのは訂正・取消だけ（I-06 の逆向き）。
+--
+-- 通常の仕訳が原仕訳を指していると、「訂正のつもりで作った通常の仕訳」が
+-- 帳簿の上では原仕訳と無関係の新しい取引として振る舞う。CHECK で書きたいところだが、
+-- 既存のテーブルに CHECK を足すには作り直しが要るので、同じ規則をトリガで置く。
+CREATE TRIGGER trg_journal_entries_original_only_for_amendment
+BEFORE INSERT ON journal_entries
+FOR EACH ROW WHEN NEW.original_entry_id IS NOT NULL
+                  AND NEW.entry_type NOT IN ('correction', 'reversal')
+BEGIN
+    SELECT RAISE(ABORT, '原仕訳を指定できるのは訂正・取消だけ。');
+END;
+
+CREATE TRIGGER trg_journal_entries_original_only_for_amendment_update
+BEFORE UPDATE ON journal_entries
+FOR EACH ROW WHEN NEW.original_entry_id IS NOT NULL
+                  AND NEW.entry_type NOT IN ('correction', 'reversal')
+BEGIN
+    SELECT RAISE(ABORT, '原仕訳を指定できるのは訂正・取消だけ。');
 END;
 
 CREATE TRIGGER trg_journal_entries_posted_no_delete

@@ -1,0 +1,252 @@
+namespace BusinessApp.AccountingCore.Server.Tests.Journals;
+
+using BusinessApp.AccountingCore.Journals;
+using BusinessApp.AccountingCore.Server.Journals;
+using BusinessApp.AccountingCore.Server.Tests.Fixtures;
+using BusinessApp.AccountingCore.Shared;
+using Codeer.LowCode.Blazor.DataIO;
+
+/// <summary>
+/// 「取り消す」「訂正する」（画面のボタンから Web API 経由で呼ばれる入口）。
+/// </summary>
+/// <remarks>
+/// <b>ここが守るのは「取引が帳簿に二重に載らない」ことである。</b>
+/// 訂正は取消と再計上の 2 本組で、取消を計上せずに再計上だけが生まれる道があってはならない
+/// （ADR-0015）。
+/// </remarks>
+public class JournalAmendmentServiceTests
+{
+    /// <summary>取り消される側の仕訳（借方 現金 1000 / 貸方 買掛金 1000）。</summary>
+    private static JournalEntryId Original(AccountingServer server, string transactionDate = "2026-05-20")
+        => server.InsertPosted(
+            1, "5 月分の仕入", transactionDate, ("debit", "1100", 1000), ("credit", "2100", 1000));
+
+    // --- 取り消す ---
+
+    [Fact]
+    public async Task 取り消すと反対仕訳が計上まで進む()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        var reversalId = await server.AmendAsync(s => s.ReverseAsync(original));
+
+        var reversal = await server.EntryStore.LoadAsync(reversalId);
+        Assert.Equal(EntryStatus.Posted, reversal.Status);
+        Assert.Equal(EntryType.Reversal, reversal.EntryType);
+        Assert.Equal(original, reversal.OriginalEntryId);
+        Assert.Equal(2, reversal.EntryNo);
+
+        // 取引日は原仕訳のまま。計上日は「取り消すと決めた日」＝今日。
+        Assert.Equal(new DateOnly(2026, 5, 20), reversal.TransactionDate);
+        Assert.Equal(new DateOnly(2026, 8, 24), reversal.PostingDate);
+
+        // 総額方式。貸借だけが入れ替わる。
+        Assert.Equal([DebitCredit.Credit, DebitCredit.Debit], reversal.Lines.Select(l => l.DebitCredit));
+        Assert.Equal([Yen.From(1000), Yen.From(1000)], reversal.Lines.Select(l => l.Amount));
+        Assert.Equal("伝票番号 1 の取消: 5 月分の仕入", reversal.Description);
+    }
+
+    [Fact]
+    public async Task 原仕訳は取消のあとも計上済みのまま残る()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        await server.AmendAsync(s => s.ReverseAsync(original));
+
+        var kept = await server.EntryStore.LoadAsync(original);
+        Assert.Equal(EntryStatus.Posted, kept.Status);
+        Assert.Equal(1, kept.EntryNo);
+        Assert.Equal(2, kept.Lines.Count);
+    }
+
+    [Fact]
+    public async Task 二度は取り消せず_伝票も採番も残らない()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        await server.AmendAsync(s => s.ReverseAsync(original));
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.ReverseAsync(original)));
+
+        Assert.Contains(JournalViolationCodes.AlreadyReversed, error.Violations.Select(v => v.Code));
+        Assert.Equal(1L, server.CountAmendments(original, "reversal"));
+        Assert.Equal(0L, server.CountAmendments(original, "reversal", status: "draft"));
+        Assert.Equal(3, server.Scalar<long>("select next_entry_no from journal_entry_sequences"));
+    }
+
+    [Fact]
+    public async Task 存在しない仕訳は取り消せない()
+    {
+        using var server = new AccountingServer();
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.ReverseAsync(new JournalEntryId(999))));
+
+        Assert.Contains(JournalViolationCodes.AmendmentTargetNotFound, error.Violations.Select(v => v.Code));
+    }
+
+    [Fact]
+    public async Task 下書きは取り消せない()
+    {
+        using var server = new AccountingServer();
+        var draft = server.InsertDraft();
+        server.InsertLine(draft, 1, "debit", "1100", 100);
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.ReverseAsync(draft)));
+
+        Assert.Contains(JournalViolationCodes.AmendmentTargetNotPosted, error.Violations.Select(v => v.Code));
+    }
+
+    [Fact]
+    public async Task 今日に対応する会計期間がなければ取り消せない()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        // 「今日」（2026-08-24）を含む会計期間を消す。年度末の翌日に取り消そうとした状況と同じ。
+        server.Execute(
+            "delete from accounting_periods "
+            + "where date(start_date) <= '2026-08-24' and date(end_date) >= '2026-08-24'");
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.ReverseAsync(original)));
+
+        Assert.Contains(JournalViolationCodes.PeriodNotFound, error.Violations.Select(v => v.Code));
+        Assert.Equal(0L, server.CountAmendments(original, "reversal", status: "draft"));
+    }
+
+    // --- 訂正する ---
+
+    [Fact]
+    public async Task 訂正すると_取消は計上され_再計上は下書きで残る()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        var started = await server.AmendAsync(s => s.CorrectAsync(original));
+
+        var reversal = await server.EntryStore.LoadAsync(started.ReversalId);
+        Assert.Equal(EntryStatus.Posted, reversal.Status);
+        Assert.Equal(EntryType.Reversal, reversal.EntryType);
+
+        // **再計上は計上しない。** 中身は利用者が決めるので、下書きのまま開いて直させる。
+        var correction = await server.EntryStore.LoadAsync(started.CorrectionId);
+        Assert.Equal(EntryStatus.Draft, correction.Status);
+        Assert.Equal(EntryType.Correction, correction.EntryType);
+        Assert.Null(correction.EntryNo);
+
+        // どちらも**原仕訳を**指す。2 本を結ぶ列は持たない（ADR-0015）。
+        Assert.Equal(original, reversal.OriginalEntryId);
+        Assert.Equal(original, correction.OriginalEntryId);
+    }
+
+    [Fact]
+    public async Task 再計上には原仕訳の内容がそのまま写る()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        var started = await server.AmendAsync(s => s.CorrectAsync(original));
+
+        var correction = await server.EntryStore.LoadAsync(started.CorrectionId);
+
+        // 貸借は**入れ替えない**。利用者は誤っている箇所だけを直せばよい。
+        Assert.Equal([DebitCredit.Debit, DebitCredit.Credit], correction.Lines.Select(l => l.DebitCredit));
+        Assert.Equal([Yen.From(1000), Yen.From(1000)], correction.Lines.Select(l => l.Amount));
+        Assert.Equal(
+            [server.AccountOf("1100"), server.AccountOf("2100")],
+            correction.Lines.Select(l => l.AccountId));
+
+        Assert.Equal(new DateOnly(2026, 5, 20), correction.TransactionDate);
+        Assert.Equal(new DateOnly(2026, 8, 24), correction.PostingDate);
+        Assert.Equal("伝票番号 1 の訂正: 5 月分の仕入", correction.Description);
+    }
+
+    [Fact]
+    public async Task 伝票番号は取消にだけ出る()
+    {
+        // 下書きは番号を持たない（I-17）。訂正を放棄しても番号は 1 つしか消費されない。
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        var started = await server.AmendAsync(s => s.CorrectAsync(original));
+
+        Assert.Equal(2, (await server.EntryStore.LoadAsync(started.ReversalId)).EntryNo);
+        Assert.Null((await server.EntryStore.LoadAsync(started.CorrectionId)).EntryNo);
+        Assert.Equal(3, server.Scalar<long>("select next_entry_no from journal_entry_sequences"));
+    }
+
+    [Fact]
+    public async Task 訂正できないときは取消も残らない()
+    {
+        // **1 操作である以上、途中の状態を残さない。** 取消だけが計上されて
+        // 「訂正しようとしたのに取り消されただけ」になるのが最悪である。
+        using var server = new AccountingServer();
+        var original = Original(server);
+        await server.AmendAsync(s => s.ReverseAsync(original));
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.CorrectAsync(original)));
+
+        Assert.Contains(JournalViolationCodes.AlreadyReversed, error.Violations.Select(v => v.Code));
+        Assert.Equal(1L, server.CountAmendments(original, "reversal"));
+        Assert.Equal(0L, server.CountAmendments(original, "correction", status: "draft"));
+    }
+
+    [Fact]
+    public async Task 訂正の伝票を訂正できる()
+    {
+        // 直した内容がまた誤っていたときに詰まないこと（ADR-0015）。
+        using var server = new AccountingServer();
+        var original = Original(server);
+        var started = await server.AmendAsync(s => s.CorrectAsync(original));
+
+        // 利用者が中身を直して計上したのと同じ状態にする。**保存経路も本物を通す。**
+        await PostAsync(server, started.CorrectionId);
+
+        var again = await server.AmendAsync(s => s.CorrectAsync(started.CorrectionId));
+
+        Assert.Equal(EntryStatus.Posted, (await server.EntryStore.LoadAsync(again.ReversalId)).Status);
+        Assert.Equal(started.CorrectionId, (await server.EntryStore.LoadAsync(again.CorrectionId)).OriginalEntryId);
+    }
+
+    [Fact]
+    public async Task 取引先は取消にも再計上にも写る()
+    {
+        // 帳簿の法定記載事項①（取引先）が取消・訂正で落ちると、
+        // 補助元帳から取引先で辿ったときに反対仕訳だけが見つからなくなる。
+        using var server = new AccountingServer();
+        var partner = server.InsertPartner();
+        var original = server.InsertPosted(
+            1, "5 月分の仕入", "2026-05-20", partner, ("debit", "1100", 1000), ("credit", "2100", 1000));
+
+        var started = await server.AmendAsync(s => s.CorrectAsync(original));
+
+        Assert.Equal(partner, (await server.EntryStore.LoadAsync(started.ReversalId)).PartnerId!.Value.Value);
+        Assert.Equal(partner, (await server.EntryStore.LoadAsync(started.CorrectionId)).PartnerId!.Value.Value);
+    }
+
+    [Fact]
+    public async Task 取消の伝票は訂正できない()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        var reversalId = await server.AmendAsync(s => s.ReverseAsync(original));
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.CorrectAsync(reversalId)));
+
+        Assert.Contains(JournalViolationCodes.AmendmentTargetNotAmendable, error.Violations.Select(v => v.Code));
+    }
+
+    /// <summary>画面から「計上」を押したのと同じ経路で計上する。</summary>
+    private static Task PostAsync(AccountingServer server, JournalEntryId id)
+    {
+        var entry = SubmitData.Entry(server.Text(id.Value), status: "posted");
+        return server.SubmitAsync([SubmitData.Updating(entry)], () => Task.FromResult(new List<ModuleSubmitResult>()));
+    }
+}
