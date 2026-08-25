@@ -36,6 +36,38 @@ public class EnumConsistencyTests
         { "借方貸方",                  "journal_lines.debit_credit",          "DebitCredits",      "Shared.DebitCredit" },
     };
 
+    /// <summary>
+    /// 表示名を持つ区分。<b>C# と CLB で文言が一致していなければならない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 利用者に見せる文言に列挙子の英語名を混ぜないため、C# 側にも日本語名を持たせている
+    /// （CLAUDE.md §2-7）。**写しが 2 つになるので、機械で突き合わせる。**
+    /// 片方だけ直すと、画面と差し戻しの文言が食い違う。
+    /// </remarks>
+    public static TheoryData<string, string, string> DisplayNames() => new()
+    {
+        //  CLB の enum      C# の型                    表示名を返す拡張メソッド
+        { "EntryTypes",     "Journals.EntryType",      "DisplayName" },
+        { "EntryStatuses",  "Journals.EntryStatus",    "DisplayName" },
+    };
+
+    [Theory]
+    [MemberData(nameof(DisplayNames))]
+    public void 表示名はCLBとCSharpで一致している(string clbEnum, string csharpType, string method)
+    {
+        var type = CSharpEnumType(csharpType);
+        var extensions = type.Assembly.GetType(type.FullName + "Extensions")
+            ?? throw new InvalidOperationException($"{csharpType}Extensions が無い");
+        var displayName = extensions.GetMethod(method)
+            ?? throw new InvalidOperationException($"{csharpType}Extensions.{method} が無い");
+
+        var fromCSharp = Enum.GetValues(type).Cast<object>()
+            .Select(v => (string)displayName.Invoke(null, [v])!)
+            .ToList();
+
+        Assert.Equal(DisplayTextsFromDesignEnum(clbEnum), fromCSharp);
+    }
+
     [Theory]
     [MemberData(nameof(Mappings))]
     public void 区分値はDDLとCLBとCSharpで一致している(string label, string ddlColumn, string? clbEnum, string? csharpType)
@@ -136,6 +168,23 @@ public class EnumConsistencyTests
         return [];
     }
 
+    /// <summary>
+    /// デザイン enum の表示名を宣言順に読む。
+    /// </summary>
+    /// <remarks>
+    /// <b>JsonDocument の外へ JsonElement を持ち出さない。</b> 破棄済みの読み取りになる
+    /// （実際にここで踏んだ）。読むのは using の中で終わらせる。
+    /// </remarks>
+    private static IReadOnlyList<string> DisplayTextsFromDesignEnum(string enumName)
+    {
+        var path = Path.Combine(DesignEnumDirectory, enumName + ".enum.json");
+        Assert.True(File.Exists(path), $"デザイン enum が無い: {path}");
+
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        return [.. document.RootElement.GetProperty("Members").EnumerateArray()
+            .Select(member => member.GetProperty("DisplayText").GetString()!)];
+    }
+
     private static IReadOnlyList<string> ValuesFromDesignEnum(string enumName)
     {
         var path = Path.Combine(DesignEnumDirectory, enumName + ".enum.json");
@@ -148,13 +197,20 @@ public class EnumConsistencyTests
             .ToList();
     }
 
-    private static IReadOnlyList<string> ValuesFromCSharpEnum(string relativeTypeName)
+    /// <summary>相対名（`Journals.EntryType`）から C# の列挙型を引く。</summary>
+    private static Type CSharpEnumType(string relativeTypeName)
     {
         var type = typeof(AccountingCore.Shared.Yen).Assembly
             .GetType("BusinessApp.AccountingCore." + relativeTypeName);
         Assert.True(type is not null, $"C# の列挙型が無い: {relativeTypeName}");
+        return type!;
+    }
 
-        return Enum.GetNames(type!)
+    private static IReadOnlyList<string> ValuesFromCSharpEnum(string relativeTypeName)
+    {
+        var type = CSharpEnumType(relativeTypeName);
+
+        return Enum.GetNames(type)
             .Select(ToSnakeCase)
             .OrderBy(v => v, StringComparer.Ordinal)
             .ToList();

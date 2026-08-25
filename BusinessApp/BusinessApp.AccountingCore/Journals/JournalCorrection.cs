@@ -94,15 +94,15 @@ public static class JournalCorrection
         {
             violations.Add(new Violation(
                 JournalViolationCodes.OriginalNotReversed,
-                "原仕訳がまだ取り消されていない。訂正は、取消と再計上の組で行う。"));
+                "元の伝票がまだ取り消されていません。訂正は取消と再計上の組で行います。"));
         }
         else if (correction.PostingDate < reversedOn)
         {
             // 取消より前に再計上が載ると、その間の期間だけ二重計上になる。
             violations.Add(new Violation(
                 JournalViolationCodes.CorrectionBeforeReversal,
-                $"再計上の計上日 {correction.PostingDate:yyyy-MM-dd} が、"
-                + $"原仕訳を取り消した日 {reversedOn:yyyy-MM-dd} より前になっている。"));
+                $"訂正の計上日（{correction.PostingDate:yyyy-MM-dd}）が、"
+                + $"元の伝票を取り消した日（{reversedOn:yyyy-MM-dd}）より前になっています。"));
         }
 
         // 再計上が 2 本載れば、直した内容がそのまま二重になる。
@@ -111,7 +111,7 @@ public static class JournalCorrection
         {
             violations.Add(new Violation(
                 JournalViolationCodes.AlreadyCorrected,
-                "この仕訳は既に訂正されている。やり直すなら、その訂正の伝票を訂正する。"));
+                "この伝票は既に訂正されています。やり直すときは、その訂正の伝票を訂正してください。"));
         }
 
         return violations;

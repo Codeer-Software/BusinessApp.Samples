@@ -95,7 +95,7 @@
           },
           {
             "IsParameter": false,
-            "Name": "entry_type_name",
+            "Name": "entry_type",
             "DbType": "text",
             "DbParameterDirection": "Input"
           },
@@ -113,7 +113,7 @@
           },
           {
             "IsParameter": false,
-            "Name": "debit_credit_name",
+            "Name": "debit_credit",
             "DbType": "text",
             "DbParameterDirection": "Input"
           },
@@ -494,13 +494,20 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateFieldDesign"
     },
     {
-      "DbColumn": "entry_type_name",
-      "IsMultiline": false,
-      "IsAutoFitRows": false,
-      "Placeholder": "",
-      "TextEditEmptyType": "StringEmpty",
-      "ShouldTrimAfterEdit": false,
-      "AutoTab": false,
+      "EnumName": "EntryTypes",
+      "Candidates": [],
+      "SearchCondition": {
+        "SelectFields": [],
+        "SortConditions": [],
+        "SortFieldVariable": "",
+        "SortDescending": false,
+        "ModuleName": ""
+      },
+      "ValueVariable": "",
+      "DisplayTextVariable": "",
+      "DbColumn": "entry_type",
+      "EmptyCandidateType": "StringEmpty",
+      "AllowOrSearch": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
@@ -514,7 +521,7 @@
       "IsFocusSkip": false,
       "NextFocusField": "",
       "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
       "DbColumn": "original_entry_no",
@@ -559,13 +566,20 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
     },
     {
-      "DbColumn": "debit_credit_name",
-      "IsMultiline": false,
-      "IsAutoFitRows": false,
-      "Placeholder": "",
-      "TextEditEmptyType": "StringEmpty",
-      "ShouldTrimAfterEdit": false,
-      "AutoTab": false,
+      "EnumName": "DebitCredits",
+      "Candidates": [],
+      "SearchCondition": {
+        "SelectFields": [],
+        "SortConditions": [],
+        "SortFieldVariable": "",
+        "SortDescending": false,
+        "ModuleName": ""
+      },
+      "ValueVariable": "",
+      "DisplayTextVariable": "",
+      "DbColumn": "debit_credit",
+      "EmptyCandidateType": "StringEmpty",
+      "AllowOrSearch": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
@@ -579,7 +593,7 @@
       "IsFocusSkip": false,
       "NextFocusField": "",
       "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
     },
     {
       "DbColumn": "account_name",

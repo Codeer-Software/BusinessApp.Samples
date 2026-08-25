@@ -41,14 +41,14 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.AlreadyPosted,
-                "計上済みの仕訳は、もう一度計上できない。訂正・取消は反対仕訳で行う。"));
+                "計上済みの伝票は、もう一度計上できません。訂正・取消は反対仕訳で行います。"));
         }
 
         if (entry.EntryNo is not null)
         {
             violations.Add(new Violation(
                 JournalViolationCodes.EntryNoNotAllowed,
-                "伝票番号は計上時にシステムが採番する。計上前の伝票が番号を持ってはいけない。"));
+                "伝票番号は計上のときに自動で付きます。計上前の伝票に番号があってはいけません。"));
         }
     }
 
@@ -56,7 +56,7 @@ public static class JournalEntryValidator
     {
         if (entry.Lines.Count == 0)
         {
-            violations.Add(new Violation(JournalViolationCodes.NoLines, "明細が 1 行もない。"));
+            violations.Add(new Violation(JournalViolationCodes.NoLines, "明細が 1 行もありません。"));
             return;
         }
 
@@ -66,25 +66,25 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.Unbalanced,
-                $"借方合計 {entry.DebitTotal} 円と貸方合計 {entry.CreditTotal} 円が一致していない。"));
+                $"借方合計 {entry.DebitTotal} 円と貸方合計 {entry.CreditTotal} 円が一致していません。"));
         }
 
         foreach (var lineNo in entry.Lines.GroupBy(l => l.LineNo).Where(g => g.Count() > 1).Select(g => g.Key))
         {
-            violations.Add(new Violation(JournalViolationCodes.LineNoInvalid, "行番号が重複している。", lineNo));
+            violations.Add(new Violation(JournalViolationCodes.LineNoInvalid, "行番号が重複しています。", lineNo));
         }
 
         foreach (var line in entry.Lines.Where(l => l.LineNo <= 0))
         {
             violations.Add(new Violation(
-                JournalViolationCodes.LineNoInvalid, "行番号は正の整数でなければならない。", line.LineNo));
+                JournalViolationCodes.LineNoInvalid, "行番号は 1 以上の整数にしてください。", line.LineNo));
         }
 
         if (entry.EntryType.RequiresOriginalEntry() && entry.OriginalEntryId is null)
         {
             violations.Add(new Violation(
                 JournalViolationCodes.OriginalEntryMissing,
-                "訂正・取消の仕訳には、原仕訳の指定が要る。"));
+                "訂正・取消の伝票には、元の伝票の指定が必要です。"));
         }
     }
 
@@ -96,7 +96,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PostingDateBeforeTransaction,
-                $"計上日 {entry.PostingDate:yyyy-MM-dd} が取引日 {entry.TransactionDate:yyyy-MM-dd} より前になっている。"));
+                $"計上日（{entry.PostingDate:yyyy-MM-dd}）が取引日（{entry.TransactionDate:yyyy-MM-dd}）より前になっています。"));
         }
 
         var period = calendar.ResolvePeriod(entry.PostingDate);
@@ -104,7 +104,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PeriodNotFound,
-                $"計上日 {entry.PostingDate:yyyy-MM-dd} に対応する会計期間がない。"));
+                $"計上日（{entry.PostingDate:yyyy-MM-dd}）に対応する会計期間がありません。"));
             return;
         }
 
@@ -112,7 +112,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PeriodClosed,
-                $"会計期間 {period.Period} は締め済みで、計上できない。"));
+                $"会計期間 {period.Period} は締め済みのため、計上できません。"));
             return;
         }
 
@@ -121,7 +121,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PeriodOrphaned,
-                $"会計期間 {period.Period} が属する会計年度がない。マスタが壊れている。"));
+                $"会計期間 {period.Period} が属する会計年度がありません。マスタの設定を確認してください。"));
             return;
         }
 
@@ -129,7 +129,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PeriodClosed,
-                $"会計年度「{fiscalYear.Label}」は締め済みで、計上できない。"));
+                $"会計年度「{fiscalYear.Label}」は締め済みのため、計上できません。"));
             return;
         }
 
@@ -139,7 +139,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.FiscalYearMismatch,
-                $"伝票の会計年度が、計上日 {entry.PostingDate:yyyy-MM-dd} の属する「{fiscalYear.Label}」と食い違っている。"));
+                $"伝票の会計年度が、計上日（{entry.PostingDate:yyyy-MM-dd}）の属する「{fiscalYear.Label}」と食い違っています。"));
         }
     }
 
@@ -151,7 +151,7 @@ public static class JournalEntryValidator
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.AmountNotPositive,
-                    "金額は正でなければならない。減額は貸借を入れ替えて表す。",
+                    "金額は 1 円以上にしてください。減額は借方と貸方を入れ替えて表します。",
                     line.LineNo));
             }
 
@@ -160,7 +160,7 @@ public static class JournalEntryValidator
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.TaxCategoryMissing,
-                    "税区分がない。税に意味のない行にも「対象外」を明示する。",
+                    "税区分を選んでください。税に関係のない行にも「対象外」を選びます。",
                     line.LineNo));
             }
 
@@ -172,7 +172,7 @@ public static class JournalEntryValidator
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.AccountUnknown,
-                    $"勘定科目 {line.AccountId.Value} がマスタにない。",
+                    "勘定科目が勘定科目マスタにありません。",
                     line.LineNo));
                 continue;
             }
@@ -181,7 +181,7 @@ public static class JournalEntryValidator
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.AccountInactive,
-                    $"勘定科目「{account.Name}」は無効で、新たな計上には使えない。",
+                    $"勘定科目「{account.Name}」は無効なので、新しい計上には使えません。",
                     line.LineNo,
                     InactiveSeverity(entry)));
             }
@@ -190,7 +190,7 @@ public static class JournalEntryValidator
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.DepartmentMissing,
-                    $"損益科目「{account.Name}」の明細には部門が要る。",
+                    $"損益科目「{account.Name}」の行には部門が必要です。",
                     line.LineNo));
             }
 
@@ -211,7 +211,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.DepartmentUnknown,
-                $"部門 {departmentId.Value} がマスタにない。",
+                "部門が部門マスタにありません。",
                 line.LineNo));
             return;
         }
@@ -220,7 +220,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.DepartmentInactive,
-                $"部門「{department.Name}」は無効で、新たな計上には使えない。",
+                $"部門「{department.Name}」は無効なので、新しい計上には使えません。",
                 line.LineNo,
                     InactiveSeverity(entry)));
         }
@@ -236,7 +236,7 @@ public static class JournalEntryValidator
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.SubAccountRequired,
-                    $"勘定科目「{account.Name}」は補助科目を使う。補助科目が要る。",
+                    $"勘定科目「{account.Name}」は補助科目を使います。補助科目を選んでください。",
                     line.LineNo));
             }
             return;
@@ -247,7 +247,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.SubAccountUnknown,
-                $"補助科目 {subAccountId.Value} がマスタにない。",
+                "補助科目が補助科目マスタにありません。",
                 line.LineNo));
             return;
         }
@@ -258,7 +258,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.SubAccountMismatch,
-                $"補助科目「{subAccount.Name}」は勘定科目「{account.Name}」に属していない。",
+                $"補助科目「{subAccount.Name}」は勘定科目「{account.Name}」のものではありません。",
                 line.LineNo));
             return;
         }
@@ -267,7 +267,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.SubAccountInactive,
-                $"補助科目「{subAccount.Name}」は無効で、新たな計上には使えない。",
+                $"補助科目「{subAccount.Name}」は無効なので、新しい計上には使えません。",
                 line.LineNo,
                     InactiveSeverity(entry)));
         }
@@ -299,7 +299,7 @@ public static class JournalEntryValidator
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.TaxLineParentInvalid,
-                    "本体行に親行を指定できない。",
+                    "本体行には親行を指定できません。",
                     line.LineNo));
             }
             return;
@@ -310,7 +310,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.TaxLineParentInvalid,
-                "消費税行は、伝票内に存在する本体行を指していなければならない。",
+                "消費税行は、同じ伝票にある本体行を指してください。",
                 line.LineNo));
             return;
         }
@@ -319,7 +319,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.TaxLineParentInvalid,
-                "消費税行が別の消費税行を親に指している。",
+                "消費税行が別の消費税行を親に指しています。",
                 line.LineNo));
             return;
         }
@@ -330,7 +330,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.TaxLineNotInherited,
-                "消費税行の貸借は、本体行と同じでなければならない。",
+                "消費税行の借方貸方は、本体行と同じにしてください。",
                 line.LineNo));
         }
 
@@ -338,7 +338,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.TaxLineNotInherited,
-                "消費税行の部門は、本体行から引き継がなければならない。",
+                "消費税行の部門は、本体行と同じにしてください。",
                 line.LineNo));
         }
 
@@ -346,7 +346,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.TaxLineNotInherited,
-                "消費税行の税区分は、本体行から引き継がなければならない。",
+                "消費税行の税区分は、本体行と同じにしてください。",
                 line.LineNo));
         }
 
@@ -354,7 +354,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.TaxLineNotInherited,
-                "消費税行の用途区分は、本体行から引き継がなければならない。",
+                "消費税行の用途区分は、本体行と同じにしてください。",
                 line.LineNo));
         }
     }
