@@ -53,6 +53,22 @@ list       一覧に出すフィールド名の配列
 search     検索条件に出すフィールド名の配列
 labelWidth ラベル列の幅（px。省略時 140）
 canCreate / canUpdate / canDelete  省略時 true。false にすると参照のみの画面になる
+
+クエリモジュール（帳簿・集計）
+------------------------------
+`query` を書くと、実テーブルではなく **SELECT の結果**を見せる読み取り専用モジュールになる
+（`_specs/QueryAndSql.md`）。`table` は要らず、CRUD は自動的に false、詳細画面も登録ボタンも作らない。
+
+    "query": {"sortType": "None", "pagingType": "System"}
+
+- SQL は `Design/Modules/{folder}/{module}.Query.sql` に**別ファイルで**置く（JSON に書かない）
+- **全フィールドに `column` が要る。** 出力列は SELECT の別名、入力パラメータは SQL の `@名前`
+- 入力パラメータにするフィールドには `"searchParameter": true` を付ける
+  （`IsSimpleSearchParameter` が立ち、SQL の `@{column}` に束縛される）
+- 範囲で絞りたいなら**下限と上限で 2 つのフィールド**を作る。
+  クエリモジュールの検索は 1 フィールド＝1 パラメータで、`SearchMin` / `SearchMax` は使えない
+- `dbType` で DB 型を明示できる（省略時は `type` から決める）
+- Select の候補はその画面限りなら `candidates`（`"表示,値"` の配列）で足りる
 """
 from __future__ import annotations
 
@@ -76,6 +92,19 @@ TYPE_TO_DESIGN = {
     "Link": "LinkFieldDesign",
     "Date": "DateFieldDesign",
     "DateTime": "DateTimeFieldDesign",
+}
+
+# クエリモジュールの列は DB 型を宣言する必要がある（_specs/QueryAndSql.md）。
+# 日付を TEXT で宣言しないこと（qa/01 A-02 と同じ理由で、比較が壊れる）。
+TYPE_TO_DB_TYPE = {
+    "Id": "integer",
+    "Text": "text",
+    "Number": "integer",
+    "Boolean": "integer",
+    "Select": "text",
+    "Link": "integer",
+    "Date": "DATE",
+    "DateTime": "DATETIME",
 }
 
 
@@ -108,6 +137,14 @@ def build_field(spec: dict) -> dict:
         field["IncrementVersion"] = True
     if spec["type"] == "Select" and spec.get("enum"):
         field["EnumName"] = spec["enum"]
+    if spec["type"] == "Select" and spec.get("module"):
+        # SelectField でマスタを引く書き方（_field_catalog.md）。**クエリモジュールの
+        # 検索条件では LinkField ではなくこちらを使う。** LinkField は親テーブルとの
+        # 結合を前提にしており、実テーブルを持たないモジュールでは噛み合わない。
+        field["SearchCondition"]["ModuleName"] = spec["module"]
+        field["SearchCondition"]["LimitCount"] = spec.get("limitCount", 200)
+        field["ValueVariable"] = spec.get("valueVariable", "Id.Value")
+        field["DisplayTextVariable"] = spec.get("displayText", "Name.Value")
     if spec["type"] == "Link":
         # DB 上の外部キーは相手の id（INTEGER）なので、保持する値は Id、
         # 画面に見せるのは名称にする（DatabaseGuidelines の主キー規約）。
@@ -121,7 +158,39 @@ def build_field(spec: dict) -> dict:
         field["Text"] = ""
         field["TrueText"] = spec.get("trueText", "○")
         field["FalseText"] = spec.get("falseText", "—")
+    if spec.get("candidates"):
+        # その画面限りの固定候補。複数モジュールで使う値ならデザイン enum にする
+        # （_field_catalog.md「Candidates と enum の使い分け」）。
+        field["Candidates"] = spec["candidates"]
+    if spec.get("searchParameter"):
+        # クエリモジュールでは、この印が付いたフィールドが SQL の @{column} に束縛される。
+        field["IsSimpleSearchParameter"] = True
 
+    return field
+
+
+def query_field(spec: dict) -> dict:
+    """
+    SELECT の結果をモジュールに見せる QueryField を作る。
+
+    **出力列も入力パラメータも、ここで全部宣言する。** 宣言し忘れた列は
+    SQL が返していても画面に出てこない（`_specs/QueryAndSql.md`）。
+    """
+    field = load_default("QueryFieldDesign")
+    field["Name"] = "Query"
+
+    query = spec["query"]
+    field["QuerySetting"]["QuerySortType"] = query.get("sortType", "None")
+    field["QuerySetting"]["QueryPagingType"] = query.get("pagingType", "System")
+    field["QuerySetting"]["Parameters"] = [
+        {
+            "IsParameter": bool(f.get("searchParameter")),
+            "Name": f["column"],
+            "DbType": f.get("dbType", TYPE_TO_DB_TYPE[f["type"]]),
+            "DbParameterDirection": "Input",
+        }
+        for f in spec["fields"]
+    ]
     return field
 
 
@@ -206,7 +275,8 @@ def build_detail_layout(spec: dict, labels: dict[str, str]) -> dict:
             columns.append(grid_column(field_layout(field_name)))
         rows.append(grid_row(columns))
 
-    if spec.get("canUpdate", True) or spec.get("canCreate", True):
+    writable = not ("query" in spec)
+    if spec.get("canUpdate", writable) or spec.get("canCreate", writable):
         rows.append(grid_row([grid_column(field_layout("SubmitButton"), horizontal="End")]))
     layout["Layout"]["Rows"] = rows
     return layout
@@ -257,16 +327,34 @@ def build_search_layout(spec: dict) -> dict:
 
 def validate_spec(spec: dict) -> None:
     """生成器自身が「designcheck は通るが挙動が違う」ものを作らないようにする。"""
-    for key in ("module", "table", "fields"):
+    is_query = "query" in spec
+    required = ("module", "fields") if is_query else ("module", "table", "fields")
+    for key in required:
         if key not in spec:
             raise SystemExit(f"仕様に {key} がない")
+
+    if is_query and spec.get("detail"):
+        raise SystemExit("クエリモジュールに detail は作れない（読み取り専用で登録ボタンも無い）")
 
     names = []
     for field in spec["fields"]:
         for key in ("name", "type"):
             if key not in field:
                 raise SystemExit(f"フィールドに {key} がない: {field}")
+        # 列名の無いフィールドは QueryField の宣言に載らず、画面に値が出ない。
+        if is_query and not field.get("column"):
+            raise SystemExit(f"クエリモジュールのフィールドには column が要る: {field['name']}")
+        if is_query and field["type"] not in TYPE_TO_DB_TYPE and not field.get("dbType"):
+            raise SystemExit(f"{field['name']} の DB 型が決まらない。dbType を書く")
         names.append(field["name"])
+
+    columns = [f["column"] for f in spec["fields"] if f.get("column")]
+    if is_query:
+        # 同じ列名を 2 つのフィールドで宣言すると、SQL のパラメータが二重になって
+        # 実行時に落ちる。designcheck は列名の重複を知らない。
+        duplicated_columns = {c for c in columns if columns.count(c) > 1}
+        if duplicated_columns:
+            raise SystemExit(f"列名が重複している: {', '.join(sorted(duplicated_columns))}")
 
     duplicated = {n for n in names if names.count(n) > 1}
     if duplicated:
@@ -288,29 +376,38 @@ def validate_spec(spec: dict) -> None:
 
 
 def main() -> None:
-    spec = json.load(sys.stdin)
+    # **標準入力は UTF-8 として読む。** 既定のままだと Windows のコンソール既定（cp932）で
+    # 復号され、日本語のラベルが壊れたまま JSON になる。壊れ方が「サロゲートが混じる」なので
+    # 読み込みでは落ちず、**書き出しの直前まで気づけない**。
+    spec = json.loads(sys.stdin.buffer.read().decode("utf-8"))
     validate_spec(spec)
 
     labels = {f["name"]: f.get("label", f["name"]) for f in spec["fields"]}
 
+    is_query = "query" in spec
+
     module = load_default("ModuleDesign")
     module["Name"] = spec["module"]
     module["DataSourceName"] = spec.get("dataSource", "BusinessAppSQLite")
-    module["DbTable"] = spec["table"]
+    # クエリモジュールは実テーブルを持たない。DbTable を空にすることが
+    # 「書き込み経路が無い」ことの表明でもある（_specs/QueryAndSql.md）。
+    module["DbTable"] = "" if is_query else spec["table"]
     module["PageTitle"] = spec.get("pageTitle", "")
     # 既定はすべて true。false にすると入力フィールドが ViewOnly になる（CommonMistakes #40）ので、
     # 「参照のみの画面」を作るのに使える。
-    module["CanCreate"] = spec.get("canCreate", True)
-    module["CanUpdate"] = spec.get("canUpdate", True)
-    module["CanDelete"] = spec.get("canDelete", True)
+    writable = not is_query
+    module["CanCreate"] = spec.get("canCreate", writable)
+    module["CanUpdate"] = spec.get("canUpdate", writable)
+    module["CanDelete"] = spec.get("canDelete", writable)
 
-    fields = [build_field(f) for f in spec["fields"]]
+    fields = [query_field(spec)] if is_query else []
+    fields += [build_field(f) for f in spec["fields"]]
     for row_fields in spec.get("detail", []):
         for name in row_fields:
             fields.append(label_field(name + "Label", labels.get(name, name)))
     for name in spec.get("search", []):
         fields.append(label_field(name + "SearchLabel", labels.get(name, name)))
-    if spec.get("canUpdate", True) or spec.get("canCreate", True):
+    if module["CanUpdate"] or module["CanCreate"]:
         fields.append(submit_button(spec.get("submitText", "登録")))
     module["Fields"] = fields
 
@@ -331,9 +428,12 @@ def main() -> None:
             f"既にある: {os.path.relpath(out_path, REPO_ROOT)} / "
             "生成後の .mod.json が正典なので上書きしない。作り直すなら先に消すこと。")
 
+    # **先に文字列にしてから書く。** 直接ストリームへ書くと、途中で失敗したときに
+    # 壊れたファイルが残り、消さないと作り直せない（削除は確認を挟む運用なので、
+    # そこで作業が止まる）。生成器の失敗が後片付けを要求しない形にしておく。
+    body = json.dumps(module, ensure_ascii=False, indent=2) + "\n"
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(module, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+        f.write(body)
 
     print(os.path.relpath(out_path, REPO_ROOT))
 
