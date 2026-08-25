@@ -51,6 +51,109 @@ public class MigrationEquivalenceTests
         Assert.True(diff.Count == 0, string.Join("\n", diff));
     }
 
+    /// <summary>
+    /// 作り直しマイグレーション（0004）を<b>データありで</b>再生する。
+    /// スキーマの同値テストは空の DB を再生するので、書き戻しの INSERT ... SELECT の列の取り違えや
+    /// 採番（sqlite_sequence）の復元漏れを検出できない（2026-08-25 の自己レビューで、
+    /// 実際に採番の復元漏れがすり抜けた。qa/03 L-09）。ここで行と採番の往復を固定する。
+    /// </summary>
+    /// <remarks>
+    /// 0004 が掃除（ADR-0020 §4）で baseline に畳まれたら、このテストも一緒に消す。
+    /// 次の作り直しマイグレーションを書くときは、同じ形のテストをその番号で作る。
+    /// </remarks>
+    [Fact]
+    public void 作り直しはデータと採番を失わない()
+    {
+        var rebuild = TestDatabase.MigrationFiles().Single(f => Path.GetFileName(f).StartsWith("0004_", StringComparison.Ordinal));
+        var before = TestDatabase.BaselineFiles()
+            .Concat(TestDatabase.MigrationFiles().Where(f => string.CompareOrdinal(Path.GetFileName(f), "0004_") < 0));
+
+        using var db = TestDatabase.CreateFromFiles(before);
+
+        // 列ごとに相異なる値（qa/03 L-02）。末尾の行を消して、採番が最大 id より先に進んだ状態を作る。
+        TestDatabase.Execute(db, """
+            INSERT INTO partners (code, name, name_kana, is_active, display_order, address, entity_type, corporate_number)
+                VALUES ('P010', '株式会社ペテルギウス', 'ペテルギウス', 1, 7, '東京都台東区雷門 2-3-4', 'corporation', '9876543210987');
+            INSERT INTO partners (code, name, entity_type, parent_partner_id)
+                VALUES ('P020', 'ペテルギウス浅草店', 'sole_proprietor', 1);
+            INSERT INTO partners (code, name) VALUES ('P030', '消される取引先');
+            DELETE FROM partners WHERE code = 'P030';
+            INSERT INTO partner_invoice_registrations
+                (partner_id, registration_no, valid_from, ended_on, end_reason,
+                 source, confirmed_on, nta_updated_on, published_name)
+                VALUES (1, 'T9876543210987', '2023-10-01', '2026-03-31', 'expired',
+                        'nta_download', '2026-08-20', '2026-04-02', '（株）ペテルギウス');
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+                VALUES (2, 'T0000000000001', '2024-01-15');
+            DELETE FROM partner_invoice_registrations WHERE registration_no = 'T0000000000001';
+            """);
+
+        const string partnersDump = """
+            SELECT group_concat(id || '/' || code || '/' || name || '/' || coalesce(name_kana, '-') || '/'
+                || is_active || '/' || coalesce(display_order, '-') || '/' || coalesce(address, '-') || '/'
+                || coalesce(entity_type, '-') || '/' || coalesce(corporate_number, '-') || '/'
+                || coalesce(parent_partner_id, '-'), ';')
+            FROM (SELECT * FROM partners ORDER BY id)
+            """;
+        const string registrationsDump = """
+            SELECT group_concat(id || '/' || partner_id || '/' || registration_no || '/' || valid_from || '/'
+                || coalesce(ended_on, '-') || '/' || coalesce(end_reason, '-') || '/' || source || '/'
+                || coalesce(confirmed_on, '-') || '/' || coalesce(nta_updated_on, '-') || '/'
+                || coalesce(published_name, '-'), ';')
+            FROM (SELECT * FROM partner_invoice_registrations ORDER BY id)
+            """;
+        var partnersBefore = TestDatabase.ScalarOf<string>(db, partnersDump);
+        var registrationsBefore = TestDatabase.ScalarOf<string>(db, registrationsDump);
+
+        // ランナーと同じ包み方で適用する。
+        TestDatabase.Execute(db, $"BEGIN;\n{File.ReadAllText(rebuild)}\nCOMMIT;");
+
+        Assert.Equal(partnersBefore, TestDatabase.ScalarOf<string>(db, partnersDump));
+        Assert.Equal(registrationsBefore, TestDatabase.ScalarOf<string>(db, registrationsDump));
+
+        // 消した id を再利用しない（sqlite_sequence の復元）。
+        TestDatabase.Execute(db, "INSERT INTO partners (code, name) VALUES ('P040', '作り直し後の取引先');");
+        Assert.Equal(4L, TestDatabase.ScalarOf<long>(db, "SELECT id FROM partners WHERE code = 'P040'"));
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+            VALUES (2, 'T1111111111111', '2026-05-01');
+            """);
+        Assert.Equal(3L, TestDatabase.ScalarOf<long>(db,
+            "SELECT id FROM partner_invoice_registrations WHERE registration_no = 'T1111111111111'"));
+    }
+
+    /// <summary>
+    /// 行を全部消した表（採番だけが進んでいる）を作り直しても、採番は巻き戻らない。
+    /// 書き戻しが 0 行だと sqlite_sequence に行が無く、UPDATE だけの復元は空振りする
+    /// （レシピ⑧の INSERT 分岐が正にこの縁のためにある。qa/03 L-09 で実際に書き落とした）。
+    /// </summary>
+    [Fact]
+    public void 作り直しは行が空でも採番を失わない()
+    {
+        var rebuild = TestDatabase.MigrationFiles().Single(f => Path.GetFileName(f).StartsWith("0004_", StringComparison.Ordinal));
+        var before = TestDatabase.BaselineFiles()
+            .Concat(TestDatabase.MigrationFiles().Where(f => string.CompareOrdinal(Path.GetFileName(f), "0004_") < 0));
+
+        using var db = TestDatabase.CreateFromFiles(before);
+        TestDatabase.Execute(db, """
+            INSERT INTO partners (code, name) VALUES ('P010', '株式会社リゲル');
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+                VALUES (1, 'T2222222222222', '2023-10-01');
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+                VALUES (1, 'T3333333333333', '2024-10-01');
+            DELETE FROM partner_invoice_registrations;
+            """);
+
+        TestDatabase.Execute(db, $"BEGIN;\n{File.ReadAllText(rebuild)}\nCOMMIT;");
+
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+            VALUES (1, 'T4444444444444', '2026-05-01');
+            """);
+        Assert.Equal(3L, TestDatabase.ScalarOf<long>(db,
+            "SELECT id FROM partner_invoice_registrations WHERE registration_no = 'T4444444444444'"));
+    }
+
     [Fact]
     public void BaselineのVERSIONは畳んだ番号を整数で持つ()
     {

@@ -60,7 +60,10 @@ public static class SchemaSnapshot
             .ToList();
 
     /// <summary>
-    /// コメントを除き、引用の外の連続する空白を 1 つに潰す。
+    /// コメントを除き、引用の外の連続する空白を 1 つに潰す。<c>,</c> <c>)</c> <c>;</c> の前と
+    /// <c>(</c> の後の空白は 0 個にする（SQLite の ALTER TABLE ADD COLUMN は
+    /// 「<c>DEFAULT 0\n)</c>」の改行位置に「<c>, 列</c>」を挿し込むので、
+    /// 正典の「<c>DEFAULT 0,</c>」と<b>カンマの前の空白だけが違う</b>テキストになる。2026-08-25 実測）。
     /// 引用の中（文字列・引用付き識別子）は変えない。
     /// 正典の整形だけを変える編集（コメント・改行・字下げ）を、スキーマの差と誤認しないため。
     /// </summary>
@@ -103,7 +106,7 @@ public static class SchemaSnapshot
                 continue;
             }
 
-            if (pendingSpace && result.Length > 0)
+            if (pendingSpace && result.Length > 0 && c is not (',' or ')' or ';') && result[^1] != '(')
             {
                 result.Append(' ');
             }

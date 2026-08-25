@@ -1,0 +1,16 @@
+{
+  "Name": "RegistrationEndReasons",
+  "ValueType": "String",
+  "Members": [
+    {
+      "Name": "Expired",
+      "Value": "expired",
+      "DisplayText": "失効"
+    },
+    {
+      "Name": "Revoked",
+      "Value": "revoked",
+      "DisplayText": "取消"
+    }
+  ]
+}

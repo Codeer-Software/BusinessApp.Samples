@@ -10,7 +10,7 @@ public class SchemaShapeTests
     private static readonly string[] BusinessTables =
     [
         "company_profile", "fiscal_years", "accounting_periods", "tax_categories",
-        "accounts", "sub_accounts", "departments", "partners",
+        "accounts", "sub_accounts", "departments", "partners", "partner_invoice_registrations",
         "journal_entries", "journal_lines", "journal_entry_sequences",
     ];
 
@@ -53,6 +53,10 @@ public class SchemaShapeTests
     [InlineData("journal_entries", "entered_at", "DATETIME")]
     [InlineData("journal_entries", "posted_at", "DATETIME")]
     [InlineData("journal_lines", "tax_point", "DATE")]
+    [InlineData("partner_invoice_registrations", "valid_from", "DATE")]
+    [InlineData("partner_invoice_registrations", "ended_on", "DATE")]
+    [InlineData("partner_invoice_registrations", "confirmed_on", "DATE")]
+    [InlineData("partner_invoice_registrations", "nta_updated_on", "DATE")]
     public void 日付列はDATEまたはDATETIMEで宣言されている(string table, string column, string expected)
     {
         using var db = TestDatabase.Create();

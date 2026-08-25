@@ -1,0 +1,26 @@
+{
+  "Name": "PartnerEntityTypes",
+  "ValueType": "String",
+  "Members": [
+    {
+      "Name": "Corporation",
+      "Value": "corporation",
+      "DisplayText": "法人"
+    },
+    {
+      "Name": "SoleProprietor",
+      "Value": "sole_proprietor",
+      "DisplayText": "個人事業者"
+    },
+    {
+      "Name": "UnincorporatedAssociation",
+      "Value": "unincorporated_association",
+      "DisplayText": "人格のない社団等"
+    },
+    {
+      "Name": "Other",
+      "Value": "other",
+      "DisplayText": "その他"
+    }
+  ]
+}
