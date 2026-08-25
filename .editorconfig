@@ -15,6 +15,18 @@
 #   2. 下の「強制する」セクション …… **ビルドの関門**（規則 ID ごとの severity）。
 #      対象は ADR-0021 §3 のプロジェクトだけ。CLB スクリプトと CLB テンプレート由来の
 #      プロジェクトは、このセクションのパスに含めないことで対象外にしてある。
+#
+# **2 段は独立ではない。片方だけ触らないこと。**
+# 下段の severity は「どの規則を報告するか」しか決めず、**何を正とするかは上段が決める**。
+# 上段の option を消す・false にすると、下段は warning のまま何も報告しなくなる
+# （例: IDE0290 が primary constructor を要求するのは csharp_style_prefer_primary_constructors
+# = true があるからで、これを false にすると IDE0290 は逆に「primary constructor をやめろ」と言う）。
+# 規則を足すときも消すときも、上段と下段の両方を直す。
+#
+# **強制セクションのプロジェクト一覧は、規約テストが CSharpStyleConvention.EnforcedProjects と
+# 突き合わせている**（CSharpStyleTests.editorconfig_の強制セクションと表が一致している）。
+# ここに足し忘れると、csproj が EnforceCodeStyleInBuild を宣言していても
+# **severity を上げる指定が 1 つも当たらず、ビルドが素通りする**。
 # ------------------------------------------------------------------------------------------------
 
 root = true
@@ -108,13 +120,14 @@ csharp_preferred_modifier_order = public,private,protected,internal,file,static,
 # 敢えて強制しないもの（理由つき）
 #---------------------------------------------------------------------------
 
-# var の使い分けは読み手の判断に任せる。ADR-0021 の表に無く、
-# 一律にするとかえって型が読めなくなる場面がある。
+# var を好む、とだけ表明する。**強制はしない**（下の強制セクションに IDE0007 / IDE0008 を
+# 書いていない）。ADR-0021 の表に無く、一律にするとかえって型が読めなくなる場面がある。
 csharp_style_var_for_built_in_types = true
 csharp_style_var_when_type_is_apparent = true
 csharp_style_var_elsewhere = true
 
 # 式形式のメンバは既に多用しているが、複数行のロジックまで押し込むと読みにくい。
+# **強制はしない**（強制セクションに IDE0021〜IDE0027 を書いていない）。
 csharp_style_expression_bodied_methods = when_on_single_line
 csharp_style_expression_bodied_constructors = when_on_single_line
 csharp_style_expression_bodied_operators = when_on_single_line
@@ -125,6 +138,7 @@ csharp_style_expression_bodied_lambdas = true
 csharp_style_expression_bodied_local_functions = when_on_single_line
 
 # 三項演算子への寄せ（IDE0045 / IDE0046）は、条件が長いと一行が読めなくなる。
+# **強制はしない**（強制セクションで silent に落としてある）。
 # ADR-0021 §1「初見の読み手が意味を一意に取れるか」で個別に判断する。
 dotnet_style_prefer_conditional_expression_over_assignment = true
 dotnet_style_prefer_conditional_expression_over_return = true
@@ -214,11 +228,20 @@ dotnet_diagnostic.IDE0302.severity = warning   # コレクション式（stackal
 dotnet_diagnostic.IDE0303.severity = warning   # コレクション式（Create）
 dotnet_diagnostic.IDE0304.severity = warning   # コレクション式（builder）
 
-# IDE0305（LINQ の終端の .ToList() / .ToArray() を [.. 式] にする）は**強制しない**。
+# ---------------------------------------------------------------------------
+# 検討して**強制しないと決めた**もの。severity を明示して、
+# 「見落とした」のではなく「決めた」ことが分かるようにしてある。
+# ---------------------------------------------------------------------------
+
+# IDE0305（LINQ の終端の .ToList() / .ToArray() を [.. 式] にする）。
 # 複数行にわたる LINQ の連鎖の頭に `[..` が来ると、開き括弧と閉じ括弧が遠く離れ、
 # 「ここで実体化する」という意図も読み取りにくくなる。ADR-0021 §1 の
 # 「初見の読み手が意味を一意に取れるか」で落とした（2026-08-25。対象は 19 か所）。
 dotnet_diagnostic.IDE0305.severity = silent
+
+# 三項演算子への寄せ。条件が長いと一行が読めなくなる。
+dotnet_diagnostic.IDE0045.severity = silent
+dotnet_diagnostic.IDE0046.severity = silent
 
 # 生成と宣言
 dotnet_diagnostic.IDE0018.severity = warning   # out 変数のインライン宣言
