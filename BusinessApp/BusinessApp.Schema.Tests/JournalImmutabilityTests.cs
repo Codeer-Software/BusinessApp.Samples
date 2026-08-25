@@ -199,16 +199,48 @@ public class JournalImmutabilityTests
             "SELECT COUNT(*) FROM journal_entries WHERE original_entry_id = 1 AND status = 'posted'"));
     }
 
+    /// <summary>
+    /// 一意なのは「原仕訳ごと」であって「帳簿全体で 1 本」ではない。
+    /// </summary>
+    /// <remarks>
+    /// インデックスの列を <c>(original_entry_id)</c> から <c>(entry_type)</c> に取り違えても、
+    /// 原仕訳が 1 本しか無いテストでは緑のままになる。症状は
+    /// 「帳簿全体で訂正が 1 本しか計上できない」で、最初の 1 件は通るぶん発見が遅れる。
+    /// </remarks>
+    [Theory]
+    [InlineData("reversal")]
+    [InlineData("correction")]
+    public void 別々の原仕訳ならそれぞれ足せる(string entryType)
+    {
+        using var db = SchemaSeed.CreateWithPostedEntry();
+
+        // 2 本目の原仕訳を作って計上する。
+        TestDatabase.Execute(db, """
+            INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES (10, 1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (10, 1, 'debit', 1, 500, 1);
+            UPDATE journal_entries SET status = 'posted', entry_no = 9, posted_at = '2026-05-20 10:00:00' WHERE id = 10;
+            """);
+
+        TestDatabase.Execute(db, Amendment(id: 2, entryNo: 2, entryType: entryType));
+        TestDatabase.Execute(db, Amendment(id: 3, entryNo: 3, entryType: entryType, originalEntryId: 10));
+
+        Assert.Equal(2L, TestDatabase.ScalarOf<long>(db,
+            $"SELECT COUNT(*) FROM journal_entries WHERE entry_type = '{entryType}' AND status = 'posted'"));
+    }
+
     private static string ReversalDraft(int id) => AmendmentDraft(id, "reversal");
 
     private static string Reversal(int id, int entryNo) => Amendment(id, entryNo, "reversal");
 
-    private static string AmendmentDraft(int id, string entryType) => $"""
+    private static string AmendmentDraft(int id, string entryType, int originalEntryId = 1) => $"""
         INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, entered_at)
-            VALUES ({id}, 1, '2026-05-20', '2026-05-21', 'draft', '{entryType}', 1, '2026-05-21 10:00:00');
+            VALUES ({id}, 1, '2026-05-20', '2026-05-21', 'draft', '{entryType}', {originalEntryId}, '2026-05-21 10:00:00');
         """;
 
-    private static string Amendment(int id, int entryNo, string entryType) => AmendmentDraft(id, entryType) + $"""
+    private static string Amendment(int id, int entryNo, string entryType, int originalEntryId = 1)
+        => AmendmentDraft(id, entryType, originalEntryId) + $"""
         UPDATE journal_entries SET status = 'posted', entry_no = {entryNo}, posted_at = '2026-05-21 10:00:00' WHERE id = {id};
         """;
 }

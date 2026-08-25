@@ -87,6 +87,26 @@ public class QueryModuleTests
             Assert.True(declared.Contains(column), $"{column} が QuerySetting.Parameters に無い"));
     }
 
+    /// <summary>
+    /// 選択肢の値が、SQL の分岐にそのまま現れること。
+    /// </summary>
+    /// <remarks>
+    /// 空値検索（通達 8-13）の絞り込みのように、<b>候補の値と SQL の分岐が文字列でしか結ばれていない</b>
+    /// ものがある。どちらかを直すとどの分岐にも当たらず、<b>例外にならずに 0 件が返る</b>。
+    /// 画面には「該当なし」としか出ないので、機能が死んだことに誰も気づけない。
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(QueryModules))]
+    public void 選択肢の値が_SQL_の分岐に現れる(string relativePath)
+    {
+        var module = Load(relativePath);
+
+        Assert.All(module.CandidateValues, value =>
+            Assert.True(
+                module.Sql.Contains($"'{value}'", StringComparison.Ordinal),
+                $"候補の値 {value} が SQL に無い（分岐と候補がずれている）"));
+    }
+
     [Theory]
     [MemberData(nameof(QueryModules))]
     public void 実テーブルを持たず読み取り専用である(string relativePath)
@@ -145,6 +165,12 @@ public class QueryModuleTests
                 .Where(p => !p.GetProperty("IsParameter").GetBoolean())
                 .Select(p => p.GetProperty("Name").GetString()!)];
 
+            // 候補は「表示テキスト,値」の形。**値だけ**が SQL と結ばれる。
+            CandidateValues = [.. Root.GetProperty("Fields").EnumerateArray()
+                .Where(f => f.TryGetProperty("Candidates", out var c) && c.GetArrayLength() > 0)
+                .SelectMany(f => f.GetProperty("Candidates").EnumerateArray())
+                .Select(c => c.GetString()!.Split(',')[^1])];
+
             FieldColumns = [.. Root.GetProperty("Fields").EnumerateArray()
                 .Where(f => f.TryGetProperty("DbColumn", out var c) && !string.IsNullOrEmpty(c.GetString()))
                 .Select(f => f.GetProperty("DbColumn").GetString()!)];
@@ -172,6 +198,9 @@ public class QueryModuleTests
 
         /// <summary>出力列（`IsParameter: false`）。<b>SELECT の順序と一致していなければならない。</b></summary>
         public IReadOnlyList<string> DeclaredColumns { get; }
+
+        /// <summary>Select の候補が持つ値（「表示テキスト,値」の値のほう）。</summary>
+        public IReadOnlyList<string> CandidateValues { get; }
 
         public IReadOnlyList<string> FieldColumns { get; }
 

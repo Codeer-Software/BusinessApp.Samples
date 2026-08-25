@@ -167,6 +167,19 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
         return rows.Count == 0 ? null : DbValue.ToDate(rows[0]["posting_date"]);
     }
 
+    /// <summary>
+    /// 保存済みの種別だけを読む。無ければ null。
+    /// </summary>
+    /// <remarks>
+    /// 種別が変えられていないかを<b>保存の前</b>に見るために使う。明細まで読む必要は無い。
+    /// </remarks>
+    public async Task<EntryType?> FindEntryTypeAsync(JournalEntryId id)
+    {
+        var rows = await QueryAsync("select entry_type from journal_entries where id = @p1", id.Value);
+
+        return rows.Count == 0 ? null : DbValue.ToEnum<EntryType>(rows[0]["entry_type"]);
+    }
+
     /// <summary>この原仕訳を訂正する計上済みの再計上が既にあるか（二重訂正の検出）。</summary>
     public async Task<bool> HasCorrectionAsync(JournalEntryId originalId)
     {
@@ -280,7 +293,9 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
                     { "@p6", line.DepartmentId?.Value },
                     { "@p7", line.PartnerId?.Value },
                     { "@p8", line.PartnerNameSnapshot },
-                    { "@p9", checked((long)line.Amount.Value) },
+                    // decimal から整数型への変換は、checked を付けなくても範囲外なら
+                    // OverflowException を投げる（C# の言語仕様）。付けても何も変わらないので置かない。
+                    { "@p9", (long)line.Amount.Value },
                     { "@p10", line.TaxCategoryId.Value },
                     { "@p11", line.TaxTreatment is { } treatment ? DbValue.ToSnakeCase(treatment) : null },
                     { "@p12", line.TaxPoint is { } point ? DbValue.ToDbDate(point) : null },
@@ -299,7 +314,9 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
     /// </summary>
     /// <remarks>
     /// <b>取消は利用者が中身を決める操作ではない</b>ので、取引日・会計年度・取引先・摘要まで
-    /// 原仕訳から作り直したもので上書きする。外部投入の印は手入力の取消には付かないので落とす。
+    /// 原仕訳から作り直したもので上書きする。投入元の情報（部品名・外部伝票 ID）も原仕訳から写す。
+    /// <b>落とすのは冪等キーだけ</b>——一意なのはそれだけで（I-14）、
+    /// 落とすと投入元が自分の伝票の取消を辿れなくなる。
     /// </remarks>
     public async Task OverwriteReversalHeaderAsync(JournalEntryId id, JournalEntry reversal)
     {
@@ -310,7 +327,7 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
             """
             update journal_entries
                set transaction_date = @p2, fiscal_year_id = @p3, partner_id = @p4, description = @p5,
-                   source_component = null, source_document_id = null, idempotency_key = null
+                   source_component = @p6, source_document_id = @p7, idempotency_key = null
              where id = @p1 and status = 'draft'
             """,
             new()
@@ -320,6 +337,8 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
                 { "@p3", reversal.FiscalYearId.Value },
                 { "@p4", reversal.PartnerId?.Value },
                 { "@p5", reversal.Description },
+                { "@p6", reversal.SourceComponent },
+                { "@p7", reversal.SourceDocumentId },
             });
 
         if (affected != 1)

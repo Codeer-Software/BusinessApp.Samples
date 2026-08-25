@@ -277,13 +277,19 @@ public static class JournalEntryValidator
     /// 無効にしたマスタを使っていることの重さ。
     /// </summary>
     /// <remarks>
-    /// <b>取消では止めない。</b> 新たな計上には使えないが、取消は「過去に計上したものを
-    /// そのまま反転する」操作なので、後からマスタを無効にしたせいで
+    /// <para><b>取消と訂正では止めない。</b> 新たな計上には使えないが、どちらも
+    /// 「過去に計上したものを打ち消す・直す」操作なので、後からマスタを無効にしたせいで
     /// <b>訂正も取消もできない仕訳が帳簿に残る</b>という最悪の状態を作ってはいけない
-    /// （docs/04 §6・ADR-0004）。
+    /// （docs/04 §6・ADR-0004）。</para>
+    /// <para><b>訂正を含めるのは 2026-08-25 の自己レビューで直した。</b> 訂正は取消を先に計上してから
+    /// 再計上の下書きを開く（ADR-0015）。ここが Error のままだと、原仕訳が無効なマスタを使っていた場合に
+    /// <b>取消だけが確定して再計上は永久に計上できない</b>——利用者から見れば、訂正しようとしたら
+    /// 取り消されただけで詰む。ADR-0015 の「誤って取り消したときの復旧」も同じ理由で塞がれていた。</para>
     /// </remarks>
     private static ViolationSeverity InactiveSeverity(JournalEntry entry)
-        => entry.EntryType == EntryType.Reversal ? ViolationSeverity.Warning : ViolationSeverity.Error;
+        => entry.EntryType is EntryType.Reversal or EntryType.Correction
+            ? ViolationSeverity.Warning
+            : ViolationSeverity.Error;
 
     private static void ValidateTaxLine(JournalLine line, JournalEntry entry, List<Violation> violations)
     {

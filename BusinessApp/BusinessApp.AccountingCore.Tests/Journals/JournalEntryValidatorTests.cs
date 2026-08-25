@@ -128,9 +128,24 @@ public class JournalEntryValidatorTests
     [Fact]
     public void 計上日が取引日より前なら計上できない()
     {
-        var entry = AccountingFixture.CashSale(Ordinary) with { TransactionDate = Ordinary.AddDays(1) };
+        // フィクスチャは計上日を取引日の 2 日後にする。取引日をその翌日にすれば逆転する。
+        var entry = AccountingFixture.CashSale(Ordinary) with { TransactionDate = Ordinary.AddDays(3) };
 
         AssertViolation(JournalViolationCodes.PostingDateBeforeTransaction, Validate(entry));
+    }
+
+    [Fact]
+    public void 取引日と計上日が同じ日でも計上できる()
+    {
+        // **その日のうちに起票して計上する**のがいちばん普通の運用である。
+        // ここを見ていないと `<` を `<=` に取り違えても気づけない（ミューテーションテストで発見）。
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+
+        Assert.False(Validate(entry).HasError());
     }
 
     [Fact]
@@ -338,18 +353,24 @@ public class JournalEntryValidatorTests
         Assert.True(violations.HasError());
     }
 
-    [Fact]
-    public void 取消では無効なマスタでも止めない()
+    [Theory]
+    [InlineData(EntryType.Reversal)]
+    [InlineData(EntryType.Correction)]
+    public void 取消と訂正では無効なマスタでも止めない(EntryType entryType)
     {
         // **後からマスタを無効にしたせいで、訂正も取消もできない仕訳が帳簿に残ってはいけない**
-        // （docs/04 §6・ADR-0004）。新たな計上には使えないが、取消は過去の反転である。
+        // （docs/04 §6・ADR-0004）。新たな計上には使えないが、どちらも過去を打ち消す・直す操作である。
+        //
+        // **訂正を含めるのは 2026-08-25 の自己レビューで直した。** 訂正は取消を先に計上してから
+        // 再計上の下書きを開くので（ADR-0015）、ここが Error だと
+        // **取消だけが確定して再計上は永久にできない**——利用者から見れば詰む。
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.RetiredExpense, 1_000,
                 department: AccountingFixture.RetiredDepartment),
             AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.BankAccount, 1_000,
                 subAccountId: AccountingFixture.RetiredBank))
-            with { EntryType = EntryType.Reversal, OriginalEntryId = new JournalEntryId(9) };
+            with { EntryType = entryType, OriginalEntryId = new JournalEntryId(9) };
 
         var violations = Validate(entry);
 

@@ -75,7 +75,13 @@ internal static class AmendmentRules
     /// </remarks>
     public static string Describe(JournalEntry original, AmendmentKind kind)
     {
-        var body = StripPrefixes(original.Description);
+        // **剥がすのは、原仕訳が取消・訂正のときだけ。**
+        // 通常の仕訳の摘要は利用者が書いた文であって、たまたま同じ形をしていることがある
+        // （「伝票番号 12 の取消について」と書いた通常の仕訳など）。
+        // 無条件に剥がすと、その本文を落として計上してしまい、計上済みは二度と直せない（I-05）。
+        var body = original.EntryType.RequiresOriginalEntry()
+            ? StripPrefixes(original.Description)
+            : (original.Description ?? string.Empty).Trim();
 
         return body.Length == 0
             ? $"伝票番号 {original.EntryNo} の{kind.Noun}"

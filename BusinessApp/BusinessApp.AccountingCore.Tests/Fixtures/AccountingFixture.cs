@@ -97,13 +97,23 @@ public static class AccountingFixture
             Line(1, DebitCredit.Debit, Cash, amount),
             Line(2, DebitCredit.Credit, Sales, amount, department: SalesDepartment));
 
+    /// <summary>
+    /// 伝票 1 本。<b>取引日と計上日は既定でずらす。</b>
+    /// </summary>
+    /// <remarks>
+    /// 同じ値にすると、取引日を書くべき場所に計上日を書いても全テストが緑のままになる
+    /// （qa/03 L-02。実際に取消の取引日で踏んだ）。同じ日にしたいテストだけが明示する。
+    /// </remarks>
     public static JournalEntry Entry(DateOnly date, params JournalLine[] lines)
+        => Entry(date, date.AddDays(2), lines);
+
+    public static JournalEntry Entry(DateOnly date, DateOnly postingDate, params JournalLine[] lines)
         => new()
         {
             Id = new JournalEntryId(1),
             FiscalYearId = FiscalYear,
             TransactionDate = date,
-            PostingDate = date,
+            PostingDate = postingDate,
             Status = EntryStatus.Draft,
             EntryType = EntryType.Normal,
             EnteredAt = new DateTimeOffset(2026, 8, 23, 10, 0, 0, TimeSpan.FromHours(9)),

@@ -114,7 +114,8 @@ internal static class DbValue
     public static string ToSnakeCase<T>(T value) where T : struct, Enum
     {
         var name = value.ToString()!;
-        var text = new System.Text.StringBuilder(name.Length + 4);
+        // 容量の見積もりは書かない。挙動に効かないので、間違えても誰も気づけない。
+        var text = new System.Text.StringBuilder();
 
         foreach (var (character, index) in name.Select((c, i) => (c, i)))
         {

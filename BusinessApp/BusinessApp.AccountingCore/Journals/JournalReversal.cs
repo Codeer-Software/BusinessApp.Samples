@@ -56,6 +56,9 @@ public static class JournalReversal
             Description = AmendmentRules.Describe(original, AmendmentKind.Reversal),
             PartnerId = original.PartnerId,
             EnteredAt = enteredAt,
+            // **投入元の情報は写す。** 一意なのは冪等キーだけで（I-14）、それだけを落とせばよい。
+            SourceComponent = original.SourceComponent,
+            SourceDocumentId = original.SourceDocumentId,
             Lines = [.. original.Lines.Select(Reverse)],
         };
 

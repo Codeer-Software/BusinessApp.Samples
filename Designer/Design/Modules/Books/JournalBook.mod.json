@@ -143,6 +143,12 @@
           },
           {
             "IsParameter": false,
+            "Name": "entered_at",
+            "DbType": "DATETIME",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
             "Name": "amount",
             "DbType": "integer",
             "DbParameterDirection": "Input"
@@ -668,6 +674,25 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
+      "DbColumn": "entered_at",
+      "Format": "",
+      "IsYearMonthOnly": false,
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "入力年月日",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "EnteredAt",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateTimeFieldDesign"
+    },
+    {
       "DbColumn": "amount",
       "Placeholder": "",
       "Format": "#,0",
@@ -1191,6 +1216,23 @@
             "FieldName": "Description",
             "ContextMenu": "",
             "Label": "摘要",
+            "IsMaxWidthFixed": false,
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": true,
+            "CanUserSort": true,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "EnteredAt",
+            "ContextMenu": "",
+            "Label": "入力年月日",
             "IsMaxWidthFixed": false,
             "ColumnSpan": 1,
             "RowSpan": 1,

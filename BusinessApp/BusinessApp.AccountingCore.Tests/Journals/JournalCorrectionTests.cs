@@ -92,9 +92,10 @@ public class JournalCorrectionTests
     }
 
     [Fact]
-    public void 外部投入の印は再計上に写さない()
+    public void 投入元は写し_冪等キーだけ落とす()
     {
-        // 冪等キーは一意（I-14）。写せば必ず衝突して、訂正そのものができなくなる。
+        // **落とすのは冪等キーだけ。** 一意なのはそれだけで（I-14）、写せば必ず衝突する。
+        // 投入元（部品名・外部伝票 ID）まで落とすと、投げた側が自分の伝票の訂正を帳簿から辿れなくなる。
         var original = Posted() with
         {
             SourceComponent = "expense",
@@ -102,11 +103,14 @@ public class JournalCorrectionTests
             IdempotencyKey = "expense/EXP-001",
         };
 
-        var correction = JournalCorrection.Start(original, CorrectedOn, EnteredAt, StartContext()).Drafts!.Value.Correction;
+        var drafts = JournalCorrection.Start(original, CorrectedOn, EnteredAt, StartContext()).Drafts!.Value;
 
-        Assert.Null(correction.SourceComponent);
-        Assert.Null(correction.SourceDocumentId);
-        Assert.Null(correction.IdempotencyKey);
+        foreach (var draft in new[] { drafts.Correction, drafts.Reversal })
+        {
+            Assert.Equal("expense", draft.SourceComponent);
+            Assert.Equal("EXP-001", draft.SourceDocumentId);
+            Assert.Null(draft.IdempotencyKey);
+        }
     }
 
     [Fact]
@@ -174,6 +178,19 @@ public class JournalCorrectionTests
         var result = JournalCorrection.Start(prefixOnly, CorrectedOn, EnteredAt, StartContext());
 
         Assert.Equal("伝票番号 4 の訂正", result.Drafts!.Value.Correction.Description);
+    }
+
+    [Fact]
+    public void 通常の仕訳の摘要は_接頭辞と同じ形でも落とさない()
+    {
+        // **通常の仕訳の摘要は利用者が書いた文である。** たまたま同じ形をしていることがあり
+        // （紙の伝票番号を書いた・過去の取消について書いた）、無条件に剥がすと本文が空のまま計上され、
+        // 計上済みは二度と直せない（I-05）。剥がすのは原仕訳が取消・訂正のときだけ。
+        var lookalike = Posted() with { Description = "伝票番号 12 の取消" };
+
+        var result = JournalCorrection.Start(lookalike, CorrectedOn, EnteredAt, StartContext());
+
+        Assert.Equal("伝票番号 1 の訂正: 伝票番号 12 の取消", result.Drafts!.Value.Correction.Description);
     }
 
     [Fact]

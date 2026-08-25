@@ -61,8 +61,10 @@ public static class JournalCorrection
             // 原仕訳をそのまま写す。**正しい姿ではなく、直す前の姿を出す。**
             // 利用者は誤っている箇所だけを直せばよく、打ち直しにならない。
             Lines = [.. original.Lines],
-            // 外部投入の印（source_component / idempotency_key）は写さない。
-            // 冪等キーは一意で、写せば必ず衝突する。訂正は手入力の伝票である。
+            // **投入元の情報は写す。** 一意なのは冪等キーだけで（I-14）、それだけを落とせばよい。
+            // 落としてしまうと、投入元の部品は自分が投げた伝票の訂正を帳簿から辿れなくなる。
+            SourceComponent = original.SourceComponent,
+            SourceDocumentId = original.SourceDocumentId,
         };
 
         return new CorrectionStartResult(

@@ -123,4 +123,10 @@ public static class JournalViolationCodes
 
     /// <summary>まだ実装していない種別の仕訳を計上しようとした。</summary>
     public const string EntryTypeNotSupported = "E-ENTRY-TYPE";
+
+    /// <summary>
+    /// 既にある伝票の種別を変えようとした。
+    /// <b>種別ごとの関門が丸ごと外れる</b>ので、下書きのうちでも変えさせない。
+    /// </summary>
+    public const string EntryTypeImmutable = "E-ENTRY-TYPE-IMMUTABLE";
 }

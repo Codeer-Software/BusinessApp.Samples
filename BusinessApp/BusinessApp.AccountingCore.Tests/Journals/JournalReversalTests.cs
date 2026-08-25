@@ -128,12 +128,28 @@ public class JournalReversalTests
     }
 
     [Fact]
-    public void 同じ日に取り消すのは通る()
+    public void 計上したその日に取り消すのは通る()
     {
         // 計上したその日に気づいて取り消すのは、ごく普通の操作である。
-        var result = JournalReversal.Reverse(Posted(), TransactionDate, EnteredAt, Context());
+        // 比べるのは**計上日**であって取引日ではない（フィクスチャは 2 日ずらしてある）。
+        var original = Posted();
+
+        var result = JournalReversal.Reverse(original, original.PostingDate, EnteredAt, Context());
 
         Assert.True(result.Created);
+    }
+
+    [Fact]
+    public void 取引日には戻れない()
+    {
+        // 取引日と計上日を取り違えていると、ここが通ってしまう
+        // （取引日は計上日より前なので、取消を原仕訳より前に載せられることになる）。
+        var original = Posted();
+
+        var result = JournalReversal.Reverse(original, original.TransactionDate, EnteredAt, Context());
+
+        Assert.False(result.Created);
+        Assert.Contains(JournalViolationCodes.AmendmentBeforeOriginal, result.Violations.Select(v => v.Code));
     }
 
     [Theory]

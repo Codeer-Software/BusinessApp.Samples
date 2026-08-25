@@ -366,7 +366,20 @@ public class JournalEntryStoreTests
         using var server = new AccountingServer();
 
         Assert.Null(await server.EntryStore.FindAsync(new JournalEntryId(999)));
+        Assert.Null(await server.EntryStore.FindEntryTypeAsync(new JournalEntryId(999)));
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => server.EntryStore.LoadAsync(new JournalEntryId(999)));
+    }
+
+    [Fact]
+    public async Task 種別だけを読める()
+    {
+        using var server = new AccountingServer();
+        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 10), ("credit", "2100", 10));
+
+        Assert.Equal(EntryType.Normal, await server.EntryStore.FindEntryTypeAsync(original));
+        Assert.Equal(
+            EntryType.Correction,
+            await server.EntryStore.FindEntryTypeAsync(server.InsertCorrectionDraft(original)));
     }
 }

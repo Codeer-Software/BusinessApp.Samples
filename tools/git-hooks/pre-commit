@@ -31,8 +31,8 @@ dotnet test BusinessApp.slnx --nologo -v q
 # 許容と判断した理由とともに下限を下げる。黙って下げない。
 echo "[pre-commit] 5/5 ミューテーションテスト"
 (cd BusinessApp/BusinessApp.AccountingCore.Tests \
-    && dotnet stryker --project BusinessApp.AccountingCore.csproj --break-at 75 --threshold-low 75 --reporter progress)
+    && dotnet stryker --project BusinessApp.AccountingCore.csproj --break-at 76 --threshold-low 76 --reporter progress)
 (cd BusinessApp/BusinessApp.AccountingCore.Server.Tests \
-    && dotnet stryker --project BusinessApp.AccountingCore.Server.csproj --break-at 92 --threshold-low 92 --reporter progress)
+    && dotnet stryker --project BusinessApp.AccountingCore.Server.csproj --break-at 94 --threshold-low 94 --reporter progress)
 
 echo "[pre-commit] すべて緑"
