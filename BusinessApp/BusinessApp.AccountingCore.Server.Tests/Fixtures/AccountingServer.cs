@@ -31,18 +31,37 @@ internal sealed class AccountingServer : IDisposable
     private readonly SqliteConnection connection;
     private readonly SqliteDbAccessor accessor;
 
+    /// <summary>
+    /// 操作している人の識別子。ユーザーは認証部品のもので、このテスト DB にテーブルも FK も無いので
+    /// 値は自由に選べる。<b>他の id（会計年度 1・伝票 1・伝票番号 1…）と衝突しない値にする</b>
+    /// （縮退させると、取り違えても全テストが緑のままになる。qa/03 L-02）。
+    /// </summary>
+    public const long CurrentUser = 91;
+
     public AccountingServer()
     {
         connection = TestDatabase.CreateWithSeed();
         accessor = new SqliteDbAccessor(connection);
 
+        var authentication = new TestAuthenticationContext(() => CurrentUserId);
+        Authentication = authentication;
         MasterLoader = new AccountingMasterLoader(accessor, SqliteDbAccessor.DataSourceName);
         EntryStore = new JournalEntryStore(accessor, SqliteDbAccessor.DataSourceName);
         SequenceStore = new EntryNumberSequenceStore(accessor, SqliteDbAccessor.DataSourceName);
-        Gate = JournalSubmitGate.Create(accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now));
+        Gate = JournalSubmitGate.Create(
+            accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
         AmendmentService = JournalAmendmentService.Create(
-            accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now));
+            accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
     }
+
+    /// <summary>
+    /// 認証コンテキストが返す識別子。<b>テストが差し替えられる</b>
+    /// （数値でない・空のときに posted_by が null になることの検査に使う）。
+    /// </summary>
+    public string CurrentUserId { get; set; } = CurrentUser.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>認証の代わり（<see cref="CurrentUserId"/> を返す）。部品を手で組むテストが使う。</summary>
+    public IAuthenticationContext Authentication { get; }
 
     public AccountingMasterLoader MasterLoader { get; }
 
@@ -338,5 +357,15 @@ internal sealed class AccountingServer : IDisposable
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    /// <summary>
+    /// 認証の代わり。<b>呼ばれるたびに読み直す</b>ので、テストが途中で
+    /// <see cref="CurrentUserId"/> を差し替えると、その後の計上に反映される
+    /// （別の人が取り消す・識別子が壊れている、の検査に使う）。
+    /// </summary>
+    private sealed class TestAuthenticationContext(Func<string> currentUserId) : IAuthenticationContext
+    {
+        public Task<string> GetCurrentUserIdAsync() => Task.FromResult(currentUserId());
     }
 }

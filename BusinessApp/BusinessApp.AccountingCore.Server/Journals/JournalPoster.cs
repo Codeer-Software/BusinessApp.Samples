@@ -1,6 +1,10 @@
 namespace BusinessApp.AccountingCore.Server.Journals;
 
+using System.Globalization;
+
 using BusinessApp.AccountingCore.Journals;
+
+using Codeer.LowCode.Blazor.DataIO;
 
 /// <summary>
 /// 下書きを計上して DB に印を付ける。<b>計上する経路はここ 1 本だけにする。</b>
@@ -15,7 +19,8 @@ using BusinessApp.AccountingCore.Journals;
 public sealed class JournalPoster(
     JournalEntryStore entryStore,
     EntryNumberSequenceStore sequenceStore,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    IAuthenticationContext authenticationContext)
 {
     /// <summary>
     /// 下書きを計上する。違反があれば例外にして保存全体を巻き戻す。
@@ -40,9 +45,40 @@ public sealed class JournalPoster(
             throw new JournalPostingRejectedException(result.Violations);
         }
 
+        var postedBy = await ResolvePostedByAsync();
         await sequenceStore.SaveAsync(sequence, result.NextSequence!.Value);
-        await entryStore.MarkPostedAsync(id, result.EntryNo!.Value, result.PostedEntry!.PostedAt!.Value);
+        await entryStore.MarkPostedAsync(id, result.EntryNo!.Value, result.PostedEntry!.PostedAt!.Value, postedBy);
 
+        // 返すのは計上検証の結果。posted_by は DB にだけ書く（読み手は LoadAsync で読み直す）。
+        // 戻り値に with で足しても誰も読まず、表明の無い契約になるだけである（2026-08-25 の自己レビュー）。
         return result.PostedEntry;
+    }
+
+    /// <summary>
+    /// 計上した人（qa/02 R2-05）。<b>計上のたびに認証コンテキストから引く。</b>
+    /// 取消・訂正もこの経路を通るので、原仕訳を計上した人ではなく<b>その操作をした人</b>が入る。
+    /// </summary>
+    /// <remarks>
+    /// <para>識別子が<b>空</b>のとき（認証の無い経路）は null。列は NULL 可で、
+    /// 「誰か分からない」を 0 などの偽の値で埋めない。</para>
+    /// <para>識別子が<b>空でないのに正の整数として読めない</b>のは、認証の設定が壊れている
+    /// （クレームの欠落・形式変更）。黙って null にすると、計上済みは不変（I-05）なので
+    /// <b>記帳者の記録が永久に失われる</b>。音を立てて止める。</para>
+    /// </remarks>
+    private async Task<long?> ResolvePostedByAsync()
+    {
+        var userId = await authenticationContext.GetCurrentUserIdAsync();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return null;
+        }
+
+        if (!long.TryParse(userId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) || value <= 0)
+        {
+            throw new InvalidOperationException(
+                $"認証されたユーザーの識別子が数値として読めない（値: {userId}）。認証の設定を確かめること。");
+        }
+
+        return value;
     }
 }

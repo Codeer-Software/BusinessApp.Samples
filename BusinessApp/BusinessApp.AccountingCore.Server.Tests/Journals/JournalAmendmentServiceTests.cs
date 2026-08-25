@@ -45,6 +45,10 @@ public class JournalAmendmentServiceTests
         Assert.Equal([DebitCredit.Credit, DebitCredit.Debit], reversal.Lines.Select(l => l.DebitCredit));
         Assert.Equal([Yen.From(1000), Yen.From(1000)], reversal.Lines.Select(l => l.Amount));
         Assert.Equal("伝票番号 1 の取消: 5 月分の仕入", reversal.Description);
+
+        // 計上した人は**取消の操作をした人**（原仕訳を計上した人ではない）。
+        // 原仕訳は SQL で直接入れており posted_by が NULL なので、写しではないことがここで分かる。
+        Assert.Equal(AccountingServer.CurrentUser, reversal.PostedBy);
     }
 
     [Fact]
@@ -310,10 +314,31 @@ public class JournalAmendmentServiceTests
         // 利用者が中身を直して計上したのと同じ状態にする。**保存経路も本物を通す。**
         await PostAsync(server, started.CorrectionId);
 
+        // 訂正（再計上）の経路でも計上した人が入る。種別ごとの分岐（PostAsync のホワイトリスト）が
+        // 増減したときに、訂正だけ落ちても気づけるようにここで固定する。
+        Assert.Equal(
+            AccountingServer.CurrentUser,
+            (await server.EntryStore.LoadAsync(started.CorrectionId)).PostedBy);
+
         var again = await server.AmendAsync(s => s.CorrectAsync(started.CorrectionId));
 
         Assert.Equal(EntryStatus.Posted, (await server.EntryStore.LoadAsync(again.ReversalId)).Status);
         Assert.Equal(started.CorrectionId, (await server.EntryStore.LoadAsync(again.CorrectionId)).OriginalEntryId);
+    }
+
+    /// <summary>計上した人は「そのとき操作した人」であり、原仕訳の値の写しでも固定値でもない。</summary>
+    [Fact]
+    public async Task 別の人が取り消すと取消にはその人が入る()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        server.CurrentUserId = "92";
+        var reversalId = await server.AmendAsync(s => s.ReverseAsync(original));
+
+        Assert.Equal(92, (await server.EntryStore.LoadAsync(reversalId)).PostedBy);
+        // 原仕訳（SQL で直接入れたもの）は NULL のまま。取消の操作で書き換わらない。
+        Assert.Null((await server.EntryStore.LoadAsync(original)).PostedBy);
     }
 
     [Fact]

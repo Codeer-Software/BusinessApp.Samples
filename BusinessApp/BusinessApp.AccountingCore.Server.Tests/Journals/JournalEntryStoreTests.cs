@@ -51,6 +51,7 @@ public class JournalEntryStoreTests
 
         Assert.Null(entry.EntryNo);
         Assert.Null(entry.PostedAt);
+        Assert.Null(entry.PostedBy);
         Assert.Null(entry.Description);
         Assert.Null(entry.PartnerId);
         Assert.Null(entry.OriginalEntryId);
@@ -138,20 +139,37 @@ public class JournalEntryStoreTests
     }
 
     [Fact]
-    public async Task 計上の印を付けると番号と計上日時と版が入る()
+    public async Task 計上の印を付けると番号と計上日時と計上した人と版が入る()
     {
         using var server = new AccountingServer();
         var id = server.InsertDraft();
 
-        await server.EntryStore.MarkPostedAsync(id, new EntryNumber(AccountingServer.FiscalYear, 7), AccountingServer.Now);
+        await server.EntryStore.MarkPostedAsync(
+            id, new EntryNumber(AccountingServer.FiscalYear, 7), AccountingServer.Now, AccountingServer.CurrentUser);
 
         var entry = await server.EntryStore.LoadAsync(id);
         Assert.Equal(EntryStatus.Posted, entry.Status);
         Assert.Equal(7, entry.EntryNo);
         Assert.Equal(AccountingServer.Now, entry.PostedAt);
+        Assert.Equal(AccountingServer.CurrentUser, entry.PostedBy);
 
         // 版は CLB が進めるもの。ここで進めると 1 回の保存で 2 つ進み、画面が古い版を握る。
         Assert.Equal(0, server.Scalar<long>($"select optimistic_locking from journal_entries where id = {id.Value}"));
+    }
+
+    /// <summary>「誰か分からない」は偽の値で埋めず NULL のまま持つ（この列より前の伝票と同じ扱い）。</summary>
+    [Fact]
+    public async Task 計上した人が分からないときはNULLのまま読み戻せる()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+
+        await server.EntryStore.MarkPostedAsync(
+            id, new EntryNumber(AccountingServer.FiscalYear, 7), AccountingServer.Now, null);
+
+        var entry = await server.EntryStore.LoadAsync(id);
+        Assert.Equal(EntryStatus.Posted, entry.Status);
+        Assert.Null(entry.PostedBy);
     }
 
     [Fact]
@@ -159,10 +177,12 @@ public class JournalEntryStoreTests
     {
         using var server = new AccountingServer();
         var id = server.InsertDraft();
-        await server.EntryStore.MarkPostedAsync(id, new EntryNumber(AccountingServer.FiscalYear, 1), AccountingServer.Now);
+        await server.EntryStore.MarkPostedAsync(
+            id, new EntryNumber(AccountingServer.FiscalYear, 1), AccountingServer.Now, AccountingServer.CurrentUser);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => server.EntryStore.MarkPostedAsync(id, new EntryNumber(AccountingServer.FiscalYear, 2), AccountingServer.Now));
+            () => server.EntryStore.MarkPostedAsync(
+                id, new EntryNumber(AccountingServer.FiscalYear, 2), AccountingServer.Now, AccountingServer.CurrentUser));
 
         Assert.Contains("下書きではない", error.Message, StringComparison.Ordinal);
         Assert.Equal(1, server.Scalar<long>($"select entry_no from journal_entries where id = {id.Value}"));

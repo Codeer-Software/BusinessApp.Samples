@@ -34,7 +34,47 @@ public class JournalSubmitGateTests
         Assert.Equal(EntryStatus.Posted, posted.Status);
         Assert.Equal(1, posted.EntryNo);
         Assert.Equal(AccountingServer.Now, posted.PostedAt);
+        Assert.Equal(AccountingServer.CurrentUser, posted.PostedBy);
         Assert.Equal(2, server.Scalar<long>("select next_entry_no from journal_entry_sequences"));
+    }
+
+    /// <summary>
+    /// 認証の識別子が<b>空</b>のとき（認証の無い経路）、計上した人は
+    /// <b>偽の値で埋めず NULL のまま</b>にする（qa/02 R2-05。列は NULL 可）。
+    /// </summary>
+    [Fact]
+    public async Task 認証の識別子が空なら計上した人はNULLになる()
+    {
+        using var server = new AccountingServer();
+        server.CurrentUserId = string.Empty;
+        var entry = SubmitData.Entry(TemporaryId, status: "posted");
+
+        await server.SubmitAsync([SubmitData.Adding(entry)], server.Saving(entry, Balanced));
+
+        var posted = await server.EntryStore.LoadAsync(new JournalEntryId(1));
+        Assert.Equal(EntryStatus.Posted, posted.Status);
+        Assert.Null(posted.PostedBy);
+    }
+
+    /// <summary>
+    /// 識別子が<b>空でないのに正の整数として読めない</b>のは認証の設定の壊れ。
+    /// 黙って NULL で計上すると、計上済みは不変（I-05）なので記帳者の記録が永久に失われる。
+    /// 音を立てて止め、保存ごと巻き戻す。
+    /// </summary>
+    [Theory]
+    [InlineData("admin")]
+    [InlineData("-1")]
+    [InlineData("0")]
+    public async Task 認証の識別子が壊れていたら計上は止まり保存ごと巻き戻る(string brokenUserId)
+    {
+        using var server = new AccountingServer();
+        server.CurrentUserId = brokenUserId;
+        var entry = SubmitData.Entry(TemporaryId, status: "posted");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => server.SubmitAsync([SubmitData.Adding(entry)], server.Saving(entry, Balanced)));
+
+        Assert.Equal(0L, server.Scalar<long>("select count(*) from journal_entries"));
     }
 
     [Fact]
