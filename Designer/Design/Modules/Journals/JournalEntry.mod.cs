@@ -9,19 +9,22 @@
 
 void Detail_OnAfterInitialization()
 {
+    // **初期値を先に入れる。** あとの ApplyPostedLock は状態を読んで表示を決めるので、
+    // 入れる前に呼ぶと「これから初期化する値を読む」ことになる（2026-08-26 の自己レビュー）。
+    if (IsNewData)
+    {
+        // 新規作成時の初期値。取引日と計上日は今日、状態は下書き、種別は通常。
+        // 入力年月日（EnteredAt）はサーバが決めるのでここでは触らない。
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        TransactionDate.Value = today;
+        PostingDate.Value = today;
+        Status.Value = EntryStatuses.Draft;
+        EntryType.Value = EntryTypes.Normal;
+        SelectFiscalYear(today);
+    }
+
     UpdateTotals();
     ApplyPostedLock();
-
-    if (!IsNewData) return;
-
-    // 新規作成時の初期値。取引日と計上日は今日、状態は下書き、種別は通常。
-    // 入力年月日（EnteredAt）はサーバが決めるのでここでは触らない。
-    var today = DateOnly.FromDateTime(DateTime.Now);
-    TransactionDate.Value = today;
-    PostingDate.Value = today;
-    Status.Value = EntryStatuses.Draft;
-    EntryType.Value = EntryTypes.Normal;
-    SelectFiscalYear(today);
 }
 
 // 計上済みの伝票では操作ボタンを消す。
@@ -34,6 +37,11 @@ void ApplyPostedLock()
     var posted = Status.Value == EntryStatuses.Posted;
     PostButton.IsVisible = !posted;
     SubmitButton.IsVisible = !posted;
+
+    // 入力のときの注意書き。計上済みの伝票はもう直せないので出さない。
+    // **文言の正典は docs/07 §1-4**（住所の写しを仕訳に作らないと決めた、その代わりの運用）。
+    // ここと 07 に同じ日本語があるので、直すときは両方を見る。
+    InvoiceNoticeLabel.IsVisible = !posted;
 
     // 訂正・取消は「計上済みの伝票に対する操作」なので、下書きでは出さない。
     // 下書きは自由に直せるし、いらなければ削除すればよい。

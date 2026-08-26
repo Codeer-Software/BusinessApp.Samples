@@ -133,6 +133,22 @@ internal static class DbValue
     public static T ToEnum<T>(object? value) where T : struct, Enum
         => Enum.Parse<T>(ToPascalCase(ToText(value)));
 
+    /// <summary>
+    /// 区分値を列挙子に直す。<b>知らない値は <c>null</c> にする</b>（例外にしない）。
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="ToEnum{T}"/> と使い分ける。<b>拒むのが DB の CHECK の仕事である場面</b>——
+    /// 保存の関門のように「読めない値でも、そのせいで別の検査ごと 500 にしてはいけない」ところで使う。</para>
+    /// <para><b><c>Enum.TryParse</c> は使わない。</b> 数字の文字列を黙って通すからである——
+    /// <c>"0"</c> は最初の列挙子に化け（<c>IsDefined</c> も真になるので見抜けない）、
+    /// <c>"99"</c> は範囲外の値のまま返る。<b>宣言されている名前と一致するかだけを見る。</b></para>
+    /// </remarks>
+    public static T? ToDefinedEnum<T>(object? value) where T : struct, Enum
+    {
+        var name = ToPascalCase(ToText(value));
+        return Enum.GetNames<T>().Contains(name, StringComparer.Ordinal) ? Enum.Parse<T>(name) : null;
+    }
+
     public static T? ToNullableEnum<T>(object? value) where T : struct, Enum
         => IsNullCore(value) || ToText(value).Length == 0 ? null : ToEnum<T>(value);
 }

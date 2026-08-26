@@ -121,4 +121,21 @@ public class DbValueTests
     [Fact]
     public void 空文字の列挙子は無いものとして扱う()
         => Assert.Null(DbValue.ToNullableEnum<PeriodStatus>(string.Empty));
+
+    [Fact]
+    public void 知っている区分値だけを列挙子にする()
+        => Assert.Equal(PeriodStatus.Closed, DbValue.ToDefinedEnum<PeriodStatus>("closed"));
+
+    /// <summary>
+    /// <b><c>Enum.TryParse</c> は数字の文字列を黙って通す。</b>
+    /// <c>"0"</c> は最初の列挙子に、<c>"99"</c> は範囲外の値のまま化ける——
+    /// 後者は表示名を求めた瞬間に例外になり、<b>例外にしないために作ったこの入口が 500 を生む</b>。
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("unknown")]
+    [InlineData("0")]
+    [InlineData("99")]
+    public void 知らない区分値は無いものとして扱う(string value)
+        => Assert.Null(DbValue.ToDefinedEnum<PeriodStatus>(value));
 }

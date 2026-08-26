@@ -66,7 +66,7 @@ public class PartnerRegistrationSubmitGateTests
         return server.Scalar<long>("select last_insert_rowid()");
     }
 
-    private static PartnerRegistrationSubmitGate Gate(AccountingServer server) => new(server.PartnerStore);
+    private static PartnerRegistrationSubmitGate Gate(AccountingServer server) => new(server.Registrations);
 
     /// <summary>保存が呼ばれたかどうかを見張る。</summary>
     private sealed class SaveSpy

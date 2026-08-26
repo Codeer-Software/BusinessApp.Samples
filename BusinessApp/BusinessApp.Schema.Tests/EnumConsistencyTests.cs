@@ -34,8 +34,7 @@ public class EnumConsistencyTests
         { "仕訳の状態",                "journal_entries.status",              "EntryStatuses",     "Journals.EntryStatus" },
         { "仕訳の種別",                "journal_entries.entry_type",          "EntryTypes",        "Journals.EntryType" },
         { "借方貸方",                  "journal_lines.debit_credit",          "DebitCredits",      "Shared.DebitCredit" },
-        // C# は null: 種別を解釈するロジック（名寄せの解決）はフェーズ 3 で作る。そのとき列挙型も作る。
-        { "取引先の種別",              "partners.entity_type",                "PartnerEntityTypes", null },
+        { "取引先の種別",              "partners.entity_type",                "PartnerEntityTypes", "Partners.PartnerEntityType" },
         // C# は null: 登録の判定ロジック（tax_point で引く）はフェーズ 3、取込はフェーズ 6 で作る。
         { "登録の終わりの理由",        "partner_invoice_registrations.end_reason", "RegistrationEndReasons", null },
         { "登録情報の出所",            "partner_invoice_registrations.source",     "RegistrationSources",    null },
@@ -51,9 +50,10 @@ public class EnumConsistencyTests
     /// </remarks>
     public static TheoryData<string, string, string> DisplayNames() => new()
     {
-        //  CLB の enum      C# の型                    表示名を返す拡張メソッド
-        { "EntryTypes",     "Journals.EntryType",      "DisplayName" },
-        { "EntryStatuses",  "Journals.EntryStatus",    "DisplayName" },
+        //  CLB の enum          C# の型                          表示名を返す拡張メソッド
+        { "EntryTypes",         "Journals.EntryType",            "DisplayName" },
+        { "EntryStatuses",      "Journals.EntryStatus",          "DisplayName" },
+        { "PartnerEntityTypes", "Partners.PartnerEntityType",    "DisplayName" },
     };
 
     [Theory]

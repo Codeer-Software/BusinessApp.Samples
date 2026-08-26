@@ -108,3 +108,10 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
   マスタを指す LinkField は `IsActive.Value = true` で絞る（`is_active` は「入力候補に出すか」の意味。ADR-0006）。
   設定しないと**無効にした科目が候補に出てしまい、降順で並ぶ**。
   `designcheck` は findings 0。DB には `app_users` のみ存在し、`temporary_files` は未作成
+- 2026-08-26: **デザイン JSON は `json.load` → `json.dumps(indent=2, ensure_ascii=False)` で
+  バイト単位に往復する**（3 つのモジュールで実測）。手で JSON を書き換えるより安全。
+  ただし **Python の text mode は Windows で CRLF を書く**ので、`open(path,'wb')` で
+  LF のまま書く（`.gitattributes` が正規化する前に `designcheck` と差分が汚れる）。
+- 2026-08-26: **レイアウトの `Width` は行ではなくレイアウト全体に効く。** 1 つの列に
+  幅を付けると、同じ位置にある他の行の入力欄まで一緒に動く（実測: 参照フィールドに 440px を
+  付けたら登録ボタンが画面の外に出た）。`designcheck` は緑のままなので、実機で見る。
