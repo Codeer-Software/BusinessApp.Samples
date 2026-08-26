@@ -747,9 +747,26 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     private static IReadOnlyList<XElement> AllProperties(string xml)
         => [.. XDocument.Parse(xml).Descendants("PropertyGroup").SelectMany(group => group.Elements())];
 
-    private static bool IsExcluded(string relativePath)
+    /// <summary>
+    /// 走査から外す場所。
+    /// </summary>
+    /// <remarks>
+    /// <para><c>.claude/worktrees/</c> は <b>このリポジトリの別のチェックアウト</b>である
+    /// （<c>git worktree</c>）。入れると同じソースを 2 回数えることになり、
+    /// <c>.gitattributes</c> は「2 本ある」、ソースは 2 倍の件数として見える。
+    /// <b>関門が、作業のやり方（ワークツリーを使ったかどうか）で結果を変えてはいけない。</b></para>
+    /// <para>2026-08-26 に実際に鳴った——前のセッションが残したワークツリーがあるだけで、
+    /// 改行の固定の検査が落ちた。</para>
+    /// </remarks>
+    public static bool IsExcluded(string relativePath)
     {
         var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (segments is [".claude", "worktrees", ..])
+        {
+            return true;
+        }
+
         return segments.Any(segment =>
             segment is "bin" or "obj" or ".vs" or ".git" or "StrykerOutput" or "TestResults" or "ClaudeCodeForDesigner");
     }
