@@ -51,8 +51,9 @@ internal sealed class AccountingServer : IDisposable
         MasterLoader = new AccountingMasterLoader(accessor, SqliteDbAccessor.DataSourceName);
         EntryStore = new JournalEntryStore(accessor, SqliteDbAccessor.DataSourceName);
         SequenceStore = new EntryNumberSequenceStore(accessor, SqliteDbAccessor.DataSourceName);
-        PartnerStore = new PartnerRegistrationStore(accessor, SqliteDbAccessor.DataSourceName);
-        SnapshotWriter = new LedgerSnapshotWriter(accessor, SqliteDbAccessor.DataSourceName, PartnerStore);
+        Registrations = new PartnerRegistrationStore(accessor, SqliteDbAccessor.DataSourceName);
+        Partners = new PartnerStore(accessor, SqliteDbAccessor.DataSourceName);
+        SnapshotWriter = new LedgerSnapshotWriter(accessor, SqliteDbAccessor.DataSourceName, Registrations);
         Poster = JournalPoster.Create(
             accessor, SqliteDbAccessor.DataSourceName, EntryStore, new FixedTimeProvider(Now), authentication);
         Gate = JournalSubmitGate.Create(
@@ -81,7 +82,10 @@ internal sealed class AccountingServer : IDisposable
     public EntryNumberSequenceStore SequenceStore { get; }
 
     /// <summary>取引先の名称と登録を読む口。</summary>
-    public PartnerRegistrationStore PartnerStore { get; }
+    public PartnerRegistrationStore Registrations { get; }
+
+    /// <summary>取引先の素性（種別・法人番号）を読む口。</summary>
+    public PartnerStore Partners { get; }
 
     /// <summary>計上のときに帳簿の記載事項を写す部品（ADR-0018）。</summary>
     public LedgerSnapshotWriter SnapshotWriter { get; }

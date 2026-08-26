@@ -571,6 +571,24 @@ public class CSharpStyleTests
         Assert.NotEmpty(CSharpStyleConvention.GitAttributesProblems([]));
     }
 
+    /// <summary>
+    /// 走査は<b>別のチェックアウト</b>（<c>git worktree</c>）を数えない。
+    /// </summary>
+    /// <remarks>
+    /// 入れると同じソースが 2 回出て、<c>.gitattributes</c> が「2 本ある」ことになる。
+    /// <b>関門が、作業のやり方で結果を変えてはいけない</b>（2026-08-26 に実際に鳴った）。
+    /// </remarks>
+    [Theory]
+    [InlineData(".claude/worktrees/x/BusinessApp/A.cs", true)]
+    [InlineData(".claude/worktrees/x/.gitattributes", true)]
+    [InlineData(".claude/settings.json", false)]
+    [InlineData("BusinessApp/A.cs", false)]
+    [InlineData("BusinessApp/obj/Debug/A.cs", true)]
+    public void 走査は別のチェックアウトを数えない(string relativePath, bool excluded)
+    {
+        Assert.Equal(excluded, CSharpStyleConvention.IsExcluded(relativePath.Replace('/', Path.DirectorySeparatorChar)));
+    }
+
     /// <summary>CRLF の走査は、CR のあるソースで鳴り、無ければ黙る。</summary>
     [Fact]
     public void CRLF_の走査は_CR_のあるソースで鳴る()

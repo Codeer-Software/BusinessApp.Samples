@@ -52,6 +52,13 @@ WHERE e.status = 'posted'
        OR date(e.transaction_date) <= date(@p_transaction_date_to))
   AND (@p_amount_min IS NULL OR @p_amount_min = '' OR l.amount >= @p_amount_min)
   AND (@p_amount_max IS NULL OR @p_amount_max = '' OR l.amount <= @p_amount_max)
+  -- 伝票番号での検索。通達 8-14 (注) の「一連番号等で帳簿間の関連性を確保している場合、
+  -- その一連番号等で検索できるとき」に当たる別ルートである（docs/research の電帳法 §3.5）。
+  -- **伝票番号は会計年度の中の連番**（005_journals.sql の UNIQUE）なので、
+  -- 年度を指定せずに範囲で引くと複数の年度の同じ番号が並ぶ。それは誤りではなく、
+  -- 「番号だけで探した」結果である。年度で絞りたいときは会計年度と組み合わせる。
+  AND (@p_entry_no_min IS NULL OR @p_entry_no_min = '' OR e.entry_no >= @p_entry_no_min)
+  AND (@p_entry_no_max IS NULL OR @p_entry_no_max = '' OR e.entry_no <= @p_entry_no_max)
   AND (@p_account_id IS NULL OR @p_account_id = '' OR l.account_id = @p_account_id)
   -- **表示・検索・空値検索で同じモデルを使う。** ここだけ OR にすると、
   -- 「伝票は甲・明細は乙」の行が「甲」で引けるのに帳簿には「乙」と出る——

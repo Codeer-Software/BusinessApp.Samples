@@ -57,6 +57,7 @@ public class PartnerSchemaTests
     [InlineData("123456789012")]     // 12 桁
     [InlineData("12345678901234")]   // 14 桁
     [InlineData("123456789012a")]    // 数字でない
+    [InlineData("")]                 // **空文字も拒む。** 「無い」は NULL で表す（docs/04 §4-4）
     public void 法人番号は13桁の数字でなければ書けない(string invalid)
     {
         using var db = Seeded();

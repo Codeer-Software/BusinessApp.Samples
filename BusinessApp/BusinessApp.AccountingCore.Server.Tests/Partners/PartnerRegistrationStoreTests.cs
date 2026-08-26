@@ -20,7 +20,7 @@ public class PartnerRegistrationStoreTests
         using var server = new AccountingServer();
         var partner = InsertPartner(server, "P900", "株式会社ベガ商会");
 
-        Assert.Equal("株式会社ベガ商会", await server.PartnerStore.FindNameAsync(new PartnerId(partner)));
+        Assert.Equal("株式会社ベガ商会", await server.Registrations.FindNameAsync(new PartnerId(partner)));
     }
 
     /// <summary>
@@ -32,7 +32,7 @@ public class PartnerRegistrationStoreTests
     {
         using var server = new AccountingServer();
 
-        Assert.Null(await server.PartnerStore.FindNameAsync(new PartnerId(999_999)));
+        Assert.Null(await server.Registrations.FindNameAsync(new PartnerId(999_999)));
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public class PartnerRegistrationStoreTests
         using var server = new AccountingServer();
         var partner = InsertPartner(server, "P900", "株式会社ベガ商会");
 
-        Assert.Empty(await server.PartnerStore.LoadRegistrationsAsync(new PartnerId(partner)));
+        Assert.Empty(await server.Registrations.LoadRegistrationsAsync(new PartnerId(partner)));
     }
 
     /// <summary>
@@ -62,7 +62,7 @@ public class PartnerRegistrationStoreTests
             values ({partner}, 'T2222222222222', {AccountingServer.DateLiteral("2026-04-01")})
             """);
 
-        var registrations = await server.PartnerStore.LoadRegistrationsAsync(new PartnerId(partner));
+        var registrations = await server.Registrations.LoadRegistrationsAsync(new PartnerId(partner));
 
         Assert.Equal(2, registrations.Count);
         Assert.Contains(
@@ -86,7 +86,7 @@ public class PartnerRegistrationStoreTests
             """);
         var row = server.Scalar<long>("select last_insert_rowid()");
 
-        Assert.Equal(new PartnerId(partner), await server.PartnerStore.FindPartnerOfAsync(row));
+        Assert.Equal(new PartnerId(partner), await server.Registrations.FindPartnerOfAsync(row));
     }
 
     /// <summary>
@@ -97,6 +97,6 @@ public class PartnerRegistrationStoreTests
     {
         using var server = new AccountingServer();
 
-        Assert.Null(await server.PartnerStore.FindPartnerOfAsync(999_999));
+        Assert.Null(await server.Registrations.FindPartnerOfAsync(999_999));
     }
 }

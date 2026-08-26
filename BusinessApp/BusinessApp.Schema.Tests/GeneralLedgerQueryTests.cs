@@ -1,0 +1,381 @@
+namespace BusinessApp.Schema.Tests;
+
+using BusinessApp.TestSupport;
+using Microsoft.Data.Sqlite;
+
+/// <summary>
+/// 総勘定元帳が<b>帳簿として正しく出ること</b>（ADR-0022）。
+/// </summary>
+/// <remarks>
+/// <para><see cref="QueryModuleTests"/> は宣言と SQL の整合しか見ない。
+/// 元帳が持つ計算——<b>相手勘定科目</b>（法規 55 ②）と<b>期間内累計</b>——は、
+/// 値を入れて数えないと合っているか分からない。どちらも間違えても例外にならず、
+/// <b>それらしい数字が静かに出る</b>（qa/03 L-03 の型）。</para>
+/// <para>とくに累計の符号は、科目区分だけで決めると評価勘定で必ず誤る（docs/04 §6）。
+/// 4 つの組み合わせ（科目区分が借方側か × 評価勘定か）をすべて通す。</para>
+/// </remarks>
+public class GeneralLedgerQueryTests
+{
+    /// <summary>
+    /// 元帳に載る素材。<b>通常残高の 4 通りを揃える</b>——
+    /// 資産（現金）・資産の評価勘定（減価償却累計額）・収益（売上高）・収益の評価勘定（売上値引高）。
+    /// </summary>
+    private const string Accounts = """
+        INSERT INTO accounts (code, name, category, is_contra) VALUES ('1500', '減価償却累計額', 'asset', 1);
+        INSERT INTO accounts (code, name, category) VALUES ('2000', '買掛金', 'liability');
+        INSERT INTO accounts (code, name, category, is_contra) VALUES ('4900', '売上値引高', 'revenue', 1);
+        INSERT INTO accounts (code, name, category) VALUES ('5300', '減価償却費', 'expense');
+        """;
+
+    /// <summary>
+    /// 仕訳。<b>1 対 1 の伝票と、相手が 2 科目に割れる伝票の両方</b>を入れる（諸口の検査）。
+    /// </summary>
+    private const string Book = """
+        -- 1) 05-10 借 現金 1,000 / 貸 売上高 1,000（相手は 1 科目）
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, partner_id, entered_at)
+            VALUES (1, '2026-05-10', '2026-05-12', 'draft', 'normal', '5 月の売上', 1, '2026-05-12 10:00:00');
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id, item_description)
+            VALUES (1, 1, 'debit', 1, 1000, 1, '商品 A');
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
+            VALUES (1, 2, 'credit', 2, 2, 1000, 1);
+
+        -- 2) 05-20 借 現金 3,000 / 貸 売上高 2,000 ＋ 買掛金 1,000（現金から見た相手は 2 科目＝諸口）
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            VALUES (1, '2026-05-20', '2026-05-25', 'draft', 'normal', '2026-05-25 10:00:00');
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (2, 1, 'debit', 1, 3000, 1);
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (2, 2, 'credit', 2, 2000, 1);
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (2, 3, 'credit', 4, 1000, 1);
+
+        -- 3) 05-25 借 減価償却費 500 / 貸 減価償却累計額 500（評価勘定・貸方が通常残高）
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            VALUES (1, '2026-05-25', '2026-05-25', 'draft', 'normal', '2026-05-25 11:00:00');
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (3, 1, 'debit', 6, 500, 1);
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (3, 2, 'credit', 3, 500, 1);
+
+        -- 4) 05-28 借 売上値引高 300 / 貸 現金 300（評価勘定・借方が通常残高）
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            VALUES (1, '2026-05-28', '2026-05-28', 'draft', 'normal', '2026-05-28 10:00:00');
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (4, 1, 'debit', 5, 300, 1);
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (4, 2, 'credit', 1, 300, 1);
+
+        -- 5) 下書き。**帳簿には出ない。**
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            VALUES (1, '2026-05-15', '2026-05-15', 'draft', 'normal', '2026-05-15 10:00:00');
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (5, 1, 'debit', 1, 9999, 1);
+        """;
+
+    private const string Post = """
+        UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-05-12 10:00:00' WHERE id = 1;
+        UPDATE journal_entries SET status = 'posted', entry_no = 2, posted_at = '2026-05-25 10:00:00' WHERE id = 2;
+        UPDATE journal_entries SET status = 'posted', entry_no = 3, posted_at = '2026-05-25 11:00:00' WHERE id = 3;
+        UPDATE journal_entries SET status = 'posted', entry_no = 4, posted_at = '2026-05-28 10:00:00' WHERE id = 4;
+        """;
+
+    // --- 出す行の範囲と並び ---
+
+    [Fact]
+    public void 下書きは元帳に出ない()
+    {
+        using var db = Create();
+
+        // 下書きの 9,999 円はどこにも無い。
+        Assert.DoesNotContain(Run(db), r => r.Debit == 9999 || r.Credit == 9999);
+        Assert.Equal(9, Run(db).Count);
+    }
+
+    /// <summary>
+    /// <b>科目コード順に並び、その中は取引日順。</b> これが元帳の形そのものである。
+    /// </summary>
+    [Fact]
+    public void 科目ごとにまとまり科目の中は取引日順に並ぶ()
+    {
+        using var db = Create();
+
+        Assert.Equal(
+            ["1100", "1100", "1100", "1500", "2000", "4000", "4000", "4900", "5300"],
+            Run(db).Select(r => r.AccountCode));
+    }
+
+    // --- 相手勘定科目（法人税法施行規則 55 ②）---
+
+    [Fact]
+    public void 相手が一科目ならその名前が出る()
+    {
+        using var db = Create();
+
+        var row = Run(db).Single(r => r.AccountCode == "1100" && r.EntryNo == 1);
+        Assert.Equal("売上高", row.CounterAccountName);
+    }
+
+    /// <summary>
+    /// <b>相手が 2 科目以上なら「諸口」。</b> ここを 1 件目の名前で埋めると、
+    /// 帳簿が「現金 3,000 の相手は売上高」と嘘をつく（実際には売上高 2,000 と買掛金 1,000）。
+    /// </summary>
+    [Fact]
+    public void 相手が複数なら諸口になる()
+    {
+        using var db = Create();
+
+        var row = Run(db).Single(r => r.AccountCode == "1100" && r.EntryNo == 2);
+        Assert.Equal("諸口", row.CounterAccountName);
+    }
+
+    /// <summary>
+    /// 同じ伝票でも、**見る側が変われば相手も変わる**。
+    /// 売上高から見た相手は現金 1 科目なので諸口にならない。
+    /// </summary>
+    [Fact]
+    public void 相手は行ごとに決まる()
+    {
+        using var db = Create();
+
+        Assert.Equal("現金", Run(db).Single(r => r.AccountCode == "4000" && r.EntryNo == 2).CounterAccountName);
+        Assert.Equal("現金", Run(db).Single(r => r.AccountCode == "2000" && r.EntryNo == 2).CounterAccountName);
+    }
+
+    // --- 借方と貸方の振り分け ---
+
+    [Fact]
+    public void 借方と貸方は別の列に出て片方は空になる()
+    {
+        using var db = Create();
+        var rows = Run(db);
+
+        var debit = rows.Single(r => r.AccountCode == "1100" && r.EntryNo == 1);
+        Assert.Equal(1000, debit.Debit);
+        Assert.Null(debit.Credit);
+
+        var credit = rows.Single(r => r.AccountCode == "4000" && r.EntryNo == 1);
+        Assert.Null(credit.Debit);
+        Assert.Equal(1000, credit.Credit);
+    }
+
+    // --- 期間内累計（docs/04 §6 の通常残高）---
+
+    /// <summary>
+    /// <b>累計は科目ごとに積み上がる。</b> 科目で区切らずに積むと、
+    /// 別の科目の金額が混ざった数字が「その科目の累計」として出る。
+    /// </summary>
+    [Fact]
+    public void 累計は科目ごとに積み上がる()
+    {
+        using var db = Create();
+        var cash = Run(db).Where(r => r.AccountCode == "1100").ToList();
+
+        // 借方 1,000 → 借方 3,000 → 貸方 300。現金は借方が通常残高。
+        Assert.Equal([1000, 4000, 3700], cash.Select(r => r.RunningTotal));
+    }
+
+    /// <summary>
+    /// 収益は<b>貸方が通常残高</b>。借方 − 貸方で積むと売上の累計が負の数で出る。
+    /// </summary>
+    [Fact]
+    public void 収益の累計は貸方を正にする()
+    {
+        using var db = Create();
+
+        Assert.Equal([1000, 3000], Run(db).Where(r => r.AccountCode == "4000").Select(r => r.RunningTotal));
+    }
+
+    /// <summary>
+    /// <b>評価勘定は科目区分と逆。</b> 減価償却累計額（資産の評価勘定）は貸方が、
+    /// 売上値引高（収益の評価勘定）は借方が通常残高になる。
+    /// 科目区分だけで符号を決める実装だと、この 2 件だけが逆符号で落ちる。
+    /// </summary>
+    [Theory]
+    [InlineData("1500", 500)]    // 資産の評価勘定 ＝ 貸方が通常残高
+    [InlineData("4900", 300)]    // 収益の評価勘定 ＝ 借方が通常残高
+    [InlineData("2000", 1000)]   // 負債 ＝ 貸方が通常残高
+    [InlineData("5300", 500)]    // 費用 ＝ 借方が通常残高
+    public void 通常残高の側を正にする(string accountCode, long expected)
+    {
+        using var db = Create();
+
+        Assert.Equal(expected, Run(db).Single(r => r.AccountCode == accountCode).RunningTotal);
+    }
+
+    // --- 絞り込み ---
+
+    [Fact]
+    public void 勘定科目で絞ると一科目だけになる()
+    {
+        using var db = Create();
+
+        var rows = Run(db, ("@p_account_id", 1L));
+        Assert.All(rows, r => Assert.Equal("1100", r.AccountCode));
+        Assert.Equal(3, rows.Count);
+    }
+
+    /// <summary>
+    /// <b>絞り込んだ範囲の中で積み直す。</b> 期間内累計は「いま出ている行の累計」であり、
+    /// 絞る前の値を引きずらない。
+    /// </summary>
+    [Fact]
+    public void 絞り込むと累計も絞り込んだ範囲で積み直される()
+    {
+        using var db = Create();
+
+        // 05-20 以降だけを見ると、現金は 3,000 → 2,700 になる（1,000 は範囲外）。
+        var rows = Run(db, ("@p_account_id", 1L), ("@p_transaction_date_from", "2026-05-20"));
+        Assert.Equal([3000, 2700], rows.Select(r => r.RunningTotal));
+    }
+
+    [Theory]
+    [InlineData(1000, 3000, 5)]
+    [InlineData(1001, 3000, 2)]
+    [InlineData(3001, 9999, 0)]
+    public void 金額の範囲は両端を含む(long min, long max, int expected)
+    {
+        using var db = Create();
+
+        Assert.Equal(expected, Run(db, ("@p_amount_min", min), ("@p_amount_max", max)).Count);
+    }
+
+    [Fact]
+    public void 伝票番号で絞れる()
+    {
+        using var db = Create();
+
+        Assert.All(Run(db, ("@p_entry_no_min", 3L), ("@p_entry_no_max", 3L)), r => Assert.Equal(3, r.EntryNo));
+    }
+
+    [Fact]
+    public void 取引先で絞れる()
+    {
+        using var db = Create();
+
+        // 取引先は 1 番の伝票にだけ付いている（2 行）。
+        var rows = Run(db, ("@p_partner_id", 1L));
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, r => Assert.Equal(1, r.EntryNo));
+    }
+
+    [Fact]
+    public void 部門で絞れる()
+    {
+        using var db = Create();
+
+        var rows = Run(db, ("@p_department_id", 2L));
+        Assert.Equal(["4000"], rows.Select(r => r.AccountCode));
+    }
+
+    [Fact]
+    public void 摘要でも内容でも引ける()
+    {
+        using var db = Create();
+
+        Assert.Equal(2, Run(db, ("@p_keyword", "5 月の売上")).Count);   // 摘要（伝票）
+        Assert.Single(Run(db, ("@p_keyword", "商品 A")));               // 内容（明細）
+    }
+
+    [Fact]
+    public void 打った文字はワイルドカードにならない()
+    {
+        using var db = Create();
+
+        Assert.Empty(Run(db, ("@p_keyword", "%")));
+    }
+
+    [Theory]
+    [InlineData("partner", 7)]           // 取引先が付いているのは 1 番の 2 行だけ
+    [InlineData("department", 8)]        // 部門が付いているのは 1 行だけ
+    [InlineData("sub_account", 9)]       // 補助科目はどこにも無い
+    [InlineData("description", 7)]       // 摘要があるのは 1 番だけ
+    [InlineData("item_description", 8)]  // 内容があるのは 1 行だけ
+    public void 記録事項がない行を探せる(string field, int expected)
+    {
+        using var db = Create();
+
+        Assert.Equal(expected, Run(db, ("@p_blank_field", field)).Count);
+    }
+
+    [Fact]
+    public void 知らない空値の指定は一件も返さない()
+    {
+        using var db = Create();
+
+        Assert.Empty(Run(db, ("@p_blank_field", "unknown")));
+    }
+
+    [Fact]
+    public void 別の会計年度を指定すると一件も出ない()
+    {
+        using var db = Create();
+
+        Assert.Empty(Run(db, ("@p_fiscal_year_id", 99L)));
+    }
+
+    // --- 実行の土台 ---
+
+    private static SqliteConnection Create()
+    {
+        var db = TestDatabase.Create();
+        TestDatabase.Execute(db, SchemaSeed.Masters);
+        TestDatabase.Execute(db, Accounts);
+        TestDatabase.Execute(db, Book);
+        TestDatabase.Execute(db, Post);
+        return db;
+    }
+
+    private sealed record Row(
+        string AccountCode, int EntryNo, string? CounterAccountName,
+        long? Debit, long? Credit, long RunningTotal);
+
+    /// <summary>
+    /// 元帳の SQL を<b>本物のまま</b>流す。渡さなかったパラメータは NULL（＝条件なし）。
+    /// </summary>
+    private static IReadOnlyList<Row> Run(SqliteConnection db, params (string Name, object Value)[] parameters)
+    {
+        using var command = db.CreateCommand();
+        command.CommandText = File.ReadAllText(Path.Combine(
+            TestDatabase.ModulesDirectory, "Books", "GeneralLedger.Query.sql"));
+
+        foreach (var name in Parameters)
+        {
+            var (givenName, givenValue) = parameters.FirstOrDefault(p => p.Name == name);
+            command.Parameters.AddWithValue(name, givenName is null ? DBNull.Value : givenValue);
+        }
+
+        using var reader = command.ExecuteReader();
+        var rows = new List<Row>();
+        while (reader.Read())
+        {
+            rows.Add(new Row(
+                reader.GetString(reader.GetOrdinal("account_code")),
+                reader.GetInt32(reader.GetOrdinal("entry_no")),
+                Nullable(reader, "counter_account_name") is int counter ? reader.GetString(counter) : null,
+                Nullable(reader, "debit_amount") is int debit ? reader.GetInt64(debit) : null,
+                Nullable(reader, "credit_amount") is int credit ? reader.GetInt64(credit) : null,
+                reader.GetInt64(reader.GetOrdinal("running_total"))));
+        }
+
+        return rows;
+    }
+
+    /// <summary>値が入っている列の位置。NULL なら <c>null</c>。</summary>
+    private static int? Nullable(SqliteDataReader reader, string column)
+    {
+        var ordinal = reader.GetOrdinal(column);
+        return reader.IsDBNull(ordinal) ? null : ordinal;
+    }
+
+    /// <summary>
+    /// SQL が使う入力パラメータ。<b>足りないと SQLite が実行時に落ちる</b>ので、
+    /// 一覧が古くなったことはテストの失敗として現れる。
+    /// </summary>
+    private static readonly string[] Parameters =
+    [
+        "@p_fiscal_year_id", "@p_account_id", "@p_sub_account_id", "@p_department_id", "@p_partner_id",
+        "@p_transaction_date_from", "@p_transaction_date_to",
+        "@p_amount_min", "@p_amount_max", "@p_entry_no_min", "@p_entry_no_max",
+        "@p_keyword", "@p_blank_field",
+    ];
+}

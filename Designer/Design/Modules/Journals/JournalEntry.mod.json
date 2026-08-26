@@ -692,6 +692,21 @@
       "IsBlock": false
     },
     {
+      "Text": "入場券等の回収特例（1 回 3 万円以上）に当たる仕入れは、明細の「内容」欄に取引先の住所を記載してください。",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "InvoiceNoticeLabel",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
       "Text": "借方計 0 / 貸方計 0",
       "Icon": "",
       "IsHtml": false,
@@ -1355,6 +1370,44 @@
                   "BackgroundColor": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 }
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None",
+                "Layout": {
+                  "FieldName": "InvoiceNoticeLabel",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "HorizontalAlignment": "Start"
               }
             ]
           },

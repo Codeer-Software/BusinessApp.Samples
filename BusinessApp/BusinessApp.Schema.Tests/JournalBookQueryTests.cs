@@ -115,6 +115,58 @@ public class JournalBookQueryTests
         Assert.Equal(expected, Run(db, ("@p_amount_min", min), ("@p_amount_max", max)).Count);
     }
 
+    // --- 伝票番号（通達 8-14 (注) の一連番号による検索）---
+
+    [Theory]
+    [InlineData(1, 2, 4)]
+    [InlineData(2, 2, 2)]
+    [InlineData(1, 1, 2)]
+    [InlineData(3, 9, 0)]
+    public void 伝票番号の範囲は両端を含む(long min, long max, int expected)
+    {
+        using var db = Create();
+
+        Assert.Equal(expected, Run(db, ("@p_entry_no_min", min), ("@p_entry_no_max", max)).Count);
+    }
+
+    /// <summary>
+    /// 片側だけの指定も効く。<b>両方揃ったときだけ効く実装</b>だと、ここが落ちる。
+    /// </summary>
+    [Fact]
+    public void 伝票番号は片側だけでも絞れる()
+    {
+        using var db = Create();
+
+        Assert.Equal([2L, 2L], Run(db, ("@p_entry_no_min", 2L)).Select(r => r.EntryId));
+        Assert.Equal([1L, 1L], Run(db, ("@p_entry_no_max", 1L)).Select(r => r.EntryId));
+    }
+
+    /// <summary>
+    /// <b>伝票番号は会計年度の中の連番</b>なので、年度を指定しなければ同じ番号が複数の年度から出る。
+    /// 年度と組み合わせれば 1 本に絞れる（通達 8-15 の「課税期間ごとに」）。
+    /// </summary>
+    [Fact]
+    public void 伝票番号は会計年度と組み合わせて一意になる()
+    {
+        using var db = Create();
+        TestDatabase.Execute(db, """
+            INSERT INTO fiscal_years (code, label, start_date, end_date, status)
+                VALUES ('FY19', '第 19 期', '2027-04-01', '2028-03-31', 'open');
+            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, entered_at)
+                VALUES (2, '2027-04-02', '2027-04-02', 'draft', 'reversal', 1, '2027-04-02 10:00:00');
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (4, 1, 'credit', 1, 1000, 1);
+            UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2027-04-02 10:00:00' WHERE id = 4;
+            """);
+
+        // 番号だけで引くと、第 18 期の 1 番（2 行）と第 19 期の 1 番（1 行）が並ぶ。
+        Assert.Equal([1L, 1L, 4L], Run(db, ("@p_entry_no_min", 1L), ("@p_entry_no_max", 1L)).Select(r => r.EntryId));
+
+        // 年度を足すと 1 本になる。
+        Assert.Equal([4L], Run(db,
+            ("@p_entry_no_min", 1L), ("@p_entry_no_max", 1L), ("@p_fiscal_year_id", 2L)).Select(r => r.EntryId));
+    }
+
     // --- 組み合わせ（規則 5 ⑤一ハ(3)・通達 8-15）---
 
     [Fact]
@@ -300,7 +352,7 @@ public class JournalBookQueryTests
     private static readonly string[] Parameters =
     [
         "@p_fiscal_year_id", "@p_transaction_date_from", "@p_transaction_date_to",
-        "@p_amount_min", "@p_amount_max", "@p_account_id", "@p_partner_id",
-        "@p_keyword", "@p_blank_field",
+        "@p_amount_min", "@p_amount_max", "@p_entry_no_min", "@p_entry_no_max",
+        "@p_account_id", "@p_partner_id", "@p_keyword", "@p_blank_field",
     ];
 }

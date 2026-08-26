@@ -113,6 +113,30 @@ public class AccountingSubmitPipelineTests
         Assert.False(called);
     }
 
+    /// <summary>
+    /// <b>取引先の関門もつながっている。</b> つながっていなければ、検査用数字の合わない法人番号が
+    /// そのまま保存され、名寄せの自然キーになる（docs/07 §2-2）。
+    /// </summary>
+    [Fact]
+    public async Task 検査用数字の合わない法人番号は保存に届かない()
+    {
+        using var server = new AccountingServer();
+        var partner = new ModuleData { Name = PartnerSubmitGate.ModuleName };
+        partner.Fields["CorporateNumber"] = new TextFieldData { Value = "1700110005901" };
+        var called = false;
+
+        await Assert.ThrowsAsync<PartnerRejectedException>(
+            () => server.Pipeline.SubmitAsync(
+                [new ModuleSubmitData { ModuleName = PartnerSubmitGate.ModuleName, Add = [partner] }],
+                () =>
+                {
+                    called = true;
+                    return Task.FromResult(new List<ModuleSubmitResult>());
+                }));
+
+        Assert.False(called);
+    }
+
     [Fact]
     public async Task 保存を渡さなければ止まる()
     {
