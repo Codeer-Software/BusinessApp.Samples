@@ -39,6 +39,7 @@ related: [00_ドキュメント規約.md]
 | デザインの静的検査 | `designcheck` CLI（`../Designer/CLAUDE.md`） |
 | 公開前チェック | `python tools/docs/lint_secrets.py` |
 | ドキュメント規約の検査 | `python tools/docs/lint_docs.py` |
+| SQL・DDL テストの強さを測る（**計画・未実装**） | [qa/05_観点網羅の計器](qa/05_観点網羅の計器.md) — ミュテーションで観点の穴を炙り出す |
 | デプロイして実機で確認する | `pwsh -NoProfile -File tools/clb/deploy.ps1` → [tools/README](../tools/README.md) |
 
 ## 3. 説明する
