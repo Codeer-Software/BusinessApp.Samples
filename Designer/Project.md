@@ -4,7 +4,7 @@ status: current
 scope: 会計コア
 audience: [開発]
 growth: append
-updated: 2026-08-23
+updated: 2026-08-26
 supersedes: []
 related: [CLAUDE.md, ../docs/README.md]
 ---
@@ -18,7 +18,9 @@ related: [CLAUDE.md, ../docs/README.md]
 - **BusinessAppSQLite**（本アプリの唯一のデータソース）
   - 種別: SQLite / 実体は `<REPO_ROOT>/LocalData/db/` 配下（Git 追跡外）
   - `AllowCliSqlAccess: true`（ローカル専用 DB。本番を指さない）
-  - 認証テーブル（`app_users`）・一時ファイル（`temporary_files`）も同居する
+  - 認証部品の `app_users` と、マイグレーションの台帳 `schema_migrations` も同居する。
+    **一時ファイルの `temporary_files` は未作成**（`appsettings.json` は参照しているので、
+    `FileField` / `ImageField` を置くならテーブルを先に作る）
 - サーバ側 `BusinessApp.Server/appsettings(.Development).json` にも同名データソースの定義が要る
   （変更時はサーバ再起動）
 
@@ -42,8 +44,9 @@ related: [CLAUDE.md, ../docs/README.md]
 - **検索レイアウトの行は `IsWrap: true` を標準**にする。1 行は 3 組（ラベル＋入力）まで
 - **「ラベル列 + 入力列」の 2 カラム行では、ラベル列に `VerticalAlignment: "Middle"` を必ず設定**
 - ラベル列の幅は「最長ラベルの文字数 × 18px + 40px」を目安に、フォーム内で揃える（下限 96px）
-- **参照フィールドの幅**（全画面共通）: 取引先を入れるカラムは **440px**、
-  勘定科目を入れるカラムは **320px**（どちらも既定幅では収まらない）
+- **参照フィールドの幅**: 詳細レイアウトで取引先を入れるカラムは **440px**
+  （既定幅では収まらない。**幅は行ではなく列に効く**ので、その行の合計を他の行と揃える。§4 の 2026-08-26）。
+  **いま適用してあるのは取引先の詳細だけ**で、一覧や仕訳明細には幅を付けていない
 
 ## 業務ルール（会計の不変条件）
 
@@ -90,8 +93,9 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
 - 2026-08-24: **予約名フィールドは規定のデザイン型で作る。** `OptimisticLocking` は
   `OptimisticLockingFieldDesign` ＋ `IncrementVersion: true`（SQLite）。型が違うと
   designcheck 緑・HTTP 200 のまま更新だけが失敗する（qa/01 F-09）。
-  `creator` / `updater` 列は型が未決なので、当面モジュールに持たせない（フェーズ 6 の監査ログで決める）。
-- 2026-08-24: マスタは**物理削除させない**（`CanDelete: false`。ADR-0006「削除ではなく無効化」）。
+  `creator` / `updater` 列は型が未決なので、当面モジュールに持たせない
+  （**優良な電子帳簿のチェックシート対応表を書くときに、記録事項の棚卸しと一緒に決める**。qa/02 R5-08）。
+- 2026-08-24: マスタは**物理削除させない**（`CanDelete: false`。ADR-0019 §1「削除ではなく無効化」）。
   一覧の削除ボタンは PageFrame の `Link.ListPageDesign.ListFieldDesign.CanDelete` でも切る。
 - 2026-08-24: 一覧の既定の並び順は PageFrame の `Link...SearchCondition.SortConditions` で指定する。
   指定しないと**降順で出る**（マスタでは使いものにならない）。
@@ -105,13 +109,15 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
   親詳細の `LimitCount` は全件（`0` にすると明細が消える）。
 - 2026-08-24: **LinkField の候補ダイアログは、一覧画面とは別に絞り込みと並び順を持つ。**
   フィールド側の `SearchCondition` に `SortConditions` と `Condition` を設定する。
-  マスタを指す LinkField は `IsActive.Value = true` で絞る（`is_active` は「入力候補に出すか」の意味。ADR-0006）。
+  マスタを指す LinkField は `IsActive.Value = true` で絞る（`is_active` は「入力候補に出すか」の意味。ADR-0019 §1）。
   設定しないと**無効にした科目が候補に出てしまい、降順で並ぶ**。
-  `designcheck` は findings 0。DB には `app_users` のみ存在し、`temporary_files` は未作成
+  `designcheck` は findings 0。DB に `temporary_files` は未作成（上の §2 も参照）
 - 2026-08-26: **デザイン JSON は `json.load` → `json.dumps(indent=2, ensure_ascii=False)` で
   バイト単位に往復する**（3 つのモジュールで実測）。手で JSON を書き換えるより安全。
   ただし **Python の text mode は Windows で CRLF を書く**ので、`open(path,'wb')` で
   LF のまま書く（`.gitattributes` が正規化する前に `designcheck` と差分が汚れる）。
 - 2026-08-26: **レイアウトの `Width` は行ではなくレイアウト全体に効く。** 1 つの列に
-  幅を付けると、同じ位置にある他の行の入力欄まで一緒に動く（実測: 参照フィールドに 440px を
-  付けたら登録ボタンが画面の外に出た）。`designcheck` は緑のままなので、実機で見る。
+  幅を付けると、同じ位置にある他の行の入力欄まで一緒に動く（実測。CLB 1.3.20）。
+  幅を付ける前は自動の列が伸びて**登録ボタンが画面の外に出ていた**ので、
+  取引先の詳細は 140+300+140+440 = 1020px に**行ごとの合計を揃えて**収めた。
+  `designcheck` は緑のままなので、実機で見る。

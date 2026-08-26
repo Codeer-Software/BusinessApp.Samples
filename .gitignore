@@ -384,3 +384,6 @@ references/
 
 # ミューテーションテストのレポート（ADR-0012。フェーズの区切りで生成し直す）
 **/StrykerOutput/
+
+# Claude Code が作る一時ワークツリー（各セッションのローカル作業場）
+.claude/worktrees/

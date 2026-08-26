@@ -3,7 +3,7 @@ title: BusinessApp — CLB 製 会計コア
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-08-23
+updated: 2026-08-26
 supersedes: []
 related: [docs/README.md]
 ---
@@ -38,7 +38,9 @@ BusinessApp.slnx            ソリューション
 BusinessApp/                ランタイム（Server / Client / Client.Shared / Designer(CLI) / LicenseRegisterCli）
 Designer/                   CLB デザインワークスペース
   Design/                     デザインプロジェクト本体（Modules / PageFrames / Enums / Resources）
-  ddl/                        DB スキーマ + seed（番号順に適用）
+  ddl/                        DB スキーマの正典（現在形の DDL）
+  seed/                       初期データ（勘定科目・税区分・部門・会計期間）
+  migrations/                 稼働 DB へ配る差分（ADR-0020）
 LocalData/                  実行時データ（DB・デザイン zip・添付）→ LocalData/README.md
 tools/                      開発スクリプト（デプロイ・検査）→ tools/README.md
 docs/                       企画・仕様・設計・ADR・リサーチ → docs/README.md
@@ -56,7 +58,9 @@ CLAUDE.md                   Claude Code 向けミッションブリーフ
    - `Designer/Design/designer.settings.Development.json` — デザイナ CLI の接続先（雛形は未整備）
    - `.claude/settings.local.json` — Claude Code を使う場合のみ。
      雛形の `.claude/settings.local.json.sample` をコピーしてプレースホルダを置換する
-2. **DB 構築** — `Designer/ddl/*.sql` を番号順に適用する
+2. **DB 構築** — `Designer/ddl/*.sql` → `Designer/seed/*.sql` を番号順に適用し、
+   `pwsh -NoProfile -File tools/clb/migrate.ps1 -Adopt` で台帳を作る
+   （手順の正典は [`Designer/migrations/README.md`](Designer/migrations/README.md)）
 3. **デザインのデプロイ** — `pwsh -NoProfile -File tools/clb/deploy.ps1`
 4. **起動**
 

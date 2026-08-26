@@ -3,9 +3,9 @@ title: seed — 初期データ
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-08-24
+updated: 2026-08-26
 supersedes: []
-related: [../ddl/README.md, ../../docs/02_ペルソナ.md, ../../docs/decisions/0006-マスタの三層分類.md]
+related: [../ddl/README.md, ../../docs/02_ペルソナ.md, ../../docs/decisions/0019-マスタは会計が生んだ概念かで分ける.md]
 ---
 # seed — 初期データ
 
@@ -24,12 +24,12 @@ DDL を先に流してから、番号順に流す。
 pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and_periods.sql
 ```
 
-| # | ファイル | 内容 | ADR-0006 の層 |
+| # | ファイル | 内容 | 層（[ADR-0019](../../docs/decisions/0019-マスタは会計が生んだ概念かで分ける.md) §1） |
 |---|---|---|---|
 | 001 | [`001_organization_and_periods.sql`](001_organization_and_periods.sql) | 事業所情報・第 18 期・月次期間 12 本・採番 | ② 会計設定 |
 | 002 | [`002_departments.sql`](002_departments.sql) | 部門 6 件（全社共通 ＋ 5 部門） | ③ 会計マスタ |
 | 003 | [`003_tax_categories.sql`](003_tax_categories.sql) | 税区分 10 件 | ③ 会計マスタ |
-| 004 | [`004_accounts.sql`](004_accounts.sql) | 勘定科目 99 件・既定税区分 | ③ 会計マスタ |
+| 004 | [`004_accounts.sql`](004_accounts.sql) | 勘定科目 105 件・既定税区分 | ③ 会計マスタ |
 
 税区分（003）を勘定科目（004）より先に流す。勘定科目が既定税区分を参照するためである。
 
@@ -62,6 +62,6 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
 
 - 2026-08-24 勘定科目の**決算書表示区分**（`statement_section`）を入れていない。
   会社計算規則が定める区分であり、記憶で書かない（CLAUDE.md §2-4）。
-  B/S・P/L を作るフェーズ 4 で一次情報を確認してから入れる（未了）
+  一次情報を確認してから入れる。**フェーズ 4 の着手前**
 - 2026-08-24 補助科目（`sub_accounts`）の初期データが無い。普通預金の金融機関別など、
-  実際の運用が決まってから入れる（未了）
+  実際に使う口座が決まらないと作れない。**デモデータを作るフェーズ 7**

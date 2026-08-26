@@ -3,7 +3,7 @@ title: tools — 開発スクリプト
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-08-25
+updated: 2026-08-26
 supersedes: []
 related: [../docs/README.md]
 ---
@@ -70,8 +70,19 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -Query "SELECT COUNT(*) FROM accounts;"
 pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 ```
 
-上の 4 つ（`lint_secrets` / `lint_docs` / `lint_design` / `dotnet test`）は
-**コミット前フックが自動で流す**。有効にするのは clone 後の 1 回だけ。
+**コミット前フックが 7 段を自動で流す**（`tools/git-hooks/pre-commit`。段の正典はこの表）。
+
+| 段 | 中身 |
+|---|---|
+| 1 | `lint_secrets.py`（秘密・絶対パスの混入） |
+| 2 | `lint_docs.py`（ドキュメント規約） |
+| 3 | `lint_design.py`（CLB デザインの静的検査） |
+| 4 | `dotnet test`（テスト・カバレッジ・スキーマ） |
+| 5 | `migrate.ps1 -Verify`（稼働 DB とスキーマ正典の同値。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
+| 6 | `dotnet stryker`（ミューテーション。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)） |
+| 7 | `guard_delete.py` の自己検査 |
+
+有効にするのは clone 後の 1 回だけ。
 
 ```powershell
 git config core.hooksPath tools/git-hooks
