@@ -3,7 +3,7 @@ title: tools — 開発スクリプト
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-08-26
+updated: 2026-08-27
 supersedes: []
 related: [../docs/README.md]
 ---
@@ -28,7 +28,7 @@ related: [../docs/README.md]
 | [`clb/lint_design.py`](clb/lint_design.py) | **CLB デザインの静的検査**。`designcheck` が緑でも壊れるもの（[qa/01](../docs/qa/01_CLB静かな失敗.md)）のうち JSON とスクリプトで判るものを検出する |
 | [`clb/scaffold_module.py`](clb/scaffold_module.py) | モジュール定義の足場作り。生成後は `Design/Modules/*.mod.json` が正典 |
 | [`git-hooks/pre-commit`](git-hooks/pre-commit) | コミット前の検証。`git config core.hooksPath tools/git-hooks` で有効にする |
-| [`docs/lint_docs.py`](docs/lint_docs.py) | **ドキュメント規約の検査**（[docs/00 §6](../docs/00_ドキュメント規約.md)）。フロントマター・リンク切れ・索引の突合・**current でない文書へのコード参照** |
+| [`docs/lint_docs.py`](docs/lint_docs.py) | **ドキュメント規約の検査**（[docs/00 §6](../docs/00_ドキュメント規約.md)）。フロントマター・リンク切れ・索引の突合・**current でない文書へのコード参照**・**`updated:` の鮮度**（作業ツリーと履歴の両方）。`--selftest` で検査そのものを検査する |
 | [`docs/lint_secrets.py`](docs/lint_secrets.py) | **公開リポジトリ向けの混入検査**。追跡ファイルに絶対パス・ユーザー名・接続文字列・API キー・秘密鍵が無いかを検査する |
 | [`docs/lint_secrets_allow.txt`](docs/lint_secrets_allow.txt) | 上記の誤検知抑制リスト |
 
@@ -75,12 +75,15 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 | 段 | 中身 |
 |---|---|
 | 1 | `lint_secrets.py`（秘密・絶対パスの混入） |
-| 2 | `lint_docs.py`（ドキュメント規約） |
+| 2 | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
 | 3 | `lint_design.py`（CLB デザインの静的検査） |
 | 4 | `dotnet test`（テスト・カバレッジ・スキーマ） |
 | 5 | `migrate.ps1 -Verify`（稼働 DB とスキーマ正典の同値。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
 | 6 | `dotnet stryker`（ミューテーション。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)） |
 | 7 | `guard_delete.py` の自己検査 |
+
+**マージが自動でコミットするときは `pre-merge-commit` から同じ 7 段へ委譲する**——
+git はマージで `pre-commit` を呼ばないので、置かないと **`main` に入る瞬間だけ誰も見ていない**。
 
 有効にするのは clone 後の 1 回だけ。
 

@@ -17,6 +17,8 @@ echo "[pre-commit] 1/7 秘密の検査"
 python tools/docs/lint_secrets.py
 
 echo "[pre-commit] 2/7 ドキュメント規約の検査"
+# 検査そのものが空回りしていないかを先に確かめる（守る道具にはテストを付ける。7/7 と同じ作法）
+python tools/docs/lint_docs.py --selftest
 python tools/docs/lint_docs.py
 
 echo "[pre-commit] 3/7 CLB デザインの検査"
