@@ -4,11 +4,13 @@
 
 仕様書: docs/00_ドキュメント規約.md
 
-長期開発でドキュメントが腐り、肥大化するのを防ぐ。検査するのは次の 3 点である。
+長期開発でドキュメントが腐り、肥大化するのを防ぐ。検査するのは次の 4 点である。
   1. 読まなくていい文書を判別できるか（フロントマターと status）
   2. 索引・ADR 台帳と実ファイルが食い違っていないか
   3. current でない文書をコード（コメント）が参照していないか
      （開発者の提案。2026-08-25。意図的な歴史参照は行に lint-docs:ignore を書く）
+  4. 本文を変えたのに updated: を今日にしていない文書がないか
+     （開発者の指示。2026-08-27。横断レビューで 7 文書のずれが見つかったため）
 
 使い方:
     python tools/docs/lint_docs.py          # 規約違反の検査（error / warn）
@@ -22,6 +24,7 @@ Python 3.8+ / 標準ライブラリのみ（YAML パーサは使わず、必要�
 from __future__ import annotations
 
 import argparse
+import datetime
 import os
 import re
 import subprocess
@@ -102,14 +105,37 @@ class Doc:
         return [x.strip().strip("'\"") for x in raw.split(",") if x.strip()]
 
 
+# 日本語のパスを git が ã のように引用して返さないようにする。
+# 既定（core.quotepath=true）だと、パスの突合を行う検査が黙って素通りする。
+GIT = ["git", "-c", "core.quotepath=false"]
+
+
 def run_git(args: List[str]) -> List[str]:
     try:
-        out = subprocess.run(["git"] + args, cwd=REPO_ROOT,
+        out = subprocess.run(GIT + args, cwd=REPO_ROOT,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     except (OSError, subprocess.CalledProcessError) as e:
         sys.stderr.write("git の実行に失敗しました: {}\n".format(e))
         sys.exit(2)
     return [l for l in out.stdout.decode("utf-8", errors="replace").splitlines() if l.strip()]
+
+
+def git_text(args: List[str], allow_failure: bool = False) -> Optional[str]:
+    """git の標準出力を丸ごと返す。
+
+    `allow_failure=True` のときだけ、失敗を None として受ける（HEAD に無い blob など、
+    失敗が答えになる問い合わせ）。それ以外の失敗は `run_git` と同じく exit 2 で落とす——
+    `.git/index.lock` を握られている等の異常を「変更なし」と読むと、検査が無言で素通りする。
+    """
+    try:
+        out = subprocess.run(GIT + args, cwd=REPO_ROOT,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    except (OSError, subprocess.CalledProcessError) as e:
+        if allow_failure:
+            return None
+        sys.stderr.write("git の実行に失敗しました: {}\n".format(e))
+        sys.exit(2)
+    return out.stdout.decode("utf-8", errors="replace")
 
 
 def parse_front_matter(lines: List[str]) -> Tuple[Dict[str, str], int]:
@@ -127,21 +153,30 @@ def parse_front_matter(lines: List[str]) -> Tuple[Dict[str, str], int]:
     return meta, 0
 
 
-def load_docs() -> List[Doc]:
-    docs = []
+def load_docs() -> Tuple[List[Doc], List[str]]:
+    """検査対象の文書と、**読めなかったファイル**を返す。
+
+    読めなかったものを黙って捨てない。捨てると「検査文書数」だけが減り、
+    error 0 のまま**何も検査していない**状態になる（実測: git の既定
+    `core.quotepath=true` だと日本語のパスが引用されて 58 → 9 に落ちた。2026-08-27）。
+    """
+    docs: List[Doc] = []
+    unreadable: List[str] = []
     for rel in run_git(["ls-files", "*.md"]):
         rel_posix = rel.replace("\\", "/")
         if rel_posix.startswith(EXCLUDE_PREFIXES) or rel_posix in EXCLUDE_FILES:
             continue
         path = os.path.join(REPO_ROOT, rel)
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            # utf-8-sig: BOM 付きでもフロントマターを読み落とさない
+            with open(path, "r", encoding="utf-8-sig") as f:
                 lines = f.read().splitlines()
-        except OSError:
+        except (OSError, UnicodeDecodeError) as e:
+            unreadable.append("{}（{}）".format(rel_posix, type(e).__name__))
             continue
         meta, body_start = parse_front_matter(lines)
         docs.append(Doc(rel_posix, lines, meta, body_start))
-    return docs
+    return docs, unreadable
 
 
 def check_front_matter(doc: Doc, findings: List[Tuple[str, str, str]]) -> None:
@@ -298,6 +333,112 @@ def check_code_references(docs: List[Doc], findings: List[Tuple[str, str, str]])
                                      "歴史参照なら行に {} を書く）".format(i + 1, status, doc_rel, INLINE_IGNORE)))
 
 
+def body_of(text: str) -> List[str]:
+    """フロントマターを除いた本文の行を返す。"""
+    lines = text.splitlines()
+    _, start = parse_front_matter(lines)
+    return lines[start:]
+
+
+def updated_violation(rel: str, old_body: Optional[List[str]], new_body: List[str],
+                      updated: str, today: str) -> Optional[str]:
+    """本文が変わっているのに `updated:` が今日でなければ、その理由を返す（純粋関数）。
+
+    `old_body` が None は「HEAD にそのパスが無い」＝新規追加・改名。本文が同じでも
+    日付を要求する（どちらも「文書として新しくなった」ため。規約 §3-1）。
+    """
+    if old_body == new_body:
+        return None
+    if updated == today:
+        return None
+    return ("本文を変えたので updated: を {} にしてください（いまは {}）。"
+            "フロントマターだけの変更なら動かさなくてよい。"
+            "**日付をまたいだだけのときも今日に直す**（規約 §3-1）".format(today, updated or "空"))
+
+
+def check_updated_freshness(docs: List[Doc], findings: List[Tuple[str, str, str]]) -> None:
+    """本文を変えたのに `updated:` を今日にしていない文書を error にする。
+
+    `updated` の意味は「**フロントマター以外の行**を最後に変えた日」である（規約 §3-1）。
+    「体裁だけの変更か」は機械には判定できないので、体裁でも動かす規則にしてある。
+    比較の対象は作業ツリーと HEAD——フックは作業ツリーを検査するため（ADR-0012 §7）。
+
+    HEAD が無いリポジトリ（最初のコミットの前）では何も見ない。
+    マージ・cherry-pick・rebase の途中も見ない——取り込んだ他人の変更に対して
+    「今日の日付にしろ」と言っても意味がなく、衝突の解決を妨げるだけである。
+    **飛ばしたことは黙らず印字する**（黙って素通りする関門を作らないため）。
+    """
+    if git_text(["rev-parse", "--verify", "HEAD"], allow_failure=True) is None:
+        return
+    git_dir = git_text(["rev-parse", "--git-dir"])
+    if git_dir:
+        base = os.path.join(REPO_ROOT, git_dir.strip())
+        for marker in ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD",
+                       "rebase-merge", "rebase-apply"):
+            if os.path.exists(os.path.join(base, marker)):
+                print("note	{}	マージ／rebase の途中なので updated: の検査を飛ばしました"
+                      .format(marker))
+                return
+
+    changed = git_text(["diff", "--name-only", "HEAD", "--", "*.md"])
+    changed_set = {l.strip().replace("\\", "/") for l in (changed or "").splitlines() if l.strip()}
+    if not changed_set:
+        return
+
+    today = datetime.date.today().isoformat()
+    for doc in docs:
+        if doc.rel not in changed_set:
+            continue
+        old = git_text(["show", "HEAD:{}".format(doc.rel)], allow_failure=True)
+        old_body = body_of(old) if old is not None else None
+        msg = updated_violation(doc.rel, old_body, doc.lines[doc.body_start:],
+                                doc.meta.get("updated", ""), today)
+        if msg:
+            findings.append((SEV_ERROR, doc.rel, msg))
+
+
+def check_updated_history(docs: List[Doc], findings: List[Tuple[str, str, str]]) -> None:
+    """**コミット済み**の腐りを見る。本文を最後に変えたコミットの日より `updated:` が古ければ error。
+
+    作業ツリーの検査（`check_updated_freshness`）は、フックを迂回した分・部分ステージした分・
+    フックを入れていない clone で入った分を見られない。こちらは履歴そのものを突き合わせる。
+
+    日付は **author 日**で比べる（amend / rebase で committer 日だけが動くため）。
+    日付をまたいでコミットした分を叩かないよう、**1 日の猶予**を置く。
+    """
+    if git_text(["rev-parse", "--verify", "HEAD"], allow_failure=True) is None:
+        return
+    for doc in docs:
+        updated = doc.meta.get("updated", "")
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", updated):
+            continue  # 書式そのものの error は check_front_matter が出す
+        log = git_text(["log", "--follow", "--format=%H %as", "--", doc.rel])
+        body_date = None
+        prev_body: Optional[List[str]] = None
+        for line in (log or "").splitlines():
+            sha, _, date = line.partition(" ")
+            if not sha:
+                continue
+            text = git_text(["show", "{}:{}".format(sha, doc.rel)], allow_failure=True)
+            body = body_of(text) if text is not None else None
+            if prev_body is not None and body != prev_body:
+                body_date = last_date
+                break
+            prev_body, last_date = body, date.strip()
+        else:
+            body_date = last_date if prev_body is not None else None
+        if body_date is None:
+            continue
+        try:
+            limit = (datetime.date.fromisoformat(body_date) - datetime.timedelta(days=1)).isoformat()
+        except ValueError:
+            continue
+        if updated < limit:
+            findings.append((SEV_ERROR, doc.rel,
+                             "updated: が {} ですが、本文を最後に変えたコミットは {} です"
+                             "（履歴との突合。規約 §3-1）".format(updated, body_date)))
+
+
 def check_docs_index(docs: List[Doc], findings: List[Tuple[str, str, str]]) -> None:
     index_rel = "docs/README.md"
     index = next((d for d in docs if d.rel == index_rel), None)
@@ -341,18 +482,80 @@ def print_stats(docs: List[Doc]) -> None:
         print("{:>6}  {}".format(by_status[k], k))
 
 
+ALL_CHECKS = (
+    "check_front_matter", "check_links", "check_body", "check_adr_ledger",
+    "check_docs_index", "check_code_references",
+    "check_updated_freshness", "check_updated_history",
+)
+
+
+def selftest() -> int:
+    """関門そのものを検査する。**中身を空にしても緑**という状態を作らないため。
+
+    ここで見るのは 2 つ。
+      1. 判定の純粋部分（`updated_violation` / `body_of`）が期待どおり鳴るか
+      2. 定義した検査が全部 `main` から呼ばれているか（呼び出しを消しても誰も気づかない事故を防ぐ）
+    """
+    failed = 0
+    fm = ["---", "title: x", "updated: 2026-08-27", "---"]
+    cases = [
+        # (old_body, new_body, updated, today, 鳴るべきか)
+        (["a"], ["a"], "2026-08-01", "2026-08-27", False),  # 本文が同じ＝フロントマターだけの変更
+        (["a"], ["b"], "2026-08-27", "2026-08-27", False),  # 本文を変えて今日にした
+        (["a"], ["b"], "2026-08-26", "2026-08-27", True),   # 本文を変えたのに据え置き
+        (["a"], ["b"], "", "2026-08-27", True),             # updated が無い
+        (None, ["a"], "2026-08-26", "2026-08-27", True),    # HEAD に無いパス（新規・改名）
+        (None, ["a"], "2026-08-27", "2026-08-27", False),
+    ]
+    for old_body, new_body, updated, today, should in cases:
+        got = updated_violation("x.md", old_body, new_body, updated, today) is not None
+        if got != should:
+            failed += 1
+            print("NG  updated_violation: 期待 {} / 実際 {}: {}".format(should, got, (old_body, new_body, updated)))
+
+    if body_of(chr(10).join(fm + ["本文"])) != ["本文"]:
+        failed += 1
+        print("NG  body_of: フロントマターを落とせていない")
+    if body_of("フロントマター無し") != ["フロントマター無し"]:
+        failed += 1
+        print("NG  body_of: フロントマターが無い文書を落としてしまった")
+
+    src = open(os.path.abspath(__file__), "r", encoding="utf-8").read()
+    main_src = src[src.index("def main()"):]
+    defined = set(re.findall(r"^def (check_[A-Za-z0-9_]+)\(", src, re.M))
+    for name in sorted(defined - set(ALL_CHECKS)):
+        failed += 1
+        print("NG  {} が ALL_CHECKS に載っていない（足した検査は必ず載せる）".format(name))
+    for name in ALL_CHECKS:
+        if name + "(" not in main_src:
+            failed += 1
+            print("NG  {} が main から呼ばれていない".format(name))
+        if "def {}(".format(name) not in src:
+            failed += 1
+            print("NG  {} が定義されていない".format(name))
+
+    print("lint_docs: すべて期待どおり" if failed == 0 else "lint_docs: {} 件が期待と違う".format(failed))
+    return 1 if failed else 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="ドキュメント規約の検査")
     ap.add_argument("--stats", action="store_true", help="指標を表示する")
+    ap.add_argument("--selftest", action="store_true", help="関門そのものを検査する")
     args = ap.parse_args()
 
-    docs = load_docs()
+    if args.selftest:
+        return selftest()
+
+    docs, unreadable = load_docs()
     if args.stats:
         print_stats(docs)
         return 0
 
     existing = {d.rel for d in docs}
     findings: List[Tuple[str, str, str]] = []
+    for rel in unreadable:
+        findings.append((SEV_ERROR, rel, "文書を読めませんでした。**検査できていない**ので黙って進まない"))
     for d in docs:
         check_front_matter(d, findings)
         check_links(d, existing, findings)
@@ -360,6 +563,8 @@ def main() -> int:
     check_adr_ledger(docs, findings)
     check_docs_index(docs, findings)
     check_code_references(docs, findings)
+    check_updated_freshness(docs, findings)
+    check_updated_history(docs, findings)
 
     errors = [f for f in findings if f[0] == SEV_ERROR]
     warns = [f for f in findings if f[0] == SEV_WARN]
