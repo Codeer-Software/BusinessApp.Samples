@@ -2,7 +2,7 @@ namespace BusinessApp.AccountingCore.Server.Journals;
 
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Periods;
-using BusinessApp.AccountingCore.Server.Shared;
+using BusinessApp.ServerSupport;
 using BusinessApp.AccountingCore.Shared;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
@@ -60,7 +60,7 @@ public sealed class JournalAmendmentService(
         }
 
         var context = await masterLoader.LoadAsync();
-        var today = DateOnly.FromDateTime(AccountingTimeZone.ToWallClock(timeProvider.GetUtcNow()));
+        var today = DateOnly.FromDateTime(DatabaseTimeZone.ToWallClock(timeProvider.GetUtcNow()));
 
         if (context.Calendar.ResolvePeriod(today) is not AccountingPeriod period)
         {
@@ -144,7 +144,7 @@ public sealed class JournalAmendmentService(
 
         // 「今日」はプロセスのタイムゾーンではなく会計のタイムゾーンで決める。
         // UTC で動くサーバでは、日本時間の朝 8 時が前日になってしまう。
-        return (original, await masterLoader.LoadAsync(), DateOnly.FromDateTime(AccountingTimeZone.ToWallClock(now)), now);
+        return (original, await masterLoader.LoadAsync(), DateOnly.FromDateTime(DatabaseTimeZone.ToWallClock(now)), now);
     }
 
     /// <summary>

@@ -8,7 +8,7 @@ using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Server;
 using BusinessApp.AccountingCore.Server.Journals;
-using BusinessApp.AccountingCore.Server.Partners;
+using BusinessApp.Partners.Server;
 using BusinessApp.AccountingCore.Server.Shared;
 using BusinessApp.TestSupport;
 using Codeer.LowCode.Blazor.DataIO;

@@ -1,8 +1,6 @@
 namespace BusinessApp.AccountingCore.Server.Tests.Conventions;
 
-using BusinessApp.AccountingCore.Partners;
 using BusinessApp.AccountingCore.Server.Journals;
-using BusinessApp.AccountingCore.Server.Partners;
 
 /// <summary>
 /// <c>record</c> のコピーコンストラクタ（<c>with</c> のために自動生成される部分）に触れる。
@@ -26,6 +24,5 @@ public class GeneratedCopyConstructorTests
         _ = new AmendRequest("1") with { };
         _ = AmendResult.Ok(1, 2) with { };
         _ = new AmendViolation("E-01", "理由", null) with { };
-        _ = new PartnerProfile(PartnerEntityType.Corporation, "8700110005901") with { };
     }
 }

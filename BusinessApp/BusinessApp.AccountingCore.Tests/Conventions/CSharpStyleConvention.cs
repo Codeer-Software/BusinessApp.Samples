@@ -43,8 +43,14 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
         "BusinessApp.AccountingCore.Server",
         "BusinessApp.AccountingCore.Server.Tests",
         "BusinessApp.AccountingCore.Tests",
+        "BusinessApp.Partners",
+        "BusinessApp.Partners.Server",
+        "BusinessApp.Partners.Server.Tests",
+        "BusinessApp.Partners.Tests",
         "BusinessApp.Schema.Tests",
         "BusinessApp.SchemaVerifyCli",
+        "BusinessApp.ServerSupport",
+        "BusinessApp.ServerSupport.Tests",
         "BusinessApp.TestSupport",
     ];
 
@@ -57,7 +63,7 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// ミューテーションスコアの下限（ADR-0012）と同じ作法で置く。
     /// <b>下げるときは黙って下げず、理由を書いて下げる。</b>
     /// </remarks>
-    public const int MinimumEnforcedProjects = 8;
+    public const int MinimumEnforcedProjects = 14;
 
     /// <summary>CLB テンプレート由来のプロジェクト（ADR-0021 §3）。</summary>
     /// <remarks>
@@ -83,6 +89,8 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     [
         "BusinessApp.AccountingCore",
         "BusinessApp.AccountingCore.Server",
+        "BusinessApp.Partners",
+        "BusinessApp.Partners.Server",
         "BusinessApp.Server",
     ];
 

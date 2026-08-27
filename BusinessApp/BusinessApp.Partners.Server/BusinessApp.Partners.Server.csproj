@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 取引先部品のサーバ側（ADR-0025）。保存の関門と DB の読み取りを置く。
+       会計コアを参照しない——取引先は会計コアより上位の部品である（ADR-0024 §4）。 -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BusinessApp.Partners\BusinessApp.Partners.csproj" />
+    <ProjectReference Include="..\BusinessApp.ServerSupport\BusinessApp.ServerSupport.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Codeer.LowCode.Blazor" Version="1.3.20" />
+    <PackageReference Include="Codeer.LowCode.Blazor.DbAccess" Version="0.1.0" />
+  </ItemGroup>
+
+</Project>

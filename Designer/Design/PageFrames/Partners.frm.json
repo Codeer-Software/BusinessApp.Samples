@@ -1,0 +1,354 @@
+{
+  "IsApplicationRoot": false,
+  "Priority": 0,
+  "Name": "Partners",
+  "Description": "取引先アプリ（ADR-0025）。会計コア抜きでも成立する部品。",
+  "Left": {
+    "IsVisible": true,
+    "Home": {
+      "Type": "Text",
+      "Text": "取引先",
+      "Icon": "",
+      "ResourcePath": ""
+    },
+    "Links": [
+      {
+        "Title": "取引先",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
+        "ModulePageType": "Auto",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "Partner",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "",
+          "HeaderTitle": "",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": true,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": true,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [
+                {
+                  "Variable": "DisplayOrder.Value",
+                  "IsDescending": false
+                },
+                {
+                  "Variable": "Code.Value",
+                  "IsDescending": false
+                }
+              ],
+              "SortFieldVariable": "",
+              "SortDescending": false,
+              "ModuleName": ""
+            },
+            "PagerPosition": "Top",
+            "ReplaceMode": "None",
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": false,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "UseIndexSort": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        }
+      },
+      {
+        "Title": "登録番号",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
+        "ModulePageType": "Auto",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "PartnerInvoiceRegistration",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "",
+          "HeaderTitle": "",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": true,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": true,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [
+                {
+                  "Variable": "Partner.Value",
+                  "IsDescending": false
+                },
+                {
+                  "Variable": "ValidFrom.Value",
+                  "IsDescending": true
+                }
+              ],
+              "SortFieldVariable": "",
+              "SortDescending": false,
+              "ModuleName": ""
+            },
+            "PagerPosition": "Top",
+            "ReplaceMode": "None",
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": false,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "UseIndexSort": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        }
+      },
+      {
+        "Title": "会計へ戻る",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
+        "ModulePageType": "Auto",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "Main",
+        "Module": "Home",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "",
+          "HeaderTitle": "",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": true,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": false,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [],
+              "SortFieldVariable": "",
+              "SortDescending": false,
+              "ModuleName": ""
+            },
+            "PagerPosition": "Bottom",
+            "ReplaceMode": "None",
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": true,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "UseIndexSort": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        }
+      }
+    ],
+    "FontFamily": "",
+    "Color": "#ffffff",
+    "BackgroundColorStart": "#052767",
+    "BackgroundColorEnd": "#3a0647",
+    "MobileBehavior": "CollapseToHamburger",
+    "UserName": "",
+    "ModuleName": "",
+    "Foreground": "#ffffff",
+    "BackgroundStart": "#052767",
+    "BackgroundEnd": "#3a0647"
+  },
+  "Right": {
+    "IsVisible": false,
+    "Home": {
+      "Type": "None",
+      "Text": "",
+      "Icon": "",
+      "ResourcePath": ""
+    },
+    "Links": [],
+    "FontFamily": "",
+    "Color": "#ffffff",
+    "BackgroundColorStart": "#052767",
+    "BackgroundColorEnd": "#3a0647",
+    "MobileBehavior": "CollapseToHamburger",
+    "UserName": "",
+    "ModuleName": "",
+    "Foreground": "#ffffff",
+    "BackgroundStart": "#052767",
+    "BackgroundEnd": "#3a0647"
+  },
+  "Header": {
+    "IsVisible": false,
+    "FontFamily": "",
+    "Color": "#000000",
+    "BackgroundColor": "#f8f9fa",
+    "Home": {
+      "Type": "None",
+      "Text": "",
+      "Icon": "",
+      "ResourcePath": ""
+    },
+    "Links": [],
+    "UserName": "",
+    "ModuleName": "",
+    "Foreground": "#000000",
+    "Background": "#f8f9fa"
+  },
+  "Padding": {},
+  "UserReadCondition": {
+    "ModuleName": ""
+  },
+  "BackgroundColor": "",
+  "Color": "",
+  "FontFamily": "",
+  "OtherPageModuleDesigns": [],
+  "TopPageModuleDesign": {
+    "ModulePageType": "Auto",
+    "ModuleUrlSegment": "",
+    "ActiveModuleSegments": [],
+    "PageFrame": "",
+    "Module": "PartnerHome",
+    "Id": "",
+    "Parameters": "",
+    "ListPageDesign": {
+      "SearchLayoutName": "",
+      "UserUrlParameter": true,
+      "PageTitle": "",
+      "HeaderTitle": "",
+      "CanBulkDataUpdate": false,
+      "CanBulkDataDownload": false,
+      "UseSubmitButton": false,
+      "UseNavigateToCreate": true,
+      "ListFieldDesign": {
+        "LayoutName": "",
+        "CanNavigateToDetail": true,
+        "NavigateModuleUrlSegment": "",
+        "CanCustomizeColumns": false,
+        "FixedColumnCount": 0,
+        "ApplyBackgroundToBoxInput": false,
+        "DisplayName": "",
+        "SearchCondition": {
+          "LimitCount": 50,
+          "SelectFields": [],
+          "SortConditions": [],
+          "SortFieldVariable": "",
+          "SortDescending": false,
+          "ModuleName": ""
+        },
+        "PagerPosition": "Top",
+        "ReplaceMode": "None",
+        "DeleteTogether": false,
+        "CanCreate": false,
+        "CanUpdate": false,
+        "CanDelete": false,
+        "CanUserSort": true,
+        "CanSelect": false,
+        "UseIndexSort": false,
+        "OnDataChanged": "",
+        "OnSearchDataChanged": "",
+        "OnSelectedIndexChanged": "",
+        "OnSelectedIndexChanging": "",
+        "OnDoubleClickRow": "",
+        "Name": "",
+        "IgnoreModification": false,
+        "OnValidateInput": "",
+        "IsFocusSkip": false,
+        "NextFocusField": "",
+        "OnFocusMoving": "",
+        "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+      }
+    },
+    "DetailPageDesign": {
+      "PageTitle": "",
+      "LayoutName": "",
+      "UrlParameter": ""
+    }
+  },
+  "AutoZoom": "None",
+  "TargetDevice": "Any",
+  "TopPageModule": "PartnerHome",
+  "OtherPages": []
+}

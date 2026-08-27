@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!-- カバレッジのゲート（ADR-0012 §1・§3）。AccountingCore.Server と同じ 100% を敷く。
+       ここは DB と CLB に触る層で、静かに壊れる場所そのものである（ADR-0012 §1）。
+       本物の DDL と初期データを載せた使い捨て SQLite（BusinessApp.TestSupport）に
+       本物の SQL を流すので、到達できないコードは残らない。 -->
+  <PropertyGroup>
+    <CollectCoverage>true</CollectCoverage>
+    <CoverletOutputFormat>cobertura</CoverletOutputFormat>
+    <CoverletOutput>$(MSBuildThisFileDirectory)TestResults/</CoverletOutput>
+    <Include>[BusinessApp.Partners.Server]*</Include>
+    <SkipAutoProps>true</SkipAutoProps>
+    <Threshold>100</Threshold>
+    <ThresholdType>line,branch</ThresholdType>
+    <ThresholdStat>total</ThresholdStat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.msbuild" Version="6.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BusinessApp.Partners.Server\BusinessApp.Partners.Server.csproj" />
+    <ProjectReference Include="..\BusinessApp.TestSupport\BusinessApp.TestSupport.csproj" />
+  </ItemGroup>
+
+</Project>

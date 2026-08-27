@@ -1,9 +1,10 @@
 namespace BusinessApp.AccountingCore.Server.Journals;
 
 using BusinessApp.AccountingCore.Journals;
-using BusinessApp.AccountingCore.Shared;
-using BusinessApp.AccountingCore.Server.Partners;
 using BusinessApp.AccountingCore.Server.Shared;
+using BusinessApp.AccountingCore.Shared;
+using BusinessApp.Partners.Server;
+using BusinessApp.ServerSupport;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
 using Codeer.LowCode.Blazor.Repository.Data;
@@ -152,7 +153,7 @@ public sealed class JournalSubmitGate(
         // 入力年月日はシステムが決める。利用者からの値は採らない（docs/04 §2）。
         foreach (var data in added)
         {
-            SetDateTime(data, "EnteredAt", AccountingTimeZone.ToWallClock(timeProvider.GetUtcNow()));
+            SetDateTime(data, "EnteredAt", DatabaseTimeZone.ToWallClock(timeProvider.GetUtcNow()));
         }
 
         // 更新では**送られてきた入力年月日を捨てる**。DB のトリガも変更を拒むが、

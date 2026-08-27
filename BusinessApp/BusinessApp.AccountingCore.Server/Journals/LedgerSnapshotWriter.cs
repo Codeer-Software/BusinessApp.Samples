@@ -1,9 +1,8 @@
 namespace BusinessApp.AccountingCore.Server.Journals;
 
 using BusinessApp.AccountingCore.Journals;
-using BusinessApp.AccountingCore.Partners;
-using BusinessApp.AccountingCore.Server.Partners;
-using BusinessApp.AccountingCore.Server.Shared;
+using BusinessApp.Partners;
+using BusinessApp.Partners.Server;
 using BusinessApp.AccountingCore.Shared;
 
 using Codeer.LowCode.Blazor.DataIO.Db;

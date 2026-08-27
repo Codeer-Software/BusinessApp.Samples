@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 部品をまたいで使う、サーバ側の下ごしらえ（ADR-0025 §2）。
+       いま入っているのは 2 つ——DbValue（DB から返る object? を C# の値に直す）と
+       DatabaseTimeZone（オフセットを持たない DATETIME を書き読みするタイムゾーン）。
+       どちらも会計でも取引先でもない、この DB の作法である。
+       DbValue が DatabaseTimeZone に依存するので、片方だけを出すことはできない。
+
+       **先回りの共通化をしない。** 2 つ以上の部品が実際に使うものだけをここへ出す。
+       会計コアだけが使う DbTransactionScope は AccountingCore.Server に残してある。 -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <!-- 候補の解決（DatabaseTimeZone.Resolve）は外に見せないが、検査はする。
+       「見つからなければ落とす」——黙って UTC に落ちない——がこの型の肝である。 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="BusinessApp.ServerSupport.Tests" />
+  </ItemGroup>
+
+</Project>

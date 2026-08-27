@@ -32,12 +32,38 @@ public class ModuleDependencyTests
         // 逆向き（税区分が科目を知る）は許可しない。
         ["Accounts"] = ["Shared", "ConsumptionTax"],
         ["Departments"] = [],
-        ["Partners"] = [],
         ["Periods"] = ["Shared"],
 
-        // 記帳。マスタと制度の上に載る。
-        ["Journals"] = ["Shared", "Accounts", "Departments", "Partners", "Periods", "ConsumptionTax"],
+        // 記帳。マスタと制度の上に載る。**取引先部品を知ってよいのはここだけ**（下の表）。
+        ["Journals"] = ["Shared", "Accounts", "Departments", "Periods", "ConsumptionTax"],
     };
+
+    /// <summary>
+    /// <b>取引先部品</b>（<c>BusinessApp.Partners</c>）を参照してよいモジュール。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>分割で穴が開くところである。</b> 分割前は取引先が会計コアの 1 モジュールで、
+    /// 上の表が「<c>Journals</c> だけが <c>Partners</c> を知る」を守っていた。
+    /// 独立部品にすると型は <c>BusinessApp.Partners.*</c> で参照されるので、
+    /// <b>会計コアの名前空間を見る検査には一度も当たらなくなる</b>——
+    /// <c>Shared/Yen.cs</c> が <c>using BusinessApp.Partners;</c> を書いても全テストが緑になる。
+    /// 表から行を消すだけでなく、代わりの規則をここに置く。</para>
+    /// <para>なぜ <c>Journals</c> だけか: 会計コアが取引先を知るのは、帳簿の記載事項①
+    /// （課税仕入れの相手方の氏名又は名称）を計上時に写すためである（ADR-0018・ADR-0024 §4）。
+    /// <b>勘定科目や会計期間が取引先を知る理由は無い。</b></para>
+    /// </remarks>
+    private static readonly string[] ModulesAllowedToUsePartners = ["Journals"];
+
+    /// <summary>
+    /// 純粋ドメインが持ってよい唯一のプロジェクト参照（ADR-0025 §2）。
+    /// </summary>
+    /// <remarks>
+    /// 取引先は<b>会計コアより上位の部品</b>で、会計コアが取引先を知る向きだけが許される
+    /// （ADR-0024 §4）。逆向きは <c>BusinessApp.Partners</c> 側が参照を持たないことで
+    /// コンパイラが禁じ、それは <c>BusinessApp.Partners.Tests</c> の
+    /// <c>PartnerDependencyTests</c> が検査する。
+    /// </remarks>
+    private const string AllowedProjectReference = "BusinessApp.Partners";
 
     [Fact]
     public void モジュールは許可された相手にしか依存しない()
@@ -84,6 +110,38 @@ public class ModuleDependencyTests
         }
     }
 
+    /// <summary>
+    /// 取引先部品を参照してよいのは <see cref="ModulesAllowedToUsePartners"/> のモジュールだけ。
+    /// </summary>
+    /// <remarks>
+    /// 会計コアの中の依存（上の表）と<b>同じ厳しさを、部品の境界をまたぐ参照にも当てる</b>。
+    /// これが無いと、分割した瞬間に「どの会計モジュールが取引先を知ってよいか」の規則が消える。
+    /// </remarks>
+    [Fact]
+    public void 取引先部品を参照してよいモジュールは限られている()
+    {
+        var violations = PartnerReferences()
+            .Where(reference => !ModulesAllowedToUsePartners.Contains(reference.Module, StringComparer.Ordinal))
+            .Select(reference =>
+                $"{reference.File}: {reference.Module} は取引先部品に依存できない"
+                + $"（許可: {string.Join(" / ", ModulesAllowedToUsePartners)}）")
+            .Distinct()
+            .ToList();
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    /// 検査が「1 件も見つからず素通り」で緑にならないための土台。
+    /// </summary>
+    /// <remarks>
+    /// 参照の数え方（名前空間の文字列）を変えたときに 0 件になっていないかを見る。
+    /// <b>0 件でも上の検査は緑になる</b>ので、別に表明する。
+    /// </remarks>
+    [Fact]
+    public void 取引先部品への参照を実際に見つけられている()
+        => Assert.NotEmpty(PartnerReferences());
+
     [Fact]
     public void 依存表の相手はすべて実在するモジュールである()
     {
@@ -115,36 +173,54 @@ public class ModuleDependencyTests
     }
 
     /// <summary>
-    /// 純粋ドメインの依存ゼロ（ADR-0008）を、<b>ビルド後のアセンブリ</b>で確かめる。
+    /// 純粋ドメインの依存を、<b>ビルド後のアセンブリ</b>で確かめる。
     /// </summary>
     /// <remarks>
-    /// csproj のテキストを見るだけだと、Directory.Build.props・生アセンブリ参照・
+    /// <para>csproj のテキストを見るだけだと、Directory.Build.props・生アセンブリ参照・
     /// 暗黙 using（<c>&lt;Using Include=...&gt;</c>）が素通りする。とくに暗黙 using は、
-    /// モジュール依存を「名前空間の文字列が出現するか」で見ている前提そのものを崩す。
+    /// モジュール依存を「名前空間の文字列が出現するか」で見ている前提そのものを崩す。</para>
+    /// <para><b>許すのは取引先部品ただ 1 つ</b>（<see cref="AllowedProjectReference"/>）。
+    /// もとは依存ゼロだったが、取引先を独立部品にした（ADR-0025）ので 1 本だけ増えた。
+    /// <b>NuGet がゼロであることは変わっていない</b>——WASM に載るので、
+    /// ここが緩むとダウンロード量と起動時間に直接効く（ADR-0008）。</para>
     /// </remarks>
     [Fact]
-    public void 純粋ドメインは外部アセンブリに依存しない()
+    public void 純粋ドメインは取引先部品以外の外部アセンブリに依存しない()
     {
         var referenced = typeof(AccountingCore.Shared.Yen).Assembly
             .GetReferencedAssemblies()
             .Select(a => a.Name!)
             .Where(name => !name.StartsWith("System", StringComparison.Ordinal)
-                           && name is not ("netstandard" or "mscorlib"))
+                           && name is not ("netstandard" or "mscorlib")
+                           && name != AllowedProjectReference)
             .ToList();
 
         Assert.Empty(referenced);
     }
 
-    /// <summary>暗黙 using が入ると名前空間の文字列検査をすり抜けるので、使わせない。</summary>
+    /// <summary>
+    /// 純粋ドメインは NuGet を持たず、参照は取引先部品 1 本だけで、暗黙 using を足さない。
+    /// </summary>
+    /// <remarks>
+    /// 暗黙 using が入ると名前空間の文字列検査をすり抜けるので、使わせない。
+    /// <b>参照は「無い」ではなく「1 本だけ」を検査する</b>——「無い」に戻すと取引先部品への
+    /// 参照で落ち、「何本でもよい」にすると次の 1 本が黙って増える（ADR-0025 §2）。
+    /// </remarks>
     [Fact]
-    public void 純粋ドメインは暗黙usingを追加しない()
+    public void 純粋ドメインの参照は取引先部品ただ1本で暗黙usingを追加しない()
     {
         var csproj = File.ReadAllText(
             Path.Combine(ProjectPaths.SourceProject, $"{ProjectPaths.SourceProjectName}.csproj"));
 
         Assert.DoesNotContain("<PackageReference", csproj, StringComparison.Ordinal);
-        Assert.DoesNotContain("<ProjectReference", csproj, StringComparison.Ordinal);
         Assert.DoesNotContain("<Using ", csproj, StringComparison.Ordinal);
+
+        var references = System.Xml.Linq.XDocument.Parse(csproj)
+            .Descendants("ProjectReference")
+            .Select(element => Path.GetFileNameWithoutExtension(element.Attribute("Include")?.Value ?? string.Empty))
+            .ToList();
+
+        Assert.Equal([AllowedProjectReference], references);
     }
 
     private bool ReachesItself(string origin, string current, HashSet<string> visited)
@@ -163,6 +239,28 @@ public class ModuleDependencyTests
         }
 
         return false;
+    }
+
+    /// <summary>取引先部品（<c>BusinessApp.Partners</c>）を名指ししているファイル。</summary>
+    /// <remarks>
+    /// <c>BusinessApp.Partners.Server</c> も同じ部品なので、<c>\b</c> で境界を切って両方を拾う。
+    /// <c>BusinessApp.PartnersFoo</c> のような別物には当たらない。
+    /// </remarks>
+    private static List<(string Module, string File)> PartnerReferences()
+    {
+        var pattern = new Regex(@"\bBusinessApp\.Partners\b");
+        var found = new List<(string Module, string File)>();
+
+        foreach (var path in ProjectPaths.SourceFiles(ProjectPaths.SourceProject))
+        {
+            var relative = Path.GetRelativePath(ProjectPaths.SourceProject, path);
+            if (pattern.IsMatch(File.ReadAllText(path)))
+            {
+                found.Add((relative.Split(Path.DirectorySeparatorChar)[0], relative));
+            }
+        }
+
+        return found;
     }
 
     private static IEnumerable<(string Module, string File, string Referenced)> ModuleReferences()

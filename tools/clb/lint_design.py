@@ -159,22 +159,60 @@ def check_layout(path, where, layout, kind, field_names, findings):
 
 
 def check_page_frame(path, doc, findings):
-    for side in ("Left", "Right"):
+    """ページフレーム 1 枚を見る。
+
+    **リンクだけでなく着地（TopPageModuleDesign / OtherPageModuleDesigns）も見る。**
+    フレームが 2 枚になってから、着地の指定が新しく荷重を負った（ADR-0025 §3）のに、
+    D-05・D-07 はリンクにしか掛かっていなかった。
+    """
+    targets = []
+    for side in ("Left", "Right", "Header"):
         for link in (doc.get(side) or {}).get("Links", []):
-            module = link.get("Module", "")
+            targets.append(("リンク", link))
+    if doc.get("TopPageModuleDesign"):
+        targets.append(("着地", doc["TopPageModuleDesign"]))
+    for other in doc.get("OtherPageModuleDesigns") or []:
+        targets.append(("その他のページ", other))
 
-            # D-05 "List" だと /Module/{id} のルートが登録されず詳細が真っ白になる
-            if link.get("ModulePageType") not in ("Auto", "", None):
-                findings.append((SEV_ERROR, "D-05", relative(path),
-                                 f"{module}: ModulePageType は Auto にする（今は {link['ModulePageType']}）"))
+    for where, link in targets:
+        module = link.get("Module", "")
 
-            # D-07 リンクを複製したときの直し忘れ
-            condition_module = (((link.get("ListPageDesign") or {})
-                                 .get("ListFieldDesign") or {})
-                                .get("SearchCondition") or {}).get("ModuleName", "")
-            if condition_module and condition_module != module:
-                findings.append((SEV_ERROR, "D-07", relative(path),
-                                 f"{module}: SearchCondition.ModuleName が {condition_module} を指している"))
+        # D-05 "List" だと /Module/{id} のルートが登録されず詳細が真っ白になる
+        if link.get("ModulePageType") not in ("Auto", "", None):
+            findings.append((SEV_ERROR, "D-05", relative(path),
+                             f"{where} {module}: ModulePageType は Auto にする（今は {link['ModulePageType']}）"))
+
+        # D-07 リンクを複製したときの直し忘れ
+        condition_module = (((link.get("ListPageDesign") or {})
+                             .get("ListFieldDesign") or {})
+                            .get("SearchCondition") or {}).get("ModuleName", "")
+        if condition_module and condition_module != module:
+            findings.append((SEV_ERROR, "D-07", relative(path),
+                             f"{where} {module}: SearchCondition.ModuleName が {condition_module} を指している"))
+
+
+def check_application_root(frames, findings):
+    """ルート URL の着地フレームがあるか。
+
+    **これが 0 件だと、CLB は非 application-root のフレームへ黙ってフォールバックする**
+    （CLB 仕様リファレンス CommonMistakes #54）。権限で絞った補助フレームが既定の着地に
+    選ばれる事故につながり、designcheck は鳴らない。
+    **新しい PageFrame は既定が false なので、フレームを足すたびに踏みうる。**
+    """
+    roots = []
+    for path in frames:
+        try:
+            with open(path, encoding="utf-8") as handle:
+                doc = json.load(handle)
+        except (OSError, ValueError):
+            continue    # 読めないことは呼び出し側が別に報告する
+        if doc.get("IsApplicationRoot"):
+            roots.append(relative(path))
+
+    if not roots:
+        findings.append((SEV_ERROR, "D-13", str(DESIGN_DIR),
+                         "IsApplicationRoot が true のページフレームが 1 枚も無い。"
+                         "ルート URL を開くと非 root のフレームへ黙って落ちる（CommonMistakes #54）"))
 
 
 def check_script(path, text, findings):
@@ -228,6 +266,7 @@ def main() -> int:
         doc = load_json(path, findings)
         if doc is not None:
             check_page_frame(path, doc, findings)
+    check_application_root(frames, findings)
     for path in scripts:
         check_script(path, io.open(path, encoding="utf-8").read(), findings)
 

@@ -1,7 +1,9 @@
 namespace BusinessApp.Schema.Tests;
 
+using BusinessApp.ServerSupport;
 using BusinessApp.TestSupport;
 
+using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -24,17 +26,17 @@ public class EnumConsistencyTests
     public static TheoryData<string, string, string?, string?> Mappings() => new()
     {
         // 表示名                      DDL の 列                              CLB の enum          C# の型
-        { "科目区分",                  "accounts.category",                   "AccountCategories", "Accounts.AccountCategory" },
+        { "科目区分",                  "accounts.category",                   "AccountCategories", "BusinessApp.AccountingCore.Accounts.AccountCategory" },
         { "課税区分",                  "tax_categories.taxation_type",        "TaxationTypes",     null },
         { "税率区分",                  "tax_categories.rate_kind",            "RateKinds",         null },
-        { "用途区分（税区分の初期値）", "tax_categories.default_tax_treatment", "TaxTreatments",     "ConsumptionTax.TaxTreatment" },
-        { "用途区分（仕訳明細）",       "journal_lines.tax_treatment",         "TaxTreatments",     "ConsumptionTax.TaxTreatment" },
-        { "締めの状態（会計年度）",     "fiscal_years.status",                 "PeriodStatuses",    "Periods.PeriodStatus" },
-        { "締めの状態（会計期間）",     "accounting_periods.status",           "PeriodStatuses",    "Periods.PeriodStatus" },
-        { "仕訳の状態",                "journal_entries.status",              "EntryStatuses",     "Journals.EntryStatus" },
-        { "仕訳の種別",                "journal_entries.entry_type",          "EntryTypes",        "Journals.EntryType" },
-        { "借方貸方",                  "journal_lines.debit_credit",          "DebitCredits",      "Shared.DebitCredit" },
-        { "取引先の種別",              "partners.entity_type",                "PartnerEntityTypes", "Partners.PartnerEntityType" },
+        { "用途区分（税区分の初期値）", "tax_categories.default_tax_treatment", "TaxTreatments",     "BusinessApp.AccountingCore.ConsumptionTax.TaxTreatment" },
+        { "用途区分（仕訳明細）",       "journal_lines.tax_treatment",         "TaxTreatments",     "BusinessApp.AccountingCore.ConsumptionTax.TaxTreatment" },
+        { "締めの状態（会計年度）",     "fiscal_years.status",                 "PeriodStatuses",    "BusinessApp.AccountingCore.Periods.PeriodStatus" },
+        { "締めの状態（会計期間）",     "accounting_periods.status",           "PeriodStatuses",    "BusinessApp.AccountingCore.Periods.PeriodStatus" },
+        { "仕訳の状態",                "journal_entries.status",              "EntryStatuses",     "BusinessApp.AccountingCore.Journals.EntryStatus" },
+        { "仕訳の種別",                "journal_entries.entry_type",          "EntryTypes",        "BusinessApp.AccountingCore.Journals.EntryType" },
+        { "借方貸方",                  "journal_lines.debit_credit",          "DebitCredits",      "BusinessApp.AccountingCore.Shared.DebitCredit" },
+        { "取引先の種別",              "partners.entity_type",                "PartnerEntityTypes", "BusinessApp.Partners.PartnerEntityType" },
         // C# は null: 登録の判定ロジック（tax_point で引く）はフェーズ 3、取込はフェーズ 6 で作る。
         { "登録の終わりの理由",        "partner_invoice_registrations.end_reason", "RegistrationEndReasons", null },
         { "登録情報の出所",            "partner_invoice_registrations.source",     "RegistrationSources",    null },
@@ -51,9 +53,9 @@ public class EnumConsistencyTests
     public static TheoryData<string, string, string> DisplayNames() => new()
     {
         //  CLB の enum          C# の型                          表示名を返す拡張メソッド
-        { "EntryTypes",         "Journals.EntryType",            "DisplayName" },
-        { "EntryStatuses",      "Journals.EntryStatus",          "DisplayName" },
-        { "PartnerEntityTypes", "Partners.PartnerEntityType",    "DisplayName" },
+        { "EntryTypes",         "BusinessApp.AccountingCore.Journals.EntryType",            "DisplayName" },
+        { "EntryStatuses",      "BusinessApp.AccountingCore.Journals.EntryStatus",          "DisplayName" },
+        { "PartnerEntityTypes", "BusinessApp.Partners.PartnerEntityType",    "DisplayName" },
     };
 
     [Theory]
@@ -202,12 +204,28 @@ public class EnumConsistencyTests
             .ToList();
     }
 
-    /// <summary>相対名（`Journals.EntryType`）から C# の列挙型を引く。</summary>
-    private static Type CSharpEnumType(string relativeTypeName)
+    /// <summary>
+    /// 区分値を持つ C# の列挙型を探すアセンブリ。<b>部品ごとに 1 本挙げる。</b>
+    /// </summary>
+    /// <remarks>
+    /// 取引先を独立部品にした（ADR-0025）ので、会計コアの 1 本だけを見ていると
+    /// <c>BusinessApp.Partners.PartnerEntityType</c> が「型が無い」で落ちる。
+    /// <b>実際に落ちた</b>（2026-08-27 の分割で、この検査が移動を捉えた）。
+    /// 新しい部品が区分値を持ったら、ここに 1 行足す。
+    /// </remarks>
+    private static readonly Assembly[] ComponentAssemblies =
+    [
+        typeof(AccountingCore.Shared.Yen).Assembly,
+        typeof(Partners.PartnerId).Assembly,
+    ];
+
+    /// <summary>完全修飾名（<c>BusinessApp.AccountingCore.Journals.EntryType</c>）から C# の列挙型を引く。</summary>
+    private static Type CSharpEnumType(string typeName)
     {
-        var type = typeof(AccountingCore.Shared.Yen).Assembly
-            .GetType("BusinessApp.AccountingCore." + relativeTypeName);
-        Assert.True(type is not null, $"C# の列挙型が無い: {relativeTypeName}");
+        var type = ComponentAssemblies
+            .Select(assembly => assembly.GetType(typeName))
+            .FirstOrDefault(found => found is not null);
+        Assert.True(type is not null, $"C# の列挙型が無い: {typeName}");
         return type!;
     }
 
@@ -221,7 +239,15 @@ public class EnumConsistencyTests
             .ToList();
     }
 
-    /// <summary>PascalCase の列挙子名を DB の値（snake_case）に変換する。数字の前でも区切る。</summary>
-    private static string ToSnakeCase(string name)
-        => Regex.Replace(name, @"(?<!^)((?<![A-Z])[A-Z]|(?<![0-9])[0-9])", "_$1").ToLowerInvariant();
+    /// <summary>
+    /// PascalCase の列挙子名を DB の値（snake_case）に変換する。
+    /// </summary>
+    /// <remarks>
+    /// <b>本番が書き込みに使う実装（<see cref="DbValue.ToSnakeCase(string)"/>）をそのまま呼ぶ。</b>
+    /// ここに写しを持つと、<b>写しだけが規約どおりで本番が違う</b>状態を検出できない——
+    /// 実際、写しは数字の前で区切るのに本番は区切らず、DDL には <c>legacy_8</c> があった。
+    /// 数字を含む列挙子を C# に足した日に、本番は <c>legacy8</c> を書いて CHECK に弾かれるのに、
+    /// この検査は「3 者一致」と言うところだった（2026-08-27 の自己レビュー R16-03）。
+    /// </remarks>
+    private static string ToSnakeCase(string name) => DbValue.ToSnakeCase(name);
 }

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 取引先部品の純粋層（ADR-0025）。DB も HTTP も CLB も知らない。
+       会計コアより上位の部品なので、会計コアを含めどこにも依存しない（ADR-0024 §4）。
+       PackageReference も ProjectReference もここに足さない。WASM に載るので
+       サイズと起動時間に効く（AccountingCore と同じ制約）。 -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+  </PropertyGroup>
+
+</Project>
