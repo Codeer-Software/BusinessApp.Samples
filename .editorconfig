@@ -190,7 +190,7 @@ csharp_preserve_single_line_statements = false
 #   - BusinessApp.{Server,Client,Client.Shared,Designer,LicenseRegisterCli}
 #     …… CLB テンプレート由来。テンプレート更新との差分を無用に増やさない（ADR-0021 §3）
 ##############################################################################
-[BusinessApp/BusinessApp.{AccountingCore,AccountingCore.Client,AccountingCore.Server,AccountingCore.Server.Tests,AccountingCore.Tests,Schema.Tests,SchemaVerifyCli,TestSupport}/**.cs]
+[BusinessApp/BusinessApp.{AccountingCore,AccountingCore.Client,AccountingCore.Server,AccountingCore.Server.Tests,AccountingCore.Tests,Partners,Partners.Server,Partners.Server.Tests,Partners.Tests,Schema.Tests,SchemaVerifyCli,ServerSupport,ServerSupport.Tests,TestSupport}/**.cs]
 
 # 整形。乱れはレビューのノイズにしかならないので機械に任せる。
 dotnet_diagnostic.IDE0055.severity = warning

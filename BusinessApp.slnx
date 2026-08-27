@@ -6,8 +6,18 @@
     <Project Path="BusinessApp/BusinessApp.AccountingCore.Server.Tests/BusinessApp.AccountingCore.Server.Tests.csproj" />
     <Project Path="BusinessApp/BusinessApp.AccountingCore.Tests/BusinessApp.AccountingCore.Tests.csproj" />
   </Folder>
+  <Folder Name="/Partners/">
+    <Project Path="BusinessApp/BusinessApp.Partners/BusinessApp.Partners.csproj" />
+    <Project Path="BusinessApp/BusinessApp.Partners.Server/BusinessApp.Partners.Server.csproj" />
+    <Project Path="BusinessApp/BusinessApp.Partners.Server.Tests/BusinessApp.Partners.Server.Tests.csproj" />
+    <Project Path="BusinessApp/BusinessApp.Partners.Tests/BusinessApp.Partners.Tests.csproj" />
+  </Folder>
   <Folder Name="/Schema/">
     <Project Path="BusinessApp/BusinessApp.Schema.Tests/BusinessApp.Schema.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Shared/">
+    <Project Path="BusinessApp/BusinessApp.ServerSupport/BusinessApp.ServerSupport.csproj" />
+    <Project Path="BusinessApp/BusinessApp.ServerSupport.Tests/BusinessApp.ServerSupport.Tests.csproj" />
   </Folder>
   <Folder Name="/TestSupport/">
     <Project Path="BusinessApp/BusinessApp.TestSupport/BusinessApp.TestSupport.csproj" />

@@ -4,10 +4,11 @@ using BusinessApp.AccountingCore.Accounts;
 using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Journals;
-using BusinessApp.AccountingCore.Partners;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Server.Shared;
 using BusinessApp.AccountingCore.Shared;
+using BusinessApp.Partners;
+using BusinessApp.ServerSupport;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
 /// <summary>
@@ -140,7 +141,7 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
             {
                 { "@p1", id.Value },
                 { "@p2", entryNo.Value },
-                { "@p3", AccountingTimeZone.ToWallClock(postedAt) },
+                { "@p3", DatabaseTimeZone.ToWallClock(postedAt) },
                 { "@p4", postedBy },
             });
 
@@ -236,7 +237,7 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
                 { "@p8", Param(draft.SourceComponent) },
                 { "@p9", Param(draft.SourceDocumentId) },
                 { "@p10", Param(draft.IdempotencyKey) },
-                { "@p11", Param(AccountingTimeZone.ToWallClock(draft.EnteredAt)) },
+                { "@p11", Param(DatabaseTimeZone.ToWallClock(draft.EnteredAt)) },
             });
 
         var id = new JournalEntryId(DbValue.ToLong(rows[0]["id"]));

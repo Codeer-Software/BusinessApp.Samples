@@ -1,6 +1,6 @@
 namespace BusinessApp.AccountingCore.Journals;
 
-using BusinessApp.AccountingCore.Partners;
+using BusinessApp.Partners;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 

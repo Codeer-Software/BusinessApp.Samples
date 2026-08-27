@@ -79,7 +79,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 | 3 | `lint_design.py`（CLB デザインの静的検査） |
 | 4 | `dotnet test`（テスト・カバレッジ・スキーマ） |
 | 5 | `migrate.ps1 -Verify`（稼働 DB とスキーマ正典の同値。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
-| 6 | `dotnet stryker`（ミューテーション。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)） |
+| 6 | `dotnet stryker`（ミューテーション。**5 プロジェクト**——会計コアの純粋層とサーバ層、取引先部品の純粋層とサーバ層、共有インフラ。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)・[ADR-0025 §6](../docs/decisions/0025-取引先を部品として分ける.md)） |
 | 7 | `guard_delete.py` の自己検査 |
 
 **マージが自動でコミットするときは `pre-merge-commit` から同じ 7 段へ委譲する**——

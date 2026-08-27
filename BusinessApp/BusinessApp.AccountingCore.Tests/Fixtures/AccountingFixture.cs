@@ -4,7 +4,7 @@ using BusinessApp.AccountingCore.Accounts;
 using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Journals;
-using BusinessApp.AccountingCore.Partners;
+using BusinessApp.Partners;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 

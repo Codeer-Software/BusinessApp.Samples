@@ -4,7 +4,7 @@ using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Accounts;
 using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Journals;
-using BusinessApp.AccountingCore.Partners;
+using BusinessApp.Partners;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 using BusinessApp.AccountingCore.Shared;
 
@@ -33,7 +33,7 @@ public class JournalEntryStoreTests
         Assert.Equal(new DateOnly(2026, 8, 24), entry.PostingDate);
         Assert.Equal(EntryStatus.Draft, entry.Status);
         Assert.Equal(EntryType.Normal, entry.EntryType);
-        // JST 固定で読む（AccountingTimeZone）。マシンのタイムゾーンに依存させない。
+        // JST 固定で読む（DatabaseTimeZone）。マシンのタイムゾーンに依存させない。
         Assert.Equal(new DateTimeOffset(2026, 8, 24, 13, 0, 0, TimeSpan.FromHours(9)), entry.EnteredAt);
         Assert.True(entry.IsBalanced);
         Assert.Equal([1, 2], entry.Lines.Select(l => l.LineNo));

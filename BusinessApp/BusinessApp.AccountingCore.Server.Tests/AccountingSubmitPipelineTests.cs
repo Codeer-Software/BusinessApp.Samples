@@ -1,6 +1,6 @@
 namespace BusinessApp.AccountingCore.Server.Tests;
 
-using BusinessApp.AccountingCore.Server.Partners;
+using BusinessApp.Partners.Server;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 
 using Codeer.LowCode.Blazor.DataIO;

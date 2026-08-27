@@ -3,7 +3,7 @@ namespace BusinessApp.AccountingCore.Server.Journals;
 using System.Globalization;
 
 using BusinessApp.AccountingCore.Journals;
-using BusinessApp.AccountingCore.Server.Partners;
+using BusinessApp.Partners.Server;
 
 using Codeer.LowCode.Blazor.DataIO.Db;
 

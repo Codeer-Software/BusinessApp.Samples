@@ -32,12 +32,22 @@ public class ModuleDependencyTests
         // 逆向き（税区分が科目を知る）は許可しない。
         ["Accounts"] = ["Shared", "ConsumptionTax"],
         ["Departments"] = [],
-        ["Partners"] = [],
         ["Periods"] = ["Shared"],
 
         // 記帳。マスタと制度の上に載る。
-        ["Journals"] = ["Shared", "Accounts", "Departments", "Partners", "Periods", "ConsumptionTax"],
+        ["Journals"] = ["Shared", "Accounts", "Departments", "Periods", "ConsumptionTax"],
     };
+
+    /// <summary>
+    /// 純粋ドメインが持ってよい唯一のプロジェクト参照（ADR-0025 §2）。
+    /// </summary>
+    /// <remarks>
+    /// 取引先は<b>会計コアより上位の部品</b>で、会計コアが取引先を知る向きだけが許される
+    /// （ADR-0024 §4）。逆向きは <c>BusinessApp.Partners</c> 側が参照を持たないことで
+    /// コンパイラが禁じ、それは <c>BusinessApp.Partners.Tests</c> の
+    /// <c>PartnerDependencyTests</c> が検査する。
+    /// </remarks>
+    private const string AllowedProjectReference = "BusinessApp.Partners";
 
     [Fact]
     public void モジュールは許可された相手にしか依存しない()
@@ -115,36 +125,54 @@ public class ModuleDependencyTests
     }
 
     /// <summary>
-    /// 純粋ドメインの依存ゼロ（ADR-0008）を、<b>ビルド後のアセンブリ</b>で確かめる。
+    /// 純粋ドメインの依存を、<b>ビルド後のアセンブリ</b>で確かめる。
     /// </summary>
     /// <remarks>
-    /// csproj のテキストを見るだけだと、Directory.Build.props・生アセンブリ参照・
+    /// <para>csproj のテキストを見るだけだと、Directory.Build.props・生アセンブリ参照・
     /// 暗黙 using（<c>&lt;Using Include=...&gt;</c>）が素通りする。とくに暗黙 using は、
-    /// モジュール依存を「名前空間の文字列が出現するか」で見ている前提そのものを崩す。
+    /// モジュール依存を「名前空間の文字列が出現するか」で見ている前提そのものを崩す。</para>
+    /// <para><b>許すのは取引先部品ただ 1 つ</b>（<see cref="AllowedProjectReference"/>）。
+    /// もとは依存ゼロだったが、取引先を独立部品にした（ADR-0025）ので 1 本だけ増えた。
+    /// <b>NuGet がゼロであることは変わっていない</b>——WASM に載るので、
+    /// ここが緩むとダウンロード量と起動時間に直接効く（ADR-0008）。</para>
     /// </remarks>
     [Fact]
-    public void 純粋ドメインは外部アセンブリに依存しない()
+    public void 純粋ドメインは取引先部品以外の外部アセンブリに依存しない()
     {
         var referenced = typeof(AccountingCore.Shared.Yen).Assembly
             .GetReferencedAssemblies()
             .Select(a => a.Name!)
             .Where(name => !name.StartsWith("System", StringComparison.Ordinal)
-                           && name is not ("netstandard" or "mscorlib"))
+                           && name is not ("netstandard" or "mscorlib")
+                           && name != AllowedProjectReference)
             .ToList();
 
         Assert.Empty(referenced);
     }
 
-    /// <summary>暗黙 using が入ると名前空間の文字列検査をすり抜けるので、使わせない。</summary>
+    /// <summary>
+    /// 純粋ドメインは NuGet を持たず、参照は取引先部品 1 本だけで、暗黙 using を足さない。
+    /// </summary>
+    /// <remarks>
+    /// 暗黙 using が入ると名前空間の文字列検査をすり抜けるので、使わせない。
+    /// <b>参照は「無い」ではなく「1 本だけ」を検査する</b>——「無い」に戻すと取引先部品への
+    /// 参照で落ち、「何本でもよい」にすると次の 1 本が黙って増える（ADR-0025 §2）。
+    /// </remarks>
     [Fact]
-    public void 純粋ドメインは暗黙usingを追加しない()
+    public void 純粋ドメインの参照は取引先部品ただ1本で暗黙usingを追加しない()
     {
         var csproj = File.ReadAllText(
             Path.Combine(ProjectPaths.SourceProject, $"{ProjectPaths.SourceProjectName}.csproj"));
 
         Assert.DoesNotContain("<PackageReference", csproj, StringComparison.Ordinal);
-        Assert.DoesNotContain("<ProjectReference", csproj, StringComparison.Ordinal);
         Assert.DoesNotContain("<Using ", csproj, StringComparison.Ordinal);
+
+        var references = System.Xml.Linq.XDocument.Parse(csproj)
+            .Descendants("ProjectReference")
+            .Select(element => Path.GetFileNameWithoutExtension(element.Attribute("Include")?.Value ?? string.Empty))
+            .ToList();
+
+        Assert.Equal([AllowedProjectReference], references);
     }
 
     private bool ReachesItself(string origin, string current, HashSet<string> visited)

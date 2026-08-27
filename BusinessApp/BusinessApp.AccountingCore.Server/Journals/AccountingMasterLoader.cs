@@ -6,7 +6,7 @@ using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
-using BusinessApp.AccountingCore.Server.Shared;
+using BusinessApp.ServerSupport;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
 /// <summary>
