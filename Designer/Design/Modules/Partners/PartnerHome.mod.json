@@ -2,9 +2,9 @@
   "Name": "PartnerHome",
   "DataSourceName": "",
   "DbTable": "",
-  "CanCreate": false,
-  "CanUpdate": false,
-  "CanDelete": false,
+  "CanCreate": true,
+  "CanUpdate": true,
+  "CanDelete": true,
   "Fields": [
     {
       "Text": "取引先",
@@ -76,44 +76,6 @@
               {
                 "Layout": {
                   "FieldName": "TitleLabel",
-                  "ContextMenu": "",
-                  "ClassName": "",
-                  "FontFamily": "",
-                  "Color": "",
-                  "Name": "",
-                  "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "IgnoreContentWidth": false,
-                "Padding": {},
-                "BackgroundColor": "",
-                "BorderStyle": {
-                  "LeftColor": "",
-                  "TopColor": "",
-                  "RightColor": "",
-                  "BottomColor": ""
-                },
-                "HorizontalAlignment": "Center",
-                "CanResize": false,
-                "AllowOverflow": false,
-                "Border": "None"
-              }
-            ]
-          },
-          {
-            "IsWrap": false,
-            "IsAutoFillWrap": false,
-            "Margin": {},
-            "GridRowType": "Normal",
-            "CanResize": false,
-            "BackgroundColor": "",
-            "KeepInFillAvailableGrid": false,
-            "IsProportionalScale": false,
-            "IsRowMarginRemoved": false,
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",

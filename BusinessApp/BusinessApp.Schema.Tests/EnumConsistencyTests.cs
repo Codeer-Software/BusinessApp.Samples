@@ -1,5 +1,6 @@
 namespace BusinessApp.Schema.Tests;
 
+using BusinessApp.ServerSupport;
 using BusinessApp.TestSupport;
 
 using System.Reflection;
@@ -238,7 +239,15 @@ public class EnumConsistencyTests
             .ToList();
     }
 
-    /// <summary>PascalCase の列挙子名を DB の値（snake_case）に変換する。数字の前でも区切る。</summary>
-    private static string ToSnakeCase(string name)
-        => Regex.Replace(name, @"(?<!^)((?<![A-Z])[A-Z]|(?<![0-9])[0-9])", "_$1").ToLowerInvariant();
+    /// <summary>
+    /// PascalCase の列挙子名を DB の値（snake_case）に変換する。
+    /// </summary>
+    /// <remarks>
+    /// <b>本番が書き込みに使う実装（<see cref="DbValue.ToSnakeCase(string)"/>）をそのまま呼ぶ。</b>
+    /// ここに写しを持つと、<b>写しだけが規約どおりで本番が違う</b>状態を検出できない——
+    /// 実際、写しは数字の前で区切るのに本番は区切らず、DDL には <c>legacy_8</c> があった。
+    /// 数字を含む列挙子を C# に足した日に、本番は <c>legacy8</c> を書いて CHECK に弾かれるのに、
+    /// この検査は「3 者一致」と言うところだった（2026-08-27 の自己レビュー R16-03）。
+    /// </remarks>
+    private static string ToSnakeCase(string name) => DbValue.ToSnakeCase(name);
 }

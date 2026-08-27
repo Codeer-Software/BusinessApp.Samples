@@ -29,6 +29,7 @@
   <ItemGroup>
     <ProjectReference Include="..\BusinessApp.AccountingCore\BusinessApp.AccountingCore.csproj" />
     <ProjectReference Include="..\BusinessApp.Partners\BusinessApp.Partners.csproj" />
+    <ProjectReference Include="..\BusinessApp.ServerSupport\BusinessApp.ServerSupport.csproj" />
     <ProjectReference Include="..\BusinessApp.TestSupport\BusinessApp.TestSupport.csproj" />
   </ItemGroup>
 

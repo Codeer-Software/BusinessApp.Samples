@@ -484,13 +484,23 @@ public class PartnerSubmitGateTests
         await Assert.ThrowsAsync<ArgumentNullException>(() => Gate(server).SubmitAsync([], null!));
     }
 
+    /// <summary>
+    /// 保存の中身を渡さなければ止まる。<b>引数名まで表明する。</b>
+    /// </summary>
+    /// <remarks>
+    /// 型だけを見ると、ガードを消しても中の LINQ が同じ
+    /// <see cref="ArgumentNullException"/>（<c>ParamName</c> は <c>"source"</c>）を投げるので
+    /// <b>テストは通ったまま</b>になる（2026-08-27 の自己レビュー R16-04）。
+    /// </remarks>
     [Fact]
     public async Task 保存の中身を渡さなければ止まる()
     {
         using var server = new PartnerServer();
 
-        await Assert.ThrowsAsync<ArgumentNullException>(
+        var rejected = await Assert.ThrowsAsync<ArgumentNullException>(
             () => Gate(server).SubmitAsync(null!, new SaveSpy().SaveAsync));
+
+        Assert.Equal("transactionData", rejected.ParamName);
     }
 
     private static long InsertPartner(

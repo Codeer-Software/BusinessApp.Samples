@@ -43,6 +43,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BusinessApp.Partners\BusinessApp.Partners.csproj" />
+    <!-- 依存の向きの検査（PartnerDependencyTests）がサーバ層のアセンブリも見るため。
+         **検査のためだけの参照である。** 純粋層のテストがサーバ層の型を使ってはいけない。 -->
+    <ProjectReference Include="..\BusinessApp.Partners.Server\BusinessApp.Partners.Server.csproj" />
     <ProjectReference Include="..\BusinessApp.TestSupport\BusinessApp.TestSupport.csproj" />
   </ItemGroup>
 

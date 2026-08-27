@@ -46,17 +46,19 @@ echo "[pre-commit] 6/7 ミューテーションテスト"
     && dotnet stryker --project BusinessApp.AccountingCore.Server.csproj --break-at 94 --threshold-low 94 --reporter progress)
 # 取引先部品と共有インフラ（ADR-0025 §6）。**分割で関門を持ち出し忘れると、
 # テストは全部緑のままこの 3 つだけが検査の外へ落ちる。**
-# 初回の実測は 90.00 / 92.22 / 96.00（2026-08-27）。生き残りは文言・防御ガード・等価な変異だけで、
-# 実漏れは無かった（採否は qa/02 のラウンド 15）。
+# 実測は 92.00 / 93.41 / 96.72（2026-08-27。自己レビューの指摘を直したあと）。
+# 生き残りは文言・等価な変異だけで、実漏れは無い（採否は qa/02 のラウンド 15・16）。
 #
-# **下限は実測より 2〜3 点下に置いてある。** タイムアウトした変異は「倒した」に数えられるが、
+# **下限は実測より 1〜3 点下に置いてある。** タイムアウトした変異は「倒した」に数えられるが、
 # 何がタイムアウトするかは機械の負荷で変わる。実際に ServerSupport は同じコードで
 # 96.00 と 94.00 の両方を出した（フックの中＝テスト直後の負荷が高いときに下振れした）。
 # 実測のすぐ下に置くと、コードを 1 行も変えていないのにコミットが落ちる。
+# **タイムアウトが多いものほど余裕を広く取る**（ServerSupport は 8 件・Partners は 1 件・
+# Partners.Server は 0 件）。
 (cd BusinessApp/BusinessApp.Partners.Tests \
-    && dotnet stryker --project BusinessApp.Partners.csproj --break-at 87 --threshold-low 87 --reporter progress)
+    && dotnet stryker --project BusinessApp.Partners.csproj --break-at 89 --threshold-low 89 --reporter progress)
 (cd BusinessApp/BusinessApp.Partners.Server.Tests \
-    && dotnet stryker --project BusinessApp.Partners.Server.csproj --break-at 91 --threshold-low 91 --reporter progress)
+    && dotnet stryker --project BusinessApp.Partners.Server.csproj --break-at 92 --threshold-low 92 --reporter progress)
 (cd BusinessApp/BusinessApp.ServerSupport.Tests \
     && dotnet stryker --project BusinessApp.ServerSupport.csproj --break-at 93 --threshold-low 93 --reporter progress)
 

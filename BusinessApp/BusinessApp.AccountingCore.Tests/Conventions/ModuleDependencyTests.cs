@@ -34,9 +34,25 @@ public class ModuleDependencyTests
         ["Departments"] = [],
         ["Periods"] = ["Shared"],
 
-        // 記帳。マスタと制度の上に載る。
+        // 記帳。マスタと制度の上に載る。**取引先部品を知ってよいのはここだけ**（下の表）。
         ["Journals"] = ["Shared", "Accounts", "Departments", "Periods", "ConsumptionTax"],
     };
+
+    /// <summary>
+    /// <b>取引先部品</b>（<c>BusinessApp.Partners</c>）を参照してよいモジュール。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>分割で穴が開くところである。</b> 分割前は取引先が会計コアの 1 モジュールで、
+    /// 上の表が「<c>Journals</c> だけが <c>Partners</c> を知る」を守っていた。
+    /// 独立部品にすると型は <c>BusinessApp.Partners.*</c> で参照されるので、
+    /// <b>会計コアの名前空間を見る検査には一度も当たらなくなる</b>——
+    /// <c>Shared/Yen.cs</c> が <c>using BusinessApp.Partners;</c> を書いても全テストが緑になる。
+    /// 表から行を消すだけでなく、代わりの規則をここに置く。</para>
+    /// <para>なぜ <c>Journals</c> だけか: 会計コアが取引先を知るのは、帳簿の記載事項①
+    /// （課税仕入れの相手方の氏名又は名称）を計上時に写すためである（ADR-0018・ADR-0024 §4）。
+    /// <b>勘定科目や会計期間が取引先を知る理由は無い。</b></para>
+    /// </remarks>
+    private static readonly string[] ModulesAllowedToUsePartners = ["Journals"];
 
     /// <summary>
     /// 純粋ドメインが持ってよい唯一のプロジェクト参照（ADR-0025 §2）。
@@ -93,6 +109,38 @@ public class ModuleDependencyTests
             Assert.False(ReachesItself(module, module, visited), $"{module} から自分自身へ戻る依存がある");
         }
     }
+
+    /// <summary>
+    /// 取引先部品を参照してよいのは <see cref="ModulesAllowedToUsePartners"/> のモジュールだけ。
+    /// </summary>
+    /// <remarks>
+    /// 会計コアの中の依存（上の表）と<b>同じ厳しさを、部品の境界をまたぐ参照にも当てる</b>。
+    /// これが無いと、分割した瞬間に「どの会計モジュールが取引先を知ってよいか」の規則が消える。
+    /// </remarks>
+    [Fact]
+    public void 取引先部品を参照してよいモジュールは限られている()
+    {
+        var violations = PartnerReferences()
+            .Where(reference => !ModulesAllowedToUsePartners.Contains(reference.Module, StringComparer.Ordinal))
+            .Select(reference =>
+                $"{reference.File}: {reference.Module} は取引先部品に依存できない"
+                + $"（許可: {string.Join(" / ", ModulesAllowedToUsePartners)}）")
+            .Distinct()
+            .ToList();
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    /// 検査が「1 件も見つからず素通り」で緑にならないための土台。
+    /// </summary>
+    /// <remarks>
+    /// 参照の数え方（名前空間の文字列）を変えたときに 0 件になっていないかを見る。
+    /// <b>0 件でも上の検査は緑になる</b>ので、別に表明する。
+    /// </remarks>
+    [Fact]
+    public void 取引先部品への参照を実際に見つけられている()
+        => Assert.NotEmpty(PartnerReferences());
 
     [Fact]
     public void 依存表の相手はすべて実在するモジュールである()
@@ -191,6 +239,28 @@ public class ModuleDependencyTests
         }
 
         return false;
+    }
+
+    /// <summary>取引先部品（<c>BusinessApp.Partners</c>）を名指ししているファイル。</summary>
+    /// <remarks>
+    /// <c>BusinessApp.Partners.Server</c> も同じ部品なので、<c>\b</c> で境界を切って両方を拾う。
+    /// <c>BusinessApp.PartnersFoo</c> のような別物には当たらない。
+    /// </remarks>
+    private static List<(string Module, string File)> PartnerReferences()
+    {
+        var pattern = new Regex(@"\bBusinessApp\.Partners\b");
+        var found = new List<(string Module, string File)>();
+
+        foreach (var path in ProjectPaths.SourceFiles(ProjectPaths.SourceProject))
+        {
+            var relative = Path.GetRelativePath(ProjectPaths.SourceProject, path);
+            if (pattern.IsMatch(File.ReadAllText(path)))
+            {
+                found.Add((relative.Split(Path.DirectorySeparatorChar)[0], relative));
+            }
+        }
+
+        return found;
     }
 
     private static IEnumerable<(string Module, string File, string Referenced)> ModuleReferences()

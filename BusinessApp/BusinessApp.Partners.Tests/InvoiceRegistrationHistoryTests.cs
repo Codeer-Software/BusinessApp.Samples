@@ -113,7 +113,21 @@ public class InvoiceRegistrationHistoryTests
         Assert.Equal("T3000000000003", InvoiceRegistrationHistory.InEffectOn(registrations, D(8, 10))?.RegistrationNo);
     }
 
+    /// <summary>
+    /// 一覧を渡さなければ止まる。<b>引数名まで表明する。</b>
+    /// </summary>
+    /// <remarks>
+    /// 型だけを見ると、ガードを消しても中の <c>Where</c> が同じ
+    /// <see cref="ArgumentNullException"/>（<c>ParamName</c> は <c>"source"</c>）を投げるので
+    /// <b>テストは通ったまま</b>になる。ミューテーションでも実際に生き残っていた
+    /// （2026-08-27 の自己レビュー R16-04）。<c>ParamName</c> を見れば区別が付く。
+    /// </remarks>
     [Fact]
     public void 一覧を渡さなければ止まる()
-        => Assert.Throws<ArgumentNullException>(() => InvoiceRegistrationHistory.InEffectOn(null!, D(8, 1)));
+    {
+        var rejected = Assert.Throws<ArgumentNullException>(
+            () => InvoiceRegistrationHistory.InEffectOn(null!, D(8, 1)));
+
+        Assert.Equal("registrations", rejected.ParamName);
+    }
 }

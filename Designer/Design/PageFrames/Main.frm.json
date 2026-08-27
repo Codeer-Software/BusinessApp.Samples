@@ -736,7 +736,7 @@
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "Partners",
-        "Module": "Partner",
+        "Module": "PartnerHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -750,7 +750,7 @@
           "UseNavigateToCreate": true,
           "ListFieldDesign": {
             "LayoutName": "",
-            "CanNavigateToDetail": true,
+            "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
             "FixedColumnCount": 0,
@@ -764,12 +764,12 @@
               "SortDescending": false,
               "ModuleName": ""
             },
-            "PagerPosition": "Top",
+            "PagerPosition": "Bottom",
             "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
-            "CanDelete": false,
+            "CanDelete": true,
             "CanUserSort": true,
             "CanSelect": false,
             "UseIndexSort": false,

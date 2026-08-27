@@ -15,12 +15,20 @@ namespace BusinessApp.ServerSupport.Tests;
 /// </remarks>
 public class DbValueTests
 {
-    /// <summary>検査用の列挙子。1 語と複数語の両方を持つ（snake_case の往復を見るため）。</summary>
+    /// <summary>
+    /// 検査用の列挙子。1 語・複数語・<b>数字を含むもの</b>を持つ（snake_case の往復を見るため）。
+    /// </summary>
+    /// <remarks>
+    /// <c>Legacy8</c> は DDL の <c>rate_kind</c> にある <c>legacy_8</c> を写したものである
+    /// （<c>Designer/ddl/003_consumption_tax.sql</c>）。**まだ C# の列挙型にしていない**ので、
+    /// ここが数字の前で区切ることを表明する唯一の場所になる。
+    /// </remarks>
     public enum SampleStatus
     {
         Open,
         Closed,
         ForTaxableSales,
+        Legacy8,
     }
 
     public static TheoryData<object?> Nulls => new() { null, DBNull.Value };
@@ -85,6 +93,48 @@ public class DbValueTests
         }
     }
 
+    /// <summary>
+    /// <b>数字の前でも区切る。</b> DDL の CHECK に <c>legacy_8</c> がある。
+    /// </summary>
+    /// <remarks>
+    /// 区切らないと <c>Legacy8</c> は <c>legacy8</c> になり、書いた瞬間に CHECK で弾かれる。
+    /// **いま数字を含む列挙子は C# に 1 つも無い**ので、ここが唯一の網である
+    /// （2026-08-27 の自己レビュー R16-03。写しの片方だけが規約どおりだった）。
+    /// 連続する数字は 1 語として扱う（<c>Legacy80</c> → <c>legacy_80</c>）。
+    /// </remarks>
+    [Theory]
+    [InlineData("Legacy8", "legacy_8")]
+    [InlineData("Legacy80", "legacy_80")]
+    [InlineData("Reduced8", "reduced_8")]
+    public void 数字の前でも区切る(string name, string expected)
+    {
+        Assert.Equal(expected, DbValue.ToSnakeCase(name));
+        Assert.Equal(name, DbValue.ToPascalCase(expected));
+    }
+
+    /// <summary>
+    /// 先頭が数字でも落ちない。
+    /// </summary>
+    /// <remarks>
+    /// <b>1 文字目には「前の文字」が無い。</b> 区切りの判定が <c>index &gt; 0</c> を先に見ずに
+    /// <c>name[index - 1]</c> へ触ると、範囲外で落ちる。C# の識別子は数字で始まらないので
+    /// 列挙子からは来ないが、<see cref="DbValue.ToSnakeCase(string)"/> は文字列を受ける公開の入口である。
+    /// <b>境界の変異（<c>index &gt; 0</c> → <c>index &gt;= 0</c>）がミューテーションで生き残ったので足した</b>
+    /// （2026-08-27。ADR-0012 §8 が「許容しない」と定めた型）。
+    /// </remarks>
+    [Theory]
+    [InlineData("8Legacy", "8_legacy")]
+    [InlineData("8", "8")]
+    public void 先頭が数字でも落ちない(string name, string expected)
+        => Assert.Equal(expected, DbValue.ToSnakeCase(name));
+
+    [Fact]
+    public void 名前を渡さなければ止まる()
+    {
+        var rejected = Assert.Throws<ArgumentNullException>(() => DbValue.ToSnakeCase(null!));
+        Assert.Equal("name", rejected.ParamName);
+    }
+
     [Theory]
     [InlineData(0L, false)]
     [InlineData(1L, true)]
@@ -120,11 +170,26 @@ public class DbValueTests
         Assert.Equal(date, DbValue.ToDate(DbValue.ToDbDate(date)));
     }
 
+    /// <summary>
+    /// 日時は<b>この DB のタイムゾーン</b>（<see cref="DatabaseTimeZone"/>）で読む。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>期待値をオフセットの直値で書く。</b> もとは
+    /// <c>DateTime.SpecifyKind(stored, DateTimeKind.Local)</c> を期待値にしていたが、
+    /// それは<b>プロセスのタイムゾーン</b>であり、この型が避けようとしているものそのものである
+    /// （<see cref="DbValue.ToDateTimeOffset"/> の注記。2026-08-27 の自己レビュー R16-02）。</para>
+    /// <para><b>この機械では、直しても鳴らない。</b> 開発機が JST なので
+    /// <c>SpecifyKind(..., Local)</c> と <see cref="DatabaseTimeZone"/> は観測上同じ値を返し、
+    /// <b>どんな表明を書いても 2 つの実装を区別できない</b>（実際に実装を書き換えて確かめた）。
+    /// それでも直す価値があるのは、<b>期待値の側がプロセスに依存しなくなる</b>からである——
+    /// 古い書き方は<b>正しい実装のまま UTC の機械で落ちた</b>（期待値が +00:00 になる）。
+    /// いまは UTC の機械で、正しい実装なら通り、<c>Local</c> に書き換えた実装なら落ちる。</para>
+    /// </remarks>
     [Fact]
-    public void 日時はローカル時刻として読む()
+    public void 日時はプロセスではなく_DB_のタイムゾーンで読む()
     {
         var stored = new DateTime(2026, 8, 24, 13, 6, 46);
-        var expected = new DateTimeOffset(DateTime.SpecifyKind(stored, DateTimeKind.Local));
+        var expected = new DateTimeOffset(2026, 8, 24, 13, 6, 46, TimeSpan.FromHours(9));
 
         Assert.Equal(expected, DbValue.ToDateTimeOffset(stored));
         Assert.Equal(expected, DbValue.ToDateTimeOffset("2026-08-24 13:06:46"));

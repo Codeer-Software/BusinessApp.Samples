@@ -112,14 +112,33 @@ public static class DbValue
     /// 手書きの定数は列挙子を変えたときに黙って一致しなくなる。
     /// </summary>
     public static string ToSnakeCase<T>(T value) where T : struct, Enum
+        => ToSnakeCase(value.ToString()!);
+
+    /// <summary>
+    /// PascalCase の名前を DB の値（snake_case）に直す。<b>数字の前でも区切る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>数字の前で区切るのは規約である</b>——DDL の CHECK に <c>legacy_8</c> がある
+    /// （<c>Designer/ddl/003_consumption_tax.sql</c>）。区切らないと <c>Legacy8</c> は
+    /// <c>legacy8</c> になり、書いた瞬間に CHECK で弾かれる。
+    /// <b>いま数字を含む列挙子は 1 つも無いので、これは将来のための規則である</b>——
+    /// 逆に言えば、間違っていても今日は誰も気づけない（2026-08-27 の自己レビュー R16-03）。
+    /// <see cref="ToPascalCase"/> がこの逆を行う。
+    /// </remarks>
+    public static string ToSnakeCase(string name)
     {
-        var name = value.ToString()!;
+        ArgumentNullException.ThrowIfNull(name);
+
         // 容量の見積もりは書かない。挙動に効かないので、間違えても誰も気づけない。
         var text = new System.Text.StringBuilder();
 
-        foreach (var (character, index) in name.Select((c, i) => (c, i)))
+        for (var index = 0; index < name.Length; index++)
         {
-            if (char.IsUpper(character) && index > 0)
+            var character = name[index];
+            var startsWord = char.IsUpper(character)
+                             || (char.IsDigit(character) && index > 0 && !char.IsDigit(name[index - 1]));
+
+            if (startsWord && index > 0)
             {
                 text.Append('_');
             }

@@ -22,11 +22,17 @@ internal sealed class PartnerServer : IDisposable
     public PartnerServer()
     {
         connection = TestDatabase.CreateWithSeed();
-        var accessor = new SqliteDbAccessor(connection);
+        Accessor = new SqliteDbAccessor(connection);
 
-        Registrations = new PartnerRegistrationStore(accessor, SqliteDbAccessor.DataSourceName);
-        Partners = new PartnerStore(accessor, SqliteDbAccessor.DataSourceName);
+        Registrations = new PartnerRegistrationStore(Accessor, SqliteDbAccessor.DataSourceName);
+        Partners = new PartnerStore(Accessor, SqliteDbAccessor.DataSourceName);
     }
+
+    /// <summary>
+    /// DB への口。<b>本番と同じ組み立て</b>（<see cref="PartnerSubmitPipeline.Create"/>）を
+    /// 通すテストが使う。手で部品を繋ぐと、本番の配線とずれても誰も気づけない。
+    /// </summary>
+    public SqliteDbAccessor Accessor { get; }
 
     /// <summary>取引先の名称と登録を読む口。</summary>
     public PartnerRegistrationStore Registrations { get; }

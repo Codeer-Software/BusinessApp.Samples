@@ -2,6 +2,7 @@ namespace BusinessApp.Partners.Tests.Conventions;
 
 using System.Xml.Linq;
 
+using BusinessApp.Partners.Server;
 using BusinessApp.TestSupport;
 
 /// <summary>
@@ -48,27 +49,83 @@ public class PartnerDependencyTests
     }
 
     /// <summary>
-    /// サーバ層が会計コアを参照していない。
+    /// 取引先部品のプロジェクトが参照してよい、リポジトリ内のプロジェクト。
     /// </summary>
     /// <remarks>
-    /// 純粋層と違い、サーバ層は CLB と共有インフラに依存してよい。
+    /// <b>許可リストにする。</b> 「会計コアを参照しない」という否定リストだと、
+    /// 会計側が別名のプロジェクトに割れた瞬間に無言で効かなくなる
+    /// （2026-08-27 の自己レビュー R16-05）。CLB と NuGet は名前で除く。
+    /// </remarks>
+    private static readonly Dictionary<string, string[]> AllowedReferences = new(StringComparer.Ordinal)
+    {
+        ["BusinessApp.Partners"] = [],
+        ["BusinessApp.Partners.Server"] = ["BusinessApp.Partners", "BusinessApp.ServerSupport"],
+        // 純粋層のテストがサーバ層を参照しているのは、**この検査がサーバ層のアセンブリを
+        // 見るためだけ**である（下の「サーバ層は会計コアのアセンブリに依存しない」）。
+        // 検査以外でサーバ層の型を使わない。
+        ["BusinessApp.Partners.Tests"] =
+            ["BusinessApp.Partners", "BusinessApp.Partners.Server", "BusinessApp.TestSupport"],
+        ["BusinessApp.Partners.Server.Tests"] = ["BusinessApp.Partners.Server", "BusinessApp.TestSupport"],
+    };
+
+    /// <summary>
+    /// 取引先部品のどのプロジェクトも、許可された相手しか参照しない。
+    /// </summary>
+    /// <remarks>
+    /// <para>純粋層と違い、サーバ層は CLB と共有インフラに依存してよい。
     /// <b>依存してはいけないのは会計コアである。</b> 参照が 1 本入った瞬間に
-    /// 「取引先だけのデプロイ」が成立しなくなるが、ビルドは緑のまま通る。
+    /// 「取引先だけのデプロイ」が成立しなくなるが、ビルドは緑のまま通る。</para>
+    /// <para><b>テストプロジェクトも見る。</b> 「依存の逆流はコードだけでなくテストでも作らない」
+    /// と <c>PartnerServer</c> のコメントが宣言しているのに、機械が守っていなかった
+    /// （2026-08-27 の自己レビュー R16-06）。</para>
     /// </remarks>
     [Fact]
-    public void サーバ層は会計コアを参照しない()
+    public void 取引先部品は許可された相手しか参照しない()
     {
-        var directory = Path.Combine(
-            Path.GetDirectoryName(TestLayoutConvention.FindProjectDirectory())!, "BusinessApp.Partners.Server");
-        var csproj = File.ReadAllText(Path.Combine(directory, "BusinessApp.Partners.Server.csproj"));
+        var root = Path.GetDirectoryName(TestLayoutConvention.FindProjectDirectory())!;
+        var violations = new List<string>();
 
-        var accountingReferences = XDocument.Parse(csproj)
-            .Descendants("ProjectReference")
-            .Select(element => Path.GetFileNameWithoutExtension(element.Attribute("Include")?.Value ?? string.Empty))
-            .Where(name => name.StartsWith("BusinessApp.AccountingCore", StringComparison.Ordinal))
-            .ToList();
+        foreach (var (project, allowed) in AllowedReferences)
+        {
+            var csproj = Path.Combine(root, project, project + ".csproj");
+            Assert.True(File.Exists(csproj), $"{project} の csproj が見つからない");
 
-        Assert.Empty(accountingReferences);
+            var actual = XDocument.Parse(File.ReadAllText(csproj))
+                .Descendants("ProjectReference")
+                .Select(element => Path.GetFileNameWithoutExtension(element.Attribute("Include")?.Value ?? string.Empty))
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+
+            var unexpected = actual.Except(allowed, StringComparer.Ordinal).ToList();
+            if (unexpected.Count > 0)
+            {
+                violations.Add($"{project}: {string.Join(" / ", unexpected)} を参照している"
+                             + $"（許可: {string.Join(" / ", allowed.DefaultIfEmpty("なし"))}）");
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    /// サーバ層を<b>ビルド後のアセンブリ</b>でも確かめる。
+    /// </summary>
+    /// <remarks>
+    /// csproj のテキストだけだと <c>Directory.Build.props</c> と生アセンブリ参照が素通りする。
+    /// 純粋層は同じことを <see cref="純粋層は外部アセンブリに依存しない"/> が見ているが、
+    /// サーバ層には無かった（2026-08-27 の自己レビュー R16-05）。
+    /// </remarks>
+    [Fact]
+    public void サーバ層は会計コアのアセンブリに依存しない()
+    {
+        var referenced = typeof(PartnerSubmitGate).Assembly
+            .GetReferencedAssemblies()
+            .Select(assembly => assembly.Name!)
+            .Where(name => name.StartsWith("BusinessApp.", StringComparison.Ordinal))
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(["BusinessApp.Partners", "BusinessApp.ServerSupport"], referenced);
     }
 
     /// <summary>ソースを 1 本も見つけられていない状態で緑にならないための土台。</summary>

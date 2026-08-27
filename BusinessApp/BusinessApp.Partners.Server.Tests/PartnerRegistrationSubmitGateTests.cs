@@ -318,14 +318,25 @@ public class PartnerRegistrationSubmitGateTests
         Assert.True(save.Called);
     }
 
+    /// <summary>
+    /// 引数を渡さなければ止まる。<b>引数名まで表明する。</b>
+    /// </summary>
+    /// <remarks>
+    /// 型だけを見ると、ガードを消しても中の LINQ が同じ
+    /// <see cref="ArgumentNullException"/>（<c>ParamName</c> は <c>"source"</c>）を投げるので
+    /// <b>テストは通ったまま</b>になる（2026-08-27 の自己レビュー R16-04）。
+    /// </remarks>
     [Fact]
     public async Task 引数を渡さなければ止まる()
     {
         using var server = new PartnerServer();
         var gate = Gate(server);
 
-        await Assert.ThrowsAsync<ArgumentNullException>(
+        var noData = await Assert.ThrowsAsync<ArgumentNullException>(
             () => gate.SubmitAsync(null!, () => Task.FromResult(new List<ModuleSubmitResult>())));
-        await Assert.ThrowsAsync<ArgumentNullException>(() => gate.SubmitAsync([], null!));
+        Assert.Equal("transactionData", noData.ParamName);
+
+        var noSave = await Assert.ThrowsAsync<ArgumentNullException>(() => gate.SubmitAsync([], null!));
+        Assert.Equal("save", noSave.ParamName);
     }
 }
