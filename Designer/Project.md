@@ -4,9 +4,9 @@ status: current
 scope: 会計コア
 audience: [開発]
 growth: append
-updated: 2026-08-26
+updated: 2026-08-28
 supersedes: []
-related: [CLAUDE.md, ../docs/README.md]
+related: [CLAUDE.md, ../docs/README.md, ../docs/decisions/0026-画面は役割で分け玄関のページフレームを置く.md]
 ---
 # Project.md（CLB デザインプロジェクト固有ルール）
 
@@ -36,10 +36,36 @@ related: [CLAUDE.md, ../docs/README.md]
 > テンプレート由来の `AppUser` モジュールだけはフィールド名が日本語（`ユーザー識別名` 等）である。
 > 認証部品の資産なので**改名しない**。新規モジュールは上記の規約に従う。
 
+## フォルダ規約（何をどこに置くか）
+
+**`Design/Modules/` のトップレベルのフォルダ＝アプリ（部品）**（開発者の決定。2026-08-28）。
+`Accounting/`（会計コア）・`Partners/`（取引先）・`Platform/`（どの部品にも属さないもの。`AppUser` 等）。
+アプリの中の分け方（`Books/` `Journals/` `Masters/` `Settings/`）はその下に置く。
+
+- **フォルダ（アプリ）と PageFrame（役割ごとの導線）は別の軸である。一致させない**
+  （[ADR-0026](../docs/decisions/0026-画面は役割で分け玄関のページフレームを置く.md)）。
+  前回プロジェクトは両者を一致させようとして、フレームを 7 回作り直したうえに
+  「勘定科目は業務マスタのフレームだがシステムマスタのフォルダ」という食い違いが残った
+- **モジュール名はデザイン全体でフラットな名前空間**なので、フォルダを動かしても参照は壊れない。
+  ただし移動後は `designcheck` → deploy → 実機まで通す
+
 ## レイアウト規約（画面の見た目）
 
-- **金額列は右詰め・3 桁カンマ区切り**（`Format: "#,0"`）。フォーム入力欄は左詰めのまま
+- **金額列は右詰め・3 桁カンマ区切り**（`Format: "#,0"`）。フォーム入力欄は左詰めのまま。
+  **一覧の右詰めは `text-align` では効かない**——セルの中身が flex なので
+  `.<クラス> > div { justify-content: flex-end; }` を `app.css` に書く（[qa/01 D-15](../docs/qa/01_CLB静かな失敗.md)）。
+  桁を揃えるため `font-variant-numeric: tabular-nums` も併せる。
+  **列見出し（`<th>`）は揃えられない**ので左寄せのまま（[qa/01 D-16](../docs/qa/01_CLB静かな失敗.md)）
+- **数値でも識別子（科目コード・伝票番号・取引先コード）は左詰め。** 右詰めは
+  「桁をそろえて大小を比べる」ためのものであり、識別子は先頭から読むものである
 - **一覧の ○/— フラグ列は中央寄せ**。Boolean は `TrueText: "○"` / `FalseText: "—"` を付ける
+- **検索条件は既定で開く**（`SearchLayouts[""].Layout.IsExpanderDefaultOpened: true`）。
+  CLB の一般則（`LayoutGuidelines.md`）は「閉じて一覧を多く見せる」だが、**本プロジェクトは違う選択をする**——
+  会計データは「絞らずに全件を眺める」使い方をしない。一覧を開いて最初にやることは必ず絞り込みであり、
+  既定で閉じているのは「絞らない」を既定にしていることになる
+- **必須入力の欄はラベルに赤い `*` を出す**（`app.css` の `.required-label::after`）。
+  フォームの上に「`*` は必須項目です」の凡例を置く（色だけに頼らない）。
+  `IsRequired: true` のフィールドと `<Name>Label` の `ClassName` の対応は `lint_design.py` が見る
 - **ボタンの色は 2 色**: 通常操作は Primary（青）、破壊的・不可逆な操作は Danger（赤）
 - **検索レイアウトの行は `IsWrap: true` を標準**にする。1 行は 3 組（ラベル＋入力）まで
 - **「ラベル列 + 入力列」の 2 カラム行では、ラベル列に `VerticalAlignment: "Middle"` を必ず設定**
@@ -111,7 +137,10 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
   フィールド側の `SearchCondition` に `SortConditions` と `Condition` を設定する。
   マスタを指す LinkField は `IsActive.Value = true` で絞る（`is_active` は「入力候補に出すか」の意味。ADR-0019 §1）。
   設定しないと**無効にした科目が候補に出てしまい、降順で並ぶ**。
-  `designcheck` は findings 0。DB に `temporary_files` は未作成（上の §2 も参照）
+  `designcheck` は findings 0。DB に `temporary_files` は未作成（上の §2 も参照）。
+  **例外が 1 つある——取引先の「名寄せの親」は絞らない。**
+  名寄せは「同一人格の表明」であって入力候補ではなく、無効にした取引先を親にする場面が正常に起こる
+  （[ADR-0028](../docs/decisions/0028-名寄せの親は同一人格の表明であり深さ1に固定する.md)）
 - 2026-08-26: **デザイン JSON は `json.load` → `json.dumps(indent=2, ensure_ascii=False)` で
   バイト単位に往復する**（3 つのモジュールで実測）。手で JSON を書き換えるより安全。
   ただし **Python の text mode は Windows で CRLF を書く**ので、`open(path,'wb')` で
