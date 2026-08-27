@@ -3,7 +3,7 @@ title: 会計コア構築ミッション（CLAUDE.md）
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-08-26
+updated: 2026-08-27
 supersedes: []
 related: [docs/README.md, docs/00_ドキュメント規約.md, Designer/CLAUDE.md, Designer/Project.md]
 ---
@@ -84,7 +84,7 @@ CLB スクリプト（`*.mod.cs`）はツリーウォーク型インタプリタ
 
 ### 2-5. スコープ拡大への既定の答えは「別部品」
 
-[ADR-0002](docs/decisions/0002-部品の定義と分割の判断基準.md) の基準に当てて判断する。
+[ADR-0024](docs/decisions/0024-部品の分割は束ねる相手抜きで使われる場面があるかで決める.md) の基準に当てて判断する。
 例外を認めるときは ADR を起こす。
 
 ### 2-6. 機能の要否は「市販ソフトではどうなっているか」も見て決める
