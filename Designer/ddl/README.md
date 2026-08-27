@@ -3,7 +3,7 @@ title: ddl — スキーマ定義
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-08-26
+updated: 2026-08-27
 supersedes: []
 related: [../Project.md, ../../docs/04_会計ドメイン設計.md, ../../docs/decisions/0019-マスタは会計が生んだ概念かで分ける.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---
@@ -56,7 +56,7 @@ dotnet test BusinessApp.slnx
 | 003 | [`003_consumption_tax.sql`](003_consumption_tax.sql) | 税区分 | ③ 会計マスタ |
 | 004 | [`004_masters.sql`](004_masters.sql) | 勘定科目・補助科目・部門・取引先 | ③ 会計マスタ（**取引先は会計の外の実体**） |
 | 005 | [`005_journals.sql`](005_journals.sql) | 仕訳・仕訳明細・伝票番号の採番 | データ |
-| 006 | [`006_partner_registrations.sql`](006_partner_registrations.sql) | 適格請求書発行事業者の登録（有効期間つき） | ③ 会計マスタ（**実体は公表情報の写し**） |
+| 006 | [`006_partner_registrations.sql`](006_partner_registrations.sql) | 適格請求書発行事業者の登録（有効期間つき） | 会計の外の実体（**公表情報の写し**。取引先部品側 — [ADR-0025](../../docs/decisions/0025-取引先を部品として分ける.md)） |
 
 適用順は**外部キーの向き**で決まっている。税区分（003）を勘定科目（004）より先に作るのは、
 勘定科目が既定税区分を参照するためである（逆向きの参照は無い）。
