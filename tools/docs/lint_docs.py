@@ -50,7 +50,8 @@ REQUIRED_KEYS = ["title", "status", "scope", "audience", "updated"]
 
 LINE_LIMIT = 250
 
-# ADR 台帳。全 ADR を載せるのが仕事なので、superseded へのリンク検査から外す
+# ADR 台帳。**全 ADR を載せるのが仕事**なので、superseded へのリンク検査から外す。
+# `growth: append` だからではない——役割による免除なので、フロントマターが変わっても効く
 ADR_LEDGER = "docs/decisions/README.md"
 
 # 検査対象外（生成物・ベンダー同梱・Git 追跡外・別の規約に従うもの）
@@ -239,11 +240,28 @@ def check_links(doc: Doc, existing: set, findings: List[Tuple[str, str, str]]) -
             add(SEV_ERROR, "{}行目: リンク先が実在しません: {}".format(i + 1, t))
 
 
+def successor_of(target_doc: Doc, docs_by_rel: Dict[str, Doc]) -> Optional[str]:
+    """`superseded` な文書の `related` から、**`current` な**後継を 1 本選んでリポジトリ相対で返す。
+
+    `related` の先頭をそのまま出さない。実データで **`related[0]` 自身が `superseded`** の文書が
+    2 本ある（後継がさらに覆された組。2026-08-28 に実測）ので、
+    先頭を機械的に案内すると**新しい違反へ誘導する**。相対パスのまま出すのも駄目である——
+    後継のパスは「対象文書から見た相対」なので、指摘を受ける文書から見ると別の場所を指す。
+    """
+    for t in target_doc.list_field("related"):
+        rel = resolve(target_doc, t)
+        d = docs_by_rel.get(rel)
+        if d is not None and d.status == "current":
+            return rel
+    return None
+
+
 def check_superseded_links(doc: Doc, docs_by_rel: Dict[str, Doc],
-                           findings: List[Tuple[str, str, str]]) -> None:
+                           findings: List[Tuple[str, str, str]]) -> int:
     """`current` な文書の本文が `superseded` な文書へ**リンク**していたら error。
 
-    （開発者の提案。2026-08-28。コード側は `check_code_references` が既に見ていた）
+    （開発者の提案。2026-08-28。コード側は `check_code_references` が既に見ていた。
+    リンクに限ることと免除の範囲は設計側で決め、開発者が承認した）
 
     **見るのはリンクだけである。** 番号や題名を地の文で挙げるのは咎めない——
     リンクは読者をそこへ**連れて行く**が、散文の言及は経緯の記述として無害だからである。
@@ -251,37 +269,52 @@ def check_superseded_links(doc: Doc, docs_by_rel: Dict[str, Doc],
 
     咎めないもの:
       - フロントマター（`supersedes:` / `related:` は関係を記録する場所。本文だけを見る）
+      - コードフェンスの中（規則の例を貼った文書が自分で落ちないように）
       - 自分が `supersedes:` に挙げている文書へのリンク（**後継は前身を語ってよい**）
-      - ADR 台帳 `docs/decisions/README.md`（全 ADR を載せるのが仕事）
-      - `growth: append` の記録文書（過去の行は当時のまま残すのが正しい）
-      - 行に `lint-docs:ignore` がある行
+      - ADR 台帳 `docs/decisions/README.md`（**全 ADR を載せるのが仕事**。`growth` とは無関係の免除）
+      - `lint-docs:ignore` がある行（**その行の検査を全部**免除する。行単位である）
+
+    `growth: append` は免除しない。実測すると、それで通っていたのは ADR 台帳の 4 件だけで、
+    他の記録文書（qa/01〜04・11_CLB改善提案）には superseded へのリンクが 1 件も無かった
+    （2026-08-28）。**記録文書でも、今日足す行は現在形として読まれる。**
 
     **連鎖は見ない**（0002 → 0024 → 0029 のように後継自身が superseded になっても、
     その中間へのリンクは前身特権で通る）。今は許容する（開発者の判断。2026-08-28）。
+
+    戻り値は**見た superseded 宛リンクの数**（免除した分を含む）。
+    `main` がこれを印字する——0 に落ちたら、配線が死んだか免除が広がりすぎたかである。
     """
-    if doc.status != "current" or doc.is_append or doc.rel == ADR_LEDGER:
-        return
+    if doc.status != "current" or doc.rel == ADR_LEDGER:
+        return 0
     predecessors = {resolve(doc, t) for t in doc.list_field("supersedes")}
+    seen = 0
+    in_code = False
     for i in range(doc.body_start, len(doc.lines)):
         line = doc.lines[i]
-        if INLINE_IGNORE in line:
+        if line.lstrip().startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code:
             continue
         for target in MD_LINK.findall(line):
             t = target.strip()
-            if not t or t.startswith(("http", "mailto:", "#")):
+            if not t or t.startswith(("http", "mailto:")):
                 continue
             resolved = resolve(doc, t)
-            if resolved in predecessors:
-                continue
             target_doc = docs_by_rel.get(resolved)
             if target_doc is None or target_doc.status != "superseded":
                 continue
-            successors = target_doc.list_field("related")
-            hint = successors[0] if successors else "後継が related に書かれていません"
+            seen += 1
+            if resolved in predecessors or INLINE_IGNORE in line:
+                continue
+            hint = successor_of(target_doc, docs_by_rel)
             findings.append((SEV_ERROR, doc.rel,
-                             "{}行目: superseded な文書へリンクしています: {}"
-                             "（後継 {} へ張り替えるか、経緯として要る行に {} を書く）"
-                             .format(i + 1, resolved, hint, INLINE_IGNORE)))
+                             "{}行目: superseded な文書へリンクしています: {}（{} へ張り替えるか、"
+                             "経緯として要る行に {} を書く）"
+                             .format(i + 1, resolved,
+                                     "後継 " + hint if hint else "current な後継が related にありません",
+                                     INLINE_IGNORE)))
+    return seen
 
 
 def check_body(doc: Doc, findings: List[Tuple[str, str, str]]) -> None:
@@ -579,28 +612,46 @@ def selftest() -> int:
         return Doc(rel, lines, parsed, start)
 
     dead = fake("docs/decisions/0019-old.md",
-                {"status": "superseded", "related": "[0029-new.md]"}, ["中身"])
+                {"status": "superseded",
+                 # related[0] が superseded の実データがあるので、その形で入れる
+                 "related": "[0006-older.md, 0029-new.md]"}, ["中身"])
+    older = fake("docs/decisions/0006-older.md",
+                 {"status": "superseded", "related": "[0019-old.md]"}, ["中身"])
+    gone = fake("docs/decisions/0018-hist.md",
+                {"status": "historical", "related": "[0029-new.md]"}, ["中身"])
     live = fake("docs/09_other.md", {"status": "current"}, ["本文"])
-    by_rel = {dead.rel: dead, live.rel: live}
+    new = fake("docs/decisions/0029-new.md", {"status": "current"}, ["本文"])
+    far = fake("docs/08_dead.md", {"status": "superseded", "related": "[09_other.md]"}, ["中身"])
+    by_rel = {d.rel: d for d in (dead, older, gone, live, new, far)}
     to_dead, to_live = "[旧](decisions/0019-old.md)", "[今](09_other.md)"
+    cur = {"status": "current"}
     link_cases = [
         # (rel, meta, body, 鳴るべき件数)
-        ("docs/10_x.md", {"status": "current"}, [to_dead], 1),                    # わざと壊した入力
-        ("docs/10_x.md", {"status": "current"}, [to_dead, to_dead], 2),           # 行ごとに鳴る
-        ("docs/10_x.md", {"status": "current"}, [to_dead + " " + INLINE_IGNORE], 0),
-        ("docs/10_x.md", {"status": "current"}, [to_live], 0),
-        ("docs/10_x.md", {"status": "current"}, ["0019-old.md は既に覆されている"], 0),  # 散文は咎めない
-        ("docs/10_x.md", {"status": "current"}, ["[外](https://example.com/0019-old.md)"], 0),
-        ("docs/10_x.md", {"status": "current"}, ["[未]( decisions/0019-nowhere.md )"], 0),  # 実在しない
+        ("docs/10_x.md", cur, [to_dead], 1),                                  # わざと壊した入力
+        ("docs/10_x.md", cur, [to_dead, to_dead], 2),                         # 別の行なら別に鳴る
+        ("docs/10_x.md", cur, [to_dead + " " + to_dead], 2),                  # 同じ行に 2 本でも鳴る
+        # 免除は行単位である。同じ行の**無関係なリンクまで**免除されるのが現在の仕様
+        ("docs/10_x.md", cur, [to_dead + " " + to_dead + " " + INLINE_IGNORE], 0),
+        ("docs/10_x.md", cur, [to_live], 0),
+        ("docs/10_x.md", cur, ["0019-old.md は既に覆されている"], 0),          # 散文は咎めない
+        ("docs/10_x.md", cur, ["[外](https://example.com/0019-old.md)"], 0),
+        ("docs/10_x.md", cur, ["[未](decisions/0019-nowhere.md)"], 0),        # 実在しない
+        ("docs/10_x.md", cur, ["[印](decisions/0018-hist.md)"], 0),           # historical は対象外
+        ("docs/10_x.md", cur, ["[節](decisions/0019-old.md#2-決定)"], 1),     # アンカー付き
+        ("docs/10_x.md", cur, ["[空]( decisions/0019-old.md )"], 1),          # 前後の空白を落とす
+        ("docs/decisions/0030-y.md", cur, ["[上](../08_dead.md)"], 1),        # `../` 起点
+        ("docs/10_x.md", cur, ["```", to_dead, "```"], 0),                    # コードフェンスの中
         ("docs/10_x.md", {"status": "superseded", "related": "[09_other.md]"}, [to_dead], 0),
         ("docs/10_x.md", {"status": "historical", "related": "[09_other.md]"}, [to_dead], 0),
-        ("docs/10_x.md", {"status": "current", "growth": "append"}, [to_dead], 0),
-        # フロントマターは対象外（related に前身を書くのは正しい）
-        ("docs/10_x.md", {"status": "current", "related": "[decisions/0019-old.md]"}, ["本文"], 0),
+        # `growth: append` は免除しない（2026-08-28 に外した。理由は関数の docstring）
+        ("docs/10_x.md", {"status": "current", "growth": "append"}, [to_dead], 1),
+        # フロントマターは対象外。**リンクの形をした値**を置いて、本文だけを見ていることを表明する
+        ("docs/10_x.md", {"status": "current", "note": to_dead}, ["本文"], 0),
         # 後継は前身を語ってよい
         ("docs/decisions/0029-new.md", {"status": "current", "supersedes": "[0019-old.md]"},
          ["[旧](0019-old.md)"], 0),
-        (ADR_LEDGER, {"status": "current"}, ["[旧](0019-old.md)"], 0),
+        # ADR 台帳は役割で免除する。**実データと同じく `growth: append` を付けた形**で表明する
+        (ADR_LEDGER, {"status": "current", "growth": "append"}, ["[旧](0019-old.md)"], 0),
     ]
     for rel, meta, body, want in link_cases:
         got: List[Tuple[str, str, str]] = []
@@ -610,8 +661,53 @@ def selftest() -> int:
             print("NG  check_superseded_links: 期待 {} 件 / 実際 {} 件: {} {}"
                   .format(want, len(got), rel, body))
 
+    # 件数だけでなく**中身**を表明する。error を warn に格下げしても件数は変わらないため
+    probe = fake("docs/10_x.md", cur, [to_dead])
+    got = []
+    seen = check_superseded_links(probe, by_rel, got)
+    want_line = "{}行目".format(probe.body_start + 1)
+    for label, ok in (
+        ("severity が error", got and got[0][0] == SEV_ERROR),
+        ("指摘先が違反した文書", got and got[0][1] == "docs/10_x.md"),
+        ("行番号が本文の実行番号", got and want_line in got[0][2]),
+        ("リンク先をリポジトリ相対で出す", got and "docs/decisions/0019-old.md" in got[0][2]),
+        # related[0] は superseded（0006）。**current な 0029 を案内する**こと
+        ("後継は current を選ぶ", got and "docs/decisions/0029-new.md" in got[0][2]),
+        ("superseded な related を案内しない", got and "0006-older.md" not in got[0][2]),
+        ("直し方を書く", got and INLINE_IGNORE in got[0][2]),
+        ("見た件数を返す", seen == 1),
+    ):
+        if not ok:
+            failed += 1
+            print("NG  check_superseded_links: {}: {}".format(label, got))
+    if successor_of(older, by_rel) is not None:
+        failed += 1
+        print("NG  successor_of: current な後継が無いのに何かを返した")
+
+    # 実データで一度通す。`resolve()` の結果が `load_docs()` のキーと噛み合っているか、
+    # main の配線が生きているかは、偽 Doc では分からない（qa/03 L-15 の型）
+    real_docs, _ = load_docs()
+    real_by_rel = {d.rel: d for d in real_docs}
+    sink: List[Tuple[str, str, str]] = []
+    real_seen = sum(check_superseded_links(d, real_by_rel, sink) for d in real_docs)
+    if real_seen < 1:
+        failed += 1
+        print("NG  check_superseded_links: 実データで superseded 宛リンクを 1 本も見ていない"
+              "（免除が広がりすぎたか、パスの解決が噛み合っていない。**0 は緑ではない**）")
+
     src = open(os.path.abspath(__file__), "r", encoding="utf-8").read()
-    main_src = src[src.index("def main()"):]
+    # 行頭の定義を取る。`src.index("def main()")` だと**この selftest の中の文字列リテラル**に
+    # 当たり、main_src が selftest の末尾を巻き込む。そこへ検査の直呼びを書くと
+    # 「main から呼ばれている」の表明が自分で自分を満たしてしまう
+    main_at = re.search(r"^def main\(\)", src, re.M)
+    if main_at is None:
+        print("NG  def main() が見つからない")
+        return 1
+    main_src = src[main_at.start():]
+    # 引数の配線まで見る。名前だけの包含だと `check_superseded_links(d, {}, findings)` が通る
+    if "check_superseded_links(d, docs_by_rel, findings)" not in main_src:
+        failed += 1
+        print("NG  check_superseded_links が main で docs_by_rel を渡されていない")
     defined = set(re.findall(r"^def (check_[A-Za-z0-9_]+)\(", src, re.M))
     for name in sorted(defined - set(ALL_CHECKS)):
         failed += 1
@@ -647,10 +743,11 @@ def main() -> int:
     findings: List[Tuple[str, str, str]] = []
     for rel in unreadable:
         findings.append((SEV_ERROR, rel, "文書を読めませんでした。**検査できていない**ので黙って進まない"))
+    seen_superseded_links = 0
     for d in docs:
         check_front_matter(d, findings)
         check_links(d, existing, findings)
-        check_superseded_links(d, docs_by_rel, findings)
+        seen_superseded_links += check_superseded_links(d, docs_by_rel, findings)
         check_body(d, findings)
     check_adr_ledger(docs, findings)
     check_docs_index(docs, findings)
@@ -664,7 +761,10 @@ def main() -> int:
         print("{}\t{}\t{}".format(sev, rel, msg))
 
     print("")
-    print("検査文書数: {} / error: {} / warn: {}".format(len(docs), len(errors), len(warns)))
+    # superseded 宛リンクの数を必ず出す。0 に落ちたら「違反が無い」ではなく
+    # 「配線が死んだ・免除が広がりすぎた」を疑う（黙って素通りする関門を作らないため）
+    print("検査文書数: {} / error: {} / warn: {} / superseded 宛リンク: {} 件を検査"
+          .format(len(docs), len(errors), len(warns), seen_superseded_links))
     return 1 if errors else 0
 
 
