@@ -6,7 +6,7 @@ audience: [開発]
 growth: append
 updated: 2026-08-28
 supersedes: []
-related: [../00_ドキュメント規約.md]
+related: [../00_ドキュメント規約/README.md]
 ---
 # ADR（意思決定ログ）
 
