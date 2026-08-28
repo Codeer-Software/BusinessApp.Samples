@@ -49,7 +49,7 @@ public class ModuleDependencyTests
     /// <c>Shared/Yen.cs</c> が <c>using BusinessApp.Partners;</c> を書いても全テストが緑になる。
     /// 表から行を消すだけでなく、代わりの規則をここに置く。</para>
     /// <para>なぜ <c>Journals</c> だけか: 会計コアが取引先を知るのは、帳簿の記載事項①
-    /// （課税仕入れの相手方の氏名又は名称）を計上時に写すためである（ADR-0018・ADR-0024 §4）。
+    /// （課税仕入れの相手方の氏名又は名称）を計上時に写すためである（ADR-0018・ADR-0029 §2）。
     /// <b>勘定科目や会計期間が取引先を知る理由は無い。</b></para>
     /// </remarks>
     private static readonly string[] ModulesAllowedToUsePartners = ["Journals"];
@@ -59,7 +59,7 @@ public class ModuleDependencyTests
     /// </summary>
     /// <remarks>
     /// 取引先は<b>会計コアより上位の部品</b>で、会計コアが取引先を知る向きだけが許される
-    /// （ADR-0024 §4）。逆向きは <c>BusinessApp.Partners</c> 側が参照を持たないことで
+    /// （ADR-0029 §2）。逆向きは <c>BusinessApp.Partners</c> 側が参照を持たないことで
     /// コンパイラが禁じ、それは <c>BusinessApp.Partners.Tests</c> の
     /// <c>PartnerDependencyTests</c> が検査する。
     /// </remarks>

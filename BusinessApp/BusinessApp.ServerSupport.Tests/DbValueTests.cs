@@ -10,7 +10,7 @@ namespace BusinessApp.ServerSupport.Tests;
 /// <para><b>列挙子は検査用のものを使う</b>（<see cref="SampleStatus"/>）。
 /// もとは会計コアの <c>PeriodStatus</c> ・ <c>TaxTreatment</c> を標本にしていたが、
 /// <c>DbValue</c> を共有インフラへ出した以上、その検査が会計コアを参照するのは依存の逆流である
-/// （ADR-0024 §4）。<b>標本の形は変えていない</b>——1 語（<c>open</c>）と
+/// （ADR-0029 §2）。<b>標本の形は変えていない</b>——1 語（<c>open</c>）と
 /// 複数語（<c>for_taxable_sales</c>）の両方を、もとの文字列のまま残してある。</para>
 /// </remarks>
 public class DbValueTests

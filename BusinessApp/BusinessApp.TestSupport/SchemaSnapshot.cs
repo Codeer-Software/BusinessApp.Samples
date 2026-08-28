@@ -144,7 +144,7 @@ public static class SchemaSnapshot
     /// 稼働 DB の行を「会計コアの管轄」と「他部品（管轄外）」に分ける。
     /// 管轄は、正典が持つオブジェクトと、正典のテーブルに付いているオブジェクト
     /// （余分なトリガ・インデックスを検出するため）。他部品のテーブルとその付属物には口を出さない
-    /// （部品の境界。ADR-0024）。
+    /// （部品の境界。ADR-0029）。
     /// </summary>
     public static (IReadOnlyList<SchemaObject> InScope, IReadOnlyList<string> Ignored) SplitByJurisdiction(
         IReadOnlyList<SchemaObject> expected,
