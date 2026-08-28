@@ -1,8 +1,9 @@
 /* アプリ全体のカスタム CSS（_specs/AppCss.md）。
    ここに書くのは「デザイン JSON では表せない見た目」だけにする。
-   規約そのものは Designer/Project.md の「レイアウト規約」が持つ。 */
+   原則（何をどう見せるか・なぜ）は docs/09_画面の原則.md、
+   CLB での書き方は Designer/Project.md の「レイアウト規約」が持つ。 */
 
-/* 金額列は右詰め（Project.md）。桁が揃わないと、帳簿は読むのに数えることになる。
+/* 金額列は右詰め（docs/09_画面の原則.md §4）。桁が揃わないと、帳簿は読むのに数えることになる。
    一覧の列に付けると td と th の両方に効くので、見出しも一緒に右へ寄る。
    使い方: ListLayouts の列に "ClassName": "amount-cell" を付ける。 */
 .amount-cell {

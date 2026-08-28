@@ -3,7 +3,7 @@ title: seed — 初期データ
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-08-28
+updated: 2026-08-29
 supersedes: []
 related: [../ddl/README.md, ../../docs/02_ペルソナ.md, ../../docs/08_マスタ台帳.md]
 ---
@@ -63,7 +63,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
 ## 保留リスト
 
 - 2026-08-24 勘定科目の**決算書表示区分**（`statement_section`）を入れていない。
-  会社計算規則が定める区分であり、記憶で書かない（CLAUDE.md §2-4）。
+  会社計算規則が定める区分であり、記憶で書かない（[10_調査の原則](../../docs/10_調査の原則.md)）。
   一次情報を確認してから入れる。**フェーズ 4 の着手前**
 - 2026-08-24 補助科目（`sub_accounts`）の初期データが無い。普通預金の金融機関別など、
   実際に使う口座が決まらないと作れない。**デモデータを作るフェーズ 7**

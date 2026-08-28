@@ -152,7 +152,7 @@ public class JournalAmendmentServiceTests
         Assert.False(available.CanCorrect);
         Assert.Contains("取消", available.Reason, StringComparison.Ordinal);
 
-        // **内部表現を出さない**（CLAUDE.md §2-7）。
+        // **内部表現を出さない**（docs/09_画面の原則.md §2）。
         Assert.DoesNotContain("Reversal", available.Reason, StringComparison.Ordinal);
     }
 
