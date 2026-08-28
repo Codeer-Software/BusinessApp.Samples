@@ -4,12 +4,14 @@
 
 仕様書: docs/00_ドキュメント規約.md
 
-長期開発でドキュメントが腐り、肥大化するのを防ぐ。検査するのは次の 4 点である。
+長期開発でドキュメントが腐り、肥大化するのを防ぐ。検査するのは次の 5 点である。
   1. 読まなくていい文書を判別できるか（フロントマターと status）
   2. 索引・ADR 台帳と実ファイルが食い違っていないか
   3. current でない文書をコード（コメント）が参照していないか
      （開発者の提案。2026-08-25。意図的な歴史参照は行に lint-docs:ignore を書く）
-  4. 本文を変えたのに updated: を今日にしていない文書がないか
+  4. current な文書が superseded な文書へリンクしていないか
+     （開発者の提案。2026-08-28。読者を古い決定へ連れて行かないため）
+  5. 本文を変えたのに updated: を今日にしていない文書がないか
      （開発者の指示。2026-08-27。横断レビューで 7 文書のずれが見つかったため）
 
 使い方:
@@ -47,6 +49,9 @@ VALID_AUDIENCE = {"開発", "運用", "営業", "テスト"}
 REQUIRED_KEYS = ["title", "status", "scope", "audience", "updated"]
 
 LINE_LIMIT = 250
+
+# ADR 台帳。全 ADR を載せるのが仕事なので、superseded へのリンク検査から外す
+ADR_LEDGER = "docs/decisions/README.md"
 
 # 検査対象外（生成物・ベンダー同梱・Git 追跡外・別の規約に従うもの）
 EXCLUDE_PREFIXES = (
@@ -234,6 +239,51 @@ def check_links(doc: Doc, existing: set, findings: List[Tuple[str, str, str]]) -
             add(SEV_ERROR, "{}行目: リンク先が実在しません: {}".format(i + 1, t))
 
 
+def check_superseded_links(doc: Doc, docs_by_rel: Dict[str, Doc],
+                           findings: List[Tuple[str, str, str]]) -> None:
+    """`current` な文書の本文が `superseded` な文書へ**リンク**していたら error。
+
+    （開発者の提案。2026-08-28。コード側は `check_code_references` が既に見ていた）
+
+    **見るのはリンクだけである。** 番号や題名を地の文で挙げるのは咎めない——
+    リンクは読者をそこへ**連れて行く**が、散文の言及は経緯の記述として無害だからである。
+    対象は `superseded` のみ。`historical`（見送った記録）は当時の記録として参照するのが正しい。
+
+    咎めないもの:
+      - フロントマター（`supersedes:` / `related:` は関係を記録する場所。本文だけを見る）
+      - 自分が `supersedes:` に挙げている文書へのリンク（**後継は前身を語ってよい**）
+      - ADR 台帳 `docs/decisions/README.md`（全 ADR を載せるのが仕事）
+      - `growth: append` の記録文書（過去の行は当時のまま残すのが正しい）
+      - 行に `lint-docs:ignore` がある行
+
+    **連鎖は見ない**（0002 → 0024 → 0029 のように後継自身が superseded になっても、
+    その中間へのリンクは前身特権で通る）。今は許容する（開発者の判断。2026-08-28）。
+    """
+    if doc.status != "current" or doc.is_append or doc.rel == ADR_LEDGER:
+        return
+    predecessors = {resolve(doc, t) for t in doc.list_field("supersedes")}
+    for i in range(doc.body_start, len(doc.lines)):
+        line = doc.lines[i]
+        if INLINE_IGNORE in line:
+            continue
+        for target in MD_LINK.findall(line):
+            t = target.strip()
+            if not t or t.startswith(("http", "mailto:", "#")):
+                continue
+            resolved = resolve(doc, t)
+            if resolved in predecessors:
+                continue
+            target_doc = docs_by_rel.get(resolved)
+            if target_doc is None or target_doc.status != "superseded":
+                continue
+            successors = target_doc.list_field("related")
+            hint = successors[0] if successors else "後継が related に書かれていません"
+            findings.append((SEV_ERROR, doc.rel,
+                             "{}行目: superseded な文書へリンクしています: {}"
+                             "（後継 {} へ張り替えるか、経緯として要る行に {} を書く）"
+                             .format(i + 1, resolved, hint, INLINE_IGNORE)))
+
+
 def check_body(doc: Doc, findings: List[Tuple[str, str, str]]) -> None:
     add = lambda sev, msg: findings.append((sev, doc.rel, msg))
     if doc.status != "current":
@@ -273,7 +323,7 @@ def check_body(doc: Doc, findings: List[Tuple[str, str, str]]) -> None:
 
 
 def check_adr_ledger(docs: List[Doc], findings: List[Tuple[str, str, str]]) -> None:
-    ledger_rel = "docs/decisions/README.md"
+    ledger_rel = ADR_LEDGER
     ledger = next((d for d in docs if d.rel == ledger_rel), None)
     if ledger is None:
         return
@@ -483,8 +533,8 @@ def print_stats(docs: List[Doc]) -> None:
 
 
 ALL_CHECKS = (
-    "check_front_matter", "check_links", "check_body", "check_adr_ledger",
-    "check_docs_index", "check_code_references",
+    "check_front_matter", "check_links", "check_superseded_links", "check_body",
+    "check_adr_ledger", "check_docs_index", "check_code_references",
     "check_updated_freshness", "check_updated_history",
 )
 
@@ -492,9 +542,10 @@ ALL_CHECKS = (
 def selftest() -> int:
     """関門そのものを検査する。**中身を空にしても緑**という状態を作らないため。
 
-    ここで見るのは 2 つ。
+    ここで見るのは 3 つ。
       1. 判定の純粋部分（`updated_violation` / `body_of`）が期待どおり鳴るか
-      2. 定義した検査が全部 `main` から呼ばれているか（呼び出しを消しても誰も気づかない事故を防ぐ）
+      2. **わざと壊した入力**で `check_superseded_links` が鳴り、免除の形では鳴らないか
+      3. 定義した検査が全部 `main` から呼ばれているか（呼び出しを消しても誰も気づかない事故を防ぐ）
     """
     failed = 0
     fm = ["---", "title: x", "updated: 2026-08-27", "---"]
@@ -519,6 +570,45 @@ def selftest() -> int:
     if body_of("フロントマター無し") != ["フロントマター無し"]:
         failed += 1
         print("NG  body_of: フロントマターが無い文書を落としてしまった")
+
+    # check_superseded_links: 壊した入力で鳴ること、免除の形で鳴らないことの両方を見る。
+    # 「足したら一度わざと壊して鳴ることを確かめる」（qa/03 L-15）を関門の中に固定してある。
+    def fake(rel: str, meta: Dict[str, str], body: List[str]) -> Doc:
+        lines = ["---"] + ["{}: {}".format(k, v) for k, v in meta.items()] + ["---"] + body
+        parsed, start = parse_front_matter(lines)
+        return Doc(rel, lines, parsed, start)
+
+    dead = fake("docs/decisions/0019-old.md",
+                {"status": "superseded", "related": "[0029-new.md]"}, ["中身"])
+    live = fake("docs/09_other.md", {"status": "current"}, ["本文"])
+    by_rel = {dead.rel: dead, live.rel: live}
+    to_dead, to_live = "[旧](decisions/0019-old.md)", "[今](09_other.md)"
+    link_cases = [
+        # (rel, meta, body, 鳴るべき件数)
+        ("docs/10_x.md", {"status": "current"}, [to_dead], 1),                    # わざと壊した入力
+        ("docs/10_x.md", {"status": "current"}, [to_dead, to_dead], 2),           # 行ごとに鳴る
+        ("docs/10_x.md", {"status": "current"}, [to_dead + " " + INLINE_IGNORE], 0),
+        ("docs/10_x.md", {"status": "current"}, [to_live], 0),
+        ("docs/10_x.md", {"status": "current"}, ["0019-old.md は既に覆されている"], 0),  # 散文は咎めない
+        ("docs/10_x.md", {"status": "current"}, ["[外](https://example.com/0019-old.md)"], 0),
+        ("docs/10_x.md", {"status": "current"}, ["[未]( decisions/0019-nowhere.md )"], 0),  # 実在しない
+        ("docs/10_x.md", {"status": "superseded", "related": "[09_other.md]"}, [to_dead], 0),
+        ("docs/10_x.md", {"status": "historical", "related": "[09_other.md]"}, [to_dead], 0),
+        ("docs/10_x.md", {"status": "current", "growth": "append"}, [to_dead], 0),
+        # フロントマターは対象外（related に前身を書くのは正しい）
+        ("docs/10_x.md", {"status": "current", "related": "[decisions/0019-old.md]"}, ["本文"], 0),
+        # 後継は前身を語ってよい
+        ("docs/decisions/0029-new.md", {"status": "current", "supersedes": "[0019-old.md]"},
+         ["[旧](0019-old.md)"], 0),
+        (ADR_LEDGER, {"status": "current"}, ["[旧](0019-old.md)"], 0),
+    ]
+    for rel, meta, body, want in link_cases:
+        got: List[Tuple[str, str, str]] = []
+        check_superseded_links(fake(rel, meta, body), by_rel, got)
+        if len(got) != want:
+            failed += 1
+            print("NG  check_superseded_links: 期待 {} 件 / 実際 {} 件: {} {}"
+                  .format(want, len(got), rel, body))
 
     src = open(os.path.abspath(__file__), "r", encoding="utf-8").read()
     main_src = src[src.index("def main()"):]
@@ -553,12 +643,14 @@ def main() -> int:
         return 0
 
     existing = {d.rel for d in docs}
+    docs_by_rel = {d.rel: d for d in docs}
     findings: List[Tuple[str, str, str]] = []
     for rel in unreadable:
         findings.append((SEV_ERROR, rel, "文書を読めませんでした。**検査できていない**ので黙って進まない"))
     for d in docs:
         check_front_matter(d, findings)
         check_links(d, existing, findings)
+        check_superseded_links(d, docs_by_rel, findings)
         check_body(d, findings)
     check_adr_ledger(docs, findings)
     check_docs_index(docs, findings)
