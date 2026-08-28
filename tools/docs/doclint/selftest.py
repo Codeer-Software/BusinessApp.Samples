@@ -14,14 +14,14 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 from . import checks
 from .checks import (ALL_CHECKS, Finding, check_superseded_links, successor_of,
                      updated_violation)
-from .model import ADR_LEDGER, Doc, INLINE_IGNORE, SEV_ERROR, body_of, load_docs, parse_front_matter
+from .model import (ADR_LEDGER, DOCS_INDEX, Doc, INLINE_IGNORE, LINE_LIMIT, SEV_ERROR,
+                    SEV_WARN, body_of, load_docs, parse_front_matter)
 
-CHECKS_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checks.py")
 CLI_SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lint_docs.py")
 
 # main が検査を呼ぶときの**引数まで含めた**呼び出し。名前だけの包含だと
@@ -77,13 +77,11 @@ def _check_superseded_links() -> List[str]:
     by_rel = {d.rel: d for d in (dead, older, gone, live, new, far)}
     to_dead, to_live = "[旧](decisions/0019-old.md)", "[今](09_other.md)"
     cur = {"status": "current"}
+    to_far = "[遠](08_dead.md)"       # docs/10_x.md から見た別の superseded 文書
+    to_older = "[古](decisions/0006-older.md)"  # related に current の後継が無い文書
     cases = [
         # (rel, meta, body, 鳴るべき件数)
         ("docs/10_x.md", cur, [to_dead], 1),                                  # わざと壊した入力
-        ("docs/10_x.md", cur, [to_dead, to_dead], 2),                         # 別の行なら別に鳴る
-        ("docs/10_x.md", cur, [to_dead + " " + to_dead], 2),                  # 同じ行に 2 本でも鳴る
-        # 免除は行単位である。同じ行の**無関係なリンクまで**免除されるのが現在の仕様
-        ("docs/10_x.md", cur, [to_dead + " " + to_dead + " " + INLINE_IGNORE], 0),
         ("docs/10_x.md", cur, [to_live], 0),
         ("docs/10_x.md", cur, ["0019-old.md は既に覆されている"], 0),          # 散文は咎めない
         ("docs/10_x.md", cur, ["[外](https://example.com/0019-old.md)"], 0),
@@ -93,17 +91,26 @@ def _check_superseded_links() -> List[str]:
         ("docs/10_x.md", cur, ["[空]( decisions/0019-old.md )"], 1),          # 前後の空白を落とす
         ("docs/decisions/0030-y.md", cur, ["[上](../08_dead.md)"], 1),        # `../` 起点
         ("docs/10_x.md", cur, ["```", to_dead, "```"], 0),                    # コードフェンスの中
+        ("docs/10_x.md", cur, ["```", to_dead, "```", to_dead], 1),           # フェンスを閉じたら効く
         ("docs/10_x.md", {"status": "superseded", "related": "[09_other.md]"}, [to_dead], 0),
         ("docs/10_x.md", {"status": "historical", "related": "[09_other.md]"}, [to_dead], 0),
         # `growth: append` は免除しない（2026-08-28 に外した。理由は関数の docstring）
         ("docs/10_x.md", {"status": "current", "growth": "append"}, [to_dead], 1),
         # フロントマターは対象外。**リンクの形をした値**を置いて、本文だけを見ていることを表明する
         ("docs/10_x.md", {"status": "current", "note": to_dead}, ["本文"], 0),
-        # 後継は前身を語ってよい
+        # --- 免除には必ず対照を置く。「免除された」と「そもそも検出できていない」は別物である ---
+        # 後継は前身を語ってよい（対照: supersedes を外すと鳴る）
         ("docs/decisions/0029-new.md", {"status": "current", "supersedes": "[0019-old.md]"},
          ["[旧](0019-old.md)"], 0),
-        # ADR 台帳は役割で免除する。**実データと同じく `growth: append` を付けた形**で表明する
+        ("docs/decisions/0029-new.md", cur, ["[旧](0019-old.md)"], 1),
+        # ADR 台帳は役割で免除する（対照: 台帳でない同じ場所の文書は鳴る）。
+        # meta は**実データと同じく `growth: append` を付けた形**にする
         (ADR_LEDGER, {"status": "current", "growth": "append"}, ["[旧](0019-old.md)"], 0),
+        ("docs/decisions/README2.md", {"status": "current", "growth": "append"},
+         ["[旧](0019-old.md)"], 1),
+        # `lint-docs:ignore` は**行単位**。同じ行の無関係なリンクまで免除されるのが現在の仕様
+        ("docs/10_x.md", cur, [to_dead + " " + to_far + " " + INLINE_IGNORE], 0),
+        ("docs/10_x.md", cur, [to_dead + " " + to_far], 2),                   # 対照（印を外す）
     ]
     for rel, meta, body, want in cases:
         got: List[Finding] = []
@@ -112,21 +119,30 @@ def _check_superseded_links() -> List[str]:
             ng.append("check_superseded_links: 期待 {} 件 / 実際 {} 件: {} {}"
                       .format(want, len(got), rel, body))
 
+    # 行番号は**本文の先頭以外**に置いて表明する。先頭に置くと `body_start + 1` に
+    # 固定する壊れ方と区別が付かない（2026-08-28 の自己レビューで実際に空振りしていた）
+    multi = _fake("docs/10_x.md", cur, ["前書き", "", to_dead, "間", to_older])
+    got: List[Finding] = []
+    seen = check_superseded_links(multi, by_rel, got)
+    want_lines = [multi.body_start + 3, multi.body_start + 5]
+    got_lines = [int(re.match(r"(\d+)行目", f[2]).group(1)) for f in got
+                 if re.match(r"(\d+)行目", f[2])]
+    if got_lines != want_lines:
+        ng.append("check_superseded_links: 行番号が違う。期待 {} / 実際 {}"
+                  .format(want_lines, got_lines))
+
     # 件数だけでなく**中身**を表明する。error を warn に格下げしても件数は変わらないため
-    probe = _fake("docs/10_x.md", cur, [to_dead])
-    got = []
-    seen = check_superseded_links(probe, by_rel, got)
-    want_line = "{}行目".format(probe.body_start + 1)
     for label, ok in (
-        ("severity が error", got and got[0][0] == SEV_ERROR),
+        ("severity が error", got and all(f[0] == SEV_ERROR for f in got)),
         ("指摘先が違反した文書", got and got[0][1] == "docs/10_x.md"),
-        ("行番号が本文の実行番号", got and want_line in got[0][2]),
         ("リンク先をリポジトリ相対で出す", got and "docs/decisions/0019-old.md" in got[0][2]),
         # related[0] は superseded（0006）。**current な 0029 を案内する**こと
         ("後継は current を選ぶ", got and "docs/decisions/0029-new.md" in got[0][2]),
         ("superseded な related を案内しない", got and "0006-older.md" not in got[0][2]),
         ("直し方を書く", got and INLINE_IGNORE in got[0][2]),
-        ("見た件数を返す", seen == 1),
+        ("current な後継が無いときはそう書く",
+         len(got) > 1 and "related に current な後継がありません" in got[1][2]),
+        ("見た件数を返す", seen == 2),
     ):
         if not ok:
             ng.append("check_superseded_links: {}: {}".format(label, got))
@@ -145,41 +161,169 @@ def _check_real_data() -> List[str]:
     by_rel = {d.rel: d for d in docs}
     sink: List[Finding] = []
     seen = sum(check_superseded_links(d, by_rel, sink) for d in docs)
-    if seen < 1:
-        return ["check_superseded_links: 実データで superseded 宛リンクを 1 本も見ていない"
-                "（免除が広がりすぎたか、パスの解決が噛み合っていない。**0 は緑ではない**）"]
+    # 実測は 10 件（2026-08-28）。免除が広がって半分以下に落ちたら気づけるようにする。
+    # 下げるときは理由をここに書く
+    if seen < 5:
+        return ["check_superseded_links: 実データで見た superseded 宛リンクが {} 件しかない"
+                "（免除が広がりすぎたか、パスの解決が噛み合っていない。**少ないのは緑ではない**）"
+                .format(seen)]
     return []
 
 
 def _check_wiring() -> List[str]:
-    """定義・登録・呼び出しの 3 つが揃っているかをソースで突き合わせる。"""
+    """定義・登録・呼び出しの 3 つが揃っているかを見る。
+
+    定義の列挙は**ソースの正規表現ではなくモジュールの中身**から取る。正規表現だと
+    ファイルを動かした・別のファイルを読ませた瞬間に `defined` が空集合になり、
+    `defined - ALL_CHECKS` も空なので**何も言わずに緑**になる（2026-08-28 の自己レビュー）。
+    `__module__` で絞るのは、`from .model import ...` で入ってきた名前を数えないため。
+    """
     ng = []
-    checks_src = open(CHECKS_SRC, "r", encoding="utf-8").read()
-    cli_src = open(CLI_SRC, "r", encoding="utf-8").read()
-    # 行頭の定義から後ろだけを見る。`cli_src.index("def main()")` だと
-    # この表明自身の文字列リテラルに当たり、表明が自分で自分を満たしてしまう
+    defined = {n for n in dir(checks)
+               if n.startswith("check_")
+               and getattr(getattr(checks, n), "__module__", "") == checks.__name__}
+    if not defined:
+        return ["checks.py から検査を 1 本も見つけられない（**0 本は緑ではない**）"]
+
+    for name in sorted(defined - set(ALL_CHECKS)):
+        ng.append("{} が ALL_CHECKS に載っていない（足した検査は必ず載せる）".format(name))
+    for name in sorted(set(ALL_CHECKS) - defined):
+        ng.append("{} が ALL_CHECKS にあるのに checks.py に無い".format(name))
+
+    try:
+        cli_src = open(CLI_SRC, "r", encoding="utf-8").read()
+    except OSError as e:
+        return ng + ["lint_docs.py を読めない（{}）。配線を検査できていない".format(e)]
+    # `main` の中だけを見る。行頭の定義から後ろを取る
     main_at = re.search(r"^def main\(\)", cli_src, re.M)
     if main_at is None:
-        return ["lint_docs.py に def main() が見つからない"]
+        return ng + ["lint_docs.py に def main() が見つからない"]
     main_src = cli_src[main_at.start():]
 
+    # 引数まで含めて照合する。名前だけの包含だと `check_superseded_links(d, {}, findings)` が通る。
+    # 照合する文字列は**別ファイル**（lint_docs.py）を探すので、この表明が自分で自分を満たすことはない
     for call in REQUIRED_CALLS:
         if call not in main_src:
             ng.append("main の配線が違う。次の形で呼ぶこと: {}".format(call))
-    defined = set(re.findall(r"^def (check_[A-Za-z0-9_]+)\(", checks_src, re.M))
-    for name in sorted(defined - set(ALL_CHECKS)):
-        ng.append("{} が ALL_CHECKS に載っていない（足した検査は必ず載せる）".format(name))
     for name in ALL_CHECKS:
-        if not hasattr(checks, name):
-            ng.append("{} が checks.py に定義されていない".format(name))
         if name + "(" not in main_src:
             ng.append("{} が main から呼ばれていない".format(name))
     return ng
 
 
+def _check_other_checks() -> List[str]:
+    """git を使わない残りの検査を、**壊した入力と対照の組**で表明する。
+
+    ここが空だと「所見を組み立てる行」が一度も実行されないまま緑になり、
+    最初に本物の違反が出た日に**報告ではなくクラッシュ**する（2026-08-28 の自己レビュー）。
+    """
+    ng = []
+
+    def run(fn, *args):
+        got: List[Finding] = []
+        fn(*(args + (got,)))
+        return got
+
+    ok_meta = {"title": "x", "status": "current", "scope": "全体",
+               "audience": "[開発]", "updated": "2026-08-28"}
+
+    def without(key):
+        m = dict(ok_meta)
+        del m[key]
+        return m
+
+    fm_cases = [
+        ("整った文書は鳴らない", _fake("a.md", ok_meta, ["本文"]), 0, None),
+        ("フロントマターが無い", Doc("a.md", ["本文"], {}, 0), 1, "フロントマター"),
+        ("必須欠落", _fake("a.md", without("scope"), ["本文"]), 1, "scope"),
+        ("status が 3 値以外", _fake("a.md", dict(ok_meta, status="draft"), ["本文"]), 1, "3 値"),
+        ("updated の書式違い", _fake("a.md", dict(ok_meta, updated="2026/08/28"), ["本文"]), 1, "YYYY"),
+        # `\d` は全角も通す。通すと書式 error をすり抜け、履歴突合まで黙って無効になる
+        ("updated が全角", _fake("a.md", dict(ok_meta, updated="２０２６-０８-２８"), ["本文"]), 1, "YYYY"),
+        ("audience が未知", _fake("a.md", dict(ok_meta, audience="[法務]"), ["本文"]), 1, "audience"),
+        ("superseded なのに related が空",
+         _fake("a.md", dict(ok_meta, status="superseded"), ["本文"]), 1, "related"),
+    ]
+    for label, doc, want, needle in fm_cases:
+        got = run(checks.check_front_matter, doc)
+        if len(got) != want or (needle and not any(needle in f[2] for f in got)):
+            ng.append("check_front_matter: {}: {}".format(label, got))
+        if got and got[0][0] != SEV_ERROR:
+            ng.append("check_front_matter: {}: error であるべき: {}".format(label, got))
+
+    existing = {"docs/09_other.md"}
+    link_cases = [
+        ("実在するリンクは鳴らない", _fake("docs/a.md", ok_meta, ["[今](09_other.md)"]), 0),
+        ("本文のリンク切れ", _fake("docs/a.md", ok_meta, ["[無](09_none.md)"]), 1),
+        ("related のリンク切れ",
+         _fake("docs/a.md", dict(ok_meta, related="[09_none.md]"), ["本文"]), 1),
+        ("http は見ない", _fake("docs/a.md", ok_meta, ["[外](https://example.com/x.md)"]), 0),
+    ]
+    for label, doc, want in link_cases:
+        got = run(checks.check_links, doc, existing)
+        if len(got) != want:
+            ng.append("check_links: {}: 期待 {} 件 / 実際 {}".format(label, want, got))
+
+    long_body = ["x"] * (LINE_LIMIT + 1)
+    body_cases = [
+        ("短い文書は鳴らない", _fake("docs/a.md", ok_meta, ["本文"]), 0),
+        ("250 行超で warn", _fake("docs/a.md", ok_meta, long_body), 1),
+        ("growth: append は免除", _fake("docs/a.md", dict(ok_meta, growth="append"), long_body), 0),
+        ("引くものは免除", _fake("docs/decisions/a.md", ok_meta, long_body), 0),
+        ("current でなければ見ない", _fake("docs/a.md", dict(ok_meta, status="historical"), long_body), 0),
+        ("ヘッダの更新履歴", _fake("docs/a.md", ok_meta, ["> 更新: 2026-08-28 …"]), 1),
+        ("未処理マーカー", _fake("docs/a.md", ok_meta, ["あとで TODO にする"]), 1),
+        ("保留リストの節は免除", _fake("docs/a.md", ok_meta, ["## 保留リスト", "TODO がある"]), 0),
+        ("印のある行は免除", _fake("docs/a.md", ok_meta, ["TODO " + INLINE_IGNORE]), 0),
+        ("コードフェンスの中は免除", _fake("docs/a.md", ok_meta, ["```", "TODO", "```"]), 0),
+    ]
+    for label, doc, want in body_cases:
+        got = run(checks.check_body, doc)
+        if len(got) != want:
+            ng.append("check_body: {}: 期待 {} 件 / 実際 {}".format(label, want, got))
+        if got and got[0][0] != SEV_WARN:
+            ng.append("check_body: {}: warn であるべき: {}".format(label, got))
+
+    adr = _fake("docs/decisions/0001-a.md", ok_meta, ["本文"])
+    ledger_cases = [
+        ("台帳と実ファイルが一致", ["[A](0001-a.md)"], 0, None),
+        ("台帳に無い ADR", ["（空）"], 1, "台帳に載っていない"),
+        ("実体の無い行", ["[A](0001-a.md)", "[B](0002-b.md)"], 1, "対応する ADR がありません"),
+    ]
+    for label, lines, want, needle in ledger_cases:
+        ledger = _fake(ADR_LEDGER, ok_meta, lines)
+        got = run(checks.check_adr_ledger, [ledger, adr])
+        if len(got) != want or (needle and not any(needle in f[2] for f in got)):
+            ng.append("check_adr_ledger: {}: {}".format(label, got))
+
+    index_cases = [
+        ("索引に載っている", ["[A](01_a.md)"], 0),
+        ("索引に無い", ["（空）"], 1),
+    ]
+    for label, lines, want in index_cases:
+        index = _fake(DOCS_INDEX, ok_meta, lines)
+        got = run(checks.check_docs_index, [index, _fake("docs/01_a.md", ok_meta, ["本文"])])
+        if len(got) != want:
+            ng.append("check_docs_index: {}: 期待 {} 件 / 実際 {}".format(label, want, got))
+    # サブディレクトリは 1 本ずつではなく**ディレクトリ単位**で見る（規約 §7-1）
+    sub_a = _fake("docs/sub/a.md", ok_meta, ["本文"])
+    sub_b = _fake("docs/sub/b.md", ok_meta, ["本文"])
+    sub_cases = [
+        ("ディレクトリの中の 1 本が載っていれば足りる", ["[S](sub/a.md)"], [sub_a, sub_b], 0),
+        ("ディレクトリそのものでも足りる", ["[S](sub/)"], [sub_a, sub_b], 0),
+        ("どれも載っていなければ鳴る", ["（空）"], [sub_a], 1),
+        ("鳴るのはディレクトリにつき 1 件", ["（空）"], [sub_a, sub_b], 1),
+    ]
+    for label, lines, subs, want in sub_cases:
+        got = run(checks.check_docs_index, [_fake(DOCS_INDEX, ok_meta, lines)] + subs)
+        if len(got) != want:
+            ng.append("check_docs_index: {}: 期待 {} 件 / 実際 {}".format(label, want, got))
+    return ng
+
+
 def selftest() -> int:
     ng: List[str] = []
-    for part in (_check_updated_violation, _check_superseded_links,
+    for part in (_check_updated_violation, _check_superseded_links, _check_other_checks,
                  _check_real_data, _check_wiring):
         ng.extend(part())
     for msg in ng:

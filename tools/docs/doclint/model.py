@@ -57,11 +57,16 @@ CODE_EXCLUDE_PREFIXES = (
     "LocalData/",
 )
 
+# 単体では文書を特定できない名前。コード参照の検査で親ディレクトリ込みにする
+GENERIC_DOC_NAMES = ("README.md", "index.md")
+
 INLINE_IGNORE = "lint-docs:ignore"
 
 APPEND_ANTIPATTERN = re.compile(r"^\s*>?\s*(更新|さらに更新|追補)\s*[:：]")
 STALE_MARKER = re.compile(r"\b(TODO|FIXME)\b|未了|後述")
-DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# `\d` は Unicode 十進数字なので全角も通る。通すと書式 error をすり抜けたうえ、
+# `updated < limit` の文字列比較が常に False になり履歴突合が黙って無効になる（2026-08-28）
+DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 MD_LINK = re.compile(r"\[[^\]]*\]\(([^)#]+?)(?:#[^)]*)?\)")
 
 

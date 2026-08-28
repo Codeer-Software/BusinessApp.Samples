@@ -34,19 +34,16 @@ import os
 import sys
 from typing import Dict, List
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
-    except Exception:
-        pass
+# `python -P` / PYTHONSAFEPATH=1 だとスクリプトの位置が sys.path に入らず `doclint` を
+# 見つけられない。**先頭ではなく末尾**に足す（先頭だと将来 tools/docs に標準モジュールと
+# 同名のファイルを置いた瞬間にプロセス全体が壊れる）
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from doclint.checks import (Finding, check_adr_ledger, check_body, check_code_references,  # noqa: E402
                             check_docs_index, check_front_matter, check_links,
                             check_superseded_links, check_updated_freshness,
                             check_updated_history)
-from doclint.model import REFERENCE_PREFIXES, SEV_ERROR, Doc, load_docs  # noqa: E402
+from doclint.model import REFERENCE_PREFIXES, SEV_ERROR, SEV_WARN, Doc, load_docs  # noqa: E402
 from doclint.selftest import selftest  # noqa: E402
 
 
@@ -107,7 +104,9 @@ def main() -> int:
     check_updated_history(docs, findings)
 
     errors = [f for f in findings if f[0] == SEV_ERROR]
-    warns = [f for f in findings if f[0] != SEV_ERROR]
+    warns = [f for f in findings if f[0] == SEV_WARN]
+    # 2 値のどちらでもない severity を黙って warn に吸い込ませない
+    others = [f for f in findings if f[0] not in (SEV_ERROR, SEV_WARN)]
     for sev, rel, msg in sorted(findings, key=lambda f: (f[0] != SEV_ERROR, f[1], f[2])):
         print("{}\t{}\t{}".format(sev, rel, msg))
 
@@ -116,7 +115,7 @@ def main() -> int:
     # 「配線が死んだ・免除が広がりすぎた」を疑う（黙って素通りする関門を作らないため）
     print("検査文書数: {} / error: {} / warn: {} / superseded 宛リンク: {} 件を検査"
           .format(len(docs), len(errors), len(warns), seen_superseded_links))
-    return 1 if errors else 0
+    return 1 if errors or others else 0
 
 
 if __name__ == "__main__":

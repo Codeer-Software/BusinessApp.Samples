@@ -12,3 +12,13 @@
 分けたのは 1 ファイルが 770 行を超えたためで、普通のプログラムと同じ理由である
 （開発者の指摘。2026-08-28）。
 """
+
+import sys
+
+# 日本語を印字するのは `doclint` 側なので、手当てもここに置く。入口に置くと
+# `lint_docs.py` を経由しない使い方で cp932 コンソールが化ける（2026-08-28 に実測）
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    except Exception:
+        pass

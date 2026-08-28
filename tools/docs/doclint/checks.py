@@ -14,7 +14,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 from .model import (ADR_LEDGER, APPEND_ANTIPATTERN, CODE_EXCLUDE_PREFIXES, CODE_EXTENSIONS,
-                    DATE_RE, DOCS_INDEX, Doc, INLINE_IGNORE, LINE_LIMIT, MD_LINK,
+                    DATE_RE, DOCS_INDEX, Doc, GENERIC_DOC_NAMES, INLINE_IGNORE, LINE_LIMIT, MD_LINK,
                     REFERENCE_PREFIXES, REPO_ROOT, REQUIRED_KEYS, SEV_ERROR, SEV_WARN,
                     STALE_MARKER, VALID_AUDIENCE, VALID_STATUS, body_of, git_text,
                     resolve, run_git)
@@ -146,12 +146,13 @@ def check_superseded_links(doc: Doc, docs_by_rel: Dict[str, Doc],
             if resolved in predecessors or INLINE_IGNORE in line:
                 continue
             hint = successor_of(target_doc, docs_by_rel)
+            how = ("後継 {} へ張り替えるか、経緯として要る行に {} を書く".format(hint, INLINE_IGNORE)
+                   if hint else
+                   "related に current な後継がありません。経緯として要る行に {} を書く"
+                   .format(INLINE_IGNORE))
             findings.append((SEV_ERROR, doc.rel,
-                             "{}行目: superseded な文書へリンクしています: {}（{} へ張り替えるか、"
-                             "経緯として要る行に {} を書く）"
-                             .format(i + 1, resolved,
-                                     "後継 " + hint if hint else "current な後継が related にありません",
-                                     INLINE_IGNORE)))
+                             "{}行目: superseded な文書へリンクしています: {}（{}）"
+                             .format(i + 1, resolved, how)))
     return seen
 
 
@@ -224,7 +225,10 @@ def check_code_references(docs: List[Doc], findings: List[Finding]) -> None:
 
     patterns: List[Tuple[str, str, "re.Pattern[str]"]] = []
     for d in stale_docs:
-        pats = [re.escape(os.path.basename(d.rel))]
+        name = os.path.basename(d.rel)
+        # `README.md` のような汎用名を素で使うと、その語を含むコード行が丸ごと error になる。
+        # 親ディレクトリ込みで照合する（2026-08-28。実測で 4 ファイル 6 行が巻き添えだった）
+        pats = [re.escape("/".join(d.rel.split("/")[-2:]) if name in GENERIC_DOC_NAMES else name)]
         m = re.match(r"docs/decisions/(\d{4})-", d.rel)
         if m:
             pats.append(r"ADR-" + m.group(1) + r"\b")
@@ -353,6 +357,12 @@ def check_updated_history(docs: List[Doc], findings: List[Finding]) -> None:
 
 
 def check_docs_index(docs: List[Doc], findings: List[Finding]) -> None:
+    """`docs/` 直下は 1 本ずつ、**サブディレクトリはディレクトリ単位**で索引と突き合わせる。
+
+    サブディレクトリを丸ごと飛ばしていたので、文書をディレクトリに分けるたびに
+    この検査が薄くなり、しかも警告が 1 件も出ないので誰も気づかなかった
+    （2026-08-28 の自己レビュー。規約を 3 分冊にした直後に発覚）。
+    """
     index = next((d for d in docs if d.rel == DOCS_INDEX), None)
     if index is None:
         return
@@ -360,10 +370,21 @@ def check_docs_index(docs: List[Doc], findings: List[Finding]) -> None:
     for line in index.lines:
         for target in MD_LINK.findall(line):
             listed.add(resolve(index, target))
+    seen_dirs = set()
     for d in docs:
-        if not d.rel.startswith("docs/"):
+        if not d.rel.startswith("docs/") or d.rel == DOCS_INDEX:
             continue
-        if d.rel == DOCS_INDEX or d.rel.count("/") > 1:
-            continue  # サブディレクトリはディレクトリ単位で案内する
-        if d.rel not in listed:
-            findings.append((SEV_WARN, DOCS_INDEX, "索引に載っていない文書があります: {}".format(d.rel)))
+        parts = d.rel.split("/")
+        if len(parts) == 2:
+            if d.rel not in listed:
+                findings.append((SEV_WARN, DOCS_INDEX,
+                                 "索引に載っていない文書があります: {}".format(d.rel)))
+            continue
+        sub = "/".join(parts[:2])
+        if sub in seen_dirs:
+            continue
+        seen_dirs.add(sub)
+        # ディレクトリそのもの・その中のどれか 1 本が載っていれば案内できている
+        if sub not in listed and not any(l.startswith(sub + "/") for l in listed):
+            findings.append((SEV_WARN, DOCS_INDEX,
+                             "索引に載っていないディレクトリがあります: {}/".format(sub)))
