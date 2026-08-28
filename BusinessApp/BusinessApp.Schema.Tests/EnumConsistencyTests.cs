@@ -47,7 +47,7 @@ public class EnumConsistencyTests
     /// </summary>
     /// <remarks>
     /// 利用者に見せる文言に列挙子の英語名を混ぜないため、C# 側にも日本語名を持たせている
-    /// （CLAUDE.md §2-7）。**写しが 2 つになるので、機械で突き合わせる。**
+    /// （docs/09_画面の原則.md §2）。**写しが 2 つになるので、機械で突き合わせる。**
     /// 片方だけ直すと、画面と差し戻しの文言が食い違う。
     /// </remarks>
     public static TheoryData<string, string, string> DisplayNames() => new()

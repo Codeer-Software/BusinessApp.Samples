@@ -176,7 +176,7 @@ public class PartnerSubmitGateTests
             Adding(Partner(corporateNumber: ValidNumber, entityType: "sole_proprietor")),
             new SaveSpy());
 
-        // 列挙子の英語名を文言に混ぜない（CLAUDE.md §2-7）。
+        // 列挙子の英語名を文言に混ぜない（docs/09_画面の原則.md §2）。
         Assert.Contains("個人事業者", rejected.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("sole_proprietor", rejected.Message, StringComparison.Ordinal);
     }
