@@ -60,7 +60,7 @@ public sealed record JournalEntry
     /// 計上済みでも null がありうる（この列より前に計上された伝票）。
     /// </summary>
     /// <remarks>
-    /// 型付き識別子（ADR-0014）にしない。ユーザーは会計コアの実体ではなく（ADR-0019）、
+    /// 型付き識別子（ADR-0014）にしない。ユーザーは会計コアの実体ではなく（ADR-0029）、
     /// 会計コアはこの値を解釈せず、外部キーも張らずに（ddl/README）書き写すだけである。
     /// <c>creator</c> / <c>updater</c>（CLB の予約列）と同じ扱い。
     /// </remarks>

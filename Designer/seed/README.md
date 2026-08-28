@@ -5,7 +5,7 @@ scope: 会計コア
 audience: [開発]
 updated: 2026-08-28
 supersedes: []
-related: [../ddl/README.md, ../../docs/02_ペルソナ.md, ../../docs/decisions/0019-マスタは会計が生んだ概念かで分ける.md]
+related: [../ddl/README.md, ../../docs/02_ペルソナ.md, ../../docs/08_マスタ台帳.md]
 ---
 # seed — 初期データ
 
@@ -24,12 +24,14 @@ DDL を先に流してから、番号順に流す。
 pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and_periods.sql
 ```
 
-| # | ファイル | 内容 | 層（[ADR-0019](../../docs/decisions/0019-マスタは会計が生んだ概念かで分ける.md) §1） |
-|---|---|---|---|
-| 001 | [`001_organization_and_periods.sql`](001_organization_and_periods.sql) | 事業所情報・第 18 期・月次期間 12 本・採番 | ② 会計設定 |
-| 002 | [`002_departments.sql`](002_departments.sql) | 部門 6 件（全社共通 ＋ 5 部門） | ③ 会計マスタ |
-| 003 | [`003_tax_categories.sql`](003_tax_categories.sql) | 税区分 10 件 | ③ 会計マスタ |
-| 004 | [`004_accounts.sql`](004_accounts.sql) | 勘定科目 105 件・既定税区分 | ③ 会計マスタ |
+| # | ファイル | 内容 |
+|---|---|---|
+| 001 | [`001_organization_and_periods.sql`](001_organization_and_periods.sql) | 事業所情報・第 18 期・月次期間 12 本・採番 |
+| 002 | [`002_departments.sql`](002_departments.sql) | 部門 6 件（全社共通 ＋ 5 部門） |
+| 003 | [`003_tax_categories.sql`](003_tax_categories.sql) | 税区分 10 件 |
+| 004 | [`004_accounts.sql`](004_accounts.sql) | 勘定科目 105 件・既定税区分 |
+
+各マスタの扱い（所有・誰が編集するか・版と削除）は [docs/08_マスタ台帳](../../docs/08_マスタ台帳.md) が持つ。
 
 税区分（003）を勘定科目（004）より先に流す。勘定科目が既定税区分を参照するためである。
 

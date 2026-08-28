@@ -6,7 +6,7 @@ using BusinessApp.Partners.Server;
 using BusinessApp.TestSupport;
 
 /// <summary>
-/// 取引先部品の純粋層が<b>何にも依存しない</b>こと（ADR-0024 §4・ADR-0025 §2）。
+/// 取引先部品の純粋層が<b>何にも依存しない</b>こと（ADR-0029 §2・ADR-0025 §2）。
 /// </summary>
 /// <remarks>
 /// <para><b>これが部品の分割の芯である。</b> 取引先は会計コアより上位の実体で、

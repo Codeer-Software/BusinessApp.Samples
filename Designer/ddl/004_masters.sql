@@ -1,7 +1,7 @@
--- 004 勘定科目・補助科目・部門・取引先（ADR-0019 ③ 会計マスタ）
+-- 004 勘定科目・補助科目・部門・取引先（docs/08_マスタ台帳）
 --
 -- 削除ではなく無効化する。is_active は「入力時の候補に出すか」の意味であり、
--- 過去データの表示・検索は妨げない（ADR-0019）。論理削除の列は置かない。
+-- 過去データの表示・検索は妨げない（docs/08_マスタ台帳）。論理削除の列は置かない。
 
 CREATE TABLE accounts (
     id                          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,7 +34,7 @@ CREATE TABLE accounts (
     created_at                  DATETIME,
     updated_at                  DATETIME,
     -- 認証部品（app_users）の識別子。**外部キーを張らない。**
-    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0019）、DB 制約で結ぶと
+    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0029）、DB 制約で結ぶと
     -- 会計コアが認証部品なしでは立ち上がらなくなる。CLB の予約名として値は自動で入る。
     creator                     INTEGER,
     updater                     INTEGER,
@@ -54,7 +54,7 @@ CREATE TABLE sub_accounts (
     created_at                  DATETIME,
     updated_at                  DATETIME,
     -- 認証部品（app_users）の識別子。**外部キーを張らない。**
-    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0019）、DB 制約で結ぶと
+    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0029）、DB 制約で結ぶと
     -- 会計コアが認証部品なしでは立ち上がらなくなる。CLB の予約名として値は自動で入る。
     creator                     INTEGER,
     updater                     INTEGER,
@@ -80,7 +80,7 @@ CREATE TABLE departments (
     created_at                  DATETIME,
     updated_at                  DATETIME,
     -- 認証部品（app_users）の識別子。**外部キーを張らない。**
-    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0019）、DB 制約で結ぶと
+    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0029）、DB 制約で結ぶと
     -- 会計コアが認証部品なしでは立ち上がらなくなる。CLB の予約名として値は自動で入る。
     creator                     INTEGER,
     updater                     INTEGER,
@@ -103,7 +103,7 @@ CREATE TABLE partners (
     created_at                  DATETIME,
     updated_at                  DATETIME,
     -- 認証部品（app_users）の識別子。**外部キーを張らない。**
-    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0019）、DB 制約で結ぶと
+    -- ユーザーは会計コアの責務ではなく別部品のものなので（ADR-0029）、DB 制約で結ぶと
     -- 会計コアが認証部品なしでは立ち上がらなくなる。CLB の予約名として値は自動で入る。
     creator                     INTEGER,
     updater                     INTEGER,
