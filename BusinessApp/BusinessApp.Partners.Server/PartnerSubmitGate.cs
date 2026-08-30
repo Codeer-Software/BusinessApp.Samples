@@ -101,16 +101,10 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         // 同じ番号が 2 通りの文字列で保存されて名寄せの突合が壊れる。
         field.Value = value;
 
-        if (!CorporateNumber.IsWellFormed(value))
+        // 判定と文言は CorporateNumber が 1 か所で持つ（自社情報の関門と同じものを通す）。
+        if (CorporateNumber.DescribeProblem(value) is string problem)
         {
-            throw new PartnerRejectedException($"{CorporateNumber.FormatDescription}入力し直してください。");
-        }
-
-        if (!CorporateNumber.HasValidCheckDigit(value))
-        {
-            throw new PartnerRejectedException(
-                "法人番号が正しくありません。打ち間違いの可能性があります。"
-                + "国税庁の法人番号公表サイトで確かめて入力し直してください。");
+            throw new PartnerRejectedException(problem);
         }
     }
 

@@ -77,7 +77,7 @@
       "DbColumn": "corporate_number",
       "IsMultiline": false,
       "IsAutoFitRows": false,
-      "Placeholder": "",
+      "Placeholder": "数字 13 桁",
       "TextEditEmptyType": "StringEmpty",
       "ShouldTrimAfterEdit": false,
       "AutoTab": false,

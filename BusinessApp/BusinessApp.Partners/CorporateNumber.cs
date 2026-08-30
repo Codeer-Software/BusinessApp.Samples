@@ -32,6 +32,37 @@ public static class CorporateNumber
     public static readonly string FormatDescription =
         $"法人番号は数字 {Length} 桁です。";
 
+    /// <summary>
+    /// 検査用数字が合っていないときに利用者へ見せる文言。
+    /// </summary>
+    /// <remarks>
+    /// <b>「打ち間違い」と言い切る。</b> 書式が合っていて検査用数字だけが合わない番号は、
+    /// 転記や打鍵の誤り以外では生まれない（実在しない番号を意図して入れる場面が無い）。
+    /// </remarks>
+    public const string CheckDigitDescription =
+        "法人番号が正しくありません。打ち間違いの可能性があります。"
+        + "国税庁の法人番号公表サイトで確かめて入力し直してください。";
+
+    /// <summary>
+    /// 通らない理由を利用者の語で返す。<b>通れば <c>null</c>。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>2 か所が同じ番号を検査する</b>——取引先の法人番号（docs/07 §1-2）と、
+    /// 自社の法人番号（docs/08 の自社情報。qa/02 R12-11）。
+    /// 判定と文言をここ 1 か所に置き、<b>投げる例外の型だけを呼ぶ側が決める</b>。</para>
+    /// <para><b>空欄は呼ぶ側が先に落とす。</b> どちらの画面でも任意の項目だが、
+    /// 「空欄をどう保存するか」（NULL に倒すか）は画面ごとの話なので、ここでは決めない。</para>
+    /// </remarks>
+    public static string? DescribeProblem(string? value)
+    {
+        if (!IsWellFormed(value))
+        {
+            return $"{FormatDescription}入力し直してください。";
+        }
+
+        return HasValidCheckDigit(value) ? null : CheckDigitDescription;
+    }
+
     /// <summary>前後の空白を落とした姿。<b>保存するのはこの形</b>。</summary>
     public static string Normalize(string? value) => value?.Trim() ?? string.Empty;
 

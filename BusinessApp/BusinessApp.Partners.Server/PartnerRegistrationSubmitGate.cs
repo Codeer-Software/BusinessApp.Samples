@@ -32,12 +32,77 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
         ArgumentNullException.ThrowIfNull(transactionData);
         ArgumentNullException.ThrowIfNull(save);
 
-        foreach (var data in RegistrationsIn(transactionData))
+        var registrations = RegistrationsIn(transactionData).ToList();
+
+        foreach (var data in registrations)
         {
             await RejectAsync(data);
         }
 
+        await RejectDuplicatesWithinAsync(registrations);
+
         return await save();
+    }
+
+    /// <summary>
+    /// <b>同じ保存の中に</b>、同じ取引先の同じ日から始まる登録が 2 件ないかを見る。
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="RejectDuplicateAsync"/> は<b>保存済みの行としか突き合わせられない</b>。
+    /// 同じ保存で入る 2 件はどちらもまだ DB に無いので、片方ずつ見るかぎり両方が通る。</para>
+    /// <para><b>DB も止められない。</b> <c>UNIQUE (partner_id, registration_no, valid_from)</c> は
+    /// 登録番号まで含むので、<b>番号が違えば同じ日の 2 件が入る</b>。
+    /// 入ってしまうと、計上のときに写しを焼く段で「どれを写すか決められない」で止まり、
+    /// <b>入力の誤りが、関係の無い計上の場面で出る</b>。</para>
+    /// <para><b>仮の識別子でも突き合わせられる。</b> 取引先の識別子を数値に直さず、
+    /// 送られてきた文字列のまま鍵に使う——新規作成の取引先は仮の識別子だが、
+    /// 同じ保存の中では同じ文字列になるので、それで同一性が判る。
+    /// これが要るのは<b>登録の入力を取引先の詳細に置いたから</b>である（docs/07 §3-4）。
+    /// 独立した一覧しか無かったときは、取引先は必ず先に保存されていた。</para>
+    /// </remarks>
+    private async Task RejectDuplicatesWithinAsync(IReadOnlyList<ModuleData> registrations)
+    {
+        var seen = new HashSet<(string Partner, DateOnly ValidFrom)>();
+
+        foreach (var data in registrations)
+        {
+            if (Date(data, "ValidFrom") is not DateOnly validFrom)
+            {
+                continue;
+            }
+
+            if (await PartnerKeyAsync(data) is not string partner)
+            {
+                continue;
+            }
+
+            if (!seen.Add((partner, validFrom)))
+            {
+                throw new PartnerRegistrationRejectedException(
+                    $"同じ取引先に、{validFrom:yyyy/MM/dd} から始まる登録を 2 件入力しています。"
+                    + "どちらかの登録年月日を直してください。");
+            }
+        }
+    }
+
+    /// <summary>
+    /// 突き合わせに使う取引先の鍵。<b>差分に無ければ、直している行の保存済みの値から引く。</b>
+    /// </summary>
+    /// <remarks>
+    /// 数値に直さないのは、<b>新規作成の取引先が仮の識別子で来る</b>ためである
+    /// （<see cref="Reference"/> の注記）。同じ保存の中で同じ相手を指していれば同じ文字列になる。
+    /// </remarks>
+    private async Task<string?> PartnerKeyAsync(ModuleData data)
+    {
+        if (Field<LinkFieldData>(data, "Partner")?.Value is string reference
+            && !string.IsNullOrEmpty(reference))
+        {
+            return reference;
+        }
+
+        return Id(data) is long rowId && await store.FindPartnerOfAsync(rowId) is PartnerId stored
+            ? stored.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : null;
     }
 
     /// <summary>

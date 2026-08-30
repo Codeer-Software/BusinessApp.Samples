@@ -146,8 +146,14 @@ def check_layout(path, where, layout, kind, field_names, findings):
             # D-10 ラベル列は Middle 揃えにしないと上端に張り付く。
             # 「Xxx」と「XxxLabel」が対で存在するときだけラベル列とみなす
             # （年度名のように名前が Label で終わるだけのフィールドを誤検知しない）。
+            #
+            # **1 列しかない行は対象外**（2026-08-30 に足した）。揃える相手が居ないので
+            # Middle にしても意味が無く、**節の見出しとして単独で置くラベル**——
+            # 取引先の詳細の「登録番号（インボイス）」——を叩いていた。
+            # 規約が言っているのは「**ラベル列 + 入力列**の 2 カラム行」である（Project.md）。
             field_name = (column.get("Layout") or {}).get("FieldName", "")
-            is_label_column = (field_name.endswith("Label")
+            is_label_column = (len(columns) > 1
+                               and field_name.endswith("Label")
                                and field_name[:-len("Label")] in field_names)
             if is_label_column and column.get("VerticalAlignment") != "Middle":
                 findings.append((SEV_WARN, "D-10", relative(path),

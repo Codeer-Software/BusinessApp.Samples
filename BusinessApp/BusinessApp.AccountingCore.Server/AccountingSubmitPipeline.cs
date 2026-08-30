@@ -20,12 +20,16 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 /// （入力年月日を打つ・保存後に読み直して計上する）ので、保存そのものを包む必要がある。
 /// 取引先部品の関門は保存の前に検査するだけなので、内側でよい。
 /// どれが例外を投げても保存ごと巻き戻る。</para>
+/// <para><b>自社情報の関門は保存の前に検査するだけ</b>なので、取引先と同じく内側でよい。
+/// 会計コアの関門が 1 つ増えたので、ここが「会計コアの関門を数える場所」になった——
+/// <b>足したら必ずここに繋ぐ</b>（本番の配線は検査に載らない。上の理由）。</para>
 /// <para><b>取引先の関門は 1 つずつ数えず、部品の入口（<see cref="PartnerSubmitPipeline"/>）を
 /// 1 本呼ぶ。</b> ここで数えると、取引先部品に関門が増えたときに会計側を直さないと
 /// 1 つ足りないまま通る——しかもテストは緑のままである（ADR-0025 §6 の「持ち出し忘れ」の型）。</para>
 /// </remarks>
 public sealed class AccountingSubmitPipeline(
     JournalSubmitGate journals,
+    CompanyProfileSubmitGate companyProfile,
     PartnerSubmitPipeline partners,
     Action<string>? onSaveFailure = null)
 {
@@ -39,6 +43,7 @@ public sealed class AccountingSubmitPipeline(
         IDbAccessor dbAccessor, string dataSourceName, TimeProvider timeProvider,
         IAuthenticationContext authenticationContext, Action<string>? onSaveFailure = null)
         => new(JournalSubmitGate.Create(dbAccessor, dataSourceName, timeProvider, authenticationContext),
+               new CompanyProfileSubmitGate(),
                PartnerSubmitPipeline.Create(dbAccessor, dataSourceName),
                onSaveFailure);
 
@@ -56,7 +61,9 @@ public sealed class AccountingSubmitPipeline(
 
         var results = await journals.SubmitAsync(
             transactionData,
-            () => partners.SubmitAsync(transactionData, save));
+            () => companyProfile.SubmitAsync(
+                transactionData,
+                () => partners.SubmitAsync(transactionData, save)));
 
         return SaveFailureMessage.ToUserLanguage(results, onSaveFailure);
     }

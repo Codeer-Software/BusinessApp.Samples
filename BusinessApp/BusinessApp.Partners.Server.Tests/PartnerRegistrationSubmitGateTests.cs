@@ -66,6 +66,16 @@ public class PartnerRegistrationSubmitGateTests
         return server.Scalar<long>("select last_insert_rowid()");
     }
 
+    private static long InsertRegistration(
+        PartnerServer server, long partnerId, string no, string validFrom)
+    {
+        server.Execute($"""
+            insert into partner_invoice_registrations (partner_id, registration_no, valid_from)
+            values ({partnerId}, '{no}', {PartnerServer.DateLiteral(validFrom)})
+            """);
+        return server.Scalar<long>("select last_insert_rowid()");
+    }
+
     private static PartnerRegistrationSubmitGate Gate(PartnerServer server) => new(server.Registrations);
 
     /// <summary>保存が呼ばれたかどうかを見張る。</summary>
@@ -306,6 +316,35 @@ public class PartnerRegistrationSubmitGateTests
         Assert.True(save.Called);
     }
 
+    /// <summary>
+    /// <b>入れ物の名前ではなく、中身の名前で担当を決める。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>入れ物（<see cref="ModuleSubmitData.ModuleName"/>）が別モジュールでも、
+    /// <b>中に登録が混ざっていれば見る</b>。<c>ModuleName</c> で絞る実装に変えても
+    /// 「素通しする」側のテストは通ってしまうので、こちら側から挟む
+    /// （2026-08-27 の自己レビュー R16-16。取引先側の同名テストにだけあった穴）。</para>
+    /// <para><b>取引先の詳細に登録を置いた以上、この形は実際に来る</b>——
+    /// 親が <c>Partner</c>、子が <c>PartnerInvoiceRegistration</c> の 1 回の保存になる。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 入れ物が別モジュールでも中の登録は見る()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+
+        var submit = new ModuleSubmitData
+        {
+            ModuleName = ForeignModuleData.JournalEntryModuleName,
+            Add = [ForeignModuleData.Entry("1"), Registration(no: "1234567890123", partnerId: partner)],
+        };
+
+        var save = new SaveSpy();
+        await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync([submit], save.SaveAsync));
+        Assert.False(save.Called);
+    }
+
     /// <summary>関門は<b>自分のモジュールだけ</b>を見る。仕訳の保存に割り込まない。</summary>
     [Fact]
     public async Task 別のモジュールの保存は素通しする()
@@ -314,6 +353,160 @@ public class PartnerRegistrationSubmitGateTests
         var save = new SaveSpy();
 
         await Gate(server).SubmitAsync([ForeignModuleData.Adding(ForeignModuleData.Entry("1"))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    // --- 同じ保存の中の二重登録（登録の入力を取引先の詳細に置いたので実際に起こる。docs/07 §3-4）---
+
+    /// <summary>
+    /// <b>同じ保存に、同じ取引先の同じ日から始まる登録が 2 件</b>。どちらも DB にまだ無い。
+    /// </summary>
+    /// <remarks>
+    /// 保存済みの行としか突き合わせない実装だと、片方ずつ見て両方が通る。
+    /// <b>DB も止められない</b>——<c>UNIQUE</c> は登録番号まで含むので、番号が違えば入る。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ保存に同じ日から始まる登録が二件あれば止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var save = new SaveSpy();
+
+        var submit = Adding(
+            Registration(no: ValidNo, partnerId: partner, validFrom: new DateOnly(2023, 10, 1)),
+            Registration(no: "T9999999999999", partnerId: partner, validFrom: new DateOnly(2023, 10, 1)));
+
+        await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync([submit], save.SaveAsync));
+        Assert.False(save.Called);
+        Assert.Equal(0L, server.Scalar<long>("select count(*) from partner_invoice_registrations"));
+    }
+
+    /// <summary>
+    /// <b>取引先も同じ保存で作られる場合</b>（仮の識別子）でも、同じ日の 2 件を止める。
+    /// </summary>
+    /// <remarks>
+    /// 取引先の詳細に登録を置いたので、<b>取引先ごと新規作成する経路が生まれた</b>。
+    /// 仮の識別子は数値として読めないので、<b>文字列のまま突き合わせる</b>（関門の注記）。
+    /// </remarks>
+    [Fact]
+    public async Task 取引先が新規でも同じ日から始まる登録の二件目を止める()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        var first = Registration(no: ValidNo, validFrom: new DateOnly(2023, 10, 1));
+        var second = Registration(no: "T9999999999999", validFrom: new DateOnly(2023, 10, 1));
+        first.Fields["Partner"] = new LinkFieldData { Value = "@temporary:aaaa-bbbb" };
+        second.Fields["Partner"] = new LinkFieldData { Value = "@temporary:aaaa-bbbb" };
+
+        await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync([Adding(first, second)], save.SaveAsync));
+        Assert.False(save.Called);
+    }
+
+    /// <summary>相手が違えば、同じ日から始まっていても通る。</summary>
+    [Fact]
+    public async Task 取引先が違えば同じ日から始まる登録を通す()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        var first = Registration(no: ValidNo, validFrom: new DateOnly(2023, 10, 1));
+        var second = Registration(no: "T9999999999999", validFrom: new DateOnly(2023, 10, 1));
+        first.Fields["Partner"] = new LinkFieldData { Value = "@temporary:aaaa" };
+        second.Fields["Partner"] = new LinkFieldData { Value = "@temporary:bbbb" };
+
+        await Gate(server).SubmitAsync([Adding(first, second)], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>同じ相手でも、始まる日が違えば通す（登録 → 取消 → 再登録の履歴）。</summary>
+    [Fact]
+    public async Task 同じ相手でも始まる日が違えば通す()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Adding(
+                Registration(no: ValidNo, partnerId: partner, validFrom: new DateOnly(2023, 10, 1)),
+                Registration(no: "T9999999999999", partnerId: partner, validFrom: new DateOnly(2025, 4, 1)))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>登録年月日が差分に無い行</b>は、この検査の対象にならない。
+    /// </summary>
+    /// <remarks>
+    /// CLB は変更されたフィールドしか送ってこない（qa/01 F-11）。公表名だけを直した保存で
+    /// 「相手が同じだから 2 件目」と数えると、直せない画面ができる。
+    /// </remarks>
+    [Fact]
+    public async Task 登録年月日が差分に無い行は数えない()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(
+                Registration(partnerId: partner, id: 1),
+                Registration(partnerId: partner, id: 2))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>取引先が差分に無い行</b>は、保存済みの値から引いて突き合わせる。
+    /// </summary>
+    /// <remarks>
+    /// 画面で登録年月日だけを直した 2 行が、同じ相手の同じ日に揃うことがある。
+    /// 差分に無いからと諦めると素通りする。
+    /// </remarks>
+    [Fact]
+    public async Task 取引先が差分に無くても保存済みの値で突き合わせる()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var first = InsertRegistration(server, partner, ValidNo, "2023-10-01");
+        var second = InsertRegistration(server, partner, "T9999999999999", "2025-04-01");
+        var save = new SaveSpy();
+
+        await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Updating(
+                    Registration(validFrom: new DateOnly(2026, 1, 1), id: first),
+                    Registration(validFrom: new DateOnly(2026, 1, 1), id: second))],
+                save.SaveAsync));
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>相手を決められない行は数えない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 取引先が差分に無く、行の識別子からも引けない（保存済みでない）とき、
+    /// この検査は相手を知りようがない。<b>知らないまま「同じ相手だ」と数えると、
+    /// 無関係な行どうしで止まる。</b> その行が本当に壊れているなら、別の関門か DB が止める。
+    /// </remarks>
+    [Fact]
+    public async Task 相手を決められない行は二重登録に数えない()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(
+                Registration(validFrom: new DateOnly(2026, 1, 1), id: 900),
+                Registration(validFrom: new DateOnly(2026, 1, 1), id: 901))],
+            save.SaveAsync);
 
         Assert.True(save.Called);
     }

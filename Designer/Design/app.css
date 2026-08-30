@@ -51,3 +51,10 @@
     color: #6c757d;
     font-size: .875em;
 }
+
+/* 詳細フォームの中の節見出し（取引先の「登録番号（インボイス）」など）。
+   入力欄のラベルと同じ大きさだと、節の切れ目が読み取れない。 */
+.section-heading {
+    font-weight: 600;
+    margin-top: .75rem;
+}

@@ -1070,6 +1070,23 @@
             "BackgroundColor": "",
             "DetailLayoutName": "",
             "ListElementComponent": ""
+          },
+          {
+            "FieldName": "ConfirmedOn",
+            "ContextMenu": "",
+            "Label": "最終確認日",
+            "IsMaxWidthFixed": false,
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": true,
+            "CanUserSort": true,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
           }
         ]
       ]
