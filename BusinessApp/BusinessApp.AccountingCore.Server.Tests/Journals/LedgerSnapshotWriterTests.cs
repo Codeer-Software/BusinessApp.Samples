@@ -444,14 +444,20 @@ public class LedgerSnapshotWriterTests
     /// <b>どの登録を写すか決められないときは、利用者のことばで計上を止める。</b>
     /// </summary>
     /// <remarks>
-    /// 入力の時点で止めるのが本筋（<c>PartnerRegistrationSubmitGate</c>）だが、
-    /// 取込など別の経路で入った場合の最後の砦。<b>黙ってどちらかを選ばない</b>。
+    /// <para>入力の時点で止めるのが本筋（<c>PartnerRegistrationSubmitGate</c>）で、
+    /// <b>2026-08-31 からは DB の一意索引も同じ組を拒む</b>（qa/02 R26-20）。
+    /// ここが守るのは、<b>その索引より前に入った行</b>と、索引を持たない DB から
+    /// 移してきた行である。<b>黙ってどちらかを選ばない</b>ことを固定する。</para>
+    /// <para><b>だから検体を作るには索引を外すしかない。</b> 関門を迂回しているのではなく、
+    /// 「守りが 1 枚も無かった時代のデータ」を作っている。索引はこのテストの中だけで消える
+    /// （インメモリ DB なので、閉じれば元に戻る）。</para>
     /// </remarks>
     [Fact]
     public async Task 登録が同じ日に_2_件あれば計上を止める()
     {
         using var server = new AccountingServer();
         var partner = InsertPartner(server, "P900", "株式会社ベガ商会");
+        server.Execute("drop index ux_partner_invoice_registrations_valid_from");
         InsertRegistration(server, partner, "T1111111111111", "2023-10-01");
         InsertRegistration(server, partner, "T2222222222222", "2023-10-01");
         var entry = PostableDraft(server);

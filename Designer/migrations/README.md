@@ -3,7 +3,7 @@ title: migrations — 既存 DB への配達物
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-08-25
+updated: 2026-08-31
 supersedes: []
 related: [../ddl/README.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---

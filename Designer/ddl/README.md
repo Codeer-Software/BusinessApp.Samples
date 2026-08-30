@@ -3,7 +3,7 @@ title: ddl — スキーマ定義
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-08-28
+updated: 2026-08-31
 supersedes: []
 related: [../Project.md, ../../docs/04_会計ドメイン設計.md, ../../docs/08_マスタ台帳.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---
@@ -57,6 +57,7 @@ dotnet test BusinessApp.slnx
 | 004 | [`004_masters.sql`](004_masters.sql) | 勘定科目・補助科目・部門・**取引先（取引先部品のもの** — [ADR-0025](../../docs/decisions/0025-取引先を部品として分ける.md)**）** |
 | 005 | [`005_journals.sql`](005_journals.sql) | 仕訳・仕訳明細・伝票番号の採番（マスタではなくデータ） |
 | 006 | [`006_partner_registrations.sql`](006_partner_registrations.sql) | 適格請求書発行事業者の登録（有効期間つき。**公表情報の写し**。取引先部品のもの） |
+| 007 | [`007_auth.sql`](007_auth.sql) | 利用者アカウント（**認証部品のテーブル**。本体は CLB のもので、役割の列だけを間借りする——[ADR-0032](../../docs/decisions/0032-認証部品のapp_usersを正典に迎え入れる.md)） |
 
 各テーブルの扱い（所有・誰が編集するか・版と削除）は [docs/08_マスタ台帳](../../docs/08_マスタ台帳.md) が持つ。
 

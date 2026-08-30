@@ -159,15 +159,15 @@
         }
       },
       {
-        "Title": "会計へ戻る",
+        "Title": "玄関へ戻る",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
-        "PageFrame": "Main",
-        "Module": "Home",
+        "PageFrame": "Portal",
+        "Module": "PortalHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -178,7 +178,7 @@
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
-          "UseNavigateToCreate": true,
+          "UseNavigateToCreate": false,
           "ListFieldDesign": {
             "LayoutName": "",
             "CanNavigateToDetail": false,
@@ -200,7 +200,7 @@
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
-            "CanDelete": true,
+            "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
             "UseIndexSort": false,
@@ -275,7 +275,24 @@
   },
   "Padding": {},
   "UserReadCondition": {
-    "ModuleName": ""
+    "ModuleName": "AppUser",
+    "Condition": {
+      "IsOrMatch": false,
+      "IsNot": false,
+      "Children": [
+        {
+          "SearchTargetVariable": "PartnerRole.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "editor",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        }
+      ],
+      "Name": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+    }
   },
   "BackgroundColor": "",
   "Color": "",

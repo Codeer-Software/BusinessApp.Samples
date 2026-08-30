@@ -503,18 +503,381 @@ public class PartnerSubmitGateTests
         Assert.Equal("transactionData", rejected.ParamName);
     }
 
+    // --- 名寄せの親（ADR-0028。深さ 1 の森と、種別の食い違い）---
+
+    /// <summary>
+    /// <b>個人事業者と法人系は互いに親にできない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 止めることで生まれるのは「束ね漏れ」の側（控除が過大になる方向）だが、
+    /// <b>種別が食い違う組は、束ねるべきなら種別のどちらかが誤っている</b>。
+    /// 関門は「束ねるな」ではなく「先に種別を直せ」と言っている（ADR-0028 の理由節）。
+    /// </remarks>
+    [Theory]
+    [InlineData("sole_proprietor", "corporation")]
+    [InlineData("sole_proprietor", "unincorporated_association")]
+    [InlineData("corporation", "sole_proprietor")]
+    [InlineData("unincorporated_association", "sole_proprietor")]
+    public async Task 個人事業者と法人系は互いに親にできない(string childType, string parentType)
+    {
+        using var server = new PartnerServer();
+        var parent = InsertPartner(server, "P800", entityType: parentType);
+
+        var rejected = await RejectedAsync(
+            server,
+            Adding(Partner(entityType: childType, parentId: parent.ToString(CultureInfo.InvariantCulture))),
+            new SaveSpy());
+
+        // **文言まで固定する。** 「同じ事業者なら、どちらかの種別が誤っています」は
+        // 関門が「束ねるな」ではなく「先に種別を直せ」と言っている、という設計そのものである。
+        Assert.Equal(
+            "個人事業者と法人・人格のない社団等は、互いに名寄せの親にできません。"
+            + "同じ事業者なら、どちらかの種別が誤っています。",
+            rejected.Message);
+    }
+
+    /// <summary>
+    /// <b>それ以外の種別違いは通す。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>公表システムの人格区分は「1 個人／2 法人（人格のない社団等を含む）」の 2 値で、
+    /// 本プロジェクトの 4 値より粗い。<b>法人と人格のない社団等を止めると、
+    /// 取込（フェーズ 6）で入った行どうしが機械的に弾かれる</b>。</para>
+    /// <para>未分類（NULL）と「その他」は人格を何も表していないので通す。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData("corporation", "unincorporated_association")]
+    [InlineData("unincorporated_association", "corporation")]
+    [InlineData("other", "sole_proprietor")]
+    [InlineData("sole_proprietor", "other")]
+    [InlineData(null, "sole_proprietor")]
+    [InlineData("sole_proprietor", null)]
+    public async Task 個人事業者と法人系の組でなければ通す(string? childType, string? parentType)
+    {
+        using var server = new PartnerServer();
+        var parent = InsertPartner(server, "P800", entityType: parentType);
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Adding(Partner(entityType: childType, parentId: parent.ToString(CultureInfo.InvariantCulture)))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>種別だけを直した保存でも、保存済みの親と突き合わせる。</b>
+    /// </summary>
+    /// <remarks>
+    /// 差分に親が無いからと諦めると、「先に親を付けておいて、あとから種別を食い違わせる」で素通りする。
+    /// </remarks>
+    [Fact]
+    public async Task 種別だけの更新でも保存済みの親と突き合わせる()
+    {
+        using var server = new PartnerServer();
+        var parent = InsertPartner(server, "P800", entityType: "corporation");
+        var child = InsertPartner(server, "P801", entityType: "corporation", parentId: parent);
+
+        var rejected = await RejectedAsync(
+            server, Updating(Partner(id: child, entityType: "sole_proprietor")), new SaveSpy());
+
+        Assert.Contains("互いに名寄せの親にできません", rejected.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>子を持つ取引先の種別を変えて、食い違わせられない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>子から親を見るだけだと、この方向が素通りする。ADR-0028 の帰結が
+    /// 「<b>親と子のどちらを直す場合も検査が要る</b>。『親の種別を変えて食い違わせる』の
+    /// 3 方向すべてを自動テストと実機の台本に入れる」と名指ししていた方向である
+    /// （2026-08-31 の自己レビューで、実装されていないことが分かった）。</para>
+    /// <para><b>DDL にも種別の規則は無い</b>（トリガが見るのは深さだけ）ので、
+    /// ここが素通りすると最後の砦も無い。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 子を持つ取引先の種別を食い違わせられない()
+    {
+        using var server = new PartnerServer();
+        var parent = InsertPartner(server, "P800", entityType: "corporation");
+        InsertPartner(server, "P801", entityType: "corporation", parentId: parent);
+
+        var rejected = await RejectedAsync(
+            server, Updating(Partner(id: parent, entityType: "sole_proprietor")), new SaveSpy());
+
+        Assert.Contains("互いに名寄せの親にできません", rejected.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>子が居ても、食い違わない種別なら変えられる。</b>
+    /// </summary>
+    /// <remarks>拒む側だけを見ると、「子が居たら種別を変えられない」実装でも緑になる。</remarks>
+    [Fact]
+    public async Task 子を持つ取引先でも食い違わない種別には変えられる()
+    {
+        using var server = new PartnerServer();
+        var parent = InsertPartner(server, "P800", entityType: "corporation");
+        InsertPartner(server, "P801", entityType: "corporation", parentId: parent);
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(Partner(id: parent, entityType: "unincorporated_association"))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>種別を触っていない保存では、子との突き合わせをしない。</summary>
+    [Fact]
+    public async Task 種別を触っていない保存は子と突き合わせない()
+    {
+        using var server = new PartnerServer();
+        var parent = InsertPartner(server, "P800", entityType: "corporation");
+        InsertPartner(server, "P801", entityType: "sole_proprietor", parentId: parent);
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(Partner(id: parent, corporateNumber: ValidNumber))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>親が、さらに親を持っていてはいけない（深さ 1 の森。ADR-0028 §2）。</summary>
+    [Fact]
+    public async Task 親を持つ取引先は親にできない()
+    {
+        using var server = new PartnerServer();
+        var root = InsertPartner(server, "P800");
+        var middle = InsertPartner(server, "P801", parentId: root);
+
+        var rejected = await RejectedAsync(
+            server,
+            Adding(Partner(parentId: middle.ToString(CultureInfo.InvariantCulture))),
+            new SaveSpy());
+
+        Assert.Equal(
+            "名寄せの親には、さらに親を持つ取引先を選べません。"
+            + "同じ事業者なら、その取引先の親を選んでください。",
+            rejected.Message);
+    }
+
+    /// <summary>
+    /// <b>親 FK が識別子フィールドで来ても、深さを見る。</b>
+    /// </summary>
+    /// <remarks>
+    /// 型を 1 つに決め打ちすると、フィールドの型が変わった日に
+    /// <b>自己親・種別の食い違い・深さ 1 の 3 本がまとめて素通しに落ちる</b>
+    /// ——しかもフィクスチャが自分で <c>LinkFieldData</c> を組むのでテストは緑のまま
+    /// （2026-08-31 の自己レビュー。登録の関門で同じ穴を同じ日に直したのに、こちらに残っていた）。
+    /// </remarks>
+    [Fact]
+    public async Task 親FKが識別子フィールドでも深さを見る()
+    {
+        using var server = new PartnerServer();
+        var root = InsertPartner(server, "P800");
+        var middle = InsertPartner(server, "P801", parentId: root);
+
+        var row = Partner();
+        row.Fields["ParentPartner"] = new IdFieldData
+        {
+            Value = middle.ToString(CultureInfo.InvariantCulture),
+        };
+
+        await RejectedAsync(server, Adding(row), new SaveSpy());
+    }
+
+    /// <summary>想定していない型で親が来たら、突き合わせの対象にしない。</summary>
+    /// <remarks>
+    /// CLB は宣言した型でしか送らないので、ここに来るのは API を直に叩いた経路だけである。
+    /// 例外にせず素通しするのは、外部キーが最後に受け止めるからである。
+    /// </remarks>
+    [Fact]
+    public async Task 想定していない型の親は突き合わせに使わない()
+    {
+        using var server = new PartnerServer();
+        var root = InsertPartner(server, "P800");
+        InsertPartner(server, "P801", parentId: root);
+        var save = new SaveSpy();
+
+        var row = Partner();
+        row.Fields["ParentPartner"] = new NumberFieldData { Value = root };
+
+        await Gate(server).SubmitAsync([Adding(row)], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>自分が誰かの親になっているなら、自分に親は付けられない（同上）。</summary>
+    [Fact]
+    public async Task 誰かの親になっている取引先には親を付けられない()
+    {
+        using var server = new PartnerServer();
+        var parent = InsertPartner(server, "P800");
+        InsertPartner(server, "P801", parentId: parent);
+        var root = InsertPartner(server, "P802");
+
+        var rejected = await RejectedAsync(
+            server,
+            Updating(Partner(id: parent, parentId: root.ToString(CultureInfo.InvariantCulture))),
+            new SaveSpy());
+
+        Assert.Equal(
+            "この取引先は他の取引先の名寄せの親になっているので、親を付けられません。"
+            + "先に、子になっている取引先の親を付け替えてください。",
+            rejected.Message);
+    }
+
+    /// <summary>
+    /// <b>根どうしなら付けられる。</b>
+    /// </summary>
+    /// <remarks>
+    /// 拒む側だけを検査すると、「親の指定を一律に拒む」実装でも全件緑になる。
+    /// </remarks>
+    [Fact]
+    public async Task 根どうしなら親を付けられる()
+    {
+        using var server = new PartnerServer();
+        var root = InsertPartner(server, "P800");
+        var child = InsertPartner(server, "P801");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(Partner(id: child, parentId: root.ToString(CultureInfo.InvariantCulture)))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>親を空欄に戻す保存は、いつでも通る。</b>
+    /// </summary>
+    /// <remarks>
+    /// 子を持つ取引先でも、自分の親を外すのは深さを浅くする操作である。
+    /// ここを止めると、矛盾した行を直す唯一の手を塞ぐことになる。
+    /// </remarks>
+    [Fact]
+    public async Task 親を空欄に戻す保存は通す()
+    {
+        using var server = new PartnerServer();
+        var parent = InsertPartner(server, "P800");
+        InsertPartner(server, "P801", parentId: parent);
+        var save = new SaveSpy();
+
+        var cleared = Partner(id: parent);
+        cleared.Fields["ParentPartner"] = new LinkFieldData { Value = string.Empty };
+
+        await Gate(server).SubmitAsync([Updating(cleared)], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>子を持つ取引先でも、他の項目だけを直す保存は通る。</b>
+    /// </summary>
+    /// <remarks>
+    /// 深さは<b>親を付け替えたときにしか変わらない</b>。触っていない行まで見ると、
+    /// 「誰かの親になっているから、この取引先はもう何も直せない」という画面ができる。
+    /// docs/07 §1-2 の「触っていない行に分類を強制しない」と同じ考え方である。
+    /// </remarks>
+    [Fact]
+    public async Task 子を持つ取引先でも他の項目は直せる()
+    {
+        using var server = new PartnerServer();
+        var parent = InsertPartner(server, "P800");
+        InsertPartner(server, "P801", parentId: parent);
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(Partner(id: parent, corporateNumber: ValidNumber))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>種別も親も触っていない保存は、食い違いを見ない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>見ると、<b>関門より前に入った食い違いの行を、他の項目を直すだけでも保存できなくする</b>。
+    /// docs/07 §1-2 の「触っていない行に分類を強制しない」と同じ考え方である
+    /// （2026-08-31 の自己レビューで、早期 return を消す変異が生き残って気づいた）。</para>
+    /// <para>検体は SQL で直接作る。<b>関門を迂回しているのではなく</b>、
+    /// 関門も DDL のトリガも種別の組までは見ていなかった時代のデータを作っている
+    /// （トリガが見るのは深さだけである）。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 種別も親も触っていない保存は食い違いを見ない()
+    {
+        using var server = new PartnerServer();
+        var parent = InsertPartner(server, "P800", entityType: "corporation");
+        var child = InsertPartner(server, "P801", entityType: "sole_proprietor", parentId: parent);
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(Partner(id: child, corporateNumber: string.Empty))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>読めない相手を指した保存は、深さを見ない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 居ない取引先を親に指した保存（API 直叩き）と、保存されていない行の更新。
+    /// どちらも深さを判定する材料が無いので、ここでは止めない——外部キーが最後に拒む。
+    /// <b>見つからないことを「深さ 0」と読むと、逆に素通しの穴になる</b>ので、経路を固定する。
+    /// </remarks>
+    [Fact]
+    public async Task 読めない相手を指した保存は深さを見ない()
+    {
+        using var server = new PartnerServer();
+        var root = InsertPartner(server, "P800");
+        var save = new SaveSpy();
+
+        // 居ない取引先を親に指す。
+        await Gate(server).SubmitAsync([Adding(Partner(parentId: "9990"))], save.SaveAsync);
+        // 保存されていない行に、実在する親を指す。
+        await Gate(server).SubmitAsync(
+            [Updating(Partner(id: 9991, parentId: root.ToString(CultureInfo.InvariantCulture)))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>DDL のトリガも同じ規則を持っている。</b>
+    /// </summary>
+    /// <remarks>
+    /// 関門は手前の網で、最後に守るのは DB である（ADR-0004 と同じ形）。
+    /// <b>取込・API・SQL の直打ちは関門を通らない。</b>
+    /// </remarks>
+    [Fact]
+    public void 深さ二の親子はDBも拒む()
+    {
+        using var server = new PartnerServer();
+        var root = InsertPartner(server, "P800");
+        var middle = InsertPartner(server, "P801", parentId: root);
+
+        Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(() => InsertPartner(
+            server, "P802", parentId: middle));
+
+        var leaf = InsertPartner(server, "P803");
+        Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(() => server.Execute(
+            $"update partners set parent_partner_id = {leaf} where id = {root}"));
+    }
+
     private static long InsertPartner(
         PartnerServer server,
         string code = "P900",
         string? entityType = null,
-        string? corporateNumber = null)
+        string? corporateNumber = null,
+        long? parentId = null)
     {
         var type = entityType is null ? "null" : $"'{entityType}'";
         var number = corporateNumber is null ? "null" : $"'{corporateNumber}'";
+        var parent = parentId is long p ? p.ToString(CultureInfo.InvariantCulture) : "null";
 
         server.Execute($"""
-            insert into partners (code, name, is_active, entity_type, corporate_number)
-            values ('{code}', '取引先 {code}', 1, {type}, {number})
+            insert into partners (code, name, is_active, entity_type, corporate_number, parent_partner_id)
+            values ('{code}', '取引先 {code}', 1, {type}, {number}, {parent})
             """);
 
         return server.Scalar<long>("select last_insert_rowid()");

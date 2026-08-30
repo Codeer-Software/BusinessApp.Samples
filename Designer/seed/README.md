@@ -3,7 +3,7 @@ title: seed — 初期データ
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-08-30
+updated: 2026-08-31
 supersedes: []
 related: [../ddl/README.md, ../../docs/02_ペルソナ.md, ../../docs/08_マスタ台帳.md]
 ---
@@ -54,9 +54,34 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
 
 経理担当・経理責任者のアカウントは `dev/` に置き、上の 001〜004 には入れない。
 **置き場所・扱い・理由は
-[ADR-0031](../../docs/decisions/0031-デモ用の利用者アカウントは開発用のseedに置く.md)**、
-**いつ作るかは [docs/05](../../docs/05_実装計画と現在地.md) のフェーズ 2.5 の C** が持つ。
-**まだ作っていない**（`dev/` は無い）。
+[ADR-0031](../../docs/decisions/0031-デモ用の利用者アカウントは開発用のseedに置く.md)。**
+
+## 開発機でデモ用の利用者を用意する（`dev/`）
+
+**`dev/001_demo_user_roles.sql` はアカウントを作らない。役割を付けるだけである。**
+`hash` / `salt` は CLB の `PasswordHashHelper` が作るもので、SQL では作れない
+（`ClaudeCodeForDesigner/_specs/Authentication.md`）。手順は 2 段になる。
+
+1. **サーバを 1 度起動する。** ユーザーテーブルが空なら CLB が `admin` を作る
+2. **最初の 1 人にシステム管理を与える**（新しい DB での 1 回だけ）:
+   `UPDATE app_users SET is_sysadmin = 1 WHERE user_name = 'admin';`
+   **マイグレーションではやらない**（新しい DB では `admin` がまだ居ないので空振りする。
+   [ADR-0032](../../docs/decisions/0032-認証部品のapp_usersを正典に迎え入れる.md)）
+3. **`admin` でログインし、システム管理の画面で 2 人を作る**——
+   `keiri_tantou`（経理担当）と `keiri_sekininsha`（経理責任者）。
+   **パスワードは開発者が決める**（開発機のローカル DB だけを守る値。ADR-0031）
+4. **`dev/001_demo_user_roles.sql` を流す**（`sql` CLI）。役割が付く
+
+> **締め出してしまったときの戻し方。** 役割は画面から自分でも編集できるので、
+> 最後のシステム管理者が自分の `is_sysadmin` を外す・`can_access_app` を落とすと、
+> **次の 1 リクエストから入れなくなり**（[qa/01 F-28](../../docs/qa/01_CLB静かな失敗.md)）、
+> 画面から戻す手が無くなる。`sql` CLI で直す:
+> `UPDATE app_users SET is_sysadmin = 1, can_access_app = 1 WHERE user_name = 'admin';`
+> **保存の手前で止める関門はまだ無い**（[qa/02](../../docs/qa/02_自己レビュー記録.md) R27-10）。
+
+> **なぜ 3 を人がやるか。** アカウントの作成とパスワードの設定は Claude が行わない領域である。
+> **役割の付与（4）は機械で再現できる**ので、そこだけをファイルにしてある——
+> DB を作り直すたびに、役割の割り当てを手で思い出さずに済む。
 
 ### 既定税区分は判断が分かれる科目に入れない
 

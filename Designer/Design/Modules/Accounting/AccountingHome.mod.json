@@ -1,5 +1,5 @@
 {
-  "Name": "PartnerHome",
+  "Name": "AccountingHome",
   "DataSourceName": "",
   "DbTable": "",
   "CanCreate": true,
@@ -7,7 +7,7 @@
   "CanDelete": true,
   "Fields": [
     {
-      "Text": "取引先",
+      "Text": "会計",
       "Icon": "",
       "IsHtml": false,
       "Style": "H1",
@@ -28,14 +28,23 @@
   "UserReadCondition": {
     "ModuleName": "AppUser",
     "Condition": {
-      "IsOrMatch": false,
+      "IsOrMatch": true,
       "IsNot": false,
       "Children": [
         {
-          "SearchTargetVariable": "PartnerRole.Value",
+          "SearchTargetVariable": "AccountingRole.Value",
           "Comparison": "Equal",
           "Value": {
-            "Value": "editor",
+            "Value": "staff",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        },
+        {
+          "SearchTargetVariable": "AccountingRole.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "manager",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
           },
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
@@ -273,5 +282,5 @@
   },
   "CanBulkDataUpdate": false,
   "CanBulkDataDownload": false,
-  "PageTitle": "取引先"
+  "PageTitle": "会計"
 }

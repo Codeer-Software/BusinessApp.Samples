@@ -1,102 +1,27 @@
 {
-  "IsApplicationRoot": false,
+  "IsApplicationRoot": true,
   "Priority": 0,
-  "Name": "Main",
-  "Description": "会計（ADR-0026）。日々の入力と帳簿",
+  "Name": "Portal",
+  "Description": "玄関（ADR-0026）。役割ごとのフレームへの入口だけを置く",
   "Left": {
     "IsVisible": true,
     "Home": {
       "Type": "Text",
-      "Text": "会計",
+      "Text": "玄関",
       "Icon": "",
       "ResourcePath": ""
     },
     "Links": [
       {
-        "Title": "振替伝票",
+        "Title": "会計",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
-        "PageFrame": "",
-        "Module": "JournalEntry",
-        "Id": "",
-        "Parameters": "",
-        "ListPageDesign": {
-          "SearchLayoutName": "",
-          "UserUrlParameter": true,
-          "PageTitle": "",
-          "HeaderTitle": "",
-          "CanBulkDataUpdate": false,
-          "CanBulkDataDownload": false,
-          "UseSubmitButton": false,
-          "UseNavigateToCreate": true,
-          "ListFieldDesign": {
-            "LayoutName": "",
-            "CanNavigateToDetail": true,
-            "NavigateModuleUrlSegment": "",
-            "CanCustomizeColumns": false,
-            "FixedColumnCount": 0,
-            "ApplyBackgroundToBoxInput": false,
-            "DisplayName": "",
-            "SearchCondition": {
-              "LimitCount": 50,
-              "SelectFields": [],
-              "SortConditions": [
-                {
-                  "Variable": "PostingDate.Value",
-                  "IsDescending": true
-                },
-                {
-                  "Variable": "EntryNo.Value",
-                  "IsDescending": true
-                }
-              ],
-              "SortFieldVariable": "",
-              "SortDescending": false,
-              "ModuleName": ""
-            },
-            "PagerPosition": "Top",
-            "ReplaceMode": "None",
-            "DeleteTogether": false,
-            "CanCreate": false,
-            "CanUpdate": false,
-            "CanDelete": true,
-            "CanUserSort": true,
-            "CanSelect": false,
-            "UseIndexSort": false,
-            "OnDataChanged": "",
-            "OnSearchDataChanged": "",
-            "OnSelectedIndexChanged": "",
-            "OnSelectedIndexChanging": "",
-            "OnDoubleClickRow": "",
-            "Name": "",
-            "IgnoreModification": false,
-            "OnValidateInput": "",
-            "IsFocusSkip": false,
-            "NextFocusField": "",
-            "OnFocusMoving": "",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
-          }
-        },
-        "DetailPageDesign": {
-          "PageTitle": "",
-          "LayoutName": "",
-          "UrlParameter": ""
-        }
-      },
-      {
-        "Title": "帳簿/仕訳帳",
-        "Icon": "",
-        "IconType": "Font",
-        "HideTitle": false,
-        "ModulePageType": "Auto",
-        "ModuleUrlSegment": "",
-        "ActiveModuleSegments": [],
-        "PageFrame": "",
-        "Module": "JournalBook",
+        "PageFrame": "Main",
+        "Module": "AccountingHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -154,15 +79,15 @@
         }
       },
       {
-        "Title": "帳簿/総勘定元帳",
+        "Title": "設定とマスタ",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
-        "PageFrame": "",
-        "Module": "GeneralLedger",
+        "PageFrame": "Settings",
+        "Module": "SettingsHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -220,15 +145,15 @@
         }
       },
       {
-        "Title": "補助科目",
+        "Title": "取引先",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
-        "PageFrame": "",
-        "Module": "SubAccount",
+        "PageFrame": "Partners",
+        "Module": "PartnerHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -239,10 +164,10 @@
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
-          "UseNavigateToCreate": true,
+          "UseNavigateToCreate": false,
           "ListFieldDesign": {
             "LayoutName": "",
-            "CanNavigateToDetail": true,
+            "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
             "FixedColumnCount": 0,
@@ -251,21 +176,12 @@
             "SearchCondition": {
               "LimitCount": 50,
               "SelectFields": [],
-              "SortConditions": [
-                {
-                  "Variable": "Account.Value",
-                  "IsDescending": false
-                },
-                {
-                  "Variable": "Code.Value",
-                  "IsDescending": false
-                }
-              ],
+              "SortConditions": [],
               "SortFieldVariable": "",
               "SortDescending": false,
               "ModuleName": ""
             },
-            "PagerPosition": "Top",
+            "PagerPosition": "Bottom",
             "ReplaceMode": "None",
             "DeleteTogether": false,
             "CanCreate": false,
@@ -295,15 +211,15 @@
         }
       },
       {
-        "Title": "玄関へ戻る",
+        "Title": "システム管理",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
-        "PageFrame": "Portal",
-        "Module": "PortalHome",
+        "PageFrame": "Admin",
+        "Module": "AdminHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -411,33 +327,7 @@
   },
   "Padding": {},
   "UserReadCondition": {
-    "ModuleName": "AppUser",
-    "Condition": {
-      "IsOrMatch": true,
-      "IsNot": false,
-      "Children": [
-        {
-          "SearchTargetVariable": "AccountingRole.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": "staff",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-        },
-        {
-          "SearchTargetVariable": "AccountingRole.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": "manager",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-        }
-      ],
-      "Name": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
-    }
+    "ModuleName": ""
   },
   "BackgroundColor": "",
   "Color": "",
@@ -448,7 +338,7 @@
     "ModuleUrlSegment": "",
     "ActiveModuleSegments": [],
     "PageFrame": "",
-    "Module": "AccountingHome",
+    "Module": "PortalHome",
     "Id": "",
     "Parameters": "",
     "ListPageDesign": {
@@ -507,6 +397,6 @@
   },
   "AutoZoom": "None",
   "TargetDevice": "Any",
-  "TopPageModule": "AccountingHome",
+  "TopPageModule": "PortalHome",
   "OtherPages": []
 }

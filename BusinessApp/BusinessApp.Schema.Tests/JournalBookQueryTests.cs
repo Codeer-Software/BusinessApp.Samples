@@ -373,8 +373,7 @@ public class JournalBookQueryTests
     private static IReadOnlyList<Row> Run(SqliteConnection db, params (string Name, object Value)[] parameters)
     {
         using var command = db.CreateCommand();
-        command.CommandText = File.ReadAllText(Path.Combine(
-            TestDatabase.ModulesDirectory, "Books", "JournalBook.Query.sql"));
+        command.CommandText = File.ReadAllText(TestDatabase.QuerySqlOf("JournalBook"));
 
         foreach (var name in Parameters)
         {

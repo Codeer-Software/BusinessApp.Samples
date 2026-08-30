@@ -112,6 +112,34 @@ public static class TestDatabase
     public static string ModulesDirectory { get; } =
         Path.Combine(RepositoryRoot(), "Designer", "Design", "Modules");
 
+    /// <summary>
+    /// クエリモジュールの SQL を<b>名前で探す</b>。
+    /// </summary>
+    /// <remarks>
+    /// <b>フォルダを直書きしない。</b> `Modules/` の下の分け方は「どのアプリのものか」で決まり、
+    /// 部品が増えるたびに動く（`Designer/Project.md` のフォルダ規約）。
+    /// 直書きすると、**フォルダを動かした日にテストが落ちる**——実際に 2026-08-31 の
+    /// アプリごとの分割で `Books/` を直書きした 2 本が落ちた。
+    /// <b>モジュール名はデザイン全体でフラットな名前空間</b>なので、名前で探せば足りる。
+    /// </remarks>
+    public static string QuerySqlOf(string moduleName)
+    {
+        // **2 通りの失敗を区別する。** `SingleOrDefault` は重複のときに英語の
+        // `InvalidOperationException` を投げるので、用意したメッセージが出ない。
+        var found = Directory
+            .EnumerateFiles(ModulesDirectory, $"{moduleName}.Query.sql", SearchOption.AllDirectories)
+            .Take(2)
+            .ToList();
+
+        return found.Count switch
+        {
+            1 => found[0],
+            0 => throw new FileNotFoundException($"{moduleName}.Query.sql が Modules/ の下に無い"),
+            _ => throw new InvalidOperationException(
+                $"{moduleName}.Query.sql が Modules/ の下に 2 つ以上ある"),
+        };
+    }
+
     public static void Execute(SqliteConnection connection, string sql)
     {
         using var command = connection.CreateCommand();

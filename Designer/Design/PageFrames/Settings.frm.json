@@ -1,28 +1,28 @@
 {
   "IsApplicationRoot": false,
   "Priority": 0,
-  "Name": "Main",
-  "Description": "会計（ADR-0026）。日々の入力と帳簿",
+  "Name": "Settings",
+  "Description": "設定とマスタ（ADR-0026）。経理責任者が決めるもの",
   "Left": {
     "IsVisible": true,
     "Home": {
       "Type": "Text",
-      "Text": "会計",
+      "Text": "設定とマスタ",
       "Icon": "",
       "ResourcePath": ""
     },
     "Links": [
       {
-        "Title": "振替伝票",
+        "Title": "自社情報",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
-        "ModulePageType": "Auto",
+        "ModulePageType": "Detail",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "",
-        "Module": "JournalEntry",
-        "Id": "",
+        "Module": "CompanyProfile",
+        "Id": "1",
         "Parameters": "",
         "ListPageDesign": {
           "SearchLayoutName": "",
@@ -32,7 +32,7 @@
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
-          "UseNavigateToCreate": true,
+          "UseNavigateToCreate": false,
           "ListFieldDesign": {
             "LayoutName": "",
             "CanNavigateToDetail": true,
@@ -44,16 +44,7 @@
             "SearchCondition": {
               "LimitCount": 50,
               "SelectFields": [],
-              "SortConditions": [
-                {
-                  "Variable": "PostingDate.Value",
-                  "IsDescending": true
-                },
-                {
-                  "Variable": "EntryNo.Value",
-                  "IsDescending": true
-                }
-              ],
+              "SortConditions": [],
               "SortFieldVariable": "",
               "SortDescending": false,
               "ModuleName": ""
@@ -63,7 +54,7 @@
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
-            "CanDelete": true,
+            "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
             "UseIndexSort": false,
@@ -88,7 +79,7 @@
         }
       },
       {
-        "Title": "帳簿/仕訳帳",
+        "Title": "会計年度",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -96,7 +87,7 @@
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "",
-        "Module": "JournalBook",
+        "Module": "FiscalYear",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -110,16 +101,21 @@
           "UseNavigateToCreate": false,
           "ListFieldDesign": {
             "LayoutName": "",
-            "CanNavigateToDetail": false,
+            "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
             "FixedColumnCount": 0,
             "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
-              "LimitCount": 100,
+              "LimitCount": 50,
               "SelectFields": [],
-              "SortConditions": [],
+              "SortConditions": [
+                {
+                  "Variable": "StartDate.Value",
+                  "IsDescending": false
+                }
+              ],
               "SortFieldVariable": "",
               "SortDescending": false,
               "ModuleName": ""
@@ -130,7 +126,7 @@
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
-            "CanUserSort": false,
+            "CanUserSort": true,
             "CanSelect": false,
             "UseIndexSort": false,
             "OnDataChanged": "",
@@ -154,7 +150,7 @@
         }
       },
       {
-        "Title": "帳簿/総勘定元帳",
+        "Title": "会計期間",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -162,7 +158,7 @@
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "",
-        "Module": "GeneralLedger",
+        "Module": "AccountingPeriod",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -176,16 +172,21 @@
           "UseNavigateToCreate": false,
           "ListFieldDesign": {
             "LayoutName": "",
-            "CanNavigateToDetail": false,
+            "CanNavigateToDetail": true,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
             "FixedColumnCount": 0,
             "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
-              "LimitCount": 100,
+              "LimitCount": 50,
               "SelectFields": [],
-              "SortConditions": [],
+              "SortConditions": [
+                {
+                  "Variable": "StartDate.Value",
+                  "IsDescending": false
+                }
+              ],
               "SortFieldVariable": "",
               "SortDescending": false,
               "ModuleName": ""
@@ -196,7 +197,7 @@
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
-            "CanUserSort": false,
+            "CanUserSort": true,
             "CanSelect": false,
             "UseIndexSort": false,
             "OnDataChanged": "",
@@ -220,7 +221,7 @@
         }
       },
       {
-        "Title": "補助科目",
+        "Title": "マスタ/勘定科目",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -228,7 +229,7 @@
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "",
-        "Module": "SubAccount",
+        "Module": "Account",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -253,7 +254,157 @@
               "SelectFields": [],
               "SortConditions": [
                 {
-                  "Variable": "Account.Value",
+                  "Variable": "DisplayOrder.Value",
+                  "IsDescending": false
+                },
+                {
+                  "Variable": "Code.Value",
+                  "IsDescending": false
+                }
+              ],
+              "SortFieldVariable": "",
+              "SortDescending": false,
+              "ModuleName": ""
+            },
+            "PagerPosition": "Top",
+            "ReplaceMode": "None",
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": false,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "UseIndexSort": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        }
+      },
+      {
+        "Title": "マスタ/部門",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
+        "ModulePageType": "Auto",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "Department",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "",
+          "HeaderTitle": "",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": true,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": true,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [
+                {
+                  "Variable": "DisplayOrder.Value",
+                  "IsDescending": false
+                },
+                {
+                  "Variable": "Code.Value",
+                  "IsDescending": false
+                }
+              ],
+              "SortFieldVariable": "",
+              "SortDescending": false,
+              "ModuleName": ""
+            },
+            "PagerPosition": "Top",
+            "ReplaceMode": "None",
+            "DeleteTogether": false,
+            "CanCreate": false,
+            "CanUpdate": false,
+            "CanDelete": false,
+            "CanUserSort": true,
+            "CanSelect": false,
+            "UseIndexSort": false,
+            "OnDataChanged": "",
+            "OnSearchDataChanged": "",
+            "OnSelectedIndexChanged": "",
+            "OnSelectedIndexChanging": "",
+            "OnDoubleClickRow": "",
+            "Name": "",
+            "IgnoreModification": false,
+            "OnValidateInput": "",
+            "IsFocusSkip": false,
+            "NextFocusField": "",
+            "OnFocusMoving": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        },
+        "DetailPageDesign": {
+          "PageTitle": "",
+          "LayoutName": "",
+          "UrlParameter": ""
+        }
+      },
+      {
+        "Title": "マスタ/税区分",
+        "Icon": "",
+        "IconType": "Font",
+        "HideTitle": false,
+        "ModulePageType": "Auto",
+        "ModuleUrlSegment": "",
+        "ActiveModuleSegments": [],
+        "PageFrame": "",
+        "Module": "TaxCategory",
+        "Id": "",
+        "Parameters": "",
+        "ListPageDesign": {
+          "SearchLayoutName": "",
+          "UserUrlParameter": true,
+          "PageTitle": "",
+          "HeaderTitle": "",
+          "CanBulkDataUpdate": false,
+          "CanBulkDataDownload": false,
+          "UseSubmitButton": false,
+          "UseNavigateToCreate": true,
+          "ListFieldDesign": {
+            "LayoutName": "",
+            "CanNavigateToDetail": true,
+            "NavigateModuleUrlSegment": "",
+            "CanCustomizeColumns": false,
+            "FixedColumnCount": 0,
+            "ApplyBackgroundToBoxInput": false,
+            "DisplayName": "",
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SelectFields": [],
+              "SortConditions": [
+                {
+                  "Variable": "DisplayOrder.Value",
                   "IsDescending": false
                 },
                 {
@@ -420,15 +571,6 @@
           "SearchTargetVariable": "AccountingRole.Value",
           "Comparison": "Equal",
           "Value": {
-            "Value": "staff",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-        },
-        {
-          "SearchTargetVariable": "AccountingRole.Value",
-          "Comparison": "Equal",
-          "Value": {
             "Value": "manager",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
           },
@@ -448,7 +590,7 @@
     "ModuleUrlSegment": "",
     "ActiveModuleSegments": [],
     "PageFrame": "",
-    "Module": "AccountingHome",
+    "Module": "SettingsHome",
     "Id": "",
     "Parameters": "",
     "ListPageDesign": {
@@ -507,6 +649,6 @@
   },
   "AutoZoom": "None",
   "TargetDevice": "Any",
-  "TopPageModule": "AccountingHome",
+  "TopPageModule": "SettingsHome",
   "OtherPages": []
 }

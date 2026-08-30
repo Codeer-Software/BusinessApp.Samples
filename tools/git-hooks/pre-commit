@@ -22,6 +22,10 @@ python tools/docs/lint_docs.py --selftest
 python tools/docs/lint_docs.py
 
 echo "[pre-commit] 3/7 CLB デザインの検査"
+# 検査そのものが空回りしていないかを先に確かめる（2/7 と 7/7 と同じ作法）。
+# **緩めた変更を守るものが無かった**——D-05 と D-10 を絞ったとき、鳴らなくなることを
+# 確かめる手が目視しか無かった（qa/02 R26-21）。
+python tools/clb/lint_design.py --selftest
 python tools/clb/lint_design.py
 
 echo "[pre-commit] 4/7 テスト・カバレッジ・スキーマ"
@@ -46,8 +50,12 @@ echo "[pre-commit] 6/7 ミューテーションテスト"
     && dotnet stryker --project BusinessApp.AccountingCore.Server.csproj --break-at 94 --threshold-low 94 --reporter progress)
 # 取引先部品と共有インフラ（ADR-0025 §6）。**分割で関門を持ち出し忘れると、
 # テストは全部緑のままこの 3 つだけが検査の外へ落ちる。**
-# 実測は 92.00 / 93.41 / 96.72（2026-08-27。自己レビューの指摘を直したあと）。
-# 生き残りは文言・等価な変異だけで、実漏れは無い（採否は qa/02 のラウンド 15・16）。
+# 実測は 92.00 / 96.55 / 96.72（Partners.Server は 2026-08-31 に 93.41 から上がった。
+# ラチェットなので下限も 92 → 94 に上げた。ADR-0012 §8 の「実測より 1〜3 点下」で、
+# **タイムアウト 0 件なので余裕は狭くてよい**）。
+# **上げた理由を「文言まで表明したから」と書かない**——§8 は文言の変異を許容ノイズと決めている
+# （qa/02 R28-18）。上がったのは実測がそうだったからで、生き残り 5 件はすべて文言である。
+# 生き残りは文言・等価な変異だけで、実漏れは無い（採否は qa/02 のラウンド 15・16・27・28）。
 #
 # **下限は実測より 1〜3 点下に置いてある。** タイムアウトした変異は「倒した」に数えられるが、
 # 何がタイムアウトするかは機械の負荷で変わる。実際に ServerSupport は同じコードで
@@ -58,7 +66,7 @@ echo "[pre-commit] 6/7 ミューテーションテスト"
 (cd BusinessApp/BusinessApp.Partners.Tests \
     && dotnet stryker --project BusinessApp.Partners.csproj --break-at 89 --threshold-low 89 --reporter progress)
 (cd BusinessApp/BusinessApp.Partners.Server.Tests \
-    && dotnet stryker --project BusinessApp.Partners.Server.csproj --break-at 92 --threshold-low 92 --reporter progress)
+    && dotnet stryker --project BusinessApp.Partners.Server.csproj --break-at 94 --threshold-low 94 --reporter progress)
 (cd BusinessApp/BusinessApp.ServerSupport.Tests \
     && dotnet stryker --project BusinessApp.ServerSupport.csproj --break-at 93 --threshold-low 93 --reporter progress)
 

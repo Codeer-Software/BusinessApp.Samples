@@ -40,6 +40,11 @@ public class EnumConsistencyTests
         // C# は null: 登録の判定ロジック（tax_point で引く）はフェーズ 3、取込はフェーズ 6 で作る。
         { "登録の終わりの理由",        "partner_invoice_registrations.end_reason", "RegistrationEndReasons", null },
         { "登録情報の出所",            "partner_invoice_registrations.source",     "RegistrationSources",    null },
+        // C# は null: 権限を判定するのは CLB（app.clprj とフレームの条件）であって C# ではない。
+        // 会計コアが役割を読む場面は無い——読むと「取引先を触るのに会計権限を確かめる」形になり、
+        // 依存方向が逆になる（ADR-0026 §1 の追記③）。
+        { "会計の役割",                "app_users.accounting_role",           "AccountingRoles",   null },
+        { "取引先の役割",              "app_users.partner_role",              "PartnerRoles",      null },
     };
 
     /// <summary>
@@ -123,7 +128,14 @@ public class EnumConsistencyTests
         foreach (var file in TestDatabase.DdlFiles())
         {
             var text = File.ReadAllText(file);
-            foreach (Match match in Regex.Matches(text, @"^\s*(\w+)\s+TEXT[^,]*?CHECK \(\1 IN \(", RegexOptions.Multiline))
+            // **`CHECK (col IS NULL OR col IN (...))` の形も拾う。** SQLite の CHECK は NULL を
+            // 通すので `IS NULL OR` は冗長だが、書いてあっても区分値であることに変わりはない。
+            // 拾えないと、**冗長な 1 句を足すだけで対応表の検査をすり抜けられる**
+            // （2026-08-31 に app_users の役割の列で実際に起きた）。
+            foreach (Match match in Regex.Matches(
+                text,
+                @"^\s*(\w+)\s+TEXT[^,]*?CHECK \((?:\1 IS NULL OR )?\1 IN \(",
+                RegexOptions.Multiline))
             {
                 var owner = Regex.Matches(text[..match.Index], @"CREATE TABLE (\w+)").LastOrDefault()?.Groups[1].Value;
                 if (owner is not null)
@@ -134,6 +146,30 @@ public class EnumConsistencyTests
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// <b>デザイン enum が全部、対応表に載っているか</b>（逆向きの網）。
+    /// </summary>
+    /// <remarks>
+    /// 表から DDL を見る検査（<see cref="区分値を持つ列はすべて対応表に載っている"/>）だけだと、
+    /// <b>CLB の enum を足して DDL の CHECK を書き忘れたとき、3 者一致の検査自体が
+    /// その区分を知らないまま緑になる</b>（2026-08-31 の自己レビュー）。
+    /// 両向きに網を張って初めて「増えたら必ず気づく」になる。
+    /// </remarks>
+    [Fact]
+    public void デザインenumはすべて対応表に載っている()
+    {
+        var declared = Mappings()
+            .Select(row => (string?)row[2])
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+
+        var actual = Directory.GetFiles(DesignEnumDirectory, "*.enum.json")
+            .Select(f => Path.GetFileName(f).Replace(".enum.json", string.Empty, StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Empty(actual.Where(e => !declared.Contains(e)));
     }
 
     /// <summary>CLB のデザイン enum は複数形で名づける（qa/01 J-01）。単数形だと同名フィールドと衝突する。</summary>
@@ -165,7 +201,11 @@ public class EnumConsistencyTests
                 continue;
             }
 
-            var check = Regex.Match(create.Groups[1].Value, $@"CHECK \({column} IN \(([^)]*)\)\)", RegexOptions.Singleline);
+            // 値を読む側も `IS NULL OR` の形に合わせる（拾う側と同じ理由）。
+            var check = Regex.Match(
+                create.Groups[1].Value,
+                $@"CHECK \((?:{column} IS NULL OR )?{column} IN \(([^)]*)\)\)",
+                RegexOptions.Singleline);
             if (check.Success)
             {
                 return Regex.Matches(check.Groups[1].Value, @"'([^']+)'")

@@ -1,5 +1,5 @@
 {
-  "Name": "PartnerHome",
+  "Name": "AdminHome",
   "DataSourceName": "",
   "DbTable": "",
   "CanCreate": true,
@@ -7,7 +7,7 @@
   "CanDelete": true,
   "Fields": [
     {
-      "Text": "取引先",
+      "Text": "システム管理",
       "Icon": "",
       "IsHtml": false,
       "Style": "H1",
@@ -32,11 +32,11 @@
       "IsNot": false,
       "Children": [
         {
-          "SearchTargetVariable": "PartnerRole.Value",
+          "SearchTargetVariable": "IsSysadmin.Value",
           "Comparison": "Equal",
           "Value": {
-            "Value": "editor",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+            "Value": true,
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
           },
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
         }
@@ -273,5 +273,5 @@
   },
   "CanBulkDataUpdate": false,
   "CanBulkDataDownload": false,
-  "PageTitle": "取引先"
+  "PageTitle": "システム管理"
 }
