@@ -204,7 +204,12 @@
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "StartDate.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "FiscalYear",
@@ -357,7 +362,16 @@
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "DisplayOrder.Value",
+            "IsDescending": false
+          },
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "Account",
@@ -388,7 +402,12 @@
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "Partner",
@@ -667,7 +686,7 @@
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "借貸",
+      "DisplayName": "貸借",
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "DebitCreditName",
@@ -1245,7 +1264,7 @@
           {
             "FieldName": "DebitCreditName",
             "ContextMenu": "",
-            "Label": "借貸",
+            "Label": "貸借",
             "IsMaxWidthFixed": false,
             "ColumnSpan": 1,
             "RowSpan": 1,

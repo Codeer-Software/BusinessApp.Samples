@@ -728,7 +728,7 @@
         }
       },
       {
-        "Title": "取引先アプリへ",
+        "Title": "取引先",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -794,7 +794,7 @@
         }
       },
       {
-        "Title": "システム管理/利用者アカウント",
+        "Title": "利用者アカウント",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -835,7 +835,7 @@
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
-            "CanDelete": true,
+            "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
             "UseIndexSort": false,

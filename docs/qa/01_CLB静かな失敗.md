@@ -4,7 +4,7 @@ status: current
 scope: 全体
 audience: [開発]
 growth: append
-updated: 2026-08-30
+updated: 2026-08-31
 supersedes: []
 related: [../11_CLB改善提案/README.md, ../decisions/0026-画面は役割で分け玄関のページフレームを置く.md]
 ---

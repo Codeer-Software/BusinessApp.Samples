@@ -421,12 +421,57 @@ public class JournalAmendmentServiceTests
     {
         using var server = new AccountingServer();
 
-        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
-            () => server.AmendAsync(s => s.ReverseAsync(new JournalEntryId(999))));
+        // **違反が 2 件以上出る形で見る。** 1 件だと「先頭だけ持ち直す」「並びを変える」
+        // 実装がどちらも緑になる（qa/03 L-02・L-17）。
+        // 下書き（計上していない）＋伝票番号が無い＝取消の規則に 2 つ当たる。
+        var draft = server.InsertDraft();
+        server.InsertLine(draft, 1, "debit", "1100", 100);
 
-        var violation = Assert.Single(error.Violations);
-        Assert.Equal(JournalViolationCodes.AmendmentTargetNotFound, violation.Code);
-        Assert.Contains(violation.Message, error.Message);
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.ReverseAsync(draft)));
+
+        Assert.Equal(
+            [JournalViolationCodes.AmendmentTargetNotPosted, JournalViolationCodes.AmendmentTargetUnidentified],
+            error.Violations.Select(v => v.Code));
+        foreach (var violation in error.Violations)
+        {
+            Assert.Contains(violation.Message, error.Message, StringComparison.Ordinal);
+        }
+
+        // 元の例外を内側に残す（どの検証で落ちたかの手掛かり）。
+        Assert.IsType<JournalPostingRejectedException>(error.InnerException);
+    }
+
+    /// <summary>
+    /// <b>取消の計上で落ちても、見出しは「取り消せません」になる。</b>
+    /// </summary>
+    /// <remarks>
+    /// 入口で 1 回包む形にしている理由がここにある。取消は途中で
+    /// <c>JournalPoster</c> を通るので、<b>そこが投げると既定の「計上できません」になる</b>——
+    /// 利用者は計上を頼んだ覚えが無い（2026-08-31 の自己レビュー）。
+    /// 締め済みの期間へ取り消すと、その経路を通る。
+    /// </remarks>
+    [Fact]
+    public async Task 計上の側で落ちても取消の言葉で断る()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        // 取消の計上日は「今日」なので、今日を含む会計期間を締める。
+        server.Execute("""
+            update accounting_periods set status = 'closed'
+            where date(start_date) <= '2026-08-24' and date(end_date) >= '2026-08-24'
+            """);
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.ReverseAsync(original)));
+
+        // **見出しだけを見る。** 本文には「締め済みのため、計上できません。」と出るが、
+        // それは**理由の説明として正しい**——取消は計上まで進む操作で、その計上が止まっている。
+        // 直すべきは「利用者が頼んでいない操作の名前で断ること」だけである。
+        Assert.StartsWith(JournalPostingRejectedException.ReversalHeadline, error.Message);
+        Assert.False(error.Message.StartsWith(JournalPostingRejectedException.PostingHeadline, StringComparison.Ordinal));
+        Assert.Equal(0L, server.CountAmendments(original, "reversal"));
     }
 
     /// <summary>画面から「計上」を押したのと同じ経路で計上する。</summary>

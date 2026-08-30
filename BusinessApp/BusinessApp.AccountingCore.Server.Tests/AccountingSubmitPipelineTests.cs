@@ -1,5 +1,6 @@
 namespace BusinessApp.AccountingCore.Server.Tests;
 
+using BusinessApp.AccountingCore.Server.Settings;
 using BusinessApp.Partners.Server;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 

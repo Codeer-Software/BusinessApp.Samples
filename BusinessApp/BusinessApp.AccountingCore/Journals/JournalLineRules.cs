@@ -52,10 +52,10 @@ public static class JournalLineRules
     // **利用者に「番号を直せ」と言わない**——直す欄が画面に無い（docs/09 §2-3）。
 
     /// <summary>行番号が 1 以上の整数でない（<see cref="JournalViolationCodes.LineNoInvalid"/>）。</summary>
-    public const string LineNoNotStorable = "明細の行番号が正しくありません。行番号は画面が自動で振るので、この伝票は作り直してください。";
+    public const string LineNoNotStorable = "明細の行番号が正しくありません。行番号は画面が自動で振るので、明細を入力し直してください。";
 
     /// <summary>同じ行番号が 2 つある（同上）。</summary>
-    public const string LineNoDuplicated = "明細の行番号が重なっています。行番号は画面が自動で振るので、この伝票は作り直してください。";
+    public const string LineNoDuplicated = "明細の行番号が重なっています。行番号は画面が自動で振るので、明細を入力し直してください。";
 
     /// <summary>税区分が空（<see cref="JournalViolationCodes.TaxCategoryMissing"/>）。</summary>
     public const string TaxCategoryMissing = "税区分を選んでください。税に関係のない行にも「対象外」を選びます。";

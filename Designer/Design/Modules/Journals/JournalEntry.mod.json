@@ -31,7 +31,12 @@
       "SearchCondition": {
         "LimitCount": 50,
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "StartDate.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "FiscalYear"
@@ -1681,7 +1686,7 @@
   },
   "ListLayouts": {
     "": {
-      "HeaderTitle": "仕訳伝票",
+      "HeaderTitle": "振替伝票",
       "DataOnlyFields": [],
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,

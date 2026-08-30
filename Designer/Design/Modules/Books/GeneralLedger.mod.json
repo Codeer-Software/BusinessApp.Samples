@@ -204,7 +204,12 @@
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "StartDate.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "FiscalYear",
@@ -235,7 +240,16 @@
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "DisplayOrder.Value",
+            "IsDescending": false
+          },
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "Account",
@@ -266,7 +280,16 @@
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "DisplayOrder.Value",
+            "IsDescending": false
+          },
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "SubAccount",
@@ -335,7 +358,12 @@
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "Partner",
@@ -408,7 +436,16 @@
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "DisplayOrder.Value",
+            "IsDescending": false
+          },
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "Department",
@@ -1114,7 +1151,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
     },
     {
-      "Text": "「期間内累計」は、絞り込んだ範囲の先頭からの累計です。資産・負債・純資産の科目は会計年度をまたいで積み上げ、収益・費用の科目は会計年度ごとに積み直します。",
+      "Text": "「期間内累計」は、勘定科目ごとに、絞り込んだ範囲の先頭から積んだ累計です。資産・負債・純資産の科目は会計年度をまたいで積み上げ、収益・費用の科目は会計年度ごとに積み直します。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",

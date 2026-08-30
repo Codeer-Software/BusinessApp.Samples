@@ -1,4 +1,4 @@
-namespace BusinessApp.AccountingCore.Server;
+namespace BusinessApp.AccountingCore.Server.Settings;
 
 using BusinessApp.Partners;
 
@@ -67,9 +67,12 @@ public sealed class CompanyProfileSubmitGate
 
         var value = CorporateNumber.Normalize(number.Value);
 
-        // **空欄は空文字ではなく NULL で保存する。** DDL の CHECK は「NULL か、数字 13 桁」しか
-        // 許さないので、空文字を書き戻すと「入っていた番号を消す」という正規の直し方が
-        // DB の失敗になる（取引先で実際に踏んだ。qa/03）。
+        // **空欄は空文字ではなく NULL で保存する。**
+        // **company_profile.corporate_number に CHECK は無い**（partners にはある。
+        // 揃えるのはフェーズ 2.5 の C。qa/02 R25-11）ので、空文字でも DB は受け取ってしまう。
+        // それでも NULL に倒すのは、**空文字と「入っていない」を DB で区別させないため**である
+        // ——区別が付かない 2 通りの「空」が混ざると、突合も表示も両方を扱うことになる。
+        // 取引先側は CHECK があるので、同じ形にしておくと移送しても壊れない（qa/03）。
         if (value.Length == 0)
         {
             number.Value = null;
@@ -86,11 +89,3 @@ public sealed class CompanyProfileSubmitGate
         }
     }
 }
-
-/// <summary>
-/// 自社情報の保存が関門で止められたときの例外。保存全体を巻き戻す。
-/// </summary>
-/// <remarks>
-/// <b>文言に改行を入れない。</b> トースト内の文字列は改行できない（CLB の仕様。qa/01 D-12）。
-/// </remarks>
-public sealed class CompanyProfileRejectedException(string message) : Exception(message);

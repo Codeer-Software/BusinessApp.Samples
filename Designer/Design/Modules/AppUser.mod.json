@@ -4,7 +4,7 @@
   "DbTable": "app_users",
   "CanCreate": true,
   "CanUpdate": true,
-  "CanDelete": true,
+  "CanDelete": false,
   "Fields": [
     {
       "DbColumn": "id",
@@ -555,7 +555,7 @@
   },
   "ListLayouts": {
     "": {
-      "HeaderTitle": "",
+      "HeaderTitle": "利用者アカウント",
       "DataOnlyFields": [],
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,
@@ -740,5 +740,5 @@
   },
   "CanBulkDataUpdate": false,
   "CanBulkDataDownload": false,
-  "PageTitle": ""
+  "PageTitle": "利用者アカウント"
 }

@@ -959,7 +959,7 @@
   },
   "ListLayouts": {
     "": {
-      "HeaderTitle": "適格請求書発行事業者の登録",
+      "HeaderTitle": "登録番号（インボイス）",
       "DataOnlyFields": [],
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,
@@ -1276,5 +1276,5 @@
   },
   "CanBulkDataUpdate": false,
   "CanBulkDataDownload": false,
-  "PageTitle": "適格請求書発行事業者の登録"
+  "PageTitle": "登録番号（インボイス）"
 }

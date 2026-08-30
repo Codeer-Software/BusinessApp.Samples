@@ -166,17 +166,31 @@ public class JournalEntryValidatorTests
         AssertViolation(JournalViolationCodes.FiscalYearMismatch, Validate(entry));
     }
 
-    [Fact]
-    public void 行番号は正の整数でなければならない()
+    /// <summary>
+    /// <b>0 と -1 を別々の伝票で試す。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>1 つの伝票に両方を入れて件数を数えると、<b>境界（0）の検査が死んでいても
+    /// -1 が 1 件出して緑になる</b>（ミューテーションテストで発覚）。件数ではなく
+    /// <b>それぞれの値で鳴ること</b>を見る。</para>
+    /// <para><b>違反に行番号を添えない</b>ので、「0 行目」と存在しない行を名指しすることはない
+    /// （2026-08-31 の自己レビュー）。行を特定する手段がその行番号そのものである。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void 行番号は正の整数でなければならない(int lineNo)
     {
         var entry = AccountingFixture.Entry(
             Ordinary,
-            AccountingFixture.Line(0, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
-            AccountingFixture.Line(-1, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+            AccountingFixture.Line(lineNo, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
+            AccountingFixture.Line(9, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
 
-        // **0 と -1 のそれぞれが弾かれること**を数える。「違反が 1 件以上ある」だけを見ると、
-        // 境界（0）の検査が死んでいても -1 が通してしまう（ミューテーションテストで発覚）。
-        Assert.Equal(2, Validate(entry).Count(v => v.Code == JournalViolationCodes.LineNoInvalid));
+        var violation = Assert.Single(
+            Validate(entry).Where(v => v.Code == JournalViolationCodes.LineNoInvalid));
+
+        Assert.Null(violation.LineNo);
+        Assert.Equal(JournalLineRules.LineNoNotStorable, violation.Message);
     }
 
     [Fact]

@@ -147,13 +147,13 @@ def check_layout(path, where, layout, kind, field_names, findings):
             # 「Xxx」と「XxxLabel」が対で存在するときだけラベル列とみなす
             # （年度名のように名前が Label で終わるだけのフィールドを誤検知しない）。
             #
-            # **1 列しかない行は対象外**（2026-08-30 に足した）。揃える相手が居ないので
-            # Middle にしても意味が無く、**節の見出しとして単独で置くラベル**——
-            # 取引先の詳細の「登録番号（インボイス）」——を叩いていた。
-            # 規約が言っているのは「**ラベル列 + 入力列**の 2 カラム行」である（Project.md）。
+            # **2026-08-30 に「1 列しかない行は対象外」を足し、2026-08-31 に戻した。**
+            # 足した理由（節の見出しとして単独で置くラベルを叩く）は、その見出しを置いた
+            # 画面ごと差し戻したので**当たる行が 1 つも無くなった**（自己レビューで 2 人が独立に指摘）。
+            # **理由の消えた緩和を残さない**——次の当て漏らしを静かに通す。
+            # 同じ形が本当に要るようになったら、そのとき鳴らして足す。
             field_name = (column.get("Layout") or {}).get("FieldName", "")
-            is_label_column = (len(columns) > 1
-                               and field_name.endswith("Label")
+            is_label_column = (field_name.endswith("Label")
                                and field_name[:-len("Label")] in field_names)
             if is_label_column and column.get("VerticalAlignment") != "Middle":
                 findings.append((SEV_WARN, "D-10", relative(path),
@@ -193,8 +193,16 @@ def check_page_frame(path, doc, findings, module_tables=None):
         # 一覧を挟まずに開く形（自社情報）と、表を持たない表示専用モジュールを載せる形
         # （ADR-0027 の `JournalEntryBoard`）——まで叩いていた。
         # **関門は足したときが完成ではない**（CLAUDE.md §4-2）。
+        # **白リストで受ける。** 黒リスト（List だけ禁じる）にすると、`"list"` のような
+        # 綴り違いや、CLB が将来増やす値が無言で通る——JSON の enum は大小を無視して読むので、
+        # `"list"` は D-05 が防いでいる「詳細が真っ白」を再現しつつ関門は緑になりうる
+        # （2026-08-31 の自己レビュー）。
         page_type = link.get("ModulePageType") or "Auto"
-        if page_type == "List":
+        if page_type not in ("Auto", "ListToDetail", "List", "Detail"):
+            findings.append((SEV_ERROR, "D-05", relative(path),
+                             f"{where} {module}: 知らない ModulePageType「{page_type}」"
+                             "（Auto / ListToDetail / List / Detail のどれかにする）"))
+        elif page_type == "List":
             findings.append((SEV_ERROR, "D-05", relative(path),
                              f"{where} {module}: ModulePageType が List だと /{module}/{{id}} の"
                              "ルートが登録されず詳細が真っ白になる（Auto にする）"))

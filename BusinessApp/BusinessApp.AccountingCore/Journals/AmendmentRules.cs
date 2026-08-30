@@ -28,7 +28,7 @@ internal static class AmendmentRules
         {
             yield return new Violation(
                 JournalViolationCodes.AmendmentTargetNotPosted,
-                $"計上していない伝票は{kind.CannotVerb}。下書きは削除してください。");
+                "この伝票はまだ計上されていません。下書きは削除してください。");
         }
 
         // 原仕訳を特定できなければ、帳簿の相互関連性（規則 5 ⑤一ロ）が切れる。
@@ -37,7 +37,7 @@ internal static class AmendmentRules
         {
             yield return new Violation(
                 JournalViolationCodes.AmendmentTargetUnidentified,
-                $"元の伝票を特定できないので{kind.CannotVerb}（保存されていないか、伝票番号がありません）。");
+                "元の伝票を特定できません（保存されていないか、伝票番号がありません）。");
         }
 
         // 打ち消す伝票が原仕訳より前に載ると、その間の期間の残高が原仕訳 1 本分ずれる。
@@ -56,7 +56,7 @@ internal static class AmendmentRules
         {
             yield return new Violation(
                 JournalViolationCodes.AmendmentTargetNotAmendable,
-                $"種別が「{original.EntryType.DisplayName()}」の伝票は{kind.CannotVerb}。対象にできるのは通常の伝票と訂正だけです。");
+                $"種別が「{original.EntryType.DisplayName()}」の伝票は対象にできません。対象にできるのは通常の伝票と訂正だけです。");
         }
     }
 
@@ -119,10 +119,14 @@ internal static class AmendmentRules
 /// 列挙型にして分岐すると、増えない分岐と到達しない既定値が 1 つ増えるだけになる。
 /// </remarks>
 /// <param name="Noun">「取消」「訂正」。</param>
-/// <param name="CannotVerb">「取り消せません」「訂正できません」。</param>
-internal readonly record struct AmendmentKind(string Noun, string CannotVerb)
+/// <remarks>
+/// <b>「取り消せません」「訂正できません」はここに持たない。</b> それは<b>差し戻しの見出し</b>で、
+/// <c>JournalPostingRejectedException</c> が押されたボタンから決める（2026-08-31。
+/// qa/02 R25-10）。両方が持つと「取り消せません。①…は取り消せません。」と 2 回言うことになる。
+/// </remarks>
+internal readonly record struct AmendmentKind(string Noun)
 {
-    public static readonly AmendmentKind Reversal = new("取消", "取り消せません");
+    public static readonly AmendmentKind Reversal = new("取消");
 
-    public static readonly AmendmentKind Correction = new("訂正", "訂正できません");
+    public static readonly AmendmentKind Correction = new("訂正");
 }

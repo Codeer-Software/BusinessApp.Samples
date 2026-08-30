@@ -15,8 +15,9 @@ using BusinessApp.AccountingCore.Shared;
 /// qa/01 D-12）。改行を入れても表示に出ず、改行コードの管理だけが増える。
 /// 代わりに<b>件数と番号</b>で区切る——1 行に繋がっても「あと何を直すか」が読み取れる。</para>
 /// </remarks>
-public sealed class JournalPostingRejectedException(IReadOnlyList<Violation> violations, string headline)
-    : Exception(BuildMessage(violations, headline))
+public sealed class JournalPostingRejectedException(
+    IReadOnlyList<Violation> violations, string headline, Exception? inner = null)
+    : Exception(BuildMessage(violations, headline), inner)
 {
     /// <summary>計上を止めたときの見出し。</summary>
     public const string PostingHeadline = "計上できません";

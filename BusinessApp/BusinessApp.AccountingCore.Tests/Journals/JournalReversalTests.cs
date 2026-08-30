@@ -254,11 +254,20 @@ public class JournalReversalTests
     {
         // 規則は訂正と共有しているので、**共有した先で操作を取り違えると**
         // 「取り消す」を押したのに「訂正できない」と出る。文言まで含めて固定する。
+        //
+        // **「取り消せません」は本文には出ない。** それは差し戻しの見出しで、
+        // JournalPostingRejectedException が押されたボタンから決める（2026-08-31。qa/02 R25-10）。
+        // 本文が同じ語を繰り返すと「取り消せません。①…は取り消せません。」になる。
+        // 見出しの側は JournalAmendmentServiceTests が固定している。
         var result = JournalReversal.Reverse(
             AccountingFixture.CashSale(TransactionDate), TransactionDate.AddDays(-1), EnteredAt, Context());
 
-        Assert.Contains("取り消せません", Message(result, JournalViolationCodes.AmendmentTargetNotPosted), StringComparison.Ordinal);
-        Assert.Contains("取り消せません", Message(result, JournalViolationCodes.AmendmentTargetUnidentified), StringComparison.Ordinal);
+        Assert.Equal(
+            "この伝票はまだ計上されていません。下書きは削除してください。",
+            Message(result, JournalViolationCodes.AmendmentTargetNotPosted));
+        Assert.Equal(
+            "元の伝票を特定できません（保存されていないか、伝票番号がありません）。",
+            Message(result, JournalViolationCodes.AmendmentTargetUnidentified));
         // **完全一致で固定する。** 前半だけを見ていると、日付をはさんだ後半
         //（＝文をつないでいる側）が無防備になる（qa/02 R8-09）。
         Assert.Equal(
@@ -273,7 +282,7 @@ public class JournalReversalTests
             Posted(entryType: EntryType.Reversal), ReversedOn, EnteredAt, Context());
 
         Assert.Equal(
-            "種別が「取消」の伝票は取り消せません。対象にできるのは通常の伝票と訂正だけです。",
+            "種別が「取消」の伝票は対象にできません。対象にできるのは通常の伝票と訂正だけです。",
             Message(result, JournalViolationCodes.AmendmentTargetNotAmendable));
     }
 

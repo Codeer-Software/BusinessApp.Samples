@@ -1,4 +1,8 @@
-namespace BusinessApp.AccountingCore.Server.Tests;
+namespace BusinessApp.AccountingCore.Server.Tests.Settings;
+
+using BusinessApp.AccountingCore.Server.Settings;
+
+using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
@@ -103,16 +107,49 @@ public class CompanyProfileSubmitGateTests
     /// DDL の <c>CHECK</c> は「NULL か、数字 13 桁」しか許さない。空文字を書き戻すと、
     /// <b>入っていた番号を消すという正規の直し方</b>が DB の失敗になる（取引先で実際に踏んだ）。
     /// </remarks>
-    [Fact]
-    public async Task 空欄はNULLで保存する()
+    [Theory]
+    [InlineData("")]        // 画面が実際に送る形（TextEditEmptyType: "StringEmpty"）
+    [InlineData("   ")]     // 空白だけを打った・貼り付けた
+    public async Task 空欄はNULLで保存する(string blank)
     {
         var save = new SaveSpy();
-        var profile = Profile(corporateNumber: "   ");
+        var profile = Profile(corporateNumber: blank);
 
         await new CompanyProfileSubmitGate().SubmitAsync([Updating(profile)], save.SaveAsync);
 
         Assert.Null(((TextFieldData)profile.Fields["CorporateNumber"]).Value);
         Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>関門が通した値は、DB も受け取れる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>関門は「DB に拒まれる値を保存へ渡さない」ところまで責任を持つ</b>（qa/03 L-14）。
+    /// 通しただけで DB が拒むと、利用者には生の SQLite のメッセージが出る（qa/01 F-16）。</para>
+    /// <para><b>ここは往復で見る。</b> <c>company_profile.corporate_number</c> には
+    /// <c>partners</c> と違って <c>CHECK</c> が無い（qa/02 R25-11 で揃える）ので、
+    /// <b>DB 側の砦が無いぶん、通した値が本当に書けることを見ておく価値がある。</b></para>
+    /// </remarks>
+    [Theory]
+    [InlineData(ValidNumber)]
+    [InlineData(null)]
+    public async Task 関門が通した値はDBも受け取れる(string? stored)
+    {
+        using var server = new AccountingServer();
+        var save = new SaveSpy();
+        var profile = Profile(corporateNumber: stored ?? string.Empty);
+
+        await new CompanyProfileSubmitGate().SubmitAsync([Updating(profile)], save.SaveAsync);
+
+        // 関門が書き換えた**そのままの値**を DB へ入れる。
+        var written = ((TextFieldData)profile.Fields["CorporateNumber"]).Value;
+        server.Execute(
+            written is null
+                ? "update company_profile set corporate_number = null where id = 1"
+                : $"update company_profile set corporate_number = '{written}' where id = 1");
+
+        Assert.Equal(stored, server.Scalar<string?>("select corporate_number from company_profile"));
     }
 
     /// <summary>貼り付けで紛れ込んだ空白は落として保存する。</summary>
@@ -151,7 +188,9 @@ public class CompanyProfileSubmitGateTests
     {
         var save = new SaveSpy();
         var profile = Profile();
-        profile.Fields["CorporateNumber"] = new NumberFieldData { Value = 5835678256246m };
+        // **検査に落ちる番号を使う。** 正しい番号だと「非テキストは素通し」と
+        // 「非テキストも検査する」のどちらの実装でも緑になり、何も表明しない（qa/03 L-03）。
+        profile.Fields["CorporateNumber"] = new NumberFieldData { Value = 1835678256246m };
 
         await new CompanyProfileSubmitGate().SubmitAsync([Updating(profile)], save.SaveAsync);
 

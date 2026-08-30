@@ -48,36 +48,34 @@ public sealed class PartnerRegistrationStore(IDbAccessor dbAccessor, string data
     }
 
     /// <summary>
-    /// 同じ取引先に、同じ日から始まる<b>別の</b>登録があるか。
+    /// その取引先の、その日から始まる登録の<b>識別子</b>を全部返す。
     /// </summary>
     /// <remarks>
-    /// <b>「別の」を行の識別子で決める。</b> 登録番号が一致するかどうかで自分自身を見分けようとすると、
-    /// 番号が差分に載っていない更新（他の項目だけ直した保存）を自分自身と区別できない。
-    /// </remarks>
-    /// <param name="id">保存しようとしている登録。新規なら <c>null</c>。</param>
-    /// <remarks>
+    /// <para><b>「他にあるか」ではなく「どれがあるか」を返す。</b> 自分自身を除くだけでは足りず、
+    /// <b>同じ保存の中で日付が動く行</b>も数えてはいけない（入れ替えが誤って止まる。
+    /// 2026-08-31 の自己レビュー）。どれを数えないかは保存の全体を知っている関門が決める。</para>
     /// <para><b><c>date()</c> で包んで比べる。</b> CLB は日付の列に
     /// <c>"2023-10-01 00:00:00"</c> と時刻付きで書く（アプリ全体でそう。2026-08-26 実測）ので、
     /// <c>valid_from = '2023-10-01'</c> という文字列の比較は<b>いつも外れる</b>。
     /// 外れても例外は出ず、<b>二重登録が黙って通る</b>だけである
     /// （実機操作テストで発見。qa/03 L-12）。</para>
     /// </remarks>
-    public async Task<bool> HasOtherRegistrationFromAsync(PartnerId partnerId, DateOnly validFrom, long? id)
+    public async Task<IReadOnlyList<long>> FindRegistrationIdsFromAsync(
+        PartnerId partnerId, DateOnly validFrom)
     {
         var rows = await dbAccessor.QueryAsync(
             dataSourceName,
             """
-            select 1 from partner_invoice_registrations
-             where partner_id = @p1 and date(valid_from) = @p2 and (@p3 is null or id <> @p3)
+            select id from partner_invoice_registrations
+             where partner_id = @p1 and date(valid_from) = @p2
             """,
             new()
             {
                 { "@p1", Param(partnerId.Value) },
                 { "@p2", Param(validFrom.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)) },
-                { "@p3", Param(id) },
             });
 
-        return rows.Count > 0;
+        return [.. rows.Select(r => Convert.ToInt64(r["id"], CultureInfo.InvariantCulture))];
     }
 
     /// <summary>

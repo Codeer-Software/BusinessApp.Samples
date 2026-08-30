@@ -154,7 +154,9 @@ public sealed class JournalAmendmentService(
         }
         catch (JournalPostingRejectedException rejected)
         {
-            throw new JournalPostingRejectedException(rejected.Violations, headline);
+            // **元の例外を内側に残す。** 包み直すと、スタックトレースが
+            // ここから始まって「どの検証で落ちたか」が消える。文言と違反は同じものを渡す。
+            throw new JournalPostingRejectedException(rejected.Violations, headline, rejected);
         }
     }
 

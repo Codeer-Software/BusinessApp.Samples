@@ -1,6 +1,7 @@
 namespace BusinessApp.AccountingCore.Server;
 
 using BusinessApp.AccountingCore.Server.Journals;
+using BusinessApp.AccountingCore.Server.Settings;
 using BusinessApp.Partners.Server;
 
 using Codeer.LowCode.Blazor.DataIO;

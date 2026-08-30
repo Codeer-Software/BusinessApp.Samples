@@ -489,6 +489,195 @@ public class PartnerRegistrationSubmitGateTests
     }
 
     /// <summary>
+    /// <b>親 FK が識別子フィールドで来ても、二重登録を止める。</b>
+    /// </summary>
+    /// <remarks>
+    /// 登録の入力を取引先の詳細に移すと、親 FK は <c>IdFieldDesign</c> になる
+    /// （ヘッダ＋明細の正典。qa/01 D-17）。<b>参照フィールド決め打ちだと、その日に
+    /// この関門が丸ごと素通しに落ちる</b>——しかもフィクスチャが自分で
+    /// <c>LinkFieldData</c> を組むので、既存のテストは全部緑のままである
+    /// （2026-08-31 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 親FKが識別子フィールドでも二重登録を止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        var row = Registration(no: "T9999999999999", validFrom: new DateOnly(2023, 10, 1));
+        row.Fields["Partner"] = new IdFieldData
+        {
+            Value = partner.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        };
+
+        await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync([Adding(row)], save.SaveAsync));
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>参照フィールドで来た行と、保存済みから引いた行が、同じ相手だと分かる。</b>
+    /// </summary>
+    /// <remarks>
+    /// 鍵の作り方が 2 通りある（送られてきた文字列と、DB の値から作った文字列）。
+    /// 片方が <c>"007"</c>、片方が <c>"7"</c> のように揃わないと、
+    /// <b>同じ相手を別物と見なして二重登録が通る</b>。両方の経路が 1 つの保存に混ざる形で固定する。
+    /// </remarks>
+    [Fact]
+    public async Task 送られてきた相手と保存済みの相手を同じ鍵で突き合わせる()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var existing = InsertRegistration(server, partner, ValidNo, "2020-04-01");
+        var save = new SaveSpy();
+
+        // 1 件目は保存済みの行を動かす（取引先は差分に無い＝DB から引く）。
+        var moved = Registration(validFrom: new DateOnly(2026, 1, 1), id: existing);
+        // 2 件目は新規で、取引先を**先頭 0 付き**の文字列で指す。
+        var added = Registration(no: "T9999999999999", validFrom: new DateOnly(2026, 1, 1));
+        added.Fields["Partner"] = new LinkFieldData
+        {
+            Value = "00" + partner.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        };
+
+        await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [new ModuleSubmitData
+                {
+                    ModuleName = PartnerRegistrationSubmitGate.ModuleName,
+                    Add = [added],
+                    Update = [moved],
+                }],
+                save.SaveAsync));
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>相手が違えば、保存済みから引いた行どうしでも通す。</b>
+    /// </summary>
+    /// <remarks>
+    /// 相手を DB から引く経路で「別の相手を同じと見なす」誤りを見る。
+    /// 取引先を 1 件しか作らないと、<c>FindPartnerOfAsync</c> が引数を無視して
+    /// いつも同じ相手を返す実装でも緑になる（2026-08-31 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 保存済みから引いた相手が違えば同じ日へ動かせる()
+    {
+        using var server = new PartnerServer();
+        var first = InsertPartner(server, "P901");
+        var second = InsertPartner(server, "P902");
+        var a = InsertRegistration(server, first, ValidNo, "2020-04-01");
+        var b = InsertRegistration(server, second, "T9999999999999", "2021-04-01");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(
+                Registration(validFrom: new DateOnly(2026, 1, 1), id: a),
+                Registration(validFrom: new DateOnly(2026, 1, 1), id: b))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>同じ保存で 2 行の登録年月日を入れ替えられる。</b>
+    /// </summary>
+    /// <remarks>
+    /// 保存済みの値としか突き合わせないと、A の新しい日付が<b>これから動く B の古い日付</b>に
+    /// 当たって「既にあります」で誤って止まる（2026-08-31 の自己レビュー）。
+    /// <b>この保存で日付が動く行は、保存済みの値で数えない。</b>
+    /// </remarks>
+    [Fact]
+    public async Task 同じ保存で二行の登録年月日を入れ替えられる()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var a = InsertRegistration(server, partner, ValidNo, "2023-10-01");
+        var b = InsertRegistration(server, partner, "T9999999999999", "2025-04-01");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(
+                Registration(validFrom: new DateOnly(2025, 4, 1), id: a),
+                Registration(validFrom: new DateOnly(2023, 10, 1), id: b))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>日付が動かない行は、除外しない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 「同じ保存に載っている行は全部除外する」と実装すると、公表名だけを直した行の日付へ
+    /// 新しい行を足せてしまう（<b>二重登録が通る</b>）。除外してよいのは
+    /// <b>登録年月日が差分にある行</b>だけである。
+    /// </remarks>
+    [Fact]
+    public async Task 公表名だけを直した行の日付には新しい登録を足せない()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var existing = InsertRegistration(server, partner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        var untouched = Registration(id: existing);
+        untouched.Fields["PublishedName"] = new TextFieldData { Value = "公表名を直しただけ" };
+
+        await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [new ModuleSubmitData
+                {
+                    ModuleName = PartnerRegistrationSubmitGate.ModuleName,
+                    Add = [Registration(no: "T9999999999999", partnerId: partner, validFrom: new DateOnly(2023, 10, 1))],
+                    Update = [untouched],
+                }],
+                save.SaveAsync));
+        Assert.False(save.Called);
+    }
+
+    /// <summary>想定していない型で取引先が来たら、突き合わせの対象にしない。</summary>
+    /// <remarks>
+    /// CLB は宣言した型でしか送らないので、ここに来るのは API を直に叩いた経路だけである。
+    /// 例外にせず素通しするのは、<b>止めるのは書式と二重登録の 2 つだけ</b>という
+    /// この関門の約束（docs/07 §3-2）を広げないため。DB の NOT NULL が最後に受け止める。
+    /// </remarks>
+    [Fact]
+    public async Task 想定していない型の取引先は突き合わせに使わない()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        var first = Registration(no: ValidNo, validFrom: new DateOnly(2023, 10, 1));
+        var second = Registration(no: "T9999999999999", validFrom: new DateOnly(2023, 10, 1));
+        first.Fields["Partner"] = new NumberFieldData { Value = 3m };
+        second.Fields["Partner"] = new NumberFieldData { Value = 3m };
+
+        await Gate(server).SubmitAsync([Adding(first, second)], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>取引先の欄が空文字で来たら、突き合わせの対象にしない。</summary>
+    [Fact]
+    public async Task 空の取引先は突き合わせに使わない()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        var first = Registration(no: ValidNo, validFrom: new DateOnly(2023, 10, 1));
+        var second = Registration(no: "T9999999999999", validFrom: new DateOnly(2023, 10, 1));
+        first.Fields["Partner"] = new LinkFieldData { Value = string.Empty };
+        second.Fields["Partner"] = new LinkFieldData { Value = string.Empty };
+
+        await Gate(server).SubmitAsync([Adding(first, second)], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
     /// <b>相手を決められない行は数えない。</b>
     /// </summary>
     /// <remarks>
