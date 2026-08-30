@@ -20,7 +20,7 @@ namespace BusinessApp.Server.Services
         readonly DesignData _designData;
         readonly AccountingSubmitPipeline _accounting;
 
-        public CustomizedModuleDataIO(DesignData designData, IAuthenticationContext authenticationContext, IDbAccessor dbAccess, ITemporaryFileManager temporaryFileManager)
+        public CustomizedModuleDataIO(DesignData designData, IAuthenticationContext authenticationContext, IDbAccessor dbAccess, ITemporaryFileManager temporaryFileManager, Action<string>? onSaveFailure = null)
             : base(designData, authenticationContext, dbAccess, temporaryFileManager)
         {
             _designData = designData;
@@ -35,7 +35,7 @@ namespace BusinessApp.Server.Services
             //**つなぎ方はここに書かない。** このファイルはカバレッジにもミューテーションにも
             //載らないので、ここで組み立てると配線の間違いを誰も検査できない（AccountingSubmitPipeline）。
             _accounting = AccountingSubmitPipeline.Create(
-                dbAccess, dataSourceName, TimeProvider.System, authenticationContext);
+                dbAccess, dataSourceName, TimeProvider.System, authenticationContext, onSaveFailure);
         }
 
         //トランザクション単位の入口。伝票の更新だけを見る UpdateAsync では、

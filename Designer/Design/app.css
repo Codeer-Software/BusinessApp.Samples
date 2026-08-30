@@ -5,10 +5,17 @@
 
 /* 金額列は右詰め（docs/09_画面の原則.md §4）。桁が揃わないと、帳簿は読むのに数えることになる。
    使い方: ListLayouts の列に "ClassName": "amount-cell" を付ける。
-   注意 1: ClassName は <td> にしか付かない。見出し（<th>）は揃わない（qa/01 D-16）。
-           09 §4 は「列見出しは左寄せのまま」なので、これは望む挙動である。
-   注意 2: この text-align は効いていない。セルの中身が flex なので見た目に出ない（qa/01 D-15）。
-           justify-content で直す（docs/05 のフェーズ 2.5 の A）。 */
+   注意: ClassName は <td> にしか付かない。見出し（<th>）は揃わない（qa/01 D-16）。
+         09 §4 は「列見出しは左寄せのまま」なので、これは望む挙動である。 */
 .amount-cell {
-    text-align: right;
+    /* 桁を縦に比べるために、数字を等幅にする。1 と 8 で幅が変わると桁がずれる。 */
+    font-variant-numeric: tabular-nums;
+}
+
+/* **text-align では右に寄らない**（qa/01 D-15。2026-08-28 実測 1.3.20）。
+   一覧のセルは <td><div style="display:flex"><span>値</span></div></td> で描かれ、
+   <span> は内容ぶんの幅しかない flex 項目なので、その中で右に寄せても見た目は変わらない。
+   寄せるのは flex の配置のほうである。 */
+.amount-cell > div {
+    justify-content: flex-end;
 }

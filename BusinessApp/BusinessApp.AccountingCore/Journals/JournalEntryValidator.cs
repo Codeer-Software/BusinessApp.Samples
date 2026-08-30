@@ -71,13 +71,14 @@ public static class JournalEntryValidator
 
         foreach (var lineNo in entry.Lines.GroupBy(l => l.LineNo).Where(g => g.Count() > 1).Select(g => g.Key))
         {
-            violations.Add(new Violation(JournalViolationCodes.LineNoInvalid, "行番号が重複しています。", lineNo));
+            violations.Add(new Violation(
+                JournalViolationCodes.LineNoInvalid, JournalLineRules.LineNoDuplicated, lineNo));
         }
 
         foreach (var line in entry.Lines.Where(l => l.LineNo <= 0))
         {
             violations.Add(new Violation(
-                JournalViolationCodes.LineNoInvalid, "行番号は 1 以上の整数にしてください。", line.LineNo));
+                JournalViolationCodes.LineNoInvalid, JournalLineRules.LineNoNotStorable, line.LineNo));
         }
 
         if (entry.EntryType.RequiresOriginalEntry() && entry.OriginalEntryId is null)
@@ -150,18 +151,14 @@ public static class JournalEntryValidator
             if (!line.Amount.IsPositive)
             {
                 violations.Add(new Violation(
-                    JournalViolationCodes.AmountNotPositive,
-                    "金額は 1 円以上にしてください。減額は借方と貸方を入れ替えて表します。",
-                    line.LineNo));
+                    JournalViolationCodes.AmountNotPositive, JournalLineRules.AmountNotPositive, line.LineNo));
             }
 
             // 既定値のまま（未設定）の税区分を通さない。NULL と「対象外」を 2 通りで表さない（docs/06 §1）。
             if (line.TaxCategoryId == default)
             {
                 violations.Add(new Violation(
-                    JournalViolationCodes.TaxCategoryMissing,
-                    "税区分を選んでください。税に関係のない行にも「対象外」を選びます。",
-                    line.LineNo));
+                    JournalViolationCodes.TaxCategoryMissing, JournalLineRules.TaxCategoryMissing, line.LineNo));
             }
 
             ValidateTaxLine(line, entry, violations);

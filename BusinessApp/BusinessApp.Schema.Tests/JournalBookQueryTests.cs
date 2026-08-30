@@ -274,25 +274,76 @@ public class JournalBookQueryTests
 
     // --- 並び順（相互関連性の読みやすさ）---
 
+    /// <summary>
+    /// 取引日 → <b>会計年度（開始日）</b> → 伝票番号 → 行番号の順。
+    /// </summary>
+    /// <remarks>
+    /// <para>先頭が取引日なのは、仕訳帳が「取引の発生順に」記載する帳簿だからである
+    /// （法人税法施行規則 55 ①）。伝票番号は<b>年度内</b>の連番なので、
+    /// 年度を並び順に入れないと年度をまたぐ取消が原仕訳より前に並ぶ。</para>
+    /// <para><b>年度は開始日で並べる。識別子で並べない。</b> <c>fiscal_years.id</c> は
+    /// <c>AUTOINCREMENT</c> の代理キーなので、後から入れた古い年度ほど id が大きくなる（qa/03 L-19）。
+    /// 検体はその形を作る——第 19 期のあとに<b>第 17 期</b>を入れるので、
+    /// 第 17 期は id が最大でいちばん古い。</para>
+    /// </remarks>
     [Fact]
-    public void 取引日_年度_伝票番号_行番号の順に並ぶ()
+    public void 取引日_会計年度_伝票番号_行番号の順に並ぶ()
     {
-        // 伝票番号は**年度内**の連番なので、年度を並び順に入れないと
-        // 年度をまたぐ取消が原仕訳より前に並ぶ。
         using var db = Create();
         TestDatabase.Execute(db, """
             INSERT INTO fiscal_years (code, label, start_date, end_date, status)
                 VALUES ('FY19', '第 19 期', '2027-04-01', '2028-03-31', 'open');
+            INSERT INTO fiscal_years (code, label, start_date, end_date, status)
+                VALUES ('FY17', '第 17 期', '2025-04-01', '2026-03-31', 'open');
+
+            -- 4) 第 19 期の取消。取引日は原仕訳と同じ 05-10、計上は翌々年度。
             INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, entered_at)
-                VALUES (2, '2026-05-10', '2027-04-02', 'draft', 'reversal', 1, '2027-04-02 10:00:00');
+                VALUES ((SELECT id FROM fiscal_years WHERE code = 'FY19'),
+                        '2026-05-10', '2027-04-02', 'draft', 'reversal', 1, '2027-04-02 10:00:00');
             INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
                 VALUES (4, 1, 'credit', 1, 1000, 1);
+
+            -- 5) 第 17 期の期末（03-30）に取引し、その期のうちに計上した。**id はいちばん大きい。**
+            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ((SELECT id FROM fiscal_years WHERE code = 'FY17'),
+                        '2026-03-30', '2026-03-30', 'draft', 'normal', '2026-03-30 10:00:00');
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (5, 1, 'debit', 1, 700, 1);
+
+            -- 6) 同じ 03-30 の取引を、決算後に見つけて第 18 期で計上した。
+            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES (1, '2026-03-30', '2026-04-05', 'draft', 'normal', '2026-04-05 10:00:00');
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (6, 1, 'debit', 1, 800, 1);
+
             UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2027-04-02 10:00:00' WHERE id = 4;
+            UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-03-30 10:00:00' WHERE id = 5;
+            UPDATE journal_entries SET status = 'posted', entry_no = 3, posted_at = '2026-04-05 10:00:00' WHERE id = 6;
             """);
 
+        var rows = Run(db);
+
+        // 取引日が同じ 03-30 の 2 行。**第 17 期（id が最大）が先、第 18 期（id が 1）が後。**
+        // 識別子で並べると逆になる。
+        Assert.Equal([5L, 6L], rows.Where(r => r.EntryId is 5 or 6).Select(r => r.EntryId));
+
         // 取引日が同じ 05-10 の 3 行。第 18 期の #1 が先、第 19 期の #1 が後。
-        var sameDay = Run(db).Where(r => r.EntryId is 1 or 4).ToList();
-        Assert.Equal([1L, 1L, 4L], sameDay.Select(r => r.EntryId));
+        Assert.Equal([1L, 1L, 4L], rows.Where(r => r.EntryId is 1 or 4).Select(r => r.EntryId));
+
+        // 帳簿全体では 03-30 の 2 行がいちばん前に来る（取引日が先頭のキー）。
+        Assert.Equal([5L, 6L, 1L, 1L, 4L, 2L, 2L], rows.Select(r => r.EntryId));
+    }
+
+    /// <summary>
+    /// <b>会計年度を列に出す。</b> 伝票番号は年度ごとの連番なので、年度で絞らなければ
+    /// 同じ番号が何行も並ぶ。帳簿は既定で絞らない（docs/09 §3）ので、既定の表示がその状態である。
+    /// </summary>
+    [Fact]
+    public void 会計年度は列に出る()
+    {
+        using var db = Create();
+
+        Assert.All(Run(db), r => Assert.Equal("第 18 期（2026 年度）", r.FiscalYearLabel));
     }
 
     // --- 実行の土台 ---
@@ -314,7 +365,7 @@ public class JournalBookQueryTests
         return db;
     }
 
-    private sealed record Row(long EntryId, long LineNo, string? PartnerName);
+    private sealed record Row(long EntryId, string FiscalYearLabel, long LineNo, string? PartnerName);
 
     /// <summary>
     /// 仕訳帳の SQL を<b>本物のまま</b>流す。渡さなかったパラメータは NULL（＝条件なし）。
@@ -337,6 +388,7 @@ public class JournalBookQueryTests
         {
             rows.Add(new Row(
                 reader.GetInt64(reader.GetOrdinal("entry_id")),
+                reader.GetString(reader.GetOrdinal("fiscal_year_label")),
                 reader.GetInt64(reader.GetOrdinal("line_no")),
                 reader.IsDBNull(reader.GetOrdinal("partner_name"))
                     ? null : reader.GetString(reader.GetOrdinal("partner_name"))));

@@ -21,6 +21,10 @@ SELECT
     a.code                      AS account_code,
     a.name                      AS account_name,
     sa.name                     AS sub_account_name,
+    -- **会計年度を列に出す。** 累計を年度で切る以上（下の OVER 句）、
+    -- 出さないと利用者には「累計が突然戻る」「取引日が遡る」理由が見えない。
+    -- 帳簿は既定で絞らない（docs/09 §3）ので、既定の表示は必ず年度が混ざる。
+    fy.label                    AS fiscal_year_label,
     e.transaction_date          AS transaction_date,
     -- **区分値は生のまま返す。** 日本語の見出しは CLB のデザイン enum が持っている
     -- （C# の列挙型・DDL の CHECK と 3 者一致を機械で検査している）。
@@ -46,22 +50,39 @@ SELECT
     -- **期間内累計。** 期首残高（フェーズ 4）が無いので、残高ではなく
     -- 「ここに出ている範囲の先頭からの累計」である。画面の列名もそう名づけてある。
     --
+    -- **会計年度をまたいで積み上げない**（開発者の決定。2026-08-28。
+    -- 理由は「損益科目の累計が決算をまたいで積み上がる」）。
+    -- **その理由を損益科目に限って当て、貸借科目は切らない**（Claude の判断。2026-08-30。
+    -- 現金や買掛金の残高は年度をまたいで続くもので、年度で 0 に戻すと
+    -- 手許現金でも残高でもない数が出る。I-07。qa/02 の R24-03）。
+    -- 区分の判定は **AccountCategory.IsProfitAndLoss の 2 つ目の実装**である（収益・費用）。
+    -- **評価勘定（is_contra）は区分を変えない**——売上値引・戻り高は収益の評価勘定であって損益科目である。
+    --
+    -- 会計年度が 1 つのうちは表に出ないが、第 17 期のデモデータか翌期が入ると必ず出る。
+    --
     -- 符号は**その科目の通常残高の側**に合わせる（docs/04 §6）。科目区分だけでは決まらない——
-    -- 評価勘定（減価償却累計額・売上値引戻り高など）は通常残高が科目区分と逆になる。
+    -- 評価勘定（減価償却累計額・売上値引・戻り高など）は通常残高が科目区分と逆になる。
     -- 借方が通常なら「借方 − 貸方」、貸方が通常なら「貸方 − 借方」。
     -- こうしないと売上の累計が負の数で出る。
     SUM(
         CASE WHEN l.debit_credit = 'debit' THEN l.amount ELSE -l.amount END
         * CASE WHEN (a.category IN ('asset', 'expense')) <> (a.is_contra = 1) THEN 1 ELSE -1 END
     ) OVER (
-        PARTITION BY l.account_id
-        ORDER BY e.transaction_date, e.fiscal_year_id, e.entry_no, l.line_no
+        -- 貸借科目では CASE が全行 NULL になり、科目ごとの 1 つの窓になる
+        -- （**PARTITION BY の式が NULL の行は 1 区画に束ねられる**。qa/01 A-09）。
+        PARTITION BY l.account_id,
+                     CASE WHEN a.category IN ('revenue', 'expense') THEN e.fiscal_year_id END
+        -- **年度の順は開始日で決める。** fiscal_years.id は AUTOINCREMENT の代理キーで、
+        -- 年代とは無関係な挿入順である——第 17 期を後から入れると id は第 18 期より大きくなる。
+        ORDER BY date(fy.start_date), date(e.transaction_date), e.entry_no, l.line_no
     )                           AS running_total,
     l.item_description          AS item_description,
     e.description               AS description
 FROM journal_entries e
 JOIN journal_lines   l  ON l.journal_entry_id = e.id
 JOIN accounts        a  ON a.id  = l.account_id
+-- 会計年度は**列に出すため**と**並び順のため**に引く（識別子ではなく開始日で並べる）。
+JOIN fiscal_years    fy ON fy.id = e.fiscal_year_id
 LEFT JOIN sub_accounts sa ON sa.id = l.sub_account_id
 LEFT JOIN departments  d  ON d.id  = l.department_id
 LEFT JOIN partners     lp ON lp.id = l.partner_id
@@ -100,7 +121,13 @@ WHERE e.status = 'posted'
            AND (e.description IS NULL OR e.description = ''))
        OR (@p_blank_field = 'item_description'
            AND (l.item_description IS NULL OR l.item_description = '')))
--- **並び順は元帳の意味そのものである。** 科目ごとにまとまり、その中は取引日順に積み上がる。
--- 累計の窓（上の OVER 句）とこの並びが一致していないと、累計が飛び飛びに見える。
--- 年度を並び順に含める理由は仕訳帳と同じ（伝票番号は年度内の連番）。
-ORDER BY a.code, e.transaction_date, e.fiscal_year_id, e.entry_no, l.line_no
+-- **並び順は元帳の意味そのものである。** 科目ごと・会計年度ごとにまとまり、
+-- その中は取引日順に積み上がる。
+-- **累計の窓（上の OVER 句）とこの並びは必ず一致させる。** ずれると累計が飛び飛びに見える。
+-- だから年度で累計を切るなら、**並びも年度で切らなければならない**——
+-- 取引日を年度より先に置くと、計上日が翌年度にずれた伝票（決算後に見つかった取引）が
+-- 前年度の行の間に挟まり、そこだけ累計が別の系列の値を出す。
+-- 会計期間への帰属を決めるのは計上日である（docs/04 の I-03）。
+-- **年度は開始日で並べる**（id は代理キー。上の OVER 句と同じ理由）。
+-- 年度の中で伝票番号を使えるのは、それが年度内の連番だからである（I-17）。
+ORDER BY a.code, date(fy.start_date), date(e.transaction_date), e.entry_no, l.line_no

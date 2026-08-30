@@ -38,6 +38,21 @@ void ApplyPostedLock()
     PostButton.IsVisible = !posted;
     SubmitButton.IsVisible = !posted;
 
+    // **押せるのに拒まれる欄を残さない**（docs/09 §1）。次の 3 つは、入力欄の形をしているのに
+    // 利用者が決められるものではない。触れると、直しようのない差し戻しに当たる。
+    //
+    //   状態     ボタンを押した結果である。「計上済み」を選んで「下書き保存」を押すと
+    //            計上まで進み、ボタンのラベルが嘘になる
+    //   会計年度 計上日から決まる（下の SelectFiscalYear）。選んでも上書きされ、
+    //            食い違えばサーバが差し戻す
+    //   種別     保存したあとは変えられない（サーバの関門と DB のトリガが拒む）。
+    //            新規のうちだけ選ばせる
+    //
+    // **これは見た目の話で、守りではない**（qa/01 F-24）。守るのはサーバ側の関門である。
+    Status.IsViewOnly = true;
+    FiscalYear.IsViewOnly = true;
+    EntryType.IsViewOnly = !IsNewData;
+
     // 入力のときの注意書き。計上済みの伝票はもう直せないので出さない。
     // **文言の正典は docs/07 §1-4**（住所の写しを仕訳に作らないと決めた、その代わりの運用）。
     // ここと 07 に同じ日本語があるので、直すときは両方を見る。
@@ -199,6 +214,19 @@ void PostButton_OnClick()
         Toaster.Warn("この伝票は計上済みです。");
         return;
     }
+
+    // **CLB 本来の入力検証を、自分で走らせる**（qa/01 F-15）。
+    // 標準の SubmitButtonFieldDesign（「下書き保存」）はクリック時に全フィールドを検証するが、
+    // スクリプトからの this.Submit() は走らせない。呼ばないと、必須の空欄がそのまま保存へ進み、
+    // DB の NOT NULL に当たって生の SQLite のメッセージがトーストに出る（qa/03 L-16）。
+    // ValidateInput() は ListField の子行（明細）まで見る。
+    //
+    // **状態を進める前に呼ぶ。** 進めてから戻す作りにすると、戻し忘れが
+    // 「計上済みに見える下書き」になる。
+    //
+    // ここで止まるのは画面の話であって、守りではない。同じ違反はサーバ側の関門
+    // （JournalSubmitRequirements）も止める——画面は経路の 1 本でしかない（ADR-0008）。
+    if (!this.ValidateInput()) return;
 
     Status.Value = EntryStatuses.Posted;
 

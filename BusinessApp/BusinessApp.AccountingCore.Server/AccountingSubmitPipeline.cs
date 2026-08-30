@@ -26,24 +26,38 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 /// </remarks>
 public sealed class AccountingSubmitPipeline(
     JournalSubmitGate journals,
-    PartnerSubmitPipeline partners)
+    PartnerSubmitPipeline partners,
+    Action<string>? onSaveFailure = null)
 {
     /// <summary>部品の組み立て。<b>本番もテストもここを通す。</b></summary>
+    /// <param name="onSaveFailure">
+    /// 利用者の語に差し替えた<b>原文</b>を受け取る口（<see cref="SaveFailureMessage"/>）。
+    /// <b>ログに出すのはホストの仕事</b>——この層にロギングの依存を持ち込まない。
+    /// 渡さなければ原文は捨てられる。
+    /// </param>
     public static AccountingSubmitPipeline Create(
         IDbAccessor dbAccessor, string dataSourceName, TimeProvider timeProvider,
-        IAuthenticationContext authenticationContext)
+        IAuthenticationContext authenticationContext, Action<string>? onSaveFailure = null)
         => new(JournalSubmitGate.Create(dbAccessor, dataSourceName, timeProvider, authenticationContext),
-               PartnerSubmitPipeline.Create(dbAccessor, dataSourceName));
+               PartnerSubmitPipeline.Create(dbAccessor, dataSourceName),
+               onSaveFailure);
 
     /// <summary>保存を包む。<paramref name="save"/> は CLB 本来の保存処理。</summary>
-    public Task<List<ModuleSubmitResult>> SubmitAsync(
+    /// <remarks>
+    /// <b>いちばん外で、保存の失敗を利用者の語に差し替える</b>（<see cref="SaveFailureMessage"/>）。
+    /// 関門が拾えなかった失敗はここまで DB の言葉のまま上がってきて、CLB がそれをトーストに出す
+    /// （qa/01 F-16）。差し替えを内側の関門に置くと、関門を 1 つ足すたびに置き場所を考えることになる。
+    /// </remarks>
+    public async Task<List<ModuleSubmitResult>> SubmitAsync(
         IReadOnlyList<ModuleSubmitData> transactionData,
         Func<Task<List<ModuleSubmitResult>>> save)
     {
         ArgumentNullException.ThrowIfNull(save);
 
-        return journals.SubmitAsync(
+        var results = await journals.SubmitAsync(
             transactionData,
             () => partners.SubmitAsync(transactionData, save));
+
+        return SaveFailureMessage.ToUserLanguage(results, onSaveFailure);
     }
 }

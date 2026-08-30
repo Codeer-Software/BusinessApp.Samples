@@ -64,7 +64,7 @@
       "ListLayoutName": "",
       "SearchLayoutName": "",
       "OnSearchButtonClicked": "",
-      "IsUpdateProtected": false,
+      "IsUpdateProtected": true,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
@@ -159,7 +159,7 @@
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "終わりの理由",
+      "DisplayName": "取消・失効の理由",
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "EndReason",
@@ -434,7 +434,7 @@
   "DetailLayouts": {
     "": {
       "OnBeforeInitialization": "",
-      "OnAfterInitialization": "",
+      "OnAfterInitialization": "Detail_OnAfterInitialization",
       "OnLocationChanging": "",
       "OnFieldDataChanged": "",
       "FocusControlMode": "Inherit",
@@ -931,7 +931,8 @@
             "Color": "",
             "BackgroundColor": "",
             "DetailLayoutName": "",
-            "ListElementComponent": ""
+            "ListElementComponent": "",
+            "IsViewOnly": true
           },
           {
             "FieldName": "RegistrationNo",

@@ -34,8 +34,36 @@ public static class JournalViolationCodes
     /// <summary>明細が 1 行も無い。</summary>
     public const string NoLines = "E-LINES-EMPTY";
 
+    /// <summary>
+    /// <b>DDL の <c>NOT NULL</c> に当たる項目が入っていない。</b>
+    /// 伝票（取引日・計上日・会計年度）と明細（借方貸方・勘定科目・金額・行番号）の両方に使う。
+    /// <b>税区分の欠落だけは <see cref="TaxCategoryMissing"/></b>——計上の検証が先に固有のコードを
+    /// 持っており、同じ原因に 2 つのコードを作らないため。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>これは検証ではなく、保存の手前に置く網である。</b> 入っていない値は
+    /// 保存そのものが失敗するので <see cref="JournalEntryValidator"/> まで届かない
+    /// （qa/03 L-16）。届かせると、利用者には DB の言葉で書かれた失敗が出る。</para>
+    /// <para><b>「マスタに無い」とは別である。</b> 空欄は本コード、
+    /// 値は入っているがマスタに無いのは <see cref="AccountUnknown"/> 等。
+    /// 対処が違う（入れる／選び直す）ので分ける。</para>
+    /// </remarks>
+    public const string RequiredValueMissing = "E-REQUIRED";
+
     /// <summary>金額が正でない。金額は常に正で持ち、向きは借方貸方で表す。</summary>
     public const string AmountNotPositive = "E-AMOUNT";
+
+    /// <summary>
+    /// 金額をそのまま保存できない——<b>1 円未満の端数がある</b>か、<b>扱える大きさを超えている</b>。
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="AmountNotPositive"/> と分けているのは、<b>対処が違う</b>からである
+    /// （こちらは桁と単位を直す、あちらは借方貸方を入れ替える）。</para>
+    /// <para>正でない値はここに含めない。<b>2 つの原因を 1 つのコードに束ねているのは
+    /// 「金額をそのまま持てない」という同じ対処に収まるから</b>で、
+    /// <see cref="LineNoInvalid"/> が重複と非整数を束ねているのと同じ扱いである。</para>
+    /// </remarks>
+    public const string AmountNotStorable = "E-AMOUNT-FORM";
 
     /// <summary>行番号が重複している、または正の整数でない。</summary>
     public const string LineNoInvalid = "E-LINE-NO";

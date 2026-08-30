@@ -84,7 +84,10 @@ public sealed class JournalSubmitGate(
         ArgumentNullException.ThrowIfNull(save);
 
         var pending = RewriteForDraftSave(transactionData);
-        await RejectEntryTypeChangeAsync(transactionData);
+
+        // **見出しは操作で決める。** 計上待ちが 1 件でもあれば、利用者は「計上する」を押している。
+        // 関門ごとに決めると、同じ違反でも捕まえた場所で言葉が変わる。
+        await RejectBeforeSaveAsync(transactionData, pending.Count > 0);
         var results = await save();
 
         // **保存が失敗していたら、計上へ進まない。**
@@ -103,7 +106,39 @@ public sealed class JournalSubmitGate(
     }
 
     /// <summary>
-    /// 既にある伝票の<b>種別を変える保存を、書く前に止める</b>。
+    /// <b>保存へ渡す前の検査。違反は全部集めてから 1 回で投げる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>見つけた順に投げない。</b> 種別で 1 回・明細で 1 回と分けて投げると、
+    /// 利用者は種別を直して保存し直してから明細の差し戻しを受ける——
+    /// <see cref="JournalPostingRejectedException"/> が全件を並べる理由（直しては弾かれを繰り返させない）を、
+    /// 関門どうしの間で破ることになる。</para>
+    /// <para><b>見出しは押されたボタンで決める。</b> ここで止まるものは計上かどうかに関係なく
+    /// 保存が失敗する（DDL の <c>NOT NULL</c> も、種別を変えないトリガも、下書き保存で当たる）が、
+    /// <b>利用者が知りたいのは「自分が押した操作がどうなったか」</b>である——
+    /// 「計上する」を押して「保存できません」と言われると、別の操作を断られたように読める。</para>
+    /// <para><b>保存の前に投げる。</b> 保存に渡してしまうと、失敗は例外ではなく
+    /// <c>ExceptionMessage</c> で返り、CLB が枠組みの言葉をそのままトーストに出す（qa/01 F-16）。</para>
+    /// </remarks>
+    /// <param name="isPosting">計上として送られてきた伝票が 1 件でもあるか。</param>
+    private async Task RejectBeforeSaveAsync(
+        IReadOnlyList<ModuleSubmitData> transactionData, bool isPosting)
+    {
+        var violations = new List<Violation>(JournalSubmitRequirements.Check(transactionData));
+        violations.AddRange(await EntryTypeChangesAsync(transactionData));
+
+        if (violations.HasError())
+        {
+            throw new JournalPostingRejectedException(
+                violations,
+                isPosting
+                    ? JournalPostingRejectedException.PostingHeadline
+                    : JournalPostingRejectedException.SavingHeadline);
+        }
+    }
+
+    /// <summary>
+    /// 既にある伝票の<b>種別を変える保存</b>を見つける。
     /// </summary>
     /// <remarks>
     /// <para>種別が変えられると、種別ごとの関門（<see cref="PostAsync"/> のホワイトリスト）が
@@ -113,8 +148,10 @@ public sealed class JournalSubmitGate(
     /// <para>DDL のトリガも同じことを止めるが、<b>トリガは最後の砦であって日常の分岐ではない</b>。
     /// 正常系でトリガに当てると、利用者には生の SQLite 例外しか届かない。</para>
     /// </remarks>
-    private async Task RejectEntryTypeChangeAsync(IReadOnlyList<ModuleSubmitData> transactionData)
+    private async Task<List<Violation>> EntryTypeChangesAsync(IReadOnlyList<ModuleSubmitData> transactionData)
     {
+        var violations = new List<Violation>();
+
         foreach (var data in EntriesIn(transactionData, d => d.Update))
         {
             var submitted = GetSelect(data, "EntryType");
@@ -126,14 +163,16 @@ public sealed class JournalSubmitGate(
             var stored = await entryStore.FindEntryTypeAsync(new JournalEntryId(id));
             if (stored is EntryType current && DbValue.ToSnakeCase(current) != submitted)
             {
-                throw new JournalPostingRejectedException(
-                [
-                    new Violation(
-                        JournalViolationCodes.EntryTypeImmutable,
-                        $"伝票の種別は変更できません（「{current.DisplayName()}」のままです）。種別を変えるときは、下書きを作り直してください。"),
-                ]);
+                // **「下書きを作り直す」とは書かない。** 訂正の下書きでそう言われても、
+                // 元の伝票は既に取り消してあるので同じものをもう一度は作れない（行き止まりになる）。
+                violations.Add(new Violation(
+                    JournalViolationCodes.EntryTypeImmutable,
+                    $"伝票の種別は、保存したあとは変更できません（「{current.DisplayName()}」のままです）。"
+                    + "別の種別で起票するときは、新しい振替伝票を作成してください。"));
             }
         }
+
+        return violations;
     }
 
     /// <summary>計上を待っている伝票。<see cref="SubmittedId"/> は保存前の値（仮 ID のことがある）。</summary>
