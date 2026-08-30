@@ -4,8 +4,11 @@
    CLB での書き方は Designer/Project.md の「レイアウト規約」が持つ。 */
 
 /* 金額列は右詰め（docs/09_画面の原則.md §4）。桁が揃わないと、帳簿は読むのに数えることになる。
-   一覧の列に付けると td と th の両方に効くので、見出しも一緒に右へ寄る。
-   使い方: ListLayouts の列に "ClassName": "amount-cell" を付ける。 */
+   使い方: ListLayouts の列に "ClassName": "amount-cell" を付ける。
+   注意 1: ClassName は <td> にしか付かない。見出し（<th>）は揃わない（qa/01 D-16）。
+           09 §4 は「列見出しは左寄せのまま」なので、これは望む挙動である。
+   注意 2: この text-align は効いていない。セルの中身が flex なので見た目に出ない（qa/01 D-15）。
+           justify-content で直す（docs/05 のフェーズ 2.5 の A）。 */
 .amount-cell {
     text-align: right;
 }
