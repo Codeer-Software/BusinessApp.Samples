@@ -1,0 +1,21 @@
+{
+  "Name": "AccountingRoles",
+  "ValueType": "String",
+  "Members": [
+    {
+      "Name": "Manager",
+      "Value": "manager",
+      "DisplayText": "経理責任者"
+    },
+    {
+      "Name": "Staff",
+      "Value": "staff",
+      "DisplayText": "経理担当"
+    },
+    {
+      "Name": "Viewer",
+      "Value": "viewer",
+      "DisplayText": "帳簿閲覧"
+    }
+  ]
+}

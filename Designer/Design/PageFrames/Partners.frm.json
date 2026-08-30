@@ -159,15 +159,15 @@
         }
       },
       {
-        "Title": "会計へ戻る",
+        "Title": "玄関へ戻る",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
         "ModulePageType": "Auto",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
-        "PageFrame": "Main",
-        "Module": "Home",
+        "PageFrame": "Portal",
+        "Module": "PortalHome",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -275,7 +275,24 @@
   },
   "Padding": {},
   "UserReadCondition": {
-    "ModuleName": ""
+    "ModuleName": "AppUser",
+    "Condition": {
+      "IsOrMatch": false,
+      "IsNot": false,
+      "Children": [
+        {
+          "SearchTargetVariable": "PartnerRole.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "editor",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        }
+      ],
+      "Name": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+    }
   },
   "BackgroundColor": "",
   "Color": "",

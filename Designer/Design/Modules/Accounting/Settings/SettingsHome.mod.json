@@ -1,5 +1,5 @@
 {
-  "Name": "PartnerHome",
+  "Name": "SettingsHome",
   "DataSourceName": "",
   "DbTable": "",
   "CanCreate": true,
@@ -7,7 +7,7 @@
   "CanDelete": true,
   "Fields": [
     {
-      "Text": "取引先",
+      "Text": "設定とマスタ",
       "Icon": "",
       "IsHtml": false,
       "Style": "H1",
@@ -25,14 +25,14 @@
   "UserWriteCondition": {
     "ModuleName": "AppUser",
     "Condition": {
-      "IsOrMatch": false,
+      "IsOrMatch": true,
       "IsNot": false,
       "Children": [
         {
-          "SearchTargetVariable": "PartnerRole.Value",
+          "SearchTargetVariable": "AccountingRole.Value",
           "Comparison": "Equal",
           "Value": {
-            "Value": "editor",
+            "Value": "manager",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
           },
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
@@ -45,14 +45,14 @@
   "UserReadCondition": {
     "ModuleName": "AppUser",
     "Condition": {
-      "IsOrMatch": false,
+      "IsOrMatch": true,
       "IsNot": false,
       "Children": [
         {
-          "SearchTargetVariable": "PartnerRole.Value",
+          "SearchTargetVariable": "AccountingRole.Value",
           "Comparison": "Equal",
           "Value": {
-            "Value": "editor",
+            "Value": "manager",
             "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
           },
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
@@ -290,5 +290,5 @@
   },
   "CanBulkDataUpdate": false,
   "CanBulkDataDownload": false,
-  "PageTitle": "取引先"
+  "PageTitle": "設定とマスタ"
 }

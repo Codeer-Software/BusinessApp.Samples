@@ -1,0 +1,16 @@
+{
+  "Name": "PartnerRoles",
+  "ValueType": "String",
+  "Members": [
+    {
+      "Name": "Editor",
+      "Value": "editor",
+      "DisplayText": "編集"
+    },
+    {
+      "Name": "Viewer",
+      "Value": "viewer",
+      "DisplayText": "閲覧"
+    }
+  ]
+}

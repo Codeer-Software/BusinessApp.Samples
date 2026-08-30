@@ -475,8 +475,7 @@ public class GeneralLedgerQueryTests
     private static IReadOnlyList<Row> Run(SqliteConnection db, params (string Name, object Value)[] parameters)
     {
         using var command = db.CreateCommand();
-        command.CommandText = File.ReadAllText(Path.Combine(
-            TestDatabase.ModulesDirectory, "Books", "GeneralLedger.Query.sql"));
+        command.CommandText = File.ReadAllText(TestDatabase.QuerySqlOf("GeneralLedger"));
 
         foreach (var name in Parameters)
         {

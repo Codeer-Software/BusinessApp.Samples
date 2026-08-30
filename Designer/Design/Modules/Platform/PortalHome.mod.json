@@ -1,5 +1,5 @@
 {
-  "Name": "PartnerHome",
+  "Name": "PortalHome",
   "DataSourceName": "",
   "DbTable": "",
   "CanCreate": true,
@@ -7,7 +7,7 @@
   "CanDelete": true,
   "Fields": [
     {
-      "Text": "取引先",
+      "Text": "会計コア",
       "Icon": "",
       "IsHtml": false,
       "Style": "H1",
@@ -23,44 +23,10 @@
     }
   ],
   "UserWriteCondition": {
-    "ModuleName": "AppUser",
-    "Condition": {
-      "IsOrMatch": false,
-      "IsNot": false,
-      "Children": [
-        {
-          "SearchTargetVariable": "PartnerRole.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": "editor",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-        }
-      ],
-      "Name": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
-    }
+    "ModuleName": ""
   },
   "UserReadCondition": {
-    "ModuleName": "AppUser",
-    "Condition": {
-      "IsOrMatch": false,
-      "IsNot": false,
-      "Children": [
-        {
-          "SearchTargetVariable": "PartnerRole.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": "editor",
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-        }
-      ],
-      "Name": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
-    }
+    "ModuleName": ""
   },
   "DataWriteCondition": {
     "ModuleName": ""
@@ -290,5 +256,5 @@
   },
   "CanBulkDataUpdate": false,
   "CanBulkDataDownload": false,
-  "PageTitle": "取引先"
+  "PageTitle": "会計コア"
 }
