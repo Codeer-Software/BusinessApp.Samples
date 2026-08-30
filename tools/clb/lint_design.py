@@ -109,7 +109,9 @@ def check_module(path, doc, findings):
 
     # 更新できるモジュールに楽観ロックが無いと、ロスト・アップデートが黙って起きる。
     # 「フィールドがあるとき型を見る」だけでは、最も危ない側（欠落）を見逃す。
-    if doc.get("CanUpdate", True) and doc.get("DbTable") in OPTIMISTIC_LOCKING_TABLES             and not any(f.get("Name") == "OptimisticLocking" for f in doc.get("Fields", [])):
+    if (doc.get("CanUpdate", True)
+            and doc.get("DbTable") in OPTIMISTIC_LOCKING_TABLES
+            and not any(f.get("Name") == "OptimisticLocking" for f in doc.get("Fields", []))):
         findings.append((SEV_ERROR, "F-09", relative(path),
                          f"{module}: 更新できるモジュールには OptimisticLocking フィールドが要る"))
 
@@ -192,17 +194,24 @@ def _check_required_marks(path, doc, findings):
 
     marked = set()
     unmarked = {}
+    placed = set()
 
     def walk(node):
         if isinstance(node, dict):
             name = node.get("FieldName", "")
-            if node.get("TypeFullName", "").endswith("FieldLayoutDesign") and name.endswith("Label"):
-                owner = name[:-len("Label")]
-                if owner in required:
-                    if node.get("ClassName") == REQUIRED_LABEL_CLASS:
-                        marked.add(owner)
-                    else:
-                        unmarked[owner] = name
+            if node.get("TypeFullName", "").endswith("FieldLayoutDesign"):
+                if name in required:
+                    placed.add(name)
+                if name.endswith("Label"):
+                    owner = name[:-len("Label")]
+                    if owner in required:
+                        # **クラスは分割して見る。** `"required-label ms-2"` のように
+                        # 他のクラスと併記できる（app.css はクラスセレクタなので印は出る）。
+                        # 完全一致で見ると、正しい書き方を誤検知する。
+                        if REQUIRED_LABEL_CLASS in (node.get("ClassName") or "").split():
+                            marked.add(owner)
+                        else:
+                            unmarked[owner] = name
             for value in node.values():
                 walk(value)
         elif isinstance(node, list):
@@ -217,6 +226,13 @@ def _check_required_marks(path, doc, findings):
         findings.append((SEV_ERROR, "D-20", relative(path),
                          f"{module}: 必須の {owner} のラベル {label} に "
                          f'"ClassName": "{REQUIRED_LABEL_CLASS}" が要る（docs/09 §1）'))
+
+    # **ラベル要素そのものが無い場合を見落とさない。** これがいちばん起きやすい書き忘れで、
+    # 「`<Field>Label` があるときにしか見ない」実装では素通りしていた（2026-08-31 の自己レビュー）。
+    for owner in sorted(placed - marked - set(unmarked)):
+        findings.append((SEV_ERROR, "D-20", relative(path),
+                         f"{module}: 必須の {owner} に、印を付けるラベル要素"
+                         f"（{owner}Label）が詳細レイアウトに無い（docs/09 §1）"))
 
 
 def app_of(path):
@@ -239,7 +255,9 @@ def check_module_references(modules, scripts, findings):
     **アプリはフォルダで判定する**（Designer/Project.md のフォルダ規約）——
     モジュール名を並べると、増えるたびに腐る。
     """
-    app_by_module = {doc.get("Name", ""): app_of(path) for path, doc in modules}
+    # **名前の無いモジュールを入れない。** 入れると `"ModuleName": ""` が
+    # 全 JSON に当たって誤検知する（条件を書いていない欄が実データに多数ある）。
+    app_by_module = {doc["Name"]: app_of(path) for path, doc in modules if doc.get("Name")}
 
     def report(path, owner, target, how):
         findings.append((SEV_ERROR, "D-21", relative(path),
@@ -252,7 +270,10 @@ def check_module_references(modules, scripts, findings):
             continue
         text = json.dumps(doc, ensure_ascii=False)
         for target, app in sorted(app_by_module.items()):
-            if app in forbidden and f'"ModuleName": "{target}"' in text:
+            # **`"ModuleName"` だけでなく `"Module"` も見る。** 遷移リンク
+            # （`AnchorTagFieldDesign`）は後者で相手を指す（2026-08-31 の自己レビュー）。
+            if app in forbidden and any(
+                    f'"{key}": "{target}"' in text for key in ("ModuleName", "Module")):
                 report(path, doc.get("Name", ""), target, "参照している")
 
     for path, text in scripts:
@@ -261,7 +282,11 @@ def check_module_references(modules, scripts, findings):
             continue
         owner = os.path.basename(path).split(".", 1)[0]
         for target, app in sorted(app_by_module.items()):
-            if app in forbidden and re.search(r"ModuleSearcher<" + re.escape(target) + ">", text):
+            # 型引数（`ModuleSearcher<X>`）と、**文字列で相手を指す形**
+            # （`NavigationService.GetModuleDataUrl("X", ...)`）の両方を見る。
+            if app in forbidden and (
+                    re.search(r"ModuleSearcher<" + re.escape(target) + ">", text)
+                    or f'"{target}"' in text):
                 report(path, owner, target, "読んでいる")
 
 
@@ -302,51 +327,114 @@ def check_cross_frame_links(frames, findings):
 
 
 def check_role_conditions(modules, frames, findings):
-    """担当の役割で絞る条件に、上位（責任者）が OR で入っているか（ADR-0026 §1 の追記）。
+    """役割で絞る条件が、階層を **OR-of-Equal** で表しているか（ADR-0026 §1 の追記）。
 
-    **階層方式の唯一の弱点は OR の書き忘れ**である。
-    `accounting_role = 'staff'` だけで絞ると、**経理責任者が経理担当の画面に入れなくなる**
-    ——しかも画面はただリンクが消えるだけなので、誰も気づかない。
+    **階層方式の唯一の弱点は書き忘れである。** 見るのは 3 つ。
+
+    1. **下位の役割で絞るなら、上位も入っている**（`staff` だけだと責任者が入れない）
+    2. **`IsOrMatch` が真である**——AND で書くと **誰も通らない**（1 つの列が
+       2 つの値を同時に取ることは無い）。しかも画面はリンクが消えるだけなので気づけない
+    3. **`Comparison` が `Equal` で、`IsNot` が偽である**——否定に化けると意図と逆の集合を通す
+
+    **軸ごとに順位を表で持つ。** 名前を書き並べると、役割が増えた日に片方だけ直る。
+    見るキーは 4 つ——`AppAccessConditions` は `app.clprj` にしか無いので入れない。
     """
-    def walk(node, found):
+    hierarchy = {
+        "AccountingRole.Value": ["viewer", "staff", "manager"],
+        "PartnerRole.Value": ["viewer", "editor"],
+    }
+
+    def collect(node, into):
         if isinstance(node, dict):
-            if node.get("SearchTargetVariable") == "AccountingRole.Value":
-                value = (node.get("Value") or {}).get("Value")
-                if isinstance(value, str):
-                    found.add(value)
+            if node.get("SearchTargetVariable") in hierarchy:
+                into.append({
+                    "variable": node["SearchTargetVariable"],
+                    "value": (node.get("Value") or {}).get("Value"),
+                    "comparison": node.get("Comparison"),
+                })
             for value in node.values():
-                walk(value, found)
+                collect(value, into)
         elif isinstance(node, list):
             for value in node:
-                walk(value, found)
+                collect(value, into)
 
+    def groups_of(node, found):
+        if isinstance(node, dict):
+            if node.get("TypeFullName", "").endswith("MultiMatchCondition"):
+                inner = []
+                collect(node.get("Children"), inner)
+                if inner:
+                    found.append((node.get("IsOrMatch"), node.get("IsNot"), len(inner)))
+            for value in node.values():
+                groups_of(value, found)
+        elif isinstance(node, list):
+            for value in node:
+                groups_of(value, found)
+
+    keys = ("UserReadCondition", "UserWriteCondition",
+            "DataReadCondition", "DataWriteCondition")
     for path, doc in modules + frames:
-        for key in ("UserReadCondition", "UserWriteCondition", "AppAccessConditions"):
-            found = set()
-            walk(doc.get(key), found)
-            if "staff" in found and "manager" not in found:
-                findings.append((SEV_ERROR, "D-22", relative(path),
-                                 f"{doc.get('Name', '')}.{key}: 経理担当（staff）で絞るなら"
-                                 "経理責任者（manager）も OR で入れる（ADR-0026 §1 の追記②）"))
+        for key in keys:
+            condition = doc.get(key)
+            if not condition:
+                continue
+
+            terms = []
+            collect(condition, terms)
+            if not terms:
+                continue
+
+            where = f"{doc.get('Name', '')}.{key}"
+
+            for term in terms:
+                if term["comparison"] != "Equal":
+                    findings.append((SEV_ERROR, "D-22", relative(path),
+                                     f"{where}: 役割の比較は Equal にする"
+                                     f"（今は {term['comparison']}）"))
+
+            for variable, order in hierarchy.items():
+                values = {t["value"] for t in terms if t["variable"] == variable}
+                lowest = min((order.index(v) for v in values if v in order), default=None)
+                if lowest is None:
+                    continue
+                missing = [v for v in order[lowest + 1:] if v not in values]
+                if missing:
+                    findings.append((SEV_ERROR, "D-22", relative(path),
+                                     f"{where}: {variable} を {sorted(values)} で絞るなら、"
+                                     f"上位の {missing} も OR で入れる（ADR-0026 §1 の追記②）"))
+
+            groups = []
+            groups_of(condition, groups)
+            for is_or, is_not, count in groups:
+                if count > 1 and not is_or:
+                    findings.append((SEV_ERROR, "D-22", relative(path),
+                                     f"{where}: 役割を {count} 件並べているのに IsOrMatch が偽。"
+                                     "AND では誰も通らない（1 つの列が 2 つの値を同時に取らない）"))
+                if is_not:
+                    findings.append((SEV_ERROR, "D-22", relative(path),
+                                     f"{where}: 役割の条件を IsNot で否定している"))
 
 
-def check_app_access_condition(findings):
-    """アプリ全体のアクセス条件が空になっていないか（CLB の認可 5 階層の最上位）。
+def check_app_access_condition(doc, path, findings):
+    """アプリ全体のアクセス条件が、`can_access_app` を見ているか。
 
     **空＝全開放である**（qa/01 F-18 と同じ性質）。ここが空だと、
     **`can_access_app` を偽にしても誰も締め出せない**——退職者がそのまま入れる。
-    条件を書かない判断をしたときも、書けない理由を残すこと（F-18）。
-    """
-    path = os.path.join(DESIGN_DIR, "app.clprj")
-    if not os.path.exists(path):
-        return
+    **「条件が 1 つある」だけでは足りない**——常に真の条件でも通ってしまうので、
+    見ている変数まで確かめる（2026-08-31 の自己レビュー）。
 
-    doc = json.load(io.open(path, encoding="utf-8"))
+    **引数で受け取る。** 実ファイルを自分で読むと、壊した入力を食わせられず
+    `--selftest` の対象にできない（qa/03 L-15 の「判定の純粋部分を分ける」）。
+    """
     condition = doc.get("AppAccessConditions") or {}
-    if not condition.get("ModuleName") or not (condition.get("Condition") or {}).get("Children"):
+    children = (condition.get("Condition") or {}).get("Children") or []
+    variables = {c.get("SearchTargetVariable") for c in children}
+
+    if not condition.get("ModuleName") or "CanAccessApp.Value" not in variables:
         findings.append((SEV_ERROR, "D-23", relative(path),
-                         "AppAccessConditions が空＝全開放である。"
-                         "can_access_app を見る条件を書く（ADR-0032）"))
+                         "AppAccessConditions が CanAccessApp を見ていない。"
+                         "空＝全開放で、退職者を締め出せない（ADR-0032）"))
+
 
 
 def check_layout(path, where, layout, kind, field_names, findings):
@@ -542,7 +630,10 @@ def main() -> int:
     check_cross_frame_links(loaded_frames, findings)
     check_module_references(loaded_modules, loaded_scripts, findings)
     check_role_conditions(loaded_modules, loaded_frames, findings)
-    check_app_access_condition(findings)
+    app_settings = os.path.join(DESIGN_DIR, "app.clprj")
+    if os.path.exists(app_settings):
+        check_app_access_condition(
+            json.load(io.open(app_settings, encoding="utf-8")), app_settings, findings)
 
     errors = [f for f in findings if f[0] == SEV_ERROR]
     warns = [f for f in findings if f[0] == SEV_WARN]
@@ -556,34 +647,53 @@ def main() -> int:
 
 
 SELFTEST_CASES = [
-    # (何を壊すか, 壊した姿, 期待するルール)
+    # (何を壊すか, 壊した姿, 期待する (severity, ルール))
     ("予約名の型",
-     lambda: _module(Fields=[{"Name": "Id", "TypeFullName": "X.NumberFieldDesign"}]), "F-09"),
+     lambda: _module(Fields=[{"Name": "Id", "TypeFullName": "X.NumberFieldDesign"}]),
+     (SEV_ERROR, "F-09")),
     ("論理削除の列",
-     lambda: _module(Fields=[{"Name": "LogicalDelete", "TypeFullName": "X.BooleanFieldDesign"}]), "PRJ-01"),
+     lambda: _module(Fields=[{"Name": "LogicalDelete", "TypeFullName": "X.BooleanFieldDesign"}]),
+     (SEV_ERROR, "PRJ-01")),
     ("画面側の入力検証",
      lambda: _module(Fields=[{"Name": "A", "TypeFullName": "X.TextFieldDesign",
-                              "OnValidateInput": "Check"}]), "F-01"),
+                              "OnValidateInput": "Check"}]),
+     (SEV_ERROR, "F-01")),
     ("3 値以外のボタンの色",
      lambda: _module(Fields=[{"Name": "B", "TypeFullName": "X.ButtonFieldDesign",
-                              "Variant": "Warning"}]), "D-18"),
+                              "Variant": "Warning"}]),
+     (SEV_ERROR, "D-18")),
     ("検索条件が既定で閉じている",
      lambda: _module(SearchLayouts={"": {"Layout": {"IsExpanderDefaultOpened": False, "Rows": [
-         {"Columns": [{"Layout": {"FieldName": "A"}}]}]}}}), "D-19"),
+         {"Columns": [{"Layout": {"FieldName": "A"}}]}]}}}),
+     (SEV_ERROR, "D-19")),
     ("必須の欄に印が無い",
-     lambda: _module(
-         Fields=[{"Name": "Code", "TypeFullName": "X.TextFieldDesign", "IsRequired": True},
-                 {"Name": "CodeLabel", "TypeFullName": "X.LabelFieldDesign"}],
-         DetailLayouts={"": {"Layout": {"Rows": [{"Columns": [
-             {"Layout": {"FieldName": "CodeLabel", "ClassName": "",
-                         "TypeFullName": "X.FieldLayoutDesign"}},
-             {"Layout": {"FieldName": "Code", "TypeFullName": "X.FieldLayoutDesign"}}]}]}}}), "D-20"),
+     lambda: _required_module(class_name=""), (SEV_ERROR, "D-20")),
+    ("必須の欄にラベル要素が無い",
+     lambda: _required_module(with_label=False), (SEV_ERROR, "D-20")),
     ("データを持つのに書き込み条件が無い",
-     lambda: _module(DbTable="x"), "D-24"),
+     lambda: _module(DbTable="x"), (SEV_ERROR, "D-24")),
     ("担当の条件に責任者が入っていない",
-     lambda: _module(UserWriteCondition={"ModuleName": "AppUser", "Condition": {"Children": [
-         {"SearchTargetVariable": "AccountingRole.Value",
-          "Value": {"Value": "staff"}}]}}), "D-22"),
+     lambda: _module(UserWriteCondition=_role_condition(["staff"])), (SEV_ERROR, "D-22")),
+    ("役割を AND で並べている",
+     lambda: _module(UserWriteCondition=_role_condition(["staff", "manager"], is_or=False)),
+     (SEV_ERROR, "D-22")),
+    ("役割の条件を否定している",
+     lambda: _module(UserWriteCondition=_role_condition(["staff", "manager"], is_not=True)),
+     (SEV_ERROR, "D-22")),
+    ("役割の比較が Equal でない",
+     lambda: _module(UserWriteCondition=_role_condition(["staff", "manager"],
+                                                        comparison="NotEqual")),
+     (SEV_ERROR, "D-22")),
+    ("行の条件に書いた役割も見る",
+     lambda: _module(DataReadCondition=_role_condition(["staff"])), (SEV_ERROR, "D-22")),
+]
+
+# `main()` が呼ぶべき検査。**ここに載っているものが全部呼ばれているか**を selftest が見る。
+# 呼び出しを 1 行消しても緑になる作りだと、検査は在っても効かない（qa/03 L-15）。
+WIRED_CHECKS = [
+    "check_module", "check_page_frame", "check_application_root", "check_script",
+    "check_cross_frame_links", "check_module_references", "check_role_conditions",
+    "check_app_access_condition",
 ]
 
 
@@ -595,36 +705,80 @@ def _module(**overrides):
     return doc
 
 
+def _required_module(class_name=REQUIRED_LABEL_CLASS, with_label=True):
+    """必須の欄が 1 つある詳細レイアウト。"""
+    columns = [{"Layout": {"FieldName": "Code", "ClassName": "",
+                           "TypeFullName": "X.FieldLayoutDesign"}}]
+    if with_label:
+        # ラベル列は Middle 揃え（D-10）。**実物と同じ形で作る**——
+        # 検体が実データと違うと、正しい姿のはずが別の関門を鳴らす（qa/03 L-17）。
+        columns.insert(0, {"VerticalAlignment": "Middle",
+                           "Layout": {"FieldName": "CodeLabel", "ClassName": class_name,
+                                      "TypeFullName": "X.FieldLayoutDesign"}})
+    return _module(
+        Fields=[{"Name": "Code", "TypeFullName": "X.TextFieldDesign", "IsRequired": True},
+                {"Name": "CodeLabel", "TypeFullName": "X.LabelFieldDesign"}],
+        DetailLayouts={"": {"Layout": {"Rows": [{"Columns": columns}]}}})
+
+
+def _role_condition(values, is_or=True, is_not=False, comparison="Equal"):
+    return {
+        "ModuleName": "AppUser",
+        "Condition": {
+            "IsOrMatch": is_or, "IsNot": is_not, "Name": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition",
+            "Children": [{
+                "SearchTargetVariable": "AccountingRole.Value", "Comparison": comparison,
+                "Value": {"Value": v, "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"},
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull",
+            } for v in values],
+        },
+    }
+
+
+def _self_path(app="Accounting", name="SelfTest.mod.json"):
+    return os.path.join(DESIGN_DIR, "Modules", app, name)
+
+
 def selftest():
     """**関門が本当に鳴るかを、関門自身が確かめる。**
 
     足したときに手で壊して確かめても、**次に緩めたときには誰も確かめない**
     （2026-08-31 の自己レビューで、D-05・D-10 を緩めた変更にテストが 1 本も無かった。qa/02 R26-21）。
     ここが赤くなったら、検査が空回りしている。
+
+    **severity まで表明する。** ルールだけを見ると、`error` を `warn` に書き換えるだけで
+    **selftest も本検査も緑のまま、関門だけが消える**（同 R27-18）。
     """
     failures = []
+
+    if not SELFTEST_CASES:
+        failures.append("検体が 0 件である（0 は「違反が無い」ではなく「配線が死んだ」を疑う数字）")
 
     for label, build, expected in SELFTEST_CASES:
         findings = []
         doc = build()
-        check_module(os.path.join(DESIGN_DIR, "Modules", "Accounting", "SelfTest.mod.json"),
-                     doc, findings)
-        check_role_conditions([(os.path.join(DESIGN_DIR, "Modules", "Accounting",
-                                             "SelfTest.mod.json"), doc)], [], findings)
-        if not any(rule == expected for _, rule, _, _ in findings):
-            failures.append(f"{label}: {expected} が鳴らない（出たのは {[f[1] for f in findings]}）")
+        check_module(_self_path(), doc, findings)
+        check_role_conditions([(_self_path(), doc)], [], findings)
+        got = [(f[0], f[1]) for f in findings]
+        if expected not in got:
+            failures.append(f"{label}: {expected} が鳴らない（出たのは {got}）")
 
     # 正しい姿では鳴らない（鳴りっぱなしの関門は、赤を無視させる）
     for label, doc in [
         ("表を持たないモジュール", _module()),
         ("書き込み条件のあるモジュール",
          _module(DbTable="x", UserWriteCondition={"ModuleName": "AppUser"})),
+        ("印の付いた必須の欄", _required_module()),
+        ("他のクラスと併記した印", _required_module(class_name="ms-2 required-label")),
+        ("階層を OR で書いた条件",
+         _module(UserWriteCondition=_role_condition(["staff", "manager"]))),
     ]:
         findings = []
-        check_module(os.path.join(DESIGN_DIR, "Modules", "Accounting", "SelfTest.mod.json"),
-                     doc, findings)
+        check_module(_self_path(), doc, findings)
+        check_role_conditions([(_self_path(), doc)], [], findings)
         if findings:
-            failures.append(f"正しい{label}で鳴った: {[f[1] for f in findings]}")
+            failures.append(f"正しい{label}で鳴った: {[(f[0], f[1]) for f in findings]}")
 
     # フレーム跨ぎのリンクの登録漏れ（F-17）
     findings = []
@@ -633,35 +787,78 @@ def selftest():
                         "Left": {"Links": [{"Module": "Missing", "PageFrame": "B"}]}}),
         ("b.frm.json", {"Name": "B", "TopPageModule": "BHome", "Left": {"Links": []}}),
     ], findings)
-    if not any(rule == "F-17" for _, rule, _, _ in findings):
+    if (SEV_ERROR, "F-17") not in [(f[0], f[1]) for f in findings]:
         failures.append("フレーム跨ぎの登録漏れ: F-17 が鳴らない")
 
-    # 部品をまたぐ参照の向き（D-21）
-    findings = []
-    modules_dir = os.path.join(DESIGN_DIR, "Modules")
-    check_module_references(
-        [(os.path.join(modules_dir, "Partners", "P.mod.json"),
-          {"Name": "P", "UserReadCondition": {"ModuleName": "JournalEntry"}}),
-         (os.path.join(modules_dir, "Accounting", "JournalEntry.mod.json"),
-          {"Name": "JournalEntry"})],
-        [], findings)
-    if not any(rule == "D-21" for _, rule, _, _ in findings):
-        failures.append("部品をまたぐ参照: D-21 が鳴らない")
+    # 部品をまたぐ参照の向き（D-21）。JSON の 2 つのキーとスクリプトの 2 つの形を見る。
+    for label, modules, scripts in [
+        ("条件の ModuleName",
+         [(_self_path("Partners", "P.mod.json"),
+           {"Name": "P", "UserReadCondition": {"ModuleName": "JournalEntry"}}),
+          (_self_path("Accounting", "JournalEntry.mod.json"), {"Name": "JournalEntry"})], []),
+        ("遷移リンクの Module",
+         [(_self_path("Partners", "P.mod.json"),
+           {"Name": "P", "Fields": [{"PageFrame": "Main", "Module": "JournalEntry"}]}),
+          (_self_path("Accounting", "JournalEntry.mod.json"), {"Name": "JournalEntry"})], []),
+        ("スクリプトの型引数",
+         [(_self_path("Accounting", "JournalEntry.mod.json"), {"Name": "JournalEntry"})],
+         [(_self_path("Partners", "P.mod.cs"), "new ModuleSearcher<JournalEntry>();")]),
+        ("スクリプトの文字列",
+         [(_self_path("Accounting", "JournalEntry.mod.json"), {"Name": "JournalEntry"})],
+         [(_self_path("Partners", "P.mod.cs"), 'GetModuleDataUrl("JournalEntry", "-")')]),
+    ]:
+        findings = []
+        check_module_references(modules, scripts, findings)
+        if (SEV_ERROR, "D-21") not in [(f[0], f[1]) for f in findings]:
+            failures.append(f"部品をまたぐ参照（{label}）: D-21 が鳴らない")
 
     # 認証部品への参照は鳴らない（権限の条件は AppUser の列でしか書けない。F-21）
     findings = []
     check_module_references(
-        [(os.path.join(modules_dir, "Partners", "P.mod.json"),
+        [(_self_path("Partners", "P.mod.json"),
           {"Name": "P", "UserReadCondition": {"ModuleName": "AppUser"}}),
-         (os.path.join(modules_dir, "Platform", "AppUser.mod.json"), {"Name": "AppUser"})],
+         (_self_path("Platform", "AppUser.mod.json"), {"Name": "AppUser"})],
         [], findings)
     if findings:
-        failures.append(f"認証部品への参照で鳴った: {[f[1] for f in findings]}")
+        failures.append(f"認証部品への参照で鳴った: {[(f[0], f[1]) for f in findings]}")
+
+    # アプリ全体のアクセス条件（D-23）
+    for label, doc in [
+        ("条件が空", {"AppAccessConditions": {"ModuleName": ""}}),
+        ("CanAccessApp を見ていない",
+         {"AppAccessConditions": {"ModuleName": "AppUser", "Condition": {"Children": [
+             {"SearchTargetVariable": "IsSysadmin.Value"}]}}}),
+    ]:
+        findings = []
+        check_app_access_condition(doc, "app.clprj", findings)
+        if (SEV_ERROR, "D-23") not in [(f[0], f[1]) for f in findings]:
+            failures.append(f"アプリ全体の条件（{label}）: D-23 が鳴らない")
+
+    findings = []
+    check_app_access_condition(
+        {"AppAccessConditions": {"ModuleName": "AppUser", "Condition": {"Children": [
+            {"SearchTargetVariable": "CanAccessApp.Value"}]}}}, "app.clprj", findings)
+    if findings:
+        failures.append("正しいアプリ全体の条件で鳴った")
+
+    # **配線**。検査を書いても main() から呼ばれていなければ効かない（qa/03 L-15）。
+    source = io.open(__file__, encoding="utf-8").read()
+    # **`main()` の中だけを見る。** ファイル末尾までを見ると、
+    # **selftest 自身の呼び出しを数えてしまい、配線を消しても緑になる**
+    # （2026-08-31 に実際にそうなった。検査を検査すると、こういう自己参照が出る）。
+    after = source[source.index("def main("):]
+    marker = chr(10) + "def "
+    end = after.index(marker, 1) if marker in after[1:] else len(after)
+    body = after[:end]
+    for name in WIRED_CHECKS:
+        if f"{name}(" not in body:
+            failures.append(f"{name} が main() から呼ばれていない")
 
     for failure in failures:
         print(f"error\tSELFTEST\t{relative(__file__)}\t{failure}")
 
-    print("lint_design: すべて期待どおり" if not failures else "")
+    print(f"lint_design: すべて期待どおり（検体 {len(SELFTEST_CASES)} 件）" if not failures
+          else f"lint_design: {len(failures)} 件が期待と違う")
     return 1 if failures else 0
 
 

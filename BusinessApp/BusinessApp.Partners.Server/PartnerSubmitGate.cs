@@ -85,10 +85,10 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     private async Task RejectMismatchedParentAsync(ModuleData data)
     {
         var submittedType = Field<SelectFieldData>(data, "EntityType");
-        var submittedParent = Field<LinkFieldData>(data, "ParentPartner");
+        var submittedParent = Submitted(data, "ParentPartner");
 
         // どちらも触っていない保存は、この組み合わせを新しく作れない。
-        if (submittedType is null && submittedParent is null)
+        if (submittedType is null && !submittedParent)
         {
             return;
         }
@@ -101,9 +101,9 @@ public sealed class PartnerSubmitGate(PartnerStore store)
 
         // **親は差分から読む。差分に無ければ保存されている親を読み直す**——
         // 種別だけを直した保存でも、保存済みの親と突き合わせる必要がある。
-        var parentId = submittedParent is null
-            ? (Id(data) is long own ? (await store.FindLineageAsync(new PartnerId(own)))?.ParentId : null)
-            : (Reference(data, "ParentPartner") is long p ? new PartnerId(p) : null);
+        var parentId = submittedParent
+            ? (Reference(data, "ParentPartner") is long p ? new PartnerId(p) : null)
+            : (Id(data) is long own ? (await store.FindLineageAsync(new PartnerId(own)))?.ParentId : null);
 
         if (parentId is not PartnerId parent
             || await store.FindProfileAsync(parent) is not PartnerProfile parentProfile)
@@ -173,7 +173,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     {
         // **親を触っていない保存は見ない。** 深さは親を付け替えたときにしか変わらない。
         // 空欄に戻す保存（Reference が null）も通す——浅くする操作である。
-        if (Field<LinkFieldData>(data, "ParentPartner") is null
+        if (!Submitted(data, "ParentPartner")
             || Reference(data, "ParentPartner") is not long parent)
         {
             return;
@@ -260,6 +260,12 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         var submittedNumber = Field<TextFieldData>(data, "CorporateNumber");
 
         // どちらも触っていない保存は、この組み合わせを新しく作れない。
+        //
+        // **ここを消しても結果が変わらない**（ミューテーションが生き残る）。理由は
+        // <b>DDL の CHECK が「個人事業者 ＋ 法人番号」の行を作らせない</b>ことであって、
+        // 上の 1 文ではない——保存済みの行がその組み合わせを持つことはありえないので、
+        // 読み直しても違反にはならない（2026-08-31 の自己レビュー）。
+        // **CHECK が緩んだ日には、この早期 return が意味を持つ。**
         if (submittedType is null && submittedNumber is null)
         {
             return;
@@ -293,21 +299,48 @@ public sealed class PartnerSubmitGate(PartnerStore store)
             : null;
 
     /// <summary>
-    /// 参照フィールド（<c>LinkFieldDesign</c>）が指している相手の識別子。
+    /// 参照フィールドが指している相手の識別子。<b>参照でも識別子でも読む。</b>
     /// </summary>
     /// <remarks>
-    /// <b>データ側の型は <see cref="LinkFieldData"/> で、識別子は <c>Value</c> に入る</b>
-    /// （<c>ModuleFieldData.Id</c> ではない）。取り違えると、いつも null を見て素通しする。
+    /// <para><b>データ側の型は <see cref="LinkFieldData"/> で、識別子は <c>Value</c> に入る</b>
+    /// （<c>ModuleFieldData.Id</c> ではない）。取り違えると、いつも null を見て素通しする。</para>
+    /// <para><b>型を 1 つに決め打ちしない。</b> 決め打ちにすると、フィールドの型が変わった日に
+    /// <b>自己親・種別の食い違い・深さ 1 の 3 本がまとめて素通しに落ちる</b>——
+    /// しかもフィクスチャが自分で <see cref="LinkFieldData"/> を組むのでテストは緑のまま。
+    /// 登録の関門で同じ穴を同じ日に直したのに、こちらに残っていた
+    /// （2026-08-31 の自己レビュー）。</para>
+    /// <para><b>新規作成の相手を指しているときは仮の識別子</b>なので数値として読めず、null になる。</para>
     /// </remarks>
     private static long? Reference(ModuleData data, string name)
-        => long.TryParse(
-            Field<LinkFieldData>(data, name)?.Value,
+    {
+        var value = data.Fields.TryGetValue(name, out var field)
+            ? field switch
+            {
+                LinkFieldData link => link.Value,
+                IdFieldData id => id.Value,
+                _ => null,
+            }
+            : null;
+
+        return long.TryParse(
+            value,
             System.Globalization.NumberStyles.Integer,
             System.Globalization.CultureInfo.InvariantCulture,
-            out var id)
-            ? id
+            out var parsed)
+            ? parsed
             : null;
+    }
 
     private static T? Field<T>(ModuleData data, string name) where T : FieldDataBase
         => data.Fields.TryGetValue(name, out var field) ? field as T : null;
+
+    /// <summary>
+    /// その項目が差分に載っているか。<b>型を問わない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 「触ったかどうか」を型付きで判定すると、<b>フィールドの型が変わった日に
+    /// 「触っていない」と読んで検査ごと飛ばす</b>（2026-08-31 の自己レビュー。
+    /// <see cref="Reference"/> だけを型に強くしても、その手前の早期 return が残っていた）。
+    /// </remarks>
+    private static bool Submitted(ModuleData data, string name) => data.Fields.ContainsKey(name);
 }

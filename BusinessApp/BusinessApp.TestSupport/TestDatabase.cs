@@ -123,9 +123,22 @@ public static class TestDatabase
     /// <b>モジュール名はデザイン全体でフラットな名前空間</b>なので、名前で探せば足りる。
     /// </remarks>
     public static string QuerySqlOf(string moduleName)
-        => Directory.EnumerateFiles(ModulesDirectory, $"{moduleName}.Query.sql", SearchOption.AllDirectories)
-            .SingleOrDefault()
-            ?? throw new FileNotFoundException($"{moduleName}.Query.sql が Modules/ の下に 1 つ見つからない");
+    {
+        // **2 通りの失敗を区別する。** `SingleOrDefault` は重複のときに英語の
+        // `InvalidOperationException` を投げるので、用意したメッセージが出ない。
+        var found = Directory
+            .EnumerateFiles(ModulesDirectory, $"{moduleName}.Query.sql", SearchOption.AllDirectories)
+            .Take(2)
+            .ToList();
+
+        return found.Count switch
+        {
+            1 => found[0],
+            0 => throw new FileNotFoundException($"{moduleName}.Query.sql が Modules/ の下に無い"),
+            _ => throw new InvalidOperationException(
+                $"{moduleName}.Query.sql が Modules/ の下に 2 つ以上ある"),
+        };
+    }
 
     public static void Execute(SqliteConnection connection, string sql)
     {

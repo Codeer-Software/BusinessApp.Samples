@@ -3,7 +3,7 @@ title: tools — 開発スクリプト
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-08-28
+updated: 2026-08-31
 supersedes: []
 related: [../docs/README.md]
 ---
@@ -25,7 +25,7 @@ related: [../docs/README.md]
 | [`clb/sql.ps1`](clb/sql.ps1) | `sql` CLI のラッパ。結果 JSON を標準出力に返し、**一時ファイルを作らない** |
 | [`clb/migrate.ps1`](clb/migrate.ps1) | **DB マイグレーションのランナー**（ADR-0020）。`-Adopt` / `-Apply` / `-Status` / `-Verify`。書き方は [`Designer/migrations/README`](../Designer/migrations/README.md) |
 | [`clb/designcheck.ps1`](clb/designcheck.ps1) | `designcheck` のラッパ。結果は固定パスに上書きし続ける |
-| [`clb/lint_design.py`](clb/lint_design.py) | **CLB デザインの静的検査**。`designcheck` が緑でも壊れるもの（[qa/01](../docs/qa/01_CLB静かな失敗.md)）のうち JSON とスクリプトで判るものを検出する |
+| [`clb/lint_design.py`](clb/lint_design.py) | **CLB デザインの静的検査**。`designcheck` が緑でも壊れるもの（[qa/01](../docs/qa/01_CLB静かな失敗.md)）のうち JSON とスクリプトで判るものを検出する。`--selftest` で**検査そのものを検査する**（関門を殺す・error を warn に格下げする・`main()` の配線を消す・検体を空にする、の 4 通りで鳴ることを確かめてある） |
 | [`clb/scaffold_module.py`](clb/scaffold_module.py) | モジュール定義の足場作り。生成後は `Design/Modules/*.mod.json` が正典 |
 | [`git-hooks/pre-commit`](git-hooks/pre-commit) | コミット前の検証。`git config core.hooksPath tools/git-hooks` で有効にする |
 | [`docs/lint_docs.py`](docs/lint_docs.py) | **ドキュメント規約の検査**（[docs/00 §6](../docs/00_ドキュメント規約/README.md)）。フロントマター・リンク切れ・索引の突合・**current でない文書へのコード参照**・**`current` の本文から `superseded` へのリンク**・**`updated:` の鮮度**（作業ツリーと履歴の両方）。`--selftest` で検査そのものを検査する |

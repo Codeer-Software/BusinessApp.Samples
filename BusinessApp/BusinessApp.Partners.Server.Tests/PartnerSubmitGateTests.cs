@@ -660,6 +660,52 @@ public class PartnerSubmitGateTests
             rejected.Message);
     }
 
+    /// <summary>
+    /// <b>親 FK が識別子フィールドで来ても、深さを見る。</b>
+    /// </summary>
+    /// <remarks>
+    /// 型を 1 つに決め打ちすると、フィールドの型が変わった日に
+    /// <b>自己親・種別の食い違い・深さ 1 の 3 本がまとめて素通しに落ちる</b>
+    /// ——しかもフィクスチャが自分で <c>LinkFieldData</c> を組むのでテストは緑のまま
+    /// （2026-08-31 の自己レビュー。登録の関門で同じ穴を同じ日に直したのに、こちらに残っていた）。
+    /// </remarks>
+    [Fact]
+    public async Task 親FKが識別子フィールドでも深さを見る()
+    {
+        using var server = new PartnerServer();
+        var root = InsertPartner(server, "P800");
+        var middle = InsertPartner(server, "P801", parentId: root);
+
+        var row = Partner();
+        row.Fields["ParentPartner"] = new IdFieldData
+        {
+            Value = middle.ToString(CultureInfo.InvariantCulture),
+        };
+
+        await RejectedAsync(server, Adding(row), new SaveSpy());
+    }
+
+    /// <summary>想定していない型で親が来たら、突き合わせの対象にしない。</summary>
+    /// <remarks>
+    /// CLB は宣言した型でしか送らないので、ここに来るのは API を直に叩いた経路だけである。
+    /// 例外にせず素通しするのは、外部キーが最後に受け止めるからである。
+    /// </remarks>
+    [Fact]
+    public async Task 想定していない型の親は突き合わせに使わない()
+    {
+        using var server = new PartnerServer();
+        var root = InsertPartner(server, "P800");
+        InsertPartner(server, "P801", parentId: root);
+        var save = new SaveSpy();
+
+        var row = Partner();
+        row.Fields["ParentPartner"] = new NumberFieldData { Value = root };
+
+        await Gate(server).SubmitAsync([Adding(row)], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
     /// <summary>自分が誰かの親になっているなら、自分に親は付けられない（同上）。</summary>
     [Fact]
     public async Task 誰かの親になっている取引先には親を付けられない()

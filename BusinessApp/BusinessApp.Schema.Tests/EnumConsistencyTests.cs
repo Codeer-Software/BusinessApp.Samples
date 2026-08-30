@@ -148,6 +148,30 @@ public class EnumConsistencyTests
         return found;
     }
 
+    /// <summary>
+    /// <b>デザイン enum が全部、対応表に載っているか</b>（逆向きの網）。
+    /// </summary>
+    /// <remarks>
+    /// 表から DDL を見る検査（<see cref="区分値を持つ列はすべて対応表に載っている"/>）だけだと、
+    /// <b>CLB の enum を足して DDL の CHECK を書き忘れたとき、3 者一致の検査自体が
+    /// その区分を知らないまま緑になる</b>（2026-08-31 の自己レビュー）。
+    /// 両向きに網を張って初めて「増えたら必ず気づく」になる。
+    /// </remarks>
+    [Fact]
+    public void デザインenumはすべて対応表に載っている()
+    {
+        var declared = Mappings()
+            .Select(row => (string?)row[2])
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+
+        var actual = Directory.GetFiles(DesignEnumDirectory, "*.enum.json")
+            .Select(f => Path.GetFileName(f).Replace(".enum.json", string.Empty, StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Empty(actual.Where(e => !declared.Contains(e)));
+    }
+
     /// <summary>CLB のデザイン enum は複数形で名づける（qa/01 J-01）。単数形だと同名フィールドと衝突する。</summary>
     [Fact]
     public void デザインenumはすべて複数形で名づけられている()

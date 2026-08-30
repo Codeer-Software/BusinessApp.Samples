@@ -234,4 +234,42 @@ public class SchemaConstraintTests
         Assert.Throws<SqliteException>(() => TestDatabase.Execute(db,
             "UPDATE journal_entry_sequences SET next_entry_no = 0 WHERE fiscal_year_id = 1;"));
     }
+
+    /// <summary>
+    /// <b>利用者アカウントの既定は「アプリには入れるが、何もできない」。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><c>can_access_app</c> の既定だけ真である。**CLB はユーザーテーブルが空のとき
+    /// `admin` を自動で入れる**ので、偽を既定にすると**その `admin` が生まれた瞬間に締め出される**
+    /// （ADR-0032 の帰結）。向きを取り違えると誰もアプリに入れなくなる（qa/03 L-06 の型）。</para>
+    /// <para>役割は NULL・偽が既定＝**何もできない**。安全側である。</para>
+    /// </remarks>
+    [Fact]
+    public void 利用者アカウントの既定はアプリに入れるが何もできない()
+    {
+        using var db = TestDatabase.Create();
+
+        TestDatabase.Execute(db,
+            "INSERT INTO app_users (user_name, hash, salt) VALUES ('u', 'h', 's')");
+
+        Assert.Equal(1L, TestDatabase.ScalarOf<long>(db, "SELECT can_access_app FROM app_users"));
+        Assert.Equal(0L, TestDatabase.ScalarOf<long>(db, "SELECT is_sysadmin FROM app_users"));
+        Assert.Null(TestDatabase.ScalarOf<string?>(db, "SELECT accounting_role FROM app_users"));
+        Assert.Null(TestDatabase.ScalarOf<string?>(db, "SELECT partner_role FROM app_users"));
+    }
+
+    /// <summary>役割の列は、決められた値と NULL しか受け取らない。</summary>
+    [Theory]
+    [InlineData("accounting_role", "chief")]
+    [InlineData("accounting_role", "")]
+    [InlineData("partner_role", "staff")]
+    [InlineData("can_access_app", "2")]
+    [InlineData("is_sysadmin", "-1")]
+    public void 利用者アカウントの区分値は決められたものしか入らない(string column, string value)
+    {
+        using var db = TestDatabase.Create();
+
+        Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(() => TestDatabase.Execute(db,
+            $"INSERT INTO app_users (user_name, hash, salt, {column}) VALUES ('u', 'h', 's', '{value}')"));
+    }
 }
