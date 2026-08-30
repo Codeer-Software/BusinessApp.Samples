@@ -49,6 +49,9 @@ public class EnumConsistencyTests
     /// 利用者に見せる文言に列挙子の英語名を混ぜないため、C# 側にも日本語名を持たせている
     /// （docs/09_画面の原則.md §2）。**写しが 2 つになるので、機械で突き合わせる。**
     /// 片方だけ直すと、画面と差し戻しの文言が食い違う。
+    /// <para><b>限界: 見ているのは「2 か所が一致しているか」だけである。</b>
+    /// 日本語かどうかは見ていないので、<b>CLB と C# の両方が英語名なら通る</b>。
+    /// 「列挙子の英語名を出さない」を守るのは人である（docs/09 §6）。</para>
     /// </remarks>
     public static TheoryData<string, string, string> DisplayNames() => new()
     {

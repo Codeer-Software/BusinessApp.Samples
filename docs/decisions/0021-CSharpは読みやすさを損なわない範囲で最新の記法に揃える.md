@@ -3,7 +3,7 @@ title: ADR-0021 C# は読みやすさを損なわない範囲で最新の記法�
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-08-29
+updated: 2026-08-30
 supersedes: []
 related: [0012-テスト方針とカバレッジのゲート.md, 0008-CLBとCSharpライブラリの責務分担.md]
 ---
@@ -156,7 +156,7 @@ IDE0290 は逆に「primary constructor をやめろ」と言う。**規則を�
 | `is { }` | **リポジトリ内のすべての `*.cs`**（CLB スクリプトを含む） | 型も位置パターンも無く、中身が空のプロパティパターン。`is string { }` や `is { Length: 0 }` は当たらない |
 | `== null` / `!= null` | ビルドの関門を敷いたプロジェクト | 等値・非等値の二項演算で、左右のどちらかが `null` リテラル。**括弧とキャストは剥がす**（`x == (object)null` は多重定義を迂回するために人が書く形で、この規則が禁じたいものそのもの）。`x == default` は見ない——値型どうしの正しい比較が実在し、意味解析なしでは区別できない |
 | **`#if` / `#elif` / `#else`** | **リポジトリ内のすべての `*.cs`** | 条件付きコンパイルの中は**構文木から消える**ので、そこに書かれた禁止形は検査を素通りする。分岐の網羅という難問を持ち込むより、使わない。**理屈は適用範囲の広い側にこそ当てはまる** |
-| `Environment.NewLine`、および**リテラルの中の CR** | `AccountingCore`・`AccountingCore.Server`・`BusinessApp.Server`（§3 の例外） | `NewLine` という名前そのものを疑う（字面で `Environment` と比べるだけでは `global::` 付き・`using static`・別名 using が抜ける）。CR は**補間文字列・文字リテラル・UTF-8 リテラルまで**見る——ここが唯一の網で、ファイルの実バイトを見る検査には当たらない |
+| `Environment.NewLine`、および**リテラルの中の CR** | `AccountingCore`・`AccountingCore.Server`・`BusinessApp.Server`（§3 の例外）<br>**→ 2026-08-30 追記**: 取引先を部品として分けたので（[ADR-0025](0025-取引先を部品として分ける.md)。2026-08-27）、いまは `Partners`・`Partners.Server` を加えた **5 本**である（`CSharpStyleConvention.MessageLayerProjects` が正典）。判断は変わっていない | `NewLine` という名前そのものを疑う（字面で `Environment` と比べるだけでは `global::` 付き・`using static`・別名 using が抜ける）。CR は**補間文字列・文字リテラル・UTF-8 リテラルまで**見る——ここが唯一の網で、ファイルの実バイトを見る検査には当たらない |
 | **構文を読めなかったこと** | 禁止形を 1 つ以上当てるとき | 構文が壊れていればどの禁止形にも当たらず、見た目は「きれい」になる。**読めなかったことを「違反 0 件」と混同しない** |
 
 **② 関門そのもの**
