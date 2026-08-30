@@ -47,11 +47,15 @@ public static class JournalLineRules
     /// <summary>金額が扱える大きさを超えている（同上）。</summary>
     public const string AmountTooLarge = "金額が大きすぎます。桁を確かめてください。";
 
+    // 行番号は画面が自動で振る（利用者は編集できない。開発者の決定。2026-08-30）。
+    // だから下の 2 つは、画面を通らない経路（取込・API）でしか出ない。
+    // **利用者に「番号を直せ」と言わない**——直す欄が画面に無い（docs/09 §2-3）。
+
     /// <summary>行番号が 1 以上の整数でない（<see cref="JournalViolationCodes.LineNoInvalid"/>）。</summary>
-    public const string LineNoNotStorable = "「行」は 1 以上の整数にしてください。";
+    public const string LineNoNotStorable = "明細の行番号が正しくありません。行番号は画面が自動で振るので、この伝票は作り直してください。";
 
     /// <summary>同じ行番号が 2 つある（同上）。</summary>
-    public const string LineNoDuplicated = "同じ「行」の番号が 2 つあります。番号が重ならないようにしてください。";
+    public const string LineNoDuplicated = "明細の行番号が重なっています。行番号は画面が自動で振るので、この伝票は作り直してください。";
 
     /// <summary>税区分が空（<see cref="JournalViolationCodes.TaxCategoryMissing"/>）。</summary>
     public const string TaxCategoryMissing = "税区分を選んでください。税に関係のない行にも「対象外」を選びます。";

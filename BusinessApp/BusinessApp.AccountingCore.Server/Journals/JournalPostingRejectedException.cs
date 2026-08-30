@@ -30,6 +30,16 @@ public sealed class JournalPostingRejectedException(IReadOnlyList<Violation> vio
     /// </remarks>
     public const string SavingHeadline = "保存できません";
 
+    /// <summary>「取り消す」を止めたときの見出し。</summary>
+    /// <remarks>
+    /// <b>見出しは押したボタンで決まる</b>（qa/02 R24-23）。取消の途中では計上も保存も走るが、
+    /// 利用者がしたのは「取り消す」1 つなので、どこで捕まえても取消の言葉で断る。
+    /// </remarks>
+    public const string ReversalHeadline = "取り消せません";
+
+    /// <summary>「訂正する」を止めたときの見出し。<see cref="ReversalHeadline"/> と同じ理由。</summary>
+    public const string CorrectionHeadline = "訂正できません";
+
     /// <summary>並べられる番号（それを超えたら番号なしで続ける）。</summary>
     private static readonly string[] Numbers = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
 

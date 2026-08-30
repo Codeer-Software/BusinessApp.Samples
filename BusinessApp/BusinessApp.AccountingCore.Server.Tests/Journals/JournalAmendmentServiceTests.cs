@@ -372,6 +372,63 @@ public class JournalAmendmentServiceTests
         Assert.Contains(JournalViolationCodes.AmendmentTargetNotAmendable, error.Violations.Select(v => v.Code));
     }
 
+    // --- 差し戻しの見出し（押したボタンの言葉で断る。docs/09 §2・qa/02 R24-23）---
+
+    /// <summary>
+    /// 取消の差し戻しは「取り消せません」で始まる。
+    /// </summary>
+    /// <remarks>
+    /// <b>取消の途中では計上も走る。</b> 既定の見出しのままだと、「取り消す」を押した利用者に
+    /// 「計上できません」と返ることになり、頼んだ覚えのない操作を断られる。
+    /// </remarks>
+    [Fact]
+    public async Task 取消の差し戻しは取消の言葉で断る()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        await server.AmendAsync(s => s.ReverseAsync(original));
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.ReverseAsync(original)));
+
+        Assert.StartsWith(JournalPostingRejectedException.ReversalHeadline, error.Message);
+        Assert.DoesNotContain(JournalPostingRejectedException.PostingHeadline, error.Message);
+    }
+
+    /// <summary>訂正の差し戻しは「訂正できません」で始まる（上と同じ理由）。</summary>
+    [Fact]
+    public async Task 訂正の差し戻しは訂正の言葉で断る()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        await server.AmendAsync(s => s.ReverseAsync(original));
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.CorrectAsync(original)));
+
+        Assert.StartsWith(JournalPostingRejectedException.CorrectionHeadline, error.Message);
+        Assert.DoesNotContain(JournalPostingRejectedException.PostingHeadline, error.Message);
+    }
+
+    /// <summary>
+    /// 見出しを付け替えても、<b>違反の中身は 1 件も落ちない</b>。
+    /// </summary>
+    /// <remarks>
+    /// 入口で包み直す作りなので、包み方を誤ると違反が消えて「理由の無い差し戻し」になる。
+    /// </remarks>
+    [Fact]
+    public async Task 見出しを付け替えても違反はそのまま残る()
+    {
+        using var server = new AccountingServer();
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.ReverseAsync(new JournalEntryId(999))));
+
+        var violation = Assert.Single(error.Violations);
+        Assert.Equal(JournalViolationCodes.AmendmentTargetNotFound, violation.Code);
+        Assert.Contains(violation.Message, error.Message);
+    }
+
     /// <summary>画面から「計上」を押したのと同じ経路で計上する。</summary>
     private static Task PostAsync(AccountingServer server, JournalEntryId id)
     {

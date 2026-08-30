@@ -1112,6 +1112,21 @@
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
+    },
+    {
+      "Text": "「期間内累計」は、絞り込んだ範囲の先頭からの累計です。資産・負債・純資産の科目は会計年度をまたいで積み上げ、収益・費用の科目は会計年度ごとに積み直します。",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "CumulativeNoticeLabel",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": true,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -1443,7 +1458,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsAutoFillWrap": false,
         "IsFillAvailable": false,
@@ -2156,6 +2171,43 @@
                   "FieldName": "BlankField",
                   "ContextMenu": "",
                   "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "IsWrap": true,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None",
+                "Layout": {
+                  "FieldName": "CumulativeNoticeLabel",
+                  "ContextMenu": "",
+                  "ClassName": "column-notice",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",

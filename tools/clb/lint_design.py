@@ -158,13 +158,16 @@ def check_layout(path, where, layout, kind, field_names, findings):
                 check_layout(path, where, nested, kind, field_names, findings)
 
 
-def check_page_frame(path, doc, findings):
+def check_page_frame(path, doc, findings, module_tables=None):
     """ページフレーム 1 枚を見る。
 
     **リンクだけでなく着地（TopPageModuleDesign / OtherPageModuleDesigns）も見る。**
     フレームが 2 枚になってから、着地の指定が新しく荷重を負った（ADR-0025 §3）のに、
     D-05・D-07 はリンクにしか掛かっていなかった。
+
+    `module_tables` はモジュール名 → `DbTable`。D-05 が「表を持つモジュールか」を見るために要る。
     """
+    module_tables = module_tables or {}
     targets = []
     for side in ("Left", "Right", "Header"):
         for link in (doc.get(side) or {}).get("Links", []):
@@ -177,10 +180,24 @@ def check_page_frame(path, doc, findings):
     for where, link in targets:
         module = link.get("Module", "")
 
-        # D-05 "List" だと /Module/{id} のルートが登録されず詳細が真っ白になる
-        if link.get("ModulePageType") not in ("Auto", "", None):
+        # D-05 実測してあるのは **"List" が詳細を真っ白にする**ことだけである（qa/01 D-05）。
+        #
+        # **もとは「Auto 以外は全部エラー」と書いてあった**（2026-08-30 に絞った）。
+        # そのせいで、CLB マニュアルが正規に示す `Detail`——1 行しか持たないモジュールを
+        # 一覧を挟まずに開く形（自社情報）と、表を持たない表示専用モジュールを載せる形
+        # （ADR-0027 の `JournalEntryBoard`）——まで叩いていた。
+        # **関門は足したときが完成ではない**（CLAUDE.md §4-2）。
+        page_type = link.get("ModulePageType") or "Auto"
+        if page_type == "List":
             findings.append((SEV_ERROR, "D-05", relative(path),
-                             f"{where} {module}: ModulePageType は Auto にする（今は {link['ModulePageType']}）"))
+                             f"{where} {module}: ModulePageType が List だと /{module}/{{id}} の"
+                             "ルートが登録されず詳細が真っ白になる（Auto にする）"))
+        elif page_type == "Detail" and module_tables.get(module) and not link.get("Id"):
+            # 表を持つモジュールを Detail で開くなら、どの行かが決まっていなければならない。
+            # Id が空だと「どの行でもない詳細」になり、designcheck は何も言わない。
+            findings.append((SEV_ERROR, "D-05", relative(path),
+                             f"{where} {module}: ModulePageType が Detail なのに Id が空。"
+                             "表を持つモジュールは開く行を決める（例: 自社情報の Id=\"1\"）"))
 
         # D-07 リンクを複製したときの直し忘れ
         condition_module = (((link.get("ListPageDesign") or {})
@@ -258,14 +275,16 @@ def main() -> int:
         print("検査ファイル数: 0 / error: 1 / warn: 0")
         return 1
 
+    module_tables = {}
     for path in modules:
         doc = load_json(path, findings)
         if doc is not None:
+            module_tables[doc.get("Name", "")] = doc.get("DbTable", "")
             check_module(path, doc, findings)
     for path in frames:
         doc = load_json(path, findings)
         if doc is not None:
-            check_page_frame(path, doc, findings)
+            check_page_frame(path, doc, findings, module_tables)
     check_application_root(frames, findings)
     for path in scripts:
         check_script(path, io.open(path, encoding="utf-8").read(), findings)

@@ -89,7 +89,7 @@ D-10（ラベル列の縦揃え）・F-01（`OnValidateInput`）・F-09（予約
 | D-02 | 表示専用モジュールの Detail でボタンが押せない | `DbTable` 空 **かつ CRUD 3 フラグが全て false** のとき既定がビュー専用になる。`Detail_OnAfterInit` 冒頭で `IsViewOnly = false;` |
 | D-03 | 読み取り専用クエリモジュールで `ButtonField` の `OnClick` が発火しない | 代わりに `AnchorTagField` の `OnClick` を使う（`Module` と `Url` を空にする） |
 | D-04 | `AnchorTagField` の `OnClick` が無反応 | `AnchorTag` は `OnClick` 指定でも `href` を持ち、サーバ往復を伴うハンドラが href ナビゲーションとのレースに負ける。**スクリプト遷移は `LabelField` + `OnClick`** |
-| D-05 | 詳細 URL が真っ白 | 一覧→詳細のリンクは `ModulePageType: "Auto"`。`"List"` だと `/Module/{id}` のルートが登録されない |
+| D-05 | 詳細 URL が真っ白 | 一覧→詳細のリンクは `ModulePageType: "Auto"`。`"List"` だと `/Module/{id}` のルートが登録されない。**`"Detail"` は別物で、正規の使い方である**——1 行しか持たないモジュール（自社情報。`Id` を添える）と、表を持たない表示専用モジュール（[ADR-0027](../decisions/0027-入力の一覧はラップモジュールとクエリモジュールで作る.md) の `JournalEntryBoard`）を一覧を挟まずに開く。**`lint_design.py` は 2026-08-30 まで `Detail` も叩いていた**（qa/02 R25-01） |
 | D-06 | メニューから消したモジュールが真っ白 | `OtherPageModuleDesigns` に登録する |
 | D-07 | 条件が黙って捨てられ全件表示になる | リンクを複製したら `ListPageDesign.ListFieldDesign.SearchCondition.ModuleName` を遷移先に直す |
 | D-08 | 非表示にしたフィールドの位置に空白が残る | 固定幅カラムは空 div として残る。`app.css` で `.grid-column:not(:has(.field-layout)){display:none}` |

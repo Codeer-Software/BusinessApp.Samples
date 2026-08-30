@@ -137,7 +137,7 @@
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
       "DisplayName": "状態",
-      "IsRequired": true,
+      "IsRequired": false,
       "OnDataChanged": "",
       "Name": "Status",
       "IgnoreModification": false,
@@ -204,10 +204,32 @@
       "SearchCondition": {
         "LimitCount": 50,
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
-        "ModuleName": "Partner"
+        "ModuleName": "Partner",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [
+            {
+              "SearchTargetVariable": "IsActive.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": true,
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            }
+          ],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
       "ValueVariable": "Id.Value",
       "DisplayTextVariable": "Name.Value",
@@ -271,7 +293,7 @@
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "原仕訳",
+      "DisplayName": "元の伝票",
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "OriginalEntry",
@@ -737,7 +759,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "原仕訳",
+      "Text": "元の伝票",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -762,7 +784,7 @@
         "Disabled": ""
       },
       "Icon": "",
-      "Variant": "Warning",
+      "Variant": "Danger",
       "OnClick": "CorrectButton_OnClick",
       "ShowTextInToolTip": false,
       "IsHtml": false,
@@ -798,6 +820,21 @@
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign",
       "IsBlock": false
+    },
+    {
+      "Text": "「*」は必須項目です。",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "RequiredLegendLabel",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": true,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -882,9 +919,46 @@
                 "AllowOverflow": false,
                 "Border": "None",
                 "Layout": {
+                  "FieldName": "RequiredLegendLabel",
+                  "ContextMenu": "",
+                  "ClassName": "required-legend",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None",
+                "Layout": {
                   "FieldName": "TransactionDateLabel",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "required-label",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",
@@ -934,7 +1008,7 @@
                 "Layout": {
                   "FieldName": "PostingDateLabel",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "required-label",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",
@@ -1110,7 +1184,7 @@
                 "Layout": {
                   "FieldName": "EntryTypeLabel",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "required-label",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",
@@ -1721,7 +1795,7 @@
           {
             "FieldName": "OriginalEntry",
             "ContextMenu": "",
-            "Label": "原仕訳",
+            "Label": "元の伝票",
             "IsMaxWidthFixed": false,
             "ColumnSpan": 1,
             "RowSpan": 1,
@@ -1787,7 +1861,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsAutoFillWrap": false,
         "IsFillAvailable": false,

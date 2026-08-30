@@ -59,7 +59,7 @@
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
       "DisplayName": "行",
-      "IsRequired": true,
+      "IsRequired": false,
       "OnDataChanged": "",
       "Name": "LineNo",
       "IgnoreModification": false,
@@ -105,10 +105,36 @@
       "SearchCondition": {
         "LimitCount": 50,
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "DisplayOrder.Value",
+            "IsDescending": false
+          },
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
-        "ModuleName": "Account"
+        "ModuleName": "Account",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [
+            {
+              "SearchTargetVariable": "IsActive.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": true,
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            }
+          ],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
       "ValueVariable": "Id.Value",
       "DisplayTextVariable": "Name.Value",
@@ -135,10 +161,36 @@
       "SearchCondition": {
         "LimitCount": 50,
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "DisplayOrder.Value",
+            "IsDescending": false
+          },
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
-        "ModuleName": "SubAccount"
+        "ModuleName": "SubAccount",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [
+            {
+              "SearchTargetVariable": "IsActive.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": true,
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            }
+          ],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
       "ValueVariable": "Id.Value",
       "DisplayTextVariable": "Name.Value",
@@ -165,10 +217,36 @@
       "SearchCondition": {
         "LimitCount": 50,
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "DisplayOrder.Value",
+            "IsDescending": false
+          },
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
-        "ModuleName": "Department"
+        "ModuleName": "Department",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [
+            {
+              "SearchTargetVariable": "IsActive.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": true,
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            }
+          ],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
       "ValueVariable": "Id.Value",
       "DisplayTextVariable": "Name.Value",
@@ -218,10 +296,36 @@
       "SearchCondition": {
         "LimitCount": 50,
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "DisplayOrder.Value",
+            "IsDescending": false
+          },
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
-        "ModuleName": "TaxCategory"
+        "ModuleName": "TaxCategory",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [
+            {
+              "SearchTargetVariable": "IsActive.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": true,
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            }
+          ],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
       "ValueVariable": "Id.Value",
       "DisplayTextVariable": "Name.Value",
@@ -278,10 +382,32 @@
       "SearchCondition": {
         "LimitCount": 50,
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
-        "ModuleName": "Partner"
+        "ModuleName": "Partner",
+        "Condition": {
+          "IsOrMatch": false,
+          "IsNot": false,
+          "Children": [
+            {
+              "SearchTargetVariable": "IsActive.Value",
+              "Comparison": "Equal",
+              "Value": {
+                "Value": true,
+                "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
+              },
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            }
+          ],
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
       "ValueVariable": "Id.Value",
       "DisplayTextVariable": "Name.Value",
@@ -753,7 +879,8 @@
                   "Color": "",
                   "Name": "",
                   "BackgroundColor": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign",
+                  "IsViewOnly": true
                 }
               },
               {
@@ -772,7 +899,7 @@
                 "Layout": {
                   "FieldName": "DebitCreditLabel",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "required-label",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",
@@ -835,7 +962,7 @@
                 "Layout": {
                   "FieldName": "AccountLabel",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "required-label",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",
@@ -998,7 +1125,7 @@
                 "Layout": {
                   "FieldName": "AmountLabel",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "required-label",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",
@@ -1061,7 +1188,7 @@
                 "Layout": {
                   "FieldName": "TaxCategoryLabel",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "required-label",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",
@@ -1330,12 +1457,13 @@
             "Color": "",
             "BackgroundColor": "",
             "DetailLayoutName": "",
-            "ListElementComponent": ""
+            "ListElementComponent": "",
+            "IsViewOnly": true
           },
           {
             "FieldName": "DebitCredit",
             "ContextMenu": "",
-            "Label": "借貸",
+            "Label": "借貸 *",
             "IsMaxWidthFixed": false,
             "ColumnSpan": 1,
             "RowSpan": 1,
@@ -1352,7 +1480,7 @@
           {
             "FieldName": "Account",
             "ContextMenu": "",
-            "Label": "勘定科目",
+            "Label": "勘定科目 *",
             "IsMaxWidthFixed": false,
             "ColumnSpan": 1,
             "RowSpan": 1,
@@ -1403,7 +1531,7 @@
           {
             "FieldName": "Amount",
             "ContextMenu": "",
-            "Label": "金額",
+            "Label": "金額 *",
             "IsMaxWidthFixed": false,
             "ColumnSpan": 1,
             "RowSpan": 1,
@@ -1420,7 +1548,7 @@
           {
             "FieldName": "TaxCategory",
             "ContextMenu": "",
-            "Label": "税区分",
+            "Label": "税区分 *",
             "IsMaxWidthFixed": false,
             "ColumnSpan": 1,
             "RowSpan": 1,
