@@ -22,6 +22,10 @@ python tools/docs/lint_docs.py --selftest
 python tools/docs/lint_docs.py
 
 echo "[pre-commit] 3/7 CLB デザインの検査"
+# 検査そのものが空回りしていないかを先に確かめる（2/7 と 7/7 と同じ作法）。
+# **緩めた変更を守るものが無かった**——D-05 と D-10 を絞ったとき、鳴らなくなることを
+# 確かめる手が目視しか無かった（qa/02 R26-21）。
+python tools/clb/lint_design.py --selftest
 python tools/clb/lint_design.py
 
 echo "[pre-commit] 4/7 テスト・カバレッジ・スキーマ"

@@ -41,6 +41,17 @@ RESERVED_FIELD_TYPES = {
 
 LEGACY_ALIGNMENTS = {"Left", "Right"}
 
+# ボタンの色は 3 値だけ（docs/09 §4・ADR-0030）。CLB は Outline* や Text も持つが使わない。
+ALLOWED_VARIANTS = {"Primary", "Danger", "Secondary"}
+
+# 必須の印を出すクラス（app.css）。ラベル側の要素に付ける。
+REQUIRED_LABEL_CLASS = "required-label"
+
+# 参照してはならない向き（ADR-0025 §4）。`Modules/` のトップレベルのフォルダ＝アプリ（部品）で
+# 判定する（Designer/Project.md のフォルダ規約）——モジュール名を並べると、増えるたびに腐る。
+# **認証部品（Platform）は誰が参照してもよい**——権限の条件は AppUser の列でしか書けない（qa/01 F-21）。
+FORBIDDEN_REFERENCES = {"Partners": {"Accounting"}}
+
 
 def tables_with_optimistic_locking():
     """DDL で optimistic_locking 列を持つテーブル。
@@ -102,6 +113,27 @@ def check_module(path, doc, findings):
         findings.append((SEV_ERROR, "F-09", relative(path),
                          f"{module}: 更新できるモジュールには OptimisticLocking フィールドが要る"))
 
+    # D-18 ボタンの色は 3 値だけ（docs/09 §4・ADR-0030）
+    for field in doc.get("Fields", []):
+        variant = field.get("Variant")
+        if variant and variant not in ALLOWED_VARIANTS:
+            findings.append((SEV_ERROR, "D-18", relative(path),
+                             f"{module}.{field.get('Name', '')}: Variant「{variant}」は使わない"
+                             f"（{' / '.join(sorted(ALLOWED_VARIANTS))} のどれかにする）"))
+
+    # D-19 検索欄を持つレイアウトは既定で開く（docs/09 §3）。
+    # **空の検索レイアウトは対象にしない**——開いても空箱が出るだけである。
+    search = (doc.get("SearchLayouts") or {}).get("") or {}
+    search_layout = search.get("Layout") or {}
+    if _field_count(search_layout) > 0 and not search_layout.get("IsExpanderDefaultOpened"):
+        findings.append((SEV_ERROR, "D-19", relative(path),
+                         f"{module}: 検索条件は既定で開く（IsExpanderDefaultOpened: true）"))
+
+    # D-20 必須の欄には印が要る（docs/09 §1）。
+    # **見るのは詳細レイアウトのラベルだけ**——一覧の見出し（<th>）には class が付かないので、
+    # そちらは文字列に「*」を入れてある（qa/01 D-16）。
+    _check_required_marks(path, doc, findings)
+
     field_names = {f.get("Name", "") for f in doc.get("Fields", [])}
     for kind, layouts in (("Detail", doc.get("DetailLayouts", {})),
                           ("Search", doc.get("SearchLayouts", {}))):
@@ -118,6 +150,195 @@ def check_module(path, doc, findings):
                     if element.get(key) in LEGACY_ALIGNMENTS:
                         findings.append((SEV_ERROR, "A-01", relative(path),
                                          f"{where}: {key} の旧値 {element[key]} は Start / End に化ける"))
+
+
+def _field_count(layout):
+    """レイアウトに置かれているフィールドの数（雛形の空行を数えない）。"""
+    count = 0
+
+    def walk(node):
+        nonlocal count
+        if isinstance(node, dict):
+            if node.get("FieldName"):
+                count += 1
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(layout)
+    return count
+
+
+def _check_required_marks(path, doc, findings):
+    """必須のフィールドのラベルに、印を出すクラスが付いているか（docs/09 §1）。
+
+    **`IsRequired` は「利用者が埋める必須欄」の 1 意味に揃えてある**（Designer/Project.md）。
+    画面が自動で入れる欄には立てないので、ここは例外なしの規則でよい。
+    """
+    module = doc.get("Name", "")
+    required = {f.get("Name", "") for f in doc.get("Fields", []) if f.get("IsRequired")}
+    if not required:
+        return
+
+    marked = set()
+    unmarked = {}
+
+    def walk(node):
+        if isinstance(node, dict):
+            name = node.get("FieldName", "")
+            if node.get("TypeFullName", "").endswith("FieldLayoutDesign") and name.endswith("Label"):
+                owner = name[:-len("Label")]
+                if owner in required:
+                    if node.get("ClassName") == REQUIRED_LABEL_CLASS:
+                        marked.add(owner)
+                    else:
+                        unmarked[owner] = name
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(doc.get("DetailLayouts", {}))
+
+    for owner, label in sorted(unmarked.items()):
+        if owner in marked:
+            continue    # 同じ欄が複数のレイアウトにあり、片方には付いている
+        findings.append((SEV_ERROR, "D-20", relative(path),
+                         f"{module}: 必須の {owner} のラベル {label} に "
+                         f'"ClassName": "{REQUIRED_LABEL_CLASS}" が要る（docs/09 §1）'))
+
+
+def app_of(path):
+    """そのファイルが属するアプリ（`Modules/` のトップレベルのフォルダ）。"""
+    modules_dir = os.path.join(DESIGN_DIR, "Modules")
+    parts = os.path.relpath(path, modules_dir).replace(os.sep, "/").split("/")
+    return parts[0] if len(parts) > 1 else ""
+
+
+def check_module_references(modules, scripts, findings):
+    """部品をまたぐ参照が、決めた向きに反していないか（ADR-0025 §4・ADR-0029 §2）。
+
+    **依存の向きは会計コア → 取引先の一方通行である。** 逆流すると、
+    取引先を取り出したときに会計コアごと付いてくる。
+    designcheck は参照が解決できるかしか見ないので、**向きは誰も見ていなかった**。
+
+    **認証部品（Platform）への参照は禁じない。** CLB の権限条件は
+    ログインユーザーのレコードの列しか参照できず（qa/01 F-21）、
+    どの部品の画面も `AppUser` を名指しするしかない。
+    **アプリはフォルダで判定する**（Designer/Project.md のフォルダ規約）——
+    モジュール名を並べると、増えるたびに腐る。
+    """
+    app_by_module = {doc.get("Name", ""): app_of(path) for path, doc in modules}
+
+    def report(path, owner, target, how):
+        findings.append((SEV_ERROR, "D-21", relative(path),
+                         f"{owner}（{app_of(path)}）が {app_by_module[target]} の {target} を{how}。"
+                         "部品をまたぐ依存は一方通行（ADR-0025 §4）"))
+
+    for path, doc in modules:
+        forbidden = FORBIDDEN_REFERENCES.get(app_of(path))
+        if not forbidden:
+            continue
+        text = json.dumps(doc, ensure_ascii=False)
+        for target, app in sorted(app_by_module.items()):
+            if app in forbidden and f'"ModuleName": "{target}"' in text:
+                report(path, doc.get("Name", ""), target, "参照している")
+
+    for path, text in scripts:
+        forbidden = FORBIDDEN_REFERENCES.get(app_of(path))
+        if not forbidden:
+            continue
+        owner = os.path.basename(path).split(".", 1)[0]
+        for target, app in sorted(app_by_module.items()):
+            if app in forbidden and re.search(r"ModuleSearcher<" + re.escape(target) + ">", text):
+                report(path, owner, target, "読んでいる")
+
+
+def check_cross_frame_links(frames, findings):
+    """フレームを跨ぐリンクの、遷移先での登録漏れ（qa/01 F-17）。
+
+    **登録が無いと画面が静かに真っ白になる。** designcheck は検出しない。
+    前回プロジェクトは繰り返し踏んで静的検査を自作した（ADR-0026 §6）。
+    """
+    registered = {}
+    for path, doc in frames:
+        name = doc.get("Name", "")
+        modules = set()
+        if doc.get("TopPageModule"):
+            modules.add(doc["TopPageModule"])
+        for side in ("Left", "Right", "Header"):
+            for link in (doc.get(side) or {}).get("Links", []):
+                if not link.get("PageFrame"):
+                    modules.add(link.get("Module", ""))
+        for other in doc.get("OtherPageModuleDesigns") or []:
+            modules.add(other.get("Module", ""))
+        registered[name] = modules
+
+    for path, doc in frames:
+        for side in ("Left", "Right", "Header"):
+            for link in (doc.get(side) or {}).get("Links", []):
+                target_frame = link.get("PageFrame")
+                if not target_frame:
+                    continue
+                if target_frame not in registered:
+                    findings.append((SEV_ERROR, "F-17", relative(path),
+                                     f"リンク {link.get('Module', '')} の遷移先フレーム"
+                                     f"「{target_frame}」が無い"))
+                elif link.get("Module") not in registered[target_frame]:
+                    findings.append((SEV_ERROR, "F-17", relative(path),
+                                     f"リンク {link.get('Module', '')} が遷移先フレーム"
+                                     f"「{target_frame}」に登録されていない（開くと真っ白になる）"))
+
+
+def check_role_conditions(modules, frames, findings):
+    """担当の役割で絞る条件に、上位（責任者）が OR で入っているか（ADR-0026 §1 の追記）。
+
+    **階層方式の唯一の弱点は OR の書き忘れ**である。
+    `accounting_role = 'staff'` だけで絞ると、**経理責任者が経理担当の画面に入れなくなる**
+    ——しかも画面はただリンクが消えるだけなので、誰も気づかない。
+    """
+    def walk(node, found):
+        if isinstance(node, dict):
+            if node.get("SearchTargetVariable") == "AccountingRole.Value":
+                value = (node.get("Value") or {}).get("Value")
+                if isinstance(value, str):
+                    found.add(value)
+            for value in node.values():
+                walk(value, found)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, found)
+
+    for path, doc in modules + frames:
+        for key in ("UserReadCondition", "UserWriteCondition", "AppAccessConditions"):
+            found = set()
+            walk(doc.get(key), found)
+            if "staff" in found and "manager" not in found:
+                findings.append((SEV_ERROR, "D-22", relative(path),
+                                 f"{doc.get('Name', '')}.{key}: 経理担当（staff）で絞るなら"
+                                 "経理責任者（manager）も OR で入れる（ADR-0026 §1 の追記②）"))
+
+
+def check_app_access_condition(findings):
+    """アプリ全体のアクセス条件が空になっていないか（CLB の認可 5 階層の最上位）。
+
+    **空＝全開放である**（qa/01 F-18 と同じ性質）。ここが空だと、
+    **`can_access_app` を偽にしても誰も締め出せない**——退職者がそのまま入れる。
+    条件を書かない判断をしたときも、書けない理由を残すこと（F-18）。
+    """
+    path = os.path.join(DESIGN_DIR, "app.clprj")
+    if not os.path.exists(path):
+        return
+
+    doc = json.load(io.open(path, encoding="utf-8"))
+    condition = doc.get("AppAccessConditions") or {}
+    if not condition.get("ModuleName") or not (condition.get("Condition") or {}).get("Children"):
+        findings.append((SEV_ERROR, "D-23", relative(path),
+                         "AppAccessConditions が空＝全開放である。"
+                         "can_access_app を見る条件を書く（ADR-0032）"))
 
 
 def check_layout(path, where, layout, kind, field_names, findings):
@@ -290,18 +511,30 @@ def main() -> int:
         return 1
 
     module_tables = {}
+    loaded_modules = []
     for path in modules:
         doc = load_json(path, findings)
         if doc is not None:
             module_tables[doc.get("Name", "")] = doc.get("DbTable", "")
+            loaded_modules.append((path, doc))
             check_module(path, doc, findings)
+
+    loaded_frames = []
     for path in frames:
         doc = load_json(path, findings)
         if doc is not None:
+            loaded_frames.append((path, doc))
             check_page_frame(path, doc, findings, module_tables)
     check_application_root(frames, findings)
-    for path in scripts:
-        check_script(path, io.open(path, encoding="utf-8").read(), findings)
+
+    loaded_scripts = [(path, io.open(path, encoding="utf-8").read()) for path in scripts]
+    for path, text in loaded_scripts:
+        check_script(path, text, findings)
+
+    check_cross_frame_links(loaded_frames, findings)
+    check_module_references(loaded_modules, loaded_scripts, findings)
+    check_role_conditions(loaded_modules, loaded_frames, findings)
+    check_app_access_condition(findings)
 
     errors = [f for f in findings if f[0] == SEV_ERROR]
     warns = [f for f in findings if f[0] == SEV_WARN]
@@ -314,5 +547,108 @@ def main() -> int:
     return 1 if errors else 0
 
 
+SELFTEST_CASES = [
+    # (何を壊すか, 壊した姿, 期待するルール)
+    ("予約名の型",
+     lambda: _module(Fields=[{"Name": "Id", "TypeFullName": "X.NumberFieldDesign"}]), "F-09"),
+    ("論理削除の列",
+     lambda: _module(Fields=[{"Name": "LogicalDelete", "TypeFullName": "X.BooleanFieldDesign"}]), "PRJ-01"),
+    ("画面側の入力検証",
+     lambda: _module(Fields=[{"Name": "A", "TypeFullName": "X.TextFieldDesign",
+                              "OnValidateInput": "Check"}]), "F-01"),
+    ("3 値以外のボタンの色",
+     lambda: _module(Fields=[{"Name": "B", "TypeFullName": "X.ButtonFieldDesign",
+                              "Variant": "Warning"}]), "D-18"),
+    ("検索条件が既定で閉じている",
+     lambda: _module(SearchLayouts={"": {"Layout": {"IsExpanderDefaultOpened": False, "Rows": [
+         {"Columns": [{"Layout": {"FieldName": "A"}}]}]}}}), "D-19"),
+    ("必須の欄に印が無い",
+     lambda: _module(
+         Fields=[{"Name": "Code", "TypeFullName": "X.TextFieldDesign", "IsRequired": True},
+                 {"Name": "CodeLabel", "TypeFullName": "X.LabelFieldDesign"}],
+         DetailLayouts={"": {"Layout": {"Rows": [{"Columns": [
+             {"Layout": {"FieldName": "CodeLabel", "ClassName": "",
+                         "TypeFullName": "X.FieldLayoutDesign"}},
+             {"Layout": {"FieldName": "Code", "TypeFullName": "X.FieldLayoutDesign"}}]}]}}}), "D-20"),
+    ("担当の条件に責任者が入っていない",
+     lambda: _module(UserWriteCondition={"ModuleName": "AppUser", "Condition": {"Children": [
+         {"SearchTargetVariable": "AccountingRole.Value",
+          "Value": {"Value": "staff"}}]}}), "D-22"),
+]
+
+
+def _module(**overrides):
+    """検査に掛ける最小のモジュール定義。"""
+    doc = {"Name": "SelfTest", "DbTable": "", "CanUpdate": False, "Fields": [],
+           "DetailLayouts": {}, "SearchLayouts": {}, "ListLayouts": {}}
+    doc.update(overrides)
+    return doc
+
+
+def selftest():
+    """**関門が本当に鳴るかを、関門自身が確かめる。**
+
+    足したときに手で壊して確かめても、**次に緩めたときには誰も確かめない**
+    （2026-08-31 の自己レビューで、D-05・D-10 を緩めた変更にテストが 1 本も無かった。qa/02 R26-21）。
+    ここが赤くなったら、検査が空回りしている。
+    """
+    failures = []
+
+    for label, build, expected in SELFTEST_CASES:
+        findings = []
+        doc = build()
+        check_module(os.path.join(DESIGN_DIR, "Modules", "Accounting", "SelfTest.mod.json"),
+                     doc, findings)
+        check_role_conditions([(os.path.join(DESIGN_DIR, "Modules", "Accounting",
+                                             "SelfTest.mod.json"), doc)], [], findings)
+        if not any(rule == expected for _, rule, _, _ in findings):
+            failures.append(f"{label}: {expected} が鳴らない（出たのは {[f[1] for f in findings]}）")
+
+    # 正しい姿では鳴らない（鳴りっぱなしの関門は、赤を無視させる）
+    findings = []
+    check_module(os.path.join(DESIGN_DIR, "Modules", "Accounting", "SelfTest.mod.json"),
+                 _module(), findings)
+    if findings:
+        failures.append(f"正しいモジュールで鳴った: {[f[1] for f in findings]}")
+
+    # フレーム跨ぎのリンクの登録漏れ（F-17）
+    findings = []
+    check_cross_frame_links([
+        ("a.frm.json", {"Name": "A", "TopPageModule": "AHome",
+                        "Left": {"Links": [{"Module": "Missing", "PageFrame": "B"}]}}),
+        ("b.frm.json", {"Name": "B", "TopPageModule": "BHome", "Left": {"Links": []}}),
+    ], findings)
+    if not any(rule == "F-17" for _, rule, _, _ in findings):
+        failures.append("フレーム跨ぎの登録漏れ: F-17 が鳴らない")
+
+    # 部品をまたぐ参照の向き（D-21）
+    findings = []
+    modules_dir = os.path.join(DESIGN_DIR, "Modules")
+    check_module_references(
+        [(os.path.join(modules_dir, "Partners", "P.mod.json"),
+          {"Name": "P", "UserReadCondition": {"ModuleName": "JournalEntry"}}),
+         (os.path.join(modules_dir, "Accounting", "JournalEntry.mod.json"),
+          {"Name": "JournalEntry"})],
+        [], findings)
+    if not any(rule == "D-21" for _, rule, _, _ in findings):
+        failures.append("部品をまたぐ参照: D-21 が鳴らない")
+
+    # 認証部品への参照は鳴らない（権限の条件は AppUser の列でしか書けない。F-21）
+    findings = []
+    check_module_references(
+        [(os.path.join(modules_dir, "Partners", "P.mod.json"),
+          {"Name": "P", "UserReadCondition": {"ModuleName": "AppUser"}}),
+         (os.path.join(modules_dir, "Platform", "AppUser.mod.json"), {"Name": "AppUser"})],
+        [], findings)
+    if findings:
+        failures.append(f"認証部品への参照で鳴った: {[f[1] for f in findings]}")
+
+    for failure in failures:
+        print(f"error\tSELFTEST\t{relative(__file__)}\t{failure}")
+
+    print("lint_design: すべて期待どおり" if not failures else "")
+    return 1 if failures else 0
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(selftest() if "--selftest" in sys.argv else main())
