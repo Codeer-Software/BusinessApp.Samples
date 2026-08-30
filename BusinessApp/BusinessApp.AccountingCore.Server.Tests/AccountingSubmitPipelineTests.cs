@@ -144,4 +144,33 @@ public class AccountingSubmitPipelineTests
 
         await Assert.ThrowsAsync<ArgumentNullException>(() => server.Pipeline.SubmitAsync([], null!));
     }
+
+    /// <summary>
+    /// <b>関門が拾えなかった保存の失敗も、利用者には利用者の語で届く</b>（qa/01 F-16）。
+    /// </summary>
+    /// <remarks>
+    /// CLB は保存の失敗を例外ではなく <c>ExceptionMessage</c> に詰め、その中身を
+    /// そのままトーストに出す。差し替えを忘れると
+    /// <c>SQLite Error 19: 'NOT NULL constraint failed: …'</c> が利用者の画面に出る
+    /// （実機で踏んだ形。qa/03 L-16）。
+    /// </remarks>
+    [Fact]
+    public async Task 保存の失敗は利用者の語に差し替わる()
+    {
+        using var server = new AccountingServer();
+
+        var results = await server.Pipeline.SubmitAsync(
+            [],
+            () => Task.FromResult(new List<ModuleSubmitResult>
+            {
+                SubmitData.Failure("SQLite Error 19: 'NOT NULL constraint failed: journal_lines.account_id'."),
+                SubmitData.Result("@temporary:0f0a", "1"),
+            }));
+
+        // 成功した結果には触らない（仮 ID の対応表が消えると、計上が ID を解決できなくなる）。
+        Assert.Equal(
+            [SaveFailureMessage.Text, string.Empty],
+            results.Select(r => r.ExceptionMessage ?? string.Empty));
+        Assert.Equal(["", "1"], results.Select(r => r.DestinationId ?? string.Empty));
+    }
 }

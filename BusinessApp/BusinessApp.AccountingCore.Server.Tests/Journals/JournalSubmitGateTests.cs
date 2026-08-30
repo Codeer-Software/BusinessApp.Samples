@@ -26,7 +26,7 @@ public class JournalSubmitGateTests
     public async Task 計上として送られた伝票は_番号と計上日時が付いて計上済みになる()
     {
         using var server = new AccountingServer();
-        var entry = SubmitData.Entry(TemporaryId, status: "posted");
+        var entry = SubmitData.NewEntry(TemporaryId, status: "posted");
 
         await server.SubmitAsync([SubmitData.Adding(entry)], server.Saving(entry, Balanced));
 
@@ -47,7 +47,7 @@ public class JournalSubmitGateTests
     {
         using var server = new AccountingServer();
         server.CurrentUserId = string.Empty;
-        var entry = SubmitData.Entry(TemporaryId, status: "posted");
+        var entry = SubmitData.NewEntry(TemporaryId, status: "posted");
 
         await server.SubmitAsync([SubmitData.Adding(entry)], server.Saving(entry, Balanced));
 
@@ -69,7 +69,7 @@ public class JournalSubmitGateTests
     {
         using var server = new AccountingServer();
         server.CurrentUserId = brokenUserId;
-        var entry = SubmitData.Entry(TemporaryId, status: "posted");
+        var entry = SubmitData.NewEntry(TemporaryId, status: "posted");
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => server.SubmitAsync([SubmitData.Adding(entry)], server.Saving(entry, Balanced)));
@@ -81,7 +81,7 @@ public class JournalSubmitGateTests
     public async Task 入力年月日はシステムが打ち_保存された値がそのまま読み戻せる()
     {
         using var server = new AccountingServer();
-        var entry = SubmitData.Entry(TemporaryId, status: "posted");
+        var entry = SubmitData.NewEntry(TemporaryId, status: "posted");
 
         await server.SubmitAsync([SubmitData.Adding(entry)], server.Saving(entry, Balanced));
 
@@ -107,7 +107,7 @@ public class JournalSubmitGateTests
     public async Task 下書き保存も状態を送らない保存も計上ではない()
     {
         using var server = new AccountingServer();
-        var draft = SubmitData.Entry(TemporaryId, status: "draft");
+        var draft = SubmitData.NewEntry(TemporaryId, status: "draft");
 
         await server.SubmitAsync(
             [SubmitData.Adding(draft), SubmitData.Updating(SubmitData.Entry("1"))],
@@ -126,8 +126,14 @@ public class JournalSubmitGateTests
 
         // 明細は伝票と同じ Add / Update に混ざって届く（qa/01 F-11）。名前で見分けられなければ、
         // 明細を伝票として計上しようとして壊れる。
+        //
+        // **明細に「計上済み」を持たせる。** 持たせないと、状態を見るところを素通りするので
+        // 「名前で見分けている」ことを何も表明しないテストになる。
+        var posted = SubmitData.Line(1);
+        posted.Fields["Status"] = new SelectFieldData { Value = "posted" };
+
         await server.SubmitAsync(
-            [SubmitData.Adding(SubmitData.Line(1), SubmitData.Line(2)), SubmitData.Updating(SubmitData.Line(3))],
+            [SubmitData.Adding(posted, SubmitData.Line(2)), SubmitData.Updating(SubmitData.Line(3))],
             NothingSaved);
 
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
@@ -182,7 +188,7 @@ public class JournalSubmitGateTests
     public async Task 計上が弾かれたら伝票も明細も採番も残らない()
     {
         using var server = new AccountingServer();
-        var entry = SubmitData.Entry(TemporaryId, status: "posted");
+        var entry = SubmitData.NewEntry(TemporaryId, status: "posted");
 
         // 貸借が合っていない。ADR-0004 が最も頼っているのは、この巻き戻しである。
         await Assert.ThrowsAsync<JournalPostingRejectedException>(
@@ -219,7 +225,7 @@ public class JournalSubmitGateTests
     public async Task 仮_ID_は保存結果の対応表で本物に読み替える()
     {
         using var server = new AccountingServer();
-        var entry = SubmitData.Entry(TemporaryId, status: "posted");
+        var entry = SubmitData.NewEntry(TemporaryId, status: "posted");
 
         // Saving は仮 ID → 実 ID の対応表を返す。読み替えられなければ計上できない。
         await server.SubmitAsync([SubmitData.Adding(entry)], server.Saving(entry, Balanced));
@@ -231,7 +237,7 @@ public class JournalSubmitGateTests
     public async Task 読み替えられない_ID_は止める()
     {
         using var server = new AccountingServer();
-        var entry = SubmitData.Entry(TemporaryId, status: "posted");
+        var entry = SubmitData.NewEntry(TemporaryId, status: "posted");
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
             () => server.SubmitAsync([SubmitData.Adding(entry)], NothingSaved));
@@ -243,8 +249,11 @@ public class JournalSubmitGateTests
     public async Task 識別子が差分に載っていない伝票は計上しない()
     {
         using var server = new AccountingServer();
-        var entry = new ModuleData { Name = JournalSubmitGate.EntryModuleName };
-        entry.Fields["Status"] = new SelectFieldData { Value = "posted" };
+
+        // 必須項目は揃えたうえで識別子だけを落とす。揃えないと必須項目の関門が先に止めてしまい、
+        // **この検査が見たい経路（ID の解決）まで届かない**。
+        var entry = SubmitData.NewEntry(TemporaryId, status: "posted");
+        entry.Fields.Remove("Id");
 
         // 黙って読み飛ばすと「計上したつもりの下書き」が残る。止めて巻き戻す。
         await Assert.ThrowsAsync<InvalidOperationException>(
@@ -255,7 +264,7 @@ public class JournalSubmitGateTests
     public async Task 同じ仮_ID_に本物の_ID_が二つ対応していたら止める()
     {
         using var server = new AccountingServer();
-        var entry = SubmitData.Entry(TemporaryId, status: "posted");
+        var entry = SubmitData.NewEntry(TemporaryId, status: "posted");
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
             () => server.SubmitAsync(
@@ -285,7 +294,7 @@ public class JournalSubmitGateTests
     public async Task 保存が失敗していたら計上へ進まない()
     {
         using var server = new AccountingServer();
-        var entry = SubmitData.Entry(TemporaryId, status: "posted");
+        var entry = SubmitData.NewEntry(TemporaryId, status: "posted");
 
         var results = await server.SubmitAsync(
             [SubmitData.Adding(entry)],
@@ -294,13 +303,97 @@ public class JournalSubmitGateTests
                 SubmitData.Failure("NOT NULL constraint failed: journal_lines.account_id"),
             }));
 
-        // **保存の失敗をそのまま返す。** CLB 本来の経路が理由を報告する。
-        Assert.Equal(
-            ["NOT NULL constraint failed: journal_lines.account_id"],
-            results.Select(r => r.ExceptionMessage));
+        // **保存の失敗は握りつぶさず返す。** CLB 本来の経路が理由を報告する。
+        // ただし利用者に見せるのは DB の言葉ではない——いちばん外の
+        // AccountingSubmitPipeline が利用者の語に差し替える（qa/01 F-16）。
+        Assert.Equal([SaveFailureMessage.Text], results.Select(r => r.ExceptionMessage));
 
         // 計上へ進んでいない（進むと ID を解決できずに InvalidOperationException になる）。
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries where status = 'posted'"));
+    }
+
+    /// <summary>
+    /// 必須項目の無い明細は<b>保存に届かない</b>（qa/03 L-16。L-14 の処方を仕訳明細へ当てたもの）。
+    /// </summary>
+    /// <remarks>
+    /// <para>実機で踏んだ形そのものである——明細を 1 行足して何も入れずに「計上する」を押すと、
+    /// <c>SQLite Error 19: 'NOT NULL constraint failed: journal_lines.account_id'</c> が
+    /// そのままトーストに出た（2026-08-28。開発者が発見）。</para>
+    /// <para><b>見出しは押されたボタンで決まる。</b> ここは「計上する」を押した保存なので
+    /// 「計上できません」。同じ違反を下書き保存で起こしたときは「保存できません」になる（次のテスト）。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 必須項目の無い明細は保存に届かない()
+    {
+        using var server = new AccountingServer();
+        var entry = SubmitData.NewEntry(TemporaryId, status: "posted");
+        var saved = false;
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync(
+                [SubmitData.Adding(entry, SubmitData.LineWithout(1, "Account"))],
+                () =>
+                {
+                    saved = true;
+                    return Task.FromResult(new List<ModuleSubmitResult>());
+                }));
+
+        Assert.False(saved);
+        Assert.Equal("計上できません。①1 行目: 勘定科目を選んでください。", error.Message);
+        Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
+        Assert.Equal(0, server.Scalar<long>("select count(*) from journal_lines"));
+    }
+
+    /// <summary>
+    /// 下書き保存でも同じ関門が効く。<b>DB が拒むかどうかに、伝票の状態は関係ない。</b>
+    /// </summary>
+    [Fact]
+    public async Task 下書き保存でも必須項目の無い明細は止まる()
+    {
+        using var server = new AccountingServer();
+        var draft = SubmitData.NewEntry(TemporaryId, status: "draft");
+        var saved = false;
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync(
+                [SubmitData.Adding(draft, SubmitData.LineWithout(1, "Amount"))],
+                () =>
+                {
+                    saved = true;
+                    return Task.FromResult(new List<ModuleSubmitResult>());
+                }));
+
+        Assert.False(saved);
+        Assert.Equal("保存できません。①1 行目: 金額を入力してください。", error.Message);
+        Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
+    }
+
+    /// <summary>
+    /// <b>保存前の関門どうしの間でも「1 件で止めない」を守る。</b>
+    /// </summary>
+    /// <remarks>
+    /// 種別の検査と必須項目の検査を別々に投げると、利用者は種別を直して保存し直してから
+    /// 明細の差し戻しを受ける——例外が全件を並べる理由（直しては弾かれを繰り返させない）を、
+    /// 関門どうしの間で破ることになる。
+    /// </remarks>
+    [Fact]
+    public async Task 種別の違反と必須項目の違反は一度にまとめて返す()
+    {
+        using var server = new AccountingServer();
+        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 100), ("credit", "2100", 100));
+        var correction = server.InsertCorrectionDraft(original);
+
+        var entry = SubmitData.Entry(server.Text(correction.Value), status: "draft");
+        entry.Fields["EntryType"] = new SelectFieldData { Value = "normal" };
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync(
+                [SubmitData.Updating(entry), SubmitData.Adding(SubmitData.LineWithout(2, "Account"))],
+                NothingSaved));
+
+        Assert.Equal(
+            [JournalViolationCodes.RequiredValueMissing, JournalViolationCodes.EntryTypeImmutable],
+            error.Violations.Select(v => v.Code));
     }
 
     /// <summary>
@@ -351,8 +444,12 @@ public class JournalSubmitGateTests
             () => server.SubmitAsync([SubmitData.Updating(entry)], NothingSaved));
 
         Assert.Contains(JournalViolationCodes.EntryTypeImmutable, error.Violations.Select(v => v.Code));
+
+        // **「下書きを作り直してください」とは言わない。** 訂正の下書きでそう言われても、
+        // 元の伝票は既に取り消してあるので、同じものをもう一度は作れない（行き止まりになる）。
         Assert.Equal(
-            "伝票の種別は変更できません（「訂正」のままです）。種別を変えるときは、下書きを作り直してください。",
+            "伝票の種別は、保存したあとは変更できません（「訂正」のままです）。"
+            + "別の種別で起票するときは、新しい振替伝票を作成してください。",
             error.Violations.Single(v => v.Code == JournalViolationCodes.EntryTypeImmutable).Message);
         Assert.Equal("correction", server.Scalar<string>(
             $"select entry_type from journal_entries where id = {correction.Value}"));

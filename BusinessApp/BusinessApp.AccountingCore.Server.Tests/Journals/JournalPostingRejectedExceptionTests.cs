@@ -51,6 +51,23 @@ public class JournalPostingRejectedExceptionTests
             error.Message);
     }
 
+    /// <summary>
+    /// 見出しは操作に合わせる。<b>計上していない操作を、計上の言葉で断らない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 保存の手前の関門（<c>JournalSubmitRequirements</c>）は<b>下書き保存でも走る</b>——
+    /// 入っていない値は状態に関わらず DB に拒まれるからである。
+    /// </remarks>
+    [Fact]
+    public void 保存を止めたときは保存の言葉で断る()
+    {
+        var error = new JournalPostingRejectedException(
+            [new Violation("E-LINE-REQUIRED", "勘定科目を選んでください。", LineNo: 1)],
+            JournalPostingRejectedException.SavingHeadline);
+
+        Assert.Equal("保存できません。①1 行目: 勘定科目を選んでください。", error.Message);
+    }
+
     [Fact]
     public void 警告は文面に混ぜない()
     {

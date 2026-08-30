@@ -202,6 +202,83 @@ public class GeneralLedgerQueryTests
         Assert.Equal(expected, Run(db).Single(r => r.AccountCode == accountCode).RunningTotal);
     }
 
+    /// <summary>
+    /// <b>損益科目の累計は、会計年度をまたいで積み上がらない</b>（開発者の決定。2026-08-28）。
+    /// </summary>
+    /// <remarks>
+    /// 収益と費用は決算で振り替えられて残高が消えるので、年度をまたいで積むと意味のない数になる。
+    /// <b>会計年度が 1 つのうちは表に出ない</b>——第 17 期のデモデータか翌期が入って初めて現れる
+    /// ので、年度を複数持つ検体でしか捕まえられない。
+    /// </remarks>
+    [Fact]
+    public void 損益科目の累計は会計年度ごとに積み直す()
+    {
+        using var db = CreateWithOtherYears();
+
+        // 売上高（収益）。第 17 期 50 → 第 18 期 1,000・3,000 → 第 19 期 **100 から積み直す**。
+        Assert.Equal(
+            [50, 1000, 3000, 100, 800],
+            Run(db).Where(r => r.AccountCode == "4000").Select(r => r.RunningTotal));
+    }
+
+    /// <summary>
+    /// <b>貸借科目の累計は切らない。</b> 現金の残高は年度をまたいで続くものであり、
+    /// 年度で 0 に戻すと手許現金でも残高でもない数が出る（docs/04 の I-07）。
+    /// </summary>
+    /// <remarks>
+    /// 開発者の決定の理由は「<b>損益科目</b>の累計が決算をまたいで積み上がる」だった。
+    /// 全科目を一律に切ると、その理由が当たらない科目まで巻き添えにする。
+    /// </remarks>
+    [Fact]
+    public void 貸借科目の累計は会計年度をまたいで積み上がる()
+    {
+        using var db = CreateWithOtherYears();
+        var cash = Run(db).Where(r => r.AccountCode == "1100").ToList();
+
+        Assert.Equal([50, 1050, 4050, 3750, 3850, 4550], cash.Select(r => r.RunningTotal));
+
+        // 最後の値は、この検体の現金の出入りをすべて足した額そのものである。
+        Assert.Equal(50 + 1000 + 3000 - 300 + 100 + 700, cash[^1].RunningTotal);
+    }
+
+    /// <summary>
+    /// <b>並びは会計年度の開始日で決める。</b> <c>fiscal_years.id</c> は代理キーなので、
+    /// 識別子で並べると<b>後から入れた第 17 期が第 19 期より後ろに出る</b>。
+    /// </summary>
+    /// <remarks>
+    /// あわせて、検体の 7 番は<b>取引日が第 18 期・会計年度が第 19 期</b>の伝票である
+    /// （決算後に見つかった取引）。取引日を年度より先に並べると、この行が第 18 期の行の間に挟まり、
+    /// 損益科目ではそこだけ累計が別の系列の値を出す。
+    /// 会計期間への帰属を決めるのは計上日である（docs/04 の I-03）。
+    /// </remarks>
+    [Fact]
+    public void 科目の中は会計年度の古い順にまとまる()
+    {
+        using var db = CreateWithOtherYears();
+        var cash = Run(db).Where(r => r.AccountCode == "1100").ToList();
+
+        Assert.Equal(
+            ["第 17 期", "第 18 期（2026 年度）", "第 18 期（2026 年度）", "第 18 期（2026 年度）",
+             "第 19 期", "第 19 期"],
+            cash.Select(r => r.FiscalYearLabel));
+
+        // 7 番（第 19 期・取引日 2026-05-15）は取引日で並べると 1 番と 2 番の間に来るが、
+        // 年度でまとまるので第 19 期のまとまりの先頭に入る。
+        Assert.Equal([1, 1, 2, 4, 2, 1], cash.Select(r => r.EntryNo));
+    }
+
+    /// <summary>
+    /// <b>年度を列に出す。</b> 出さないと、累計が突然戻る理由も、取引日が遡る理由も画面に現れない。
+    /// 帳簿は既定で絞らない（docs/09 §3）ので、既定の表示は必ず年度が混ざる。
+    /// </summary>
+    [Fact]
+    public void 会計年度は列に出る()
+    {
+        using var db = Create();
+
+        Assert.All(Run(db), r => Assert.Equal("第 18 期（2026 年度）", r.FiscalYearLabel));
+    }
+
     // --- 絞り込み ---
 
     [Fact]
@@ -325,8 +402,71 @@ public class GeneralLedgerQueryTests
         return db;
     }
 
+    /// <summary>
+    /// 第 17 期と第 19 期を足した検体。<b>会計年度をまたぐ話はこれでしか検査できない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 伝票を 3 本足す——6 番は素直に第 19 期の取引、
+    /// <b>7 番は取引日が第 18 期・計上日が第 19 期</b>（決算後に見つかった取引）、
+    /// <b>8 番はいちばん古い第 17 期なのに識別子はいちばん大きい</b>。
+    /// 7 番が無いと取引日順と年度順が食い違う形を、
+    /// 8 番が無いと識別子順と年代順が食い違う形を、一度も通さないことになる。
+    /// </remarks>
+    private static SqliteConnection CreateWithOtherYears()
+    {
+        var db = Create();
+        TestDatabase.Execute(db, OtherYears);
+        return db;
+    }
+
+    /// <remarks>
+    /// <para><b>第 19 期を先に、第 17 期を後から入れる。</b> <c>fiscal_years.id</c> は
+    /// <c>AUTOINCREMENT</c> の代理キーなので、こうすると<b>識別子の順と年代の順が食い違う</b>——
+    /// 第 17 期は id が最大なのに、いちばん古い。並びを id で決めていると、この検体で必ず落ちる。
+    /// 逆に、後の年度ほど id が大きい検体しか持たないと、<b>誤った実装でも緑になる</b>（qa/03 L-02）。</para>
+    /// <para>年度は<b>コードから引く</b>（初期データの id を書き写さない）。</para>
+    /// </remarks>
+    private const string OtherYears = """
+        INSERT INTO fiscal_years (code, label, start_date, end_date, status)
+            VALUES ('FY19', '第 19 期', '2027-04-01', '2028-03-31', 'open');
+        INSERT INTO fiscal_years (code, label, start_date, end_date, status)
+            VALUES ('FY17', '第 17 期', '2025-04-01', '2026-03-31', 'open');
+
+        -- 6) 第 19 期 2027-04-10 借 現金 700 / 貸 売上高 700
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            VALUES ((SELECT id FROM fiscal_years WHERE code = 'FY19'),
+                    '2027-04-10', '2027-04-10', 'draft', 'normal', '2027-04-10 10:00:00');
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (6, 1, 'debit', 1, 700, 1);
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (6, 2, 'credit', 2, 700, 1);
+
+        -- 7) **取引日は第 18 期（2026-05-15）・計上日は第 19 期。** 決算後に見つかった取引。
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            VALUES ((SELECT id FROM fiscal_years WHERE code = 'FY19'),
+                    '2026-05-15', '2027-04-20', 'draft', 'normal', '2027-04-20 10:00:00');
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (7, 1, 'debit', 1, 100, 1);
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (7, 2, 'credit', 2, 100, 1);
+
+        -- 8) 第 17 期 2025-05-10 借 現金 50 / 貸 売上高 50。**いちばん古いのに id はいちばん大きい。**
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            VALUES ((SELECT id FROM fiscal_years WHERE code = 'FY17'),
+                    '2025-05-10', '2025-05-10', 'draft', 'normal', '2025-05-10 10:00:00');
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (8, 1, 'debit', 1, 50, 1);
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (8, 2, 'credit', 2, 50, 1);
+
+        -- 伝票番号は会計年度の中の連番（I-17）。年度が変われば 1 番から採り直す。
+        UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2027-04-10 10:00:00' WHERE id = 6;
+        UPDATE journal_entries SET status = 'posted', entry_no = 2, posted_at = '2027-04-20 10:00:00' WHERE id = 7;
+        UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2025-05-10 10:00:00' WHERE id = 8;
+        """;
+
     private sealed record Row(
-        string AccountCode, int EntryNo, string? CounterAccountName,
+        string AccountCode, string FiscalYearLabel, int EntryNo, string? CounterAccountName,
         long? Debit, long? Credit, long RunningTotal);
 
     /// <summary>
@@ -350,6 +490,7 @@ public class GeneralLedgerQueryTests
         {
             rows.Add(new Row(
                 reader.GetString(reader.GetOrdinal("account_code")),
+                reader.GetString(reader.GetOrdinal("fiscal_year_label")),
                 reader.GetInt32(reader.GetOrdinal("entry_no")),
                 Nullable(reader, "counter_account_name") is int counter ? reader.GetString(counter) : null,
                 Nullable(reader, "debit_amount") is int debit ? reader.GetInt64(debit) : null,

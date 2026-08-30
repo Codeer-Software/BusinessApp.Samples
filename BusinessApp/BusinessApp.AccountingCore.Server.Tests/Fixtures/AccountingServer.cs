@@ -250,6 +250,50 @@ internal sealed class AccountingServer : IDisposable
     }
 
     /// <summary>
+    /// 明細を、<b>保存の関門が通したとおりの値で</b> 1 行足す。
+    /// </summary>
+    /// <remarks>
+    /// <b>「関門の受理集合が DB の受理集合に収まっているか」を、実際に書いて確かめるための口</b>
+    /// （qa/03 L-14 の処方）。値を作り直さずに <see cref="ModuleData"/> から読むので、
+    /// 関門が通した値を DDL が拒めば、ここで落ちる。
+    /// </remarks>
+    public void InsertLine(JournalEntryId entryId, ModuleData line)
+        => Execute($"""
+            insert into journal_lines
+                (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            values ({entryId.Value}, {ValuesOf(line)})
+            """);
+
+    /// <summary>
+    /// 明細の値を <c>line_no/debit_credit/account_id/amount/tax_category_id</c> の順に並べた文字列。
+    /// </summary>
+    /// <remarks>
+    /// <b>書いた値と読み戻した値を、1 つの表明で record ごと比べるために使う</b>（qa/03 L-04）。
+    /// 列ごとに数えると、取り違えた 2 列が打ち消し合っても気づけない。
+    /// </remarks>
+    public static string ValuesOf(ModuleData line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+
+        return string.Join(", ", [
+            $"{(line.Fields["LineNo"] as NumberFieldData)?.Value}",
+            $"'{(line.Fields["DebitCredit"] as SelectFieldData)?.Value}'",
+            $"{(line.Fields["Account"] as LinkFieldData)?.Value}",
+            $"{(line.Fields["Amount"] as NumberFieldData)?.Value}",
+            $"{(line.Fields["TaxCategory"] as LinkFieldData)?.Value}",
+        ]);
+    }
+
+    /// <summary>DB に書かれた明細を、<see cref="ValuesOf"/> と同じ並びで読み戻す。</summary>
+    public string StoredLine(JournalEntryId entryId, int lineNo)
+        => Scalar<string>($"""
+            select line_no || ', ''' || debit_credit || ''', ' || account_id || ', ' || amount
+                   || ', ' || tax_category_id
+              from journal_lines
+             where journal_entry_id = {entryId.Value} and line_no = {lineNo}
+            """);
+
+    /// <summary>
     /// 会計年度をもう 1 本足す。伝票番号が年度ごとの連番であること（I-17）の検査に使う。
     /// <b>月次の会計期間も一緒に作る。</b> 期間が無い年度には計上できないので、
     /// 年度だけ足しても検証を通らない（I-03）。

@@ -13,6 +13,10 @@
 SELECT
     e.id                        AS entry_id,
     e.entry_no                  AS entry_no,
+    -- **会計年度を列に出す。** 伝票番号は年度ごとの連番（I-17）なので、年度で絞らなければ
+    -- 同じ「1」が何行も並ぶ。帳簿は既定で絞らない（docs/09 §3）ので、既定の表示は必ずそうなる。
+    -- 元帳にも同じ理由で出してある。
+    fy.label                    AS fiscal_year_label,
     e.transaction_date          AS transaction_date,
     e.posting_date              AS posting_date,
     -- **区分値は生のまま返す。** 日本語の見出しは CLB のデザイン enum が持っており
@@ -38,6 +42,8 @@ FROM journal_entries e
 JOIN journal_lines   l  ON l.journal_entry_id = e.id
 JOIN accounts        a  ON a.id  = l.account_id
 JOIN tax_categories  tc ON tc.id = l.tax_category_id
+-- 会計年度は**列に出すため**と**並び順のため**に引く（識別子ではなく開始日で並べる）。
+JOIN fiscal_years    fy ON fy.id = e.fiscal_year_id
 LEFT JOIN sub_accounts sa ON sa.id = l.sub_account_id
 LEFT JOIN departments  d  ON d.id  = l.department_id
 LEFT JOIN partners     lp ON lp.id = l.partner_id
@@ -86,7 +92,13 @@ WHERE e.status = 'posted'
            AND (e.description IS NULL OR e.description = ''))
        OR (@p_blank_field = 'item_description'
            AND (l.item_description IS NULL OR l.item_description = '')))
+-- **先頭は取引日である。** 仕訳帳は「取引の発生順に」記載する（法人税法施行規則 55 ①。docs/09 §3）。
+--
 -- **年度を並び順に含める。** 伝票番号は年度内の連番なので（005_journals.sql の UNIQUE）、
 -- 年度を無視すると、3 月の仕訳を 4 月に取り消したときに
 -- 「取引日が同じで番号が小さい取消」が原仕訳より前に並ぶ。
-ORDER BY e.transaction_date, e.fiscal_year_id, e.entry_no, l.line_no
+--
+-- **年度は開始日で並べる。識別子で並べない。** fiscal_years.id は AUTOINCREMENT の代理キーで、
+-- 年代とは無関係な挿入順である——第 17 期を後から入れると id は第 18 期より大きくなる（qa/03 L-19）。
+-- date() で包むのは、格納形が 'YYYY-MM-DD' と 'YYYY-MM-DD 00:00:00' の両方をとりうるため（qa/01 A-04）。
+ORDER BY date(e.transaction_date), date(fy.start_date), e.entry_no, l.line_no

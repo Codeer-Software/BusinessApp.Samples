@@ -18,6 +18,13 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 /// という壊れ方をする（ADR-0025 §2 が約束した「取引先だけのデプロイ」の受け皿）。</para>
 /// <para>関門はどちらも保存の前に検査するだけなので、順番に意味は無い。
 /// どちらが例外を投げても、呼び出し側のトランザクションごと巻き戻る。</para>
+/// <para><b>取引先だけを載せるときに 1 つ足りなくなるものがある。</b>
+/// 保存が失敗したときの文言を利用者の語に差し替える網（会計側の <c>SaveFailureMessage</c>）が
+/// それで、いまは会計コアの入口に置いてある（ADR-0025 §2「2 つ以上の部品が実際に使うものだけを
+/// 共有へ出す」に従い、先回りして写しを作っていない）。
+/// <b>取引先だけのホストを作るときは、これを <c>BusinessApp.ServerSupport</c> へ移してここから呼ぶ。</b>
+/// 移さないと、利用者に <c>Partner This field cannot be modified</c> のような
+/// 枠組みの言葉がそのまま出る（qa/01 F-16・F-26）。</para>
 /// </remarks>
 public sealed class PartnerSubmitPipeline(
     PartnerRegistrationSubmitGate registrations,

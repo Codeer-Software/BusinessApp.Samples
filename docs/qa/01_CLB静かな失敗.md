@@ -4,7 +4,7 @@ status: current
 scope: 全体
 audience: [開発]
 growth: append
-updated: 2026-08-28
+updated: 2026-08-30
 supersedes: []
 related: [../11_CLB改善提案/README.md, ../decisions/0026-画面は役割で分け玄関のページフレームを置く.md]
 ---
@@ -47,6 +47,7 @@ D-10（ラベル列の縦揃え）・F-01（`OnValidateInput`）・F-09（予約
 | A-06 | ゼロ埋めが実行時に落ち、以降のハンドラが止まる | スクリプトの数値は `decimal` に統一される。**`ToString("D3")` 等の整数専用書式は実行時に `Format specifier was invalid.`**。文字列補間 `$"{n:000}"` を使う |
 | A-07 | 「1.25」のような端数が出て同値判定が壊れる | スクリプトの `/` は**整数どうしでも decimal 除算**。切り捨てたいなら `Math.Floor(...)` を通すか **`int` で受ける** |
 | A-08 | 本人なのに本人と判定されない／親行が見つからない | id の比較は **`$"{a.Value}" == $"{b.Value}"`** で文字列化してから行う。動的型なので型が違うと `==` が黙って false になる。金額・日付の比較は普通に `==` `<` でよい |
+| A-09 | 窓関数を式で区切ったとき、区切りの値が NULL になる行がどう束ねられるか分からない | **`PARTITION BY` の式が NULL になる行は、すべて同じ 1 区画に束ねられる**（2026-08-30 実測。SQLite 3.41.2。`WITH t(k,v) AS (VALUES (NULL,1),(NULL,2),(1,10)) SELECT sum(v) OVER (PARTITION BY k ORDER BY v) FROM t` が NULL の 2 行で `1, 3` を返す）。`GROUP BY` と同じ束ね方である。**「一部の行だけ区切らない」を `CASE ... END` で書ける**——総勘定元帳が、損益科目だけを会計年度で区切るのにこれを使っている |
 
 ## B. スクリプトの言語制約（ロード時または実行時に落ちる）
 
@@ -133,9 +134,10 @@ D-10（ラベル列の縦揃え）・F-01（`OnValidateInput`）・F-09（予約
 | F-13 | 保存後に状態を変える更新が DB のトリガに弾かれる | 不変にした行（計上済みの仕訳など）は、**最初から最終状態で書くと子行を足せない**。「下書きで書く → 読み直して検証 → 状態を進める」の順にする。`SubmitAsync` の中で投げた例外は保存ごと巻き戻る（2026-08-24 実測。下書き行も採番も残らないことを確認） |
 | F-14 | 書き込み条件から外れた行で、ボタンを押しても<b>何も起きない</b> | `DataWriteCondition` を満たさない行は、入力欄がラベル表示に変わり、`ListField` の追加・削除も消える（読み取りは通る）。**ただしボタンフィールドは残り、押しても無反応になる**（2026-08-24 実測 1.3.20）。`OnAfterInitialization` で `IsVisible = false` にして消す。<br>**押させたいボタンがある場合**（計上済みの伝票に置く「訂正する」「取り消す」など）は、`OnAfterInitialization` で `IsViewOnly = false` を明示すると押せる。本プロジェクトはこれで動いている（2026-08-25 実測 1.3.20）。**明示しない場合にどうなるかは未確認** |
 | F-15 | **`ButtonField` + `this.Submit()` にすると、`IsRequired` が効かなくなる。** 必須の欄が空のまま保存へ進み、DB の `NOT NULL` に当たって落ちる | **`this.Submit()` の前に `this.ValidateInput()` を呼ぶ**（2026-08-28 実測 1.3.20）。標準の `SubmitButtonFieldDesign` はクリック時に全フィールドの検証を走らせるが、**スクリプトからの `Submit()` は走らせない**。同じ画面に標準ボタンとスクリプトのボタンが並ぶと、**押すボタンによって検査の有無が変わる**（実測: 「下書き保存」は「必須項目です」で止まり、「計上する」は素通りして `SQLite Error 19` を出した）。`ValidateInput()` は **`ListField` の子行まで見る**（同日実測）。**F-01 の「関門はサーバ側に置く」は、CLB 標準の入力検証を呼ばない理由にならない**——`IsRequired` はデザイン JSON の宣言であって、スクリプトに書いた業務判断ではない |
-| F-16 | 保存が DB に拒まれると、**`SQLite Error 19: 'NOT NULL constraint failed: …'` のような生のメッセージがそのままトーストに出る** | 保存の失敗は例外ではなく **`ModuleSubmitResult.ExceptionMessage`** で返り、CLB がそれをそのままトーストにする（2026-08-28 実測 1.3.20）。**関門は「DB が拒む値を保存へ渡さない」ところまで責任を持つ**（[qa/03 L-14](03_テストで漏らした実例.md)）。それでも漏れたときのために、**DB 由来と分かるメッセージは利用者の語に差し替える**。差し替えは検査に載る層（`AccountingSubmitPipeline` 等）に置く——`CustomizedModuleDataIO` はカバレッジにもミューテーションにも載らない |
+| F-16 | 保存が DB に拒まれると、**`SQLite Error 19: 'NOT NULL constraint failed: …'` のような生のメッセージがそのままトーストに出る** | 保存の失敗は例外ではなく **`ModuleSubmitResult.ExceptionMessage`** で返り、CLB がそれをそのままトーストにする（2026-08-28 実測 1.3.20）。**関門は「DB が拒む値を保存へ渡さない」ところまで責任を持つ**（[qa/03 L-14](03_テストで漏らした実例.md)）。それでも漏れたときのために、**この項目に入った文言はまるごと利用者の語に差し替える**。差し替えは検査に載る層（`AccountingSubmitPipeline` 等）に置く——`CustomizedModuleDataIO` はカバレッジにもミューテーションにも載らない。<br>**この項目に入るのは「枠組みの言葉」であって、DB 由来とは限らない。** 実測したのは 3 通り——①`SQLite Error 19: 'NOT NULL constraint failed: …'`（DB。2026-08-28 実測 1.3.20）②`Partner This field cannot be modified`（CLB。`IsUpdateProtected` の拒否。2026-08-30 実測 1.3.20。F-26）③`Update failed`（CLB。楽観ロックの競合。**理由が何も入っていない**。2026-08-30 実測 1.3.20）。<br>**「DB 由来かどうか」で選り分けない**（Claude の判断。2026-08-30）——文字列で見分ける形にすると、DB を替えても CLB が文言を変えても**静かに効かなくなる**。差し替え先の文言（3 通りの「次にすべきこと」を全部包む）は `SaveFailureMessage.Text` が持つ |
 | F-17 | フレーム跨ぎのリンクを押すと**画面が静かに真っ白**になる。`designcheck` は緑 | **遷移先フレームに、同じモジュール × URL セグメントの登録が要る**（サイドバーの `Links` か `OtherPageModuleDesigns`）。前回プロジェクトで繰り返し踏み、静的検査（`check_navigation.py`）を自作して止めた。本プロジェクトは `lint_design.py` に同じ検査を入れる（[ADR-0026](../decisions/0026-画面は役割で分け玄関のページフレームを置く.md)） |
 | F-25 | フレームを増やしたら、ボタンの遷移先が別のフレームになった | **`NavigationService.GetModuleDataUrl(モジュール, id)` の 2 引数版は、現在のフレームで解決される。** どのフレームから押されたかで行き先が変わる。フレームをまたいで固定したいなら 3 引数版（フレーム名つき）を使う。**`id` に `"-"` を渡すと新規作成の画面が開く**（2026-08-28 実測 1.3.20。`/Main/JournalEntry/-`） |
+| F-26 | `IsUpdateProtected: true` にした項目が、**画面では今までどおり編集できる**。直して保存した瞬間に「更新に失敗しました」と、**`Partner This field cannot be modified`**（英語 ＋ フィールド名そのまま）が出る | **画面からの保存は拒まれる**（2026-08-30 実測 1.3.20）。**API を直に叩く経路は未確認**なので、「守りとして数えてよい」とはまだ書けない。**効かないのは表示のほうである**——入力欄も候補ダイアログも消えない。理由は `IsUpdateProtected` がフィールド定義、`IsViewOnly` がレイアウト要素と、別の層のものだから（`ClaudeCodeForDesigner/CLAUDE.md` の 18 番と `_specs/_FieldCommon.md`）。**「押せるのに拒まれる」状態そのもの**なので（[09 §1](../09_画面の原則.md)）、`Detail_OnAfterInitialization` で **`IsNewData` でないときだけ `フィールド.IsViewOnly = true`** にして見た目を合わせる（新規では選ばせる必要があり、`IsUpdateProtected` も更新のときだけ効くため）。**この表示は守りではない**（F-24）。拒否のメッセージは `ModuleSubmitResult.ExceptionMessage` に載るので、F-16 の差し替えが要る |
 
 **権限（`UserReadCondition` / `UserWriteCondition` / `DataReadCondition` / `DataWriteCondition`）**——
 **下の F-18〜F-24 は、前回プロジェクト（`BusinessApp_old`。CLB 1.3.18 まで）の文書から

@@ -196,7 +196,16 @@ public class QueryModuleTests
         /// <summary>入力パラメータ（`IsParameter: true`）。順序を無視するため名前順に並べてある。</summary>
         public IReadOnlyList<string> DeclaredParameters { get; }
 
-        /// <summary>出力列（`IsParameter: false`）。<b>SELECT の順序と一致していなければならない。</b></summary>
+        /// <summary>
+        /// 出力列（`IsParameter: false`）。<b>SELECT と順序込みで突き合わせる。</b>
+        /// </summary>
+        /// <remarks>
+        /// <b>CLB が順序を要求しているという根拠は無い</b>（`_specs/QueryAndSql.md` が言うのは
+        /// 「`Name` をフィールドの `DbColumn` と一致させる」だけで、並びには触れていない）。
+        /// ここで順序も見ているのは<b>本プロジェクトの規約</b>で、
+        /// 列を足したときに宣言と SQL の片方だけを直したことに気づくための当たり判定である。
+        /// 緩めてよいかを判断するときは、この違いを踏まえること。
+        /// </remarks>
         public IReadOnlyList<string> DeclaredColumns { get; }
 
         /// <summary>Select の候補が持つ値（「表示テキスト,値」の値のほう）。</summary>
