@@ -88,7 +88,7 @@
         }
       },
       {
-        "Title": "仕訳帳",
+        "Title": "帳簿/仕訳帳",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -154,7 +154,7 @@
         }
       },
       {
-        "Title": "総勘定元帳",
+        "Title": "帳簿/総勘定元帳",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -220,16 +220,16 @@
         }
       },
       {
-        "Title": "事業所情報",
+        "Title": "設定/自社情報",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
-        "ModulePageType": "Auto",
+        "ModulePageType": "Detail",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "",
         "Module": "CompanyProfile",
-        "Id": "",
+        "Id": "1",
         "Parameters": "",
         "ListPageDesign": {
           "SearchLayoutName": "",
@@ -286,7 +286,7 @@
         }
       },
       {
-        "Title": "会計年度",
+        "Title": "設定/会計年度",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -357,7 +357,7 @@
         }
       },
       {
-        "Title": "会計期間",
+        "Title": "設定/会計期間",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -428,7 +428,7 @@
         }
       },
       {
-        "Title": "勘定科目",
+        "Title": "マスタ/勘定科目",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -503,7 +503,7 @@
         }
       },
       {
-        "Title": "補助科目",
+        "Title": "マスタ/補助科目",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -578,7 +578,7 @@
         }
       },
       {
-        "Title": "部門",
+        "Title": "マスタ/部門",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -653,7 +653,7 @@
         }
       },
       {
-        "Title": "税区分",
+        "Title": "マスタ/税区分",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -728,7 +728,7 @@
         }
       },
       {
-        "Title": "取引先アプリへ",
+        "Title": "取引先",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -794,7 +794,7 @@
         }
       },
       {
-        "Title": "AppUser",
+        "Title": "利用者アカウント",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
@@ -835,7 +835,7 @@
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
-            "CanDelete": true,
+            "CanDelete": false,
             "CanUserSort": true,
             "CanSelect": false,
             "UseIndexSort": false,

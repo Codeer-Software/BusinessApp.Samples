@@ -4,7 +4,7 @@ status: current
 scope: 全体
 audience: [開発]
 growth: append
-updated: 2026-08-30
+updated: 2026-08-31
 supersedes: []
 related: [../11_CLB改善提案/README.md, ../decisions/0026-画面は役割で分け玄関のページフレームを置く.md]
 ---
@@ -89,7 +89,7 @@ D-10（ラベル列の縦揃え）・F-01（`OnValidateInput`）・F-09（予約
 | D-02 | 表示専用モジュールの Detail でボタンが押せない | `DbTable` 空 **かつ CRUD 3 フラグが全て false** のとき既定がビュー専用になる。`Detail_OnAfterInit` 冒頭で `IsViewOnly = false;` |
 | D-03 | 読み取り専用クエリモジュールで `ButtonField` の `OnClick` が発火しない | 代わりに `AnchorTagField` の `OnClick` を使う（`Module` と `Url` を空にする） |
 | D-04 | `AnchorTagField` の `OnClick` が無反応 | `AnchorTag` は `OnClick` 指定でも `href` を持ち、サーバ往復を伴うハンドラが href ナビゲーションとのレースに負ける。**スクリプト遷移は `LabelField` + `OnClick`** |
-| D-05 | 詳細 URL が真っ白 | 一覧→詳細のリンクは `ModulePageType: "Auto"`。`"List"` だと `/Module/{id}` のルートが登録されない |
+| D-05 | 詳細 URL が真っ白 | 一覧→詳細のリンクは `ModulePageType: "Auto"`。`"List"` だと `/Module/{id}` のルートが登録されない。**`"Detail"` は別物で、正規の使い方である**——1 行しか持たないモジュール（自社情報。`Id` を添える）と、表を持たない表示専用モジュール（[ADR-0027](../decisions/0027-入力の一覧はラップモジュールとクエリモジュールで作る.md) の `JournalEntryBoard`）を一覧を挟まずに開く。**`lint_design.py` は 2026-08-30 まで `Detail` も叩いていた**（qa/02 R25-01） |
 | D-06 | メニューから消したモジュールが真っ白 | `OtherPageModuleDesigns` に登録する |
 | D-07 | 条件が黙って捨てられ全件表示になる | リンクを複製したら `ListPageDesign.ListFieldDesign.SearchCondition.ModuleName` を遷移先に直す |
 | D-08 | 非表示にしたフィールドの位置に空白が残る | 固定幅カラムは空 div として残る。`app.css` で `.grid-column:not(:has(.field-layout)){display:none}` |
@@ -100,6 +100,7 @@ D-10（ラベル列の縦揃え）・F-01（`OnValidateInput`）・F-09（予約
 | D-13 | 改行や強調を含む通知を出したい | **`MessageBox.Show()` の本文は `MarkupString` として描画される**ので、改行・太字・箇条書きなどの HTML タグを含められる（CLB の仕様。2026-08-26）。ただし**利用者が入力した文字列（摘要・マスタ名など）をそのまま埋め込むと HTML として解釈される**。値を差し込むなら**エスケープしてから**入れる |
 | D-14 | 一覧から 1 件消したあと、**行は減っているのに件数の表示だけ古いまま**（「(1-17 /18件)」）。もう一度検索すると直る | **削除の直後の件数を信じない**（2026-08-26 実測）。利用者からは「18 件あるはずなのに 17 件しか出ない」に見える。**実機テストで件数を判定材料にするときは、削除のあとに必ず再検索してから読む。** 直し方は CLB 側の話なので [11_CLB改善提案](../11_CLB改善提案/README.md) へ回す |
 | D-15 | 一覧の列に `ClassName` を付けて `text-align: right` を当てても、**数字が左のまま動かない**（`designcheck` も CSS も正しい） | **一覧のセルは `<td><div style="display:flex"><span>値</span></div></td>` で描かれる**（2026-08-28 実測 1.3.20）。`text-align` は `<span>` まで継承されるが、`<span>` は**内容ぶんの幅しかない flex 項目**なので、その中で右に寄せても見た目は変わらない。**効かせるのは `justify-content`** —— `.<クラス> > div { justify-content: flex-end; }`。桁を揃えるには `font-variant-numeric: tabular-nums` も足す |
+| D-17 | **ヘッダ＋明細の明細行を「追加」して保存しても、行が静かに消える。** ボタンは押せるのに**保存要求が 1 本も飛ばない**（`/api/module_data/submit` が出ない）。エラーもトーストも出ず、画面には行が残るので、**リロードして初めて消えたと分かる** | **子（明細）の親 FK を `LinkFieldDesign` にしていた**（2026-08-30 実測 1.3.20。取引先の詳細に登録番号の一覧を埋め込んだとき）。**正典は `IdFieldDesign` ＋ `IsManualInput: false`**（`Docs/AppPatterns/header_detail.md`。「候補から選ばせたい設計なら LinkField でもよい」とも書いてあるが、**親子の逆引きでは効かない**）。**読み取りは動く**ので気づきにくい——既存の行は `SearchCondition` の逆引きで正しく出る。壊れるのは**追加**だけである。<br>**`IsRequired` を外しても直らない**（切り分け済み）。CLB が親の識別子を差し込む相手は `IdFieldDesign` の FK に限られる。<br>**表示に相手の名前が要るなら、一覧はクエリモジュールで作る**（[ADR-0022](../decisions/0022-明細を並べる帳簿はクエリモジュールで作る.md)・[ADR-0027](../decisions/0027-入力の一覧はラップモジュールとクエリモジュールで作る.md)）——`IdField` の FK は識別子しか出せない |
 | D-16 | 一覧の列の `ClassName` を付けたのに、**見出し（`<th>`）だけ揃わない** | **`ListElement.ClassName` は `<td>` にしか付かない。`<th>` の class は空**（2026-08-28 実測 1.3.20）。見出しを揃える手段が無いので、**列見出しは既定の左寄せのまま**にする（`nth-child` で狙うと列の増減で黙ってずれる）。[11_CLB改善提案 FB-008](../11_CLB改善提案/01_機能改善提案.md) へ回した |
 
 ## E. 検索

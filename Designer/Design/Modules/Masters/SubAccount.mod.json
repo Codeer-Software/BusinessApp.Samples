@@ -399,6 +399,21 @@
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SubmitButtonFieldDesign"
+    },
+    {
+      "Text": "「*」は必須項目です。",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "RequiredLegendLabel",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": true,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -466,9 +481,46 @@
                 "AllowOverflow": false,
                 "Border": "None",
                 "Layout": {
+                  "FieldName": "RequiredLegendLabel",
+                  "ContextMenu": "",
+                  "ClassName": "required-legend",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None",
+                "Layout": {
                   "FieldName": "AccountLabel",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "required-label",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",
@@ -531,7 +583,7 @@
                 "Layout": {
                   "FieldName": "CodeLabel",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "required-label",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",
@@ -581,7 +633,7 @@
                 "Layout": {
                   "FieldName": "NameLabel",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "required-label",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",
@@ -934,7 +986,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsAutoFillWrap": false,
         "IsFillAvailable": false,

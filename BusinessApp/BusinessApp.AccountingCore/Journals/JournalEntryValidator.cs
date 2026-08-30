@@ -75,10 +75,13 @@ public static class JournalEntryValidator
                 JournalViolationCodes.LineNoInvalid, JournalLineRules.LineNoDuplicated, lineNo));
         }
 
-        foreach (var line in entry.Lines.Where(l => l.LineNo <= 0))
+        // **行番号を添えない。** 添えると「0 行目: 行番号が正しくありません」と、
+        // 存在しない行を名指しすることになる（負の値なら「-1 行目」）。
+        // 行を特定する手段がその行番号そのものなので、壊れているときは指せない。
+        if (entry.Lines.Any(l => l.LineNo <= 0))
         {
             violations.Add(new Violation(
-                JournalViolationCodes.LineNoInvalid, JournalLineRules.LineNoNotStorable, line.LineNo));
+                JournalViolationCodes.LineNoInvalid, JournalLineRules.LineNoNotStorable));
         }
 
         if (entry.EntryType.RequiresOriginalEntry() && entry.OriginalEntryId is null)

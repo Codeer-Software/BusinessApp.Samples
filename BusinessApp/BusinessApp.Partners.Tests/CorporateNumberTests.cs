@@ -106,4 +106,40 @@ public class CorporateNumberTests
     [Fact]
     public void 書式の説明に改行を入れない()
         => Assert.DoesNotContain("\n", CorporateNumber.FormatDescription, StringComparison.Ordinal);
+
+    // --- 通らない理由の文言（取引先と自社情報の 2 か所が同じものを使う。qa/02 R12-11）---
+
+    /// <summary>通る番号には理由が無い。</summary>
+    [Fact]
+    public void 検査に通る番号は理由を返さない()
+        => Assert.Null(CorporateNumber.DescribeProblem(NtaExample));
+
+    /// <summary>書式が崩れていれば、桁の説明を返す。</summary>
+    [Theory]
+    [InlineData("12345")]
+    [InlineData("")]
+    [InlineData(null)]
+    [InlineData("１２３４５６７８９０１２３")]
+    public void 書式が崩れていれば桁の説明を返す(string? value)
+        => Assert.StartsWith(
+            CorporateNumber.FormatDescription, CorporateNumber.DescribeProblem(value), StringComparison.Ordinal);
+
+    /// <summary>
+    /// 書式は合っていて検査用数字だけが違えば、<b>打ち間違いとして</b>知らせる。
+    /// </summary>
+    /// <remarks>
+    /// 桁の説明を返してしまうと、利用者は「13 桁あるのに 13 桁だと言われる」ことになる。
+    /// </remarks>
+    [Fact]
+    public void 検査用数字だけが違えば打ち間違いとして知らせる()
+    {
+        var wrong = (NtaExample[0] == '1' ? '2' : '1') + NtaExample[1..];
+
+        Assert.Equal(CorporateNumber.CheckDigitDescription, CorporateNumber.DescribeProblem(wrong));
+    }
+
+    /// <summary>文言に改行を入れない（トーストは改行できない。qa/01 D-12）。</summary>
+    [Fact]
+    public void 検査用数字の文言に改行を入れない()
+        => Assert.DoesNotContain("\n", CorporateNumber.CheckDigitDescription, StringComparison.Ordinal);
 }

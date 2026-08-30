@@ -46,10 +46,6 @@
               "SelectFields": [],
               "SortConditions": [
                 {
-                  "Variable": "DisplayOrder.Value",
-                  "IsDescending": false
-                },
-                {
                   "Variable": "Code.Value",
                   "IsDescending": false
                 }
@@ -88,7 +84,7 @@
         }
       },
       {
-        "Title": "登録番号",
+        "Title": "登録番号（インボイス）",
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,

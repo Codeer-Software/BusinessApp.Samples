@@ -15,8 +15,9 @@ using BusinessApp.AccountingCore.Shared;
 /// qa/01 D-12）。改行を入れても表示に出ず、改行コードの管理だけが増える。
 /// 代わりに<b>件数と番号</b>で区切る——1 行に繋がっても「あと何を直すか」が読み取れる。</para>
 /// </remarks>
-public sealed class JournalPostingRejectedException(IReadOnlyList<Violation> violations, string headline)
-    : Exception(BuildMessage(violations, headline))
+public sealed class JournalPostingRejectedException(
+    IReadOnlyList<Violation> violations, string headline, Exception? inner = null)
+    : Exception(BuildMessage(violations, headline), inner)
 {
     /// <summary>計上を止めたときの見出し。</summary>
     public const string PostingHeadline = "計上できません";
@@ -29,6 +30,16 @@ public sealed class JournalPostingRejectedException(IReadOnlyList<Violation> vio
     /// そこで「計上できません」と言うと、計上していない操作を計上の言葉で断ることになる。
     /// </remarks>
     public const string SavingHeadline = "保存できません";
+
+    /// <summary>「取り消す」を止めたときの見出し。</summary>
+    /// <remarks>
+    /// <b>見出しは押したボタンで決まる</b>（qa/02 R24-23）。取消の途中では計上も保存も走るが、
+    /// 利用者がしたのは「取り消す」1 つなので、どこで捕まえても取消の言葉で断る。
+    /// </remarks>
+    public const string ReversalHeadline = "取り消せません";
+
+    /// <summary>「訂正する」を止めたときの見出し。<see cref="ReversalHeadline"/> と同じ理由。</summary>
+    public const string CorrectionHeadline = "訂正できません";
 
     /// <summary>並べられる番号（それを超えたら番号なしで続ける）。</summary>
     private static readonly string[] Numbers = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];

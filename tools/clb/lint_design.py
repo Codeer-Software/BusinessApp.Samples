@@ -146,6 +146,12 @@ def check_layout(path, where, layout, kind, field_names, findings):
             # D-10 ラベル列は Middle 揃えにしないと上端に張り付く。
             # 「Xxx」と「XxxLabel」が対で存在するときだけラベル列とみなす
             # （年度名のように名前が Label で終わるだけのフィールドを誤検知しない）。
+            #
+            # **2026-08-30 に「1 列しかない行は対象外」を足し、2026-08-31 に戻した。**
+            # 足した理由（節の見出しとして単独で置くラベルを叩く）は、その見出しを置いた
+            # 画面ごと差し戻したので**当たる行が 1 つも無くなった**（自己レビューで 2 人が独立に指摘）。
+            # **理由の消えた緩和を残さない**——次の当て漏らしを静かに通す。
+            # 同じ形が本当に要るようになったら、そのとき鳴らして足す。
             field_name = (column.get("Layout") or {}).get("FieldName", "")
             is_label_column = (field_name.endswith("Label")
                                and field_name[:-len("Label")] in field_names)
@@ -158,13 +164,16 @@ def check_layout(path, where, layout, kind, field_names, findings):
                 check_layout(path, where, nested, kind, field_names, findings)
 
 
-def check_page_frame(path, doc, findings):
+def check_page_frame(path, doc, findings, module_tables=None):
     """ページフレーム 1 枚を見る。
 
     **リンクだけでなく着地（TopPageModuleDesign / OtherPageModuleDesigns）も見る。**
     フレームが 2 枚になってから、着地の指定が新しく荷重を負った（ADR-0025 §3）のに、
     D-05・D-07 はリンクにしか掛かっていなかった。
+
+    `module_tables` はモジュール名 → `DbTable`。D-05 が「表を持つモジュールか」を見るために要る。
     """
+    module_tables = module_tables or {}
     targets = []
     for side in ("Left", "Right", "Header"):
         for link in (doc.get(side) or {}).get("Links", []):
@@ -177,10 +186,32 @@ def check_page_frame(path, doc, findings):
     for where, link in targets:
         module = link.get("Module", "")
 
-        # D-05 "List" だと /Module/{id} のルートが登録されず詳細が真っ白になる
-        if link.get("ModulePageType") not in ("Auto", "", None):
+        # D-05 実測してあるのは **"List" が詳細を真っ白にする**ことだけである（qa/01 D-05）。
+        #
+        # **もとは「Auto 以外は全部エラー」と書いてあった**（2026-08-30 に絞った）。
+        # そのせいで、CLB マニュアルが正規に示す `Detail`——1 行しか持たないモジュールを
+        # 一覧を挟まずに開く形（自社情報）と、表を持たない表示専用モジュールを載せる形
+        # （ADR-0027 の `JournalEntryBoard`）——まで叩いていた。
+        # **関門は足したときが完成ではない**（CLAUDE.md §4-2）。
+        # **白リストで受ける。** 黒リスト（List だけ禁じる）にすると、`"list"` のような
+        # 綴り違いや、CLB が将来増やす値が無言で通る——JSON の enum は大小を無視して読むので、
+        # `"list"` は D-05 が防いでいる「詳細が真っ白」を再現しつつ関門は緑になりうる
+        # （2026-08-31 の自己レビュー）。
+        page_type = link.get("ModulePageType") or "Auto"
+        if page_type not in ("Auto", "ListToDetail", "List", "Detail"):
             findings.append((SEV_ERROR, "D-05", relative(path),
-                             f"{where} {module}: ModulePageType は Auto にする（今は {link['ModulePageType']}）"))
+                             f"{where} {module}: 知らない ModulePageType「{page_type}」"
+                             "（Auto / ListToDetail / List / Detail のどれかにする）"))
+        elif page_type == "List":
+            findings.append((SEV_ERROR, "D-05", relative(path),
+                             f"{where} {module}: ModulePageType が List だと /{module}/{{id}} の"
+                             "ルートが登録されず詳細が真っ白になる（Auto にする）"))
+        elif page_type == "Detail" and module_tables.get(module) and not link.get("Id"):
+            # 表を持つモジュールを Detail で開くなら、どの行かが決まっていなければならない。
+            # Id が空だと「どの行でもない詳細」になり、designcheck は何も言わない。
+            findings.append((SEV_ERROR, "D-05", relative(path),
+                             f"{where} {module}: ModulePageType が Detail なのに Id が空。"
+                             "表を持つモジュールは開く行を決める（例: 自社情報の Id=\"1\"）"))
 
         # D-07 リンクを複製したときの直し忘れ
         condition_module = (((link.get("ListPageDesign") or {})
@@ -258,14 +289,16 @@ def main() -> int:
         print("検査ファイル数: 0 / error: 1 / warn: 0")
         return 1
 
+    module_tables = {}
     for path in modules:
         doc = load_json(path, findings)
         if doc is not None:
+            module_tables[doc.get("Name", "")] = doc.get("DbTable", "")
             check_module(path, doc, findings)
     for path in frames:
         doc = load_json(path, findings)
         if doc is not None:
-            check_page_frame(path, doc, findings)
+            check_page_frame(path, doc, findings, module_tables)
     check_application_root(frames, findings)
     for path in scripts:
         check_script(path, io.open(path, encoding="utf-8").read(), findings)

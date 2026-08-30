@@ -375,8 +375,15 @@ public class JournalCorrectionTests
             AccountingFixture.CashSale(TransactionDate),
             PostingContext());
 
-        Assert.Contains("訂正できません", Message(violations, JournalViolationCodes.AmendmentTargetNotPosted), StringComparison.Ordinal);
-        Assert.Contains("訂正できません", Message(violations, JournalViolationCodes.AmendmentTargetUnidentified), StringComparison.Ordinal);
+        // **「訂正できません」は本文には出ない**（取消側と同じ理由。qa/02 R25-10）。
+        // 操作の語は差し戻しの見出しが持ち、JournalAmendmentServiceTests が固定している。
+        // ここが守るのは「取消と共有した本文が、訂正のときも同じ文で出る」ことである。
+        Assert.Equal(
+            "この伝票はまだ計上されていません。下書きは削除してください。",
+            Message(violations, JournalViolationCodes.AmendmentTargetNotPosted));
+        Assert.Equal(
+            "元の伝票を特定できません（保存されていないか、伝票番号がありません）。",
+            Message(violations, JournalViolationCodes.AmendmentTargetUnidentified));
         // **完全一致で固定する**（qa/02 R8-09）。
         Assert.Equal(
             "訂正の計上日（2026-05-19）が、元の伝票の計上日（2026-05-22）より前になっています。",

@@ -1,5 +1,6 @@
 namespace BusinessApp.AccountingCore.Server.Tests;
 
+using BusinessApp.AccountingCore.Server.Settings;
 using BusinessApp.Partners.Server;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 
@@ -172,5 +173,36 @@ public class AccountingSubmitPipelineTests
             [SaveFailureMessage.Text, string.Empty],
             results.Select(r => r.ExceptionMessage ?? string.Empty));
         Assert.Equal(["", "1"], results.Select(r => r.DestinationId ?? string.Empty));
+    }
+
+    /// <summary>
+    /// <b>自社情報の関門がつながっている。</b> つながっていなければ打ち間違えた法人番号が保存される。
+    /// </summary>
+    /// <remarks>
+    /// 会計コアの関門は 2 本になった（仕訳・自社情報）。<b>本番の配線は検査に載らない</b>ので、
+    /// 足した関門をここに繋いだかどうかは、このテストだけが見ている。
+    /// </remarks>
+    [Fact]
+    public async Task 検査用数字の合わない自社の法人番号は保存に届かない()
+    {
+        using var server = new AccountingServer();
+        var profile = new ModuleData { Name = CompanyProfileSubmitGate.ModuleName };
+        profile.Fields["CorporateNumber"] = new TextFieldData { Value = "1835678256246" };
+        var called = false;
+
+        await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => server.Pipeline.SubmitAsync(
+                [new ModuleSubmitData
+                {
+                    ModuleName = CompanyProfileSubmitGate.ModuleName,
+                    Update = [profile],
+                }],
+                () =>
+                {
+                    called = true;
+                    return Task.FromResult(new List<ModuleSubmitResult>());
+                }));
+
+        Assert.False(called);
     }
 }

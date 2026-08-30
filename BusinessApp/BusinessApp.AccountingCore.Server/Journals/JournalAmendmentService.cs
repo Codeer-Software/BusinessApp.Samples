@@ -90,7 +90,11 @@ public sealed class JournalAmendmentService(
     /// 原仕訳を取り消す。反対仕訳を作って<b>計上まで進める</b>。
     /// </summary>
     /// <returns>計上した反対仕訳の識別子。</returns>
-    public async Task<JournalEntryId> ReverseAsync(JournalEntryId originalId)
+    public Task<JournalEntryId> ReverseAsync(JournalEntryId originalId)
+        => WithHeadlineAsync(
+            JournalPostingRejectedException.ReversalHeadline, () => ReverseCoreAsync(originalId));
+
+    private async Task<JournalEntryId> ReverseCoreAsync(JournalEntryId originalId)
     {
         var (original, context, today, now) = await PrepareAsync(originalId);
 
@@ -108,7 +112,11 @@ public sealed class JournalAmendmentService(
     /// 原仕訳を訂正する。取消を計上し、原仕訳を写した再計上を<b>下書きのまま</b>作る。
     /// </summary>
     /// <returns>計上した取消と、これから利用者が直す再計上の下書き。</returns>
-    public async Task<AmendmentStarted> CorrectAsync(JournalEntryId originalId)
+    public Task<AmendmentStarted> CorrectAsync(JournalEntryId originalId)
+        => WithHeadlineAsync(
+            JournalPostingRejectedException.CorrectionHeadline, () => CorrectCoreAsync(originalId));
+
+    private async Task<AmendmentStarted> CorrectCoreAsync(JournalEntryId originalId)
     {
         var (original, context, today, now) = await PrepareAsync(originalId);
 
@@ -125,6 +133,31 @@ public sealed class JournalAmendmentService(
         var correctionId = await entryStore.InsertDraftAsync(drafts.Correction);
 
         return new AmendmentStarted(reversalId, correctionId);
+    }
+
+    /// <summary>
+    /// 差し戻しの見出しを、<b>押されたボタンの言葉</b>に付け替える。
+    /// </summary>
+    /// <remarks>
+    /// <para>取消・訂正の途中では、伝票の検証（<see cref="JournalReversal"/>）も
+    /// 取消の計上（<see cref="JournalPoster"/>）も走り、どちらも既定の見出し「計上できません」で
+    /// 投げてくる。しかし<b>利用者が押したのは「取り消す」か「訂正する」の 1 つ</b>で、
+    /// 計上を頼んだ覚えは無い（docs/09 §2・qa/02 R24-23）。</para>
+    /// <para><b>入口で 1 回包む形にしてある。</b> 投げる場所ごとに見出しを渡す形だと、
+    /// 経路が 1 本増えるたびに書き漏らし、そこだけ別の言葉で断ることになる。</para>
+    /// </remarks>
+    private static async Task<T> WithHeadlineAsync<T>(string headline, Func<Task<T>> operation)
+    {
+        try
+        {
+            return await operation();
+        }
+        catch (JournalPostingRejectedException rejected)
+        {
+            // **元の例外を内側に残す。** 包み直すと、スタックトレースが
+            // ここから始まって「どの検証で落ちたか」が消える。文言と違反は同じものを渡す。
+            throw new JournalPostingRejectedException(rejected.Violations, headline, rejected);
+        }
     }
 
     /// <summary>取消・訂正のどちらでも要る材料をまとめて用意する。</summary>

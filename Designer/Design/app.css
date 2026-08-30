@@ -19,3 +19,35 @@
 .amount-cell > div {
     justify-content: flex-end;
 }
+
+/* 必須の欄は、入力する前に必須と分かるようにする（docs/09_画面の原則.md §1）。
+   使い方: 詳細レイアウトのラベル側の要素に "ClassName": "required-label" を付ける。
+   ClassName はフィールドのラッパー div に付くので（_specs/AppCss.md）、
+   ::after はラベルの文字の直後に出る。
+   **色だけに頼らない**（09 §1）ので、印は記号「*」であって赤はその補強でしかない。 */
+.required-label::after {
+    content: "*";
+    margin-left: .25em;
+    color: #d63384;
+    font-weight: 700;
+}
+
+/* 「*」が何を意味するかの凡例。フォームの先頭行に置く。
+   文言は LabelField が持つ（CSS に利用者向けの文言を書かない）。 */
+.required-legend {
+    color: #6c757d;
+    font-size: .875em;
+}
+
+/* **明細表の見出しには印を付けられない。** ListElement.ClassName は <td> にしか付かず、
+   <th> の class は空である（qa/01 D-16。2026-08-28 実測 1.3.20）。
+   nth-child で狙うと列の増減で黙ってずれるので、
+   明細の必須列は見出しの文字列そのものに「*」を入れてある（JournalLine.mod.json）。
+   このため、フォームの「*」は赤・明細の「*」は黒になる。 */
+
+/* 列の意味の注記（総勘定元帳の「期間内累計」など）。
+   見出しだけでは決まらないことを、その場で読めるようにする（docs/09_画面の原則.md §1）。 */
+.column-notice {
+    color: #6c757d;
+    font-size: .875em;
+}

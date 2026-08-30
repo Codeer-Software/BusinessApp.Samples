@@ -19,6 +19,10 @@
        向きは会計コア → 取引先の一方通行である（ADR-0024 §4）。 -->
   <ItemGroup>
     <ProjectReference Include="..\BusinessApp.AccountingCore\BusinessApp.AccountingCore.csproj" />
+    <!-- 取引先部品の**純粋層**への直接参照。自社情報の関門が法人番号の判定（CorporateNumber）を
+         借りている。推移的に通っていても書く——**参照の向きは csproj に現れていなければ、
+         検査も人も見られない**（2026-08-31 の自己レビュー）。 -->
+    <ProjectReference Include="..\BusinessApp.Partners\BusinessApp.Partners.csproj" />
     <ProjectReference Include="..\BusinessApp.Partners.Server\BusinessApp.Partners.Server.csproj" />
     <ProjectReference Include="..\BusinessApp.ServerSupport\BusinessApp.ServerSupport.csproj" />
   </ItemGroup>

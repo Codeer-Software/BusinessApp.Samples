@@ -1,5 +1,6 @@
 namespace BusinessApp.Schema.Tests;
 
+using BusinessApp.Partners;
 using BusinessApp.TestSupport;
 
 /// <summary>
@@ -24,6 +25,29 @@ public class SeedDataTests
         Assert.Equal(6L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM departments"));
         Assert.Equal(10L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM tax_categories"));
         Assert.Equal(105L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounts"));
+    }
+
+    /// <summary>
+    /// <b>初期データが、自分を守る関門に拒まれない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>自社の法人番号は <c>CompanyProfileSubmitGate</c> が検査用数字まで見る
+    /// （2026-08-30 に足した。qa/02 R12-11）。初期データがその検査に落ちると、
+    /// <b>入れたままでは自社情報を保存できない</b>——利用者は自分が触っていない欄のせいで詰む。</para>
+    /// <para><b>実際に落ちていた。</b> それまでの <c>1234567890123</c> は桁だけ合った値で、
+    /// 関門を足した日に初めて分かった。DDL の <c>CHECK</c> は桁と字種しか見ないので、
+    /// <b>ここで見なければ誰も見ない</b>。</para>
+    /// <para>関門そのもの（<c>BusinessApp.AccountingCore.Server</c>）は参照しない——
+    /// スキーマの検査がサーバ層に依存すると向きが濁る。<b>判定を持つ値オブジェクトだけを呼ぶ。</b></para>
+    /// </remarks>
+    [Fact]
+    public void 初期データの法人番号は検査用数字まで合っている()
+    {
+        using var db = TestDatabase.CreateWithSeed();
+
+        var number = TestDatabase.ScalarOf<string>(db, "SELECT corporate_number FROM company_profile");
+
+        Assert.Null(CorporateNumber.DescribeProblem(number));
     }
 
     [Fact]

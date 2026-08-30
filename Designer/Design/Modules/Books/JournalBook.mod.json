@@ -204,7 +204,12 @@
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "StartDate.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "FiscalYear",
@@ -357,7 +362,16 @@
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "DisplayOrder.Value",
+            "IsDescending": false
+          },
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "Account",
@@ -388,7 +402,12 @@
       "Candidates": [],
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [],
+        "SortConditions": [
+          {
+            "Variable": "Code.Value",
+            "IsDescending": false
+          }
+        ],
         "SortFieldVariable": "",
         "SortDescending": false,
         "ModuleName": "Partner",
@@ -616,7 +635,7 @@
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "原仕訳",
+      "DisplayName": "元の伝票",
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "OriginalEntryNo",
@@ -667,7 +686,7 @@
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
-      "DisplayName": "借貸",
+      "DisplayName": "貸借",
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "DebitCreditName",
@@ -1211,7 +1230,7 @@
           {
             "FieldName": "OriginalEntryNo",
             "ContextMenu": "",
-            "Label": "原仕訳",
+            "Label": "元の伝票",
             "IsMaxWidthFixed": false,
             "ColumnSpan": 1,
             "RowSpan": 1,
@@ -1245,7 +1264,7 @@
           {
             "FieldName": "DebitCreditName",
             "ContextMenu": "",
-            "Label": "借貸",
+            "Label": "貸借",
             "IsMaxWidthFixed": false,
             "ColumnSpan": 1,
             "RowSpan": 1,
@@ -1430,7 +1449,7 @@
         "UseBorderedShrinkWrap": false,
         "IsExpandable": true,
         "ExpanderLabel": "検索条件",
-        "IsExpanderDefaultOpened": false,
+        "IsExpanderDefaultOpened": true,
         "IsFlowLayout": false,
         "IsAutoFillWrap": false,
         "IsFillAvailable": false,
