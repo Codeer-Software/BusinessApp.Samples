@@ -128,7 +128,7 @@
       "ValueVariable": "",
       "DisplayTextVariable": "",
       "DbColumn": "accounting_role",
-      "EmptyCandidateType": "Empty",
+      "EmptyCandidateType": "Null",
       "AllowOrSearch": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
@@ -158,7 +158,7 @@
       "ValueVariable": "",
       "DisplayTextVariable": "",
       "DbColumn": "partner_role",
-      "EmptyCandidateType": "Empty",
+      "EmptyCandidateType": "Null",
       "AllowOrSearch": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
@@ -200,7 +200,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Extras.Designs.PasswordHashFieldDesign"
     },
     {
-      "Text": "ユーザー",
+      "Text": "利用者アカウント",
       "Icon": "",
       "IsHtml": false,
       "Style": "H2",
@@ -215,7 +215,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Text": "Submit",
+      "Text": "登録",
       "ImageResourcePath": "",
       "ImageResourceSet": {
         "Default": "",
@@ -397,7 +397,7 @@
   "DetailLayouts": {
     "": {
       "OnBeforeInitialization": "",
-      "OnAfterInitialization": "",
+      "OnAfterInitialization": "Detail_OnAfterInitialization",
       "OnLocationChanging": "",
       "OnFieldDataChanged": "",
       "FocusControlMode": "Inherit",

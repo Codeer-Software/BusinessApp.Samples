@@ -23,24 +23,7 @@
     }
   ],
   "UserWriteCondition": {
-    "ModuleName": "AppUser",
-    "Condition": {
-      "IsOrMatch": false,
-      "IsNot": false,
-      "Children": [
-        {
-          "SearchTargetVariable": "IsSysadmin.Value",
-          "Comparison": "Equal",
-          "Value": {
-            "Value": true,
-            "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
-          },
-          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
-        }
-      ],
-      "Name": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
-    }
+    "ModuleName": ""
   },
   "UserReadCondition": {
     "ModuleName": "AppUser",

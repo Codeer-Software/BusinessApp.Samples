@@ -60,6 +60,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         RejectMalformedCorporateNumber(data);
         await RejectSoleProprietorWithCorporateNumberAsync(data);
         await RejectMismatchedParentAsync(data);
+        await RejectMismatchedChildrenAsync(data);
         await RejectDeepParentAsync(data);
     }
 
@@ -77,6 +78,9 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// 種別のどちらかが誤っている</b>からである——関門は「束ねるな」ではなく「先に種別を直せ」と言っている。</para>
     /// <para><b>差分に無いほうは保存されている値で補う</b>（他の検査と同じ作法）。
     /// 種別だけを直した保存で検査をやめると、「先に親を付けておいて、あとから種別を食い違わせる」で素通りする。</para>
+    /// <para><b>親の側を直す方向も見る。</b> 子から親を見るだけだと、
+    /// 「子を持つ取引先の種別を変えて食い違わせる」保存が素通りする——
+    /// ADR-0028 の帰結が「親と子のどちらを直す場合も検査が要る」と名指ししていた方向である。</para>
     /// </remarks>
     private async Task RejectMismatchedParentAsync(ModuleData data)
     {
@@ -95,7 +99,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
             ? stored?.EntityType
             : DbValue.ToDefinedEnum<PartnerEntityType>(submittedType.Value);
 
-        // **親は差分から読む。差分に無ければ保存されている親を読み直さない**——
+        // **親は差分から読む。差分に無ければ保存されている親を読み直す**——
         // 種別だけを直した保存でも、保存済みの親と突き合わせる必要がある。
         var parentId = submittedParent is null
             ? (Id(data) is long own ? (await store.FindLineageAsync(new PartnerId(own)))?.ParentId : null)
@@ -109,11 +113,38 @@ public sealed class PartnerSubmitGate(PartnerStore store)
 
         if (AreIncompatible(type, parentProfile.EntityType))
         {
-            throw new PartnerRejectedException(
-                $"{PartnerEntityType.SoleProprietor.DisplayName()}と法人・人格のない社団等は、"
-                + "互いに名寄せの親にできません。同じ事業者なら、どちらかの種別が誤っています。");
+            throw MismatchedParent();
         }
     }
+
+    /// <summary>
+    /// <b>子を持つ取引先の種別を変えて、食い違わせていないか</b>（ADR-0028 §1 の親の側）。
+    /// </summary>
+    /// <remarks>
+    /// 種別を触っていない保存は見ない——触っていない行に分類を強制しない（docs/07 §1-2）。
+    /// </remarks>
+    private async Task RejectMismatchedChildrenAsync(ModuleData data)
+    {
+        if (Field<SelectFieldData>(data, "EntityType") is not SelectFieldData submitted
+            || Id(data) is not long id)
+        {
+            return;
+        }
+
+        var type = DbValue.ToDefinedEnum<PartnerEntityType>(submitted.Value);
+        foreach (var child in await store.FindChildEntityTypesAsync(new PartnerId(id)))
+        {
+            if (AreIncompatible(type, child))
+            {
+                throw MismatchedParent();
+            }
+        }
+    }
+
+    /// <summary>種別の食い違いの差し戻し。<b>親から見ても子から見ても同じ文言で断る。</b></summary>
+    private static PartnerRejectedException MismatchedParent()
+        => new($"{PartnerEntityType.SoleProprietor.DisplayName()}と法人・人格のない社団等は、"
+               + "互いに名寄せの親にできません。同じ事業者なら、どちらかの種別が誤っています。");
 
     /// <summary>
     /// 個人事業者と法人系の組か。<b>未分類（<c>null</c>）と「その他」は通す。</b>

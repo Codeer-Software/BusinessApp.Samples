@@ -584,6 +584,63 @@ public class PartnerSubmitGateTests
         Assert.Contains("互いに名寄せの親にできません", rejected.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// <b>子を持つ取引先の種別を変えて、食い違わせられない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>子から親を見るだけだと、この方向が素通りする。ADR-0028 の帰結が
+    /// 「<b>親と子のどちらを直す場合も検査が要る</b>。『親の種別を変えて食い違わせる』の
+    /// 3 方向すべてを自動テストと実機の台本に入れる」と名指ししていた方向である
+    /// （2026-08-31 の自己レビューで、実装されていないことが分かった）。</para>
+    /// <para><b>DDL にも種別の規則は無い</b>（トリガが見るのは深さだけ）ので、
+    /// ここが素通りすると最後の砦も無い。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 子を持つ取引先の種別を食い違わせられない()
+    {
+        using var server = new PartnerServer();
+        var parent = InsertPartner(server, "P800", entityType: "corporation");
+        InsertPartner(server, "P801", entityType: "corporation", parentId: parent);
+
+        var rejected = await RejectedAsync(
+            server, Updating(Partner(id: parent, entityType: "sole_proprietor")), new SaveSpy());
+
+        Assert.Contains("互いに名寄せの親にできません", rejected.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>子が居ても、食い違わない種別なら変えられる。</b>
+    /// </summary>
+    /// <remarks>拒む側だけを見ると、「子が居たら種別を変えられない」実装でも緑になる。</remarks>
+    [Fact]
+    public async Task 子を持つ取引先でも食い違わない種別には変えられる()
+    {
+        using var server = new PartnerServer();
+        var parent = InsertPartner(server, "P800", entityType: "corporation");
+        InsertPartner(server, "P801", entityType: "corporation", parentId: parent);
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(Partner(id: parent, entityType: "unincorporated_association"))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>種別を触っていない保存では、子との突き合わせをしない。</summary>
+    [Fact]
+    public async Task 種別を触っていない保存は子と突き合わせない()
+    {
+        using var server = new PartnerServer();
+        var parent = InsertPartner(server, "P800", entityType: "corporation");
+        InsertPartner(server, "P801", entityType: "sole_proprietor", parentId: parent);
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(Partner(id: parent, corporateNumber: ValidNumber))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
     /// <summary>親が、さらに親を持っていてはいけない（深さ 1 の森。ADR-0028 §2）。</summary>
     [Fact]
     public async Task 親を持つ取引先は親にできない()

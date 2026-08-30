@@ -63,6 +63,25 @@ public sealed class PartnerStore(IDbAccessor dbAccessor, string dataSourceName)
     }
 
     /// <summary>
+    /// その取引先を親にしている取引先の<b>種別</b>（重複を除く）。
+    /// </summary>
+    /// <remarks>
+    /// <b>親の側を直す方向を見るために要る。</b> 子から親を見るだけでは、
+    /// 「親の種別を変えて食い違わせる」保存が素通りする——ADR-0028 の帰結が
+    /// 「親と子のどちらを直す場合も検査が要る」と名指ししていた方向である
+    /// （2026-08-31 の自己レビューで、実装されていないことが分かった）。
+    /// </remarks>
+    public async Task<IReadOnlyList<PartnerEntityType?>> FindChildEntityTypesAsync(PartnerId id)
+    {
+        var rows = await dbAccessor.QueryAsync(
+            dataSourceName,
+            "select distinct entity_type from partners where parent_partner_id = @p1",
+            new() { { "@p1", Param(id.Value) } });
+
+        return [.. rows.Select(r => DbValue.ToDefinedEnum<PartnerEntityType>(r["entity_type"]))];
+    }
+
+    /// <summary>
     /// 問い合わせ用のパラメータに包む。
     /// </summary>
     /// <remarks>

@@ -72,6 +72,13 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
    **パスワードは開発者が決める**（開発機のローカル DB だけを守る値。ADR-0031）
 4. **`dev/001_demo_user_roles.sql` を流す**（`sql` CLI）。役割が付く
 
+> **締め出してしまったときの戻し方。** 役割は画面から自分でも編集できるので、
+> 最後のシステム管理者が自分の `is_sysadmin` を外す・`can_access_app` を落とすと、
+> **次の 1 リクエストから入れなくなり**（[qa/01 F-28](../../docs/qa/01_CLB静かな失敗.md)）、
+> 画面から戻す手が無くなる。`sql` CLI で直す:
+> `UPDATE app_users SET is_sysadmin = 1, can_access_app = 1 WHERE user_name = 'admin';`
+> **保存の手前で止める関門はまだ無い**（[qa/02](../../docs/qa/02_自己レビュー記録.md) R27-10）。
+
 > **なぜ 3 を人がやるか。** アカウントの作成とパスワードの設定は Claude が行わない領域である。
 > **役割の付与（4）は機械で再現できる**ので、そこだけをファイルにしてある——
 > DB を作り直すたびに、役割の割り当てを手で思い出さずに済む。

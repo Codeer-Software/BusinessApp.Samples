@@ -1090,7 +1090,33 @@
     "ModuleName": ""
   },
   "UserReadCondition": {
-    "ModuleName": ""
+    "ModuleName": "AppUser",
+    "Condition": {
+      "IsOrMatch": true,
+      "IsNot": false,
+      "Name": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition",
+      "Children": [
+        {
+          "SearchTargetVariable": "AccountingRole.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "staff",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        },
+        {
+          "SearchTargetVariable": "AccountingRole.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "manager",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        }
+      ]
+    }
   },
   "DataWriteCondition": {
     "ModuleName": ""

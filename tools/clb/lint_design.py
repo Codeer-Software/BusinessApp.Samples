@@ -129,6 +129,14 @@ def check_module(path, doc, findings):
         findings.append((SEV_ERROR, "D-19", relative(path),
                          f"{module}: 検索条件は既定で開く（IsExpanderDefaultOpened: true）"))
 
+    # D-24 データを持つモジュールに書き込み条件が書かれているか（qa/01 F-18）。
+    # **空＝全開放である。** 前回プロジェクトは 104 本になってから全数監査をして穴を 28 本見つけた
+    # （ADR-0026 の教訓）。新しいモジュールは条件が空で生まれるので、増えた日に鳴らす。
+    if doc.get("DbTable") and not (doc.get("UserWriteCondition") or {}).get("ModuleName"):
+        findings.append((SEV_ERROR, "D-24", relative(path),
+                         f"{module}: データを持つモジュールに UserWriteCondition が要る"
+                         "（空＝全開放。qa/01 F-18）"))
+
     # D-20 必須の欄には印が要る（docs/09 §1）。
     # **見るのは詳細レイアウトのラベルだけ**——一覧の見出し（<th>）には class が付かないので、
     # そちらは文字列に「*」を入れてある（qa/01 D-16）。
@@ -570,6 +578,8 @@ SELFTEST_CASES = [
              {"Layout": {"FieldName": "CodeLabel", "ClassName": "",
                          "TypeFullName": "X.FieldLayoutDesign"}},
              {"Layout": {"FieldName": "Code", "TypeFullName": "X.FieldLayoutDesign"}}]}]}}}), "D-20"),
+    ("データを持つのに書き込み条件が無い",
+     lambda: _module(DbTable="x"), "D-24"),
     ("担当の条件に責任者が入っていない",
      lambda: _module(UserWriteCondition={"ModuleName": "AppUser", "Condition": {"Children": [
          {"SearchTargetVariable": "AccountingRole.Value",
@@ -605,11 +615,16 @@ def selftest():
             failures.append(f"{label}: {expected} が鳴らない（出たのは {[f[1] for f in findings]}）")
 
     # 正しい姿では鳴らない（鳴りっぱなしの関門は、赤を無視させる）
-    findings = []
-    check_module(os.path.join(DESIGN_DIR, "Modules", "Accounting", "SelfTest.mod.json"),
-                 _module(), findings)
-    if findings:
-        failures.append(f"正しいモジュールで鳴った: {[f[1] for f in findings]}")
+    for label, doc in [
+        ("表を持たないモジュール", _module()),
+        ("書き込み条件のあるモジュール",
+         _module(DbTable="x", UserWriteCondition={"ModuleName": "AppUser"})),
+    ]:
+        findings = []
+        check_module(os.path.join(DESIGN_DIR, "Modules", "Accounting", "SelfTest.mod.json"),
+                     doc, findings)
+        if findings:
+            failures.append(f"正しい{label}で鳴った: {[f[1] for f in findings]}")
 
     # フレーム跨ぎのリンクの登録漏れ（F-17）
     findings = []
