@@ -32,6 +32,37 @@ public sealed class PartnerStore(IDbAccessor dbAccessor, string dataSourceName)
     }
 
     /// <summary>
+    /// 名寄せの親として使えるかを見るために要る、その取引先の<b>親子まわりの姿</b>。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>2 つを 1 回で読む。</b> 「その取引先が親を持っているか」と
+    /// 「その取引先が誰かの親になっているか」は、どちらも深さ 1 の森（ADR-0028 §2）を守るために要る。
+    /// 別々に問い合わせると、関門 1 回で DB を 2 往復することになる。</para>
+    /// <para>取引先が無ければ <c>null</c>。<b>新規作成の相手を指しているときは呼ばない</b>——
+    /// 仮の識別子は数値として読めないので、呼ぶ側が先に落とす。</para>
+    /// </remarks>
+    public async Task<PartnerLineage?> FindLineageAsync(PartnerId id)
+    {
+        var rows = await dbAccessor.QueryAsync(
+            dataSourceName,
+            """
+            select p.parent_partner_id                                             as parent_id,
+                   exists (select 1 from partners c where c.parent_partner_id = p.id) as has_children
+              from partners p
+             where p.id = @p1
+            """,
+            new() { { "@p1", Param(id.Value) } });
+
+        return rows.Count == 0
+            ? null
+            : new PartnerLineage(
+                DbValue.ToNullableText(rows[0]["parent_id"]) is string parent
+                    ? new PartnerId(long.Parse(parent, System.Globalization.CultureInfo.InvariantCulture))
+                    : null,
+                Convert.ToInt64(rows[0]["has_children"], System.Globalization.CultureInfo.InvariantCulture) != 0);
+    }
+
+    /// <summary>
     /// 問い合わせ用のパラメータに包む。
     /// </summary>
     /// <remarks>
@@ -50,3 +81,10 @@ public sealed class PartnerStore(IDbAccessor dbAccessor, string dataSourceName)
 /// <param name="EntityType">種別。<c>null</c> は未分類。</param>
 /// <param name="CorporateNumber">法人番号。<c>null</c> は未入力。</param>
 public sealed record PartnerProfile(PartnerEntityType? EntityType, string? CorporateNumber);
+
+/// <summary>
+/// 名寄せの親子まわりの姿（ADR-0028 §2 の「深さ 1 の森」を判定するのに要る 2 つ）。
+/// </summary>
+/// <param name="ParentId">その取引先が指している親。<c>null</c> なら根である。</param>
+/// <param name="HasChildren">その取引先を親にしている取引先があるか。</param>
+public readonly record struct PartnerLineage(PartnerId? ParentId, bool HasChildren);

@@ -98,7 +98,9 @@ CREATE TABLE partners (
     name                        TEXT NOT NULL,
     name_kana                   TEXT,
     is_active                   INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
-    display_order               INTEGER,
+    -- **display_order は持たない**（2026-08-31 に落とした。docs/07 §1-2）。
+    -- マスタのテンプレートから写しただけで、どの行にも値が入っていなかった。
+    -- 取引先は数百件に育つもので、人が並び順を手で維持することはあり得ない。
 
     created_at                  DATETIME,
     updated_at                  DATETIME,
@@ -129,6 +131,35 @@ CREATE TABLE partners (
     -- 矛盾した行を許すと、法人番号が自然キーとして名寄せされ、誤束ねが黙って起こる。
     CHECK (entity_type IS NULL OR entity_type <> 'sole_proprietor' OR corporate_number IS NULL)
 );
+
+-- 名寄せの親は**深さ 1 の森**に固定する（ADR-0028 §2）。行をまたぐ規則なので CHECK では書けない。
+-- **アプリ側の関門（PartnerSubmitGate）が同じ規則を先に見る。** ここは最後の砦である
+-- （ADR-0004 の「最後に守るのは DB」と同じ形）——取込・API・SQL の直打ちも通る。
+--
+-- **この 2 つで循環は構造的に消える。** 深さ 2 以上が作れなければ、A→B→A も作れない。
+-- 自己参照（A→A）は列の CHECK が拒む。
+--
+-- **INSERT では「自分が既に親になっている」を見ない。** BEFORE INSERT の時点で NEW.id は
+-- まだ採番されておらず、そもそも生まれたばかりの行を親にしている行は無い。
+CREATE TRIGGER trg_partners_parent_must_be_root_insert
+BEFORE INSERT ON partners
+WHEN NEW.parent_partner_id IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, '名寄せの親には、さらに親を持つ取引先を選べません。')
+     WHERE EXISTS (SELECT 1 FROM partners p
+                    WHERE p.id = NEW.parent_partner_id AND p.parent_partner_id IS NOT NULL);
+END;
+
+CREATE TRIGGER trg_partners_parent_must_be_root_update
+BEFORE UPDATE OF parent_partner_id ON partners
+WHEN NEW.parent_partner_id IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, '名寄せの親には、さらに親を持つ取引先を選べません。')
+     WHERE EXISTS (SELECT 1 FROM partners p
+                    WHERE p.id = NEW.parent_partner_id AND p.parent_partner_id IS NOT NULL);
+    SELECT RAISE(ABORT, '他の取引先の名寄せの親になっている取引先には、親を付けられません。')
+     WHERE EXISTS (SELECT 1 FROM partners c WHERE c.parent_partner_id = NEW.id);
+END;
 
 -- 適格請求書発行事業者としての登録状況はここに列で持たない。
 -- 登録・取消には日付があり、1 列では「いつ時点で登録事業者だったか」を表せない（docs/07 §3-1）。

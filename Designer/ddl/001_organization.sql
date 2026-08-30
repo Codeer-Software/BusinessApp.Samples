@@ -8,7 +8,10 @@ CREATE TABLE company_profile (
 
     name                        TEXT NOT NULL,
     name_kana                   TEXT,
-    corporate_number            TEXT,                       -- 法人番号 13 桁
+    -- 法人番号（13 桁）。**取引先の同じ列と同じ CHECK を置く**（2026-08-31。qa/02 R26-19）。
+    -- 検査用数字はアプリ側（CompanyProfileSubmitGate → CorporateNumber）。DB は桁と字種だけを見る。
+    -- 揃えていないと、**同じ値が入る 2 つの列で「DB が受け取る範囲」が違う**ことになる。
+    corporate_number            TEXT CHECK (corporate_number IS NULL OR corporate_number GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'),
     representative_name         TEXT,
     postal_code                 TEXT,
     address                     TEXT,

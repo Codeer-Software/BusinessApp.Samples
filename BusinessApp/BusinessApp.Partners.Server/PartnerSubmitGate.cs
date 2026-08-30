@@ -18,9 +18,9 @@ using Codeer.LowCode.Blazor.Repository.Data;
 /// それが名寄せの自然キーになる（同 §2-2）——別の法人に化けて束なるか、
 /// 束なるべきものが束ならないかのどちらかで、どちらも画面には何も出ない。</para>
 /// <para><b>画面のスクリプトでは検査しない</b>（ADR-0008）。取込（フェーズ 6）も同じ入口を通る。</para>
-/// <para><b>名寄せの連鎖と循環（A→B→C・A→B→A）は見ない。</b> 行をまたぐ検査であり、
-/// 解決の規則そのものがフェーズ 3 の仕事である（docs/07 §2-2）。ここで止めるのは、
-/// 1 行だけで判定できる自己参照に限る。</para>
+/// <para><b>名寄せの親は深さ 1 の森に固定する</b>（ADR-0028 §2。2026-08-31 に足した）。
+/// 連鎖（A→B→C）を作れなくすれば、循環（A→B→A）も構造的に作れない。
+/// 同じ規則を DDL のトリガも持っている——ここは手前に置く網である。</para>
 /// </remarks>
 public sealed class PartnerSubmitGate(PartnerStore store)
 {
@@ -59,6 +59,116 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         RejectSelfParent(data);
         RejectMalformedCorporateNumber(data);
         await RejectSoleProprietorWithCorporateNumberAsync(data);
+        await RejectMismatchedParentAsync(data);
+        await RejectDeepParentAsync(data);
+    }
+
+    /// <summary>
+    /// 個人事業者と、法人・人格のない社団等は互いに親にできない（ADR-0028 §1）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>すべての種別違いを止めるのではない。</b> 適格請求書発行事業者公表システムの人格区分は
+    /// 「1 個人／2 法人（人格のない社団等を含む）」の 2 値で、本プロジェクトの 4 値より粗い。
+    /// 法人と人格のない社団等を止めると、<b>取込（フェーズ 6）で入った行どうしが機械的に弾かれる</b>
+    /// ——取込元がその 2 つを区別できないからである。「その他」は人格を何も表していない。</para>
+    /// <para><b>止めることで生まれるのは「束ね漏れ」の側である。</b> 経過措置の上限は
+    /// 「一の免税事業者等ごと」の合計に掛かるので、束ね漏れは控除が過大になる方向
+    /// （＝過少申告のリスク）。それでも止めるのは、<b>種別が食い違う組は、束ねるべきなら
+    /// 種別のどちらかが誤っている</b>からである——関門は「束ねるな」ではなく「先に種別を直せ」と言っている。</para>
+    /// <para><b>差分に無いほうは保存されている値で補う</b>（他の検査と同じ作法）。
+    /// 種別だけを直した保存で検査をやめると、「先に親を付けておいて、あとから種別を食い違わせる」で素通りする。</para>
+    /// </remarks>
+    private async Task RejectMismatchedParentAsync(ModuleData data)
+    {
+        var submittedType = Field<SelectFieldData>(data, "EntityType");
+        var submittedParent = Field<LinkFieldData>(data, "ParentPartner");
+
+        // どちらも触っていない保存は、この組み合わせを新しく作れない。
+        if (submittedType is null && submittedParent is null)
+        {
+            return;
+        }
+
+        var stored = Id(data) is long id ? await store.FindProfileAsync(new PartnerId(id)) : null;
+
+        var type = submittedType is null
+            ? stored?.EntityType
+            : DbValue.ToDefinedEnum<PartnerEntityType>(submittedType.Value);
+
+        // **親は差分から読む。差分に無ければ保存されている親を読み直さない**——
+        // 種別だけを直した保存でも、保存済みの親と突き合わせる必要がある。
+        var parentId = submittedParent is null
+            ? (Id(data) is long own ? (await store.FindLineageAsync(new PartnerId(own)))?.ParentId : null)
+            : (Reference(data, "ParentPartner") is long p ? new PartnerId(p) : null);
+
+        if (parentId is not PartnerId parent
+            || await store.FindProfileAsync(parent) is not PartnerProfile parentProfile)
+        {
+            return;
+        }
+
+        if (AreIncompatible(type, parentProfile.EntityType))
+        {
+            throw new PartnerRejectedException(
+                $"{PartnerEntityType.SoleProprietor.DisplayName()}と法人・人格のない社団等は、"
+                + "互いに名寄せの親にできません。同じ事業者なら、どちらかの種別が誤っています。");
+        }
+    }
+
+    /// <summary>
+    /// 個人事業者と法人系の組か。<b>未分類（<c>null</c>）と「その他」は通す。</b>
+    /// </summary>
+    private static bool AreIncompatible(PartnerEntityType? one, PartnerEntityType? other)
+        => (one == PartnerEntityType.SoleProprietor && IsCorporateLike(other))
+            || (other == PartnerEntityType.SoleProprietor && IsCorporateLike(one));
+
+    private static bool IsCorporateLike(PartnerEntityType? type)
+        => type is PartnerEntityType.Corporation or PartnerEntityType.UnincorporatedAssociation;
+
+    /// <summary>
+    /// 名寄せの親は必ず根である（深さ 1 の森。ADR-0028 §2）。
+    /// </summary>
+    /// <remarks>
+    /// <para>止めるのは 2 つ——<b>選んだ親が、さらに親を持っている</b>ことと、
+    /// <b>自分が既に誰かの親になっているのに、自分に親を付けようとしている</b>こと。
+    /// この 2 つで循環は構造的に消える（深さ 2 以上が作れないため）。</para>
+    /// <para><b>親を触っていない保存は見ない。</b> 深さは親を付け替えたときにしか変わらず、
+    /// 触っていない行まで見ると、既に矛盾している行（トリガより前に入ったもの）を
+    /// <b>他の項目を直すだけでも保存できなくする</b>。</para>
+    /// <para><b>新規作成の相手を親にしている場合は見ない</b>——仮の識別子は数値として読めず、
+    /// そもそも生まれたばかりの行は親を持てない。</para>
+    /// </remarks>
+    private async Task RejectDeepParentAsync(ModuleData data)
+    {
+        // **親を触っていない保存は見ない。** 深さは親を付け替えたときにしか変わらない。
+        // 空欄に戻す保存（Reference が null）も通す——浅くする操作である。
+        if (Field<LinkFieldData>(data, "ParentPartner") is null
+            || Reference(data, "ParentPartner") is not long parent)
+        {
+            return;
+        }
+
+        // **読めない相手は見ない。** 指した相手が居なければ、深さを判定する材料が無い
+        // （外部キーが最後に拒む）。同じ保存で作られる相手は仮の識別子なので Reference が落とす。
+        if (await store.FindLineageAsync(new PartnerId(parent)) is PartnerLineage parentLineage
+            && parentLineage.ParentId is not null)
+        {
+            throw new PartnerRejectedException(
+                "名寄せの親には、さらに親を持つ取引先を選べません。"
+                + "同じ事業者なら、その取引先の親を選んでください。");
+        }
+
+        // 自分が誰かの親なら、自分に親は付けられない。
+        if (Id(data) is not long own
+            || await store.FindLineageAsync(new PartnerId(own)) is not PartnerLineage lineage
+            || !lineage.HasChildren)
+        {
+            return;
+        }
+
+        throw new PartnerRejectedException(
+            "この取引先は他の取引先の名寄せの親になっているので、親を付けられません。"
+            + "先に、子になっている取引先の親を付け替えてください。");
     }
 
     /// <summary>自分自身を名寄せの親にできない（DDL の CHECK と同じ規則）。</summary>
