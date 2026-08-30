@@ -4,7 +4,7 @@ status: current
 scope: 会計コア
 audience: [開発]
 growth: append
-updated: 2026-08-29
+updated: 2026-08-30
 supersedes: []
 related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/decisions/0026-画面は役割で分け玄関のページフレームを置く.md]
 ---
@@ -64,6 +64,8 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/d
 | 検索条件は既定で開く | `SearchLayouts[""].Layout.IsExpanderDefaultOpened: true`（CLB の一般則 `LayoutGuidelines.md` とは逆の選択）。**いまは全モジュールが `false`**——直すのは**フェーズ 2.5 B** |
 | 帳簿を並べ替えさせない | 列の `CanUserSort: false`。**PageFrame 側でも切る**（両方書く） |
 | 必須の欄に赤い `*` | **まだ無い。** `app.css` に `.required-label::after` を足し、フォームの上に「`*` は必須項目です」の凡例を置く（**フェーズ 2.5 B**——[05 §3](../docs/05_実装計画と現在地.md)） |
+| ボタンの色は 3 値だけ | `Variant` に [09 §4](../docs/09_画面の原則.md) の 3 値以外を書かない |
+| 押せないボタンを灰色にしない | **まだ無い。** 押せなくする手段は `IsViewOnly` か `IsVisible: false` で、`ButtonField` に `disabled` は無い（[qa/01 D-01・F-14](../docs/qa/01_CLB静かな失敗.md)）。半透明にするなら `app.css` に `opacity: .45`（**Bootstrap 既定の `.65` より薄く**）。**`cursor` は効かない**——`IsViewOnly` は `pointer-events: none` になる |
 
 **CLB 固有の寸法・組み方**（09 には無い。ここだけが持つ）
 
