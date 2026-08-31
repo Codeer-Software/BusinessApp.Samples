@@ -68,7 +68,8 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
    **マイグレーションではやらない**（新しい DB では `admin` がまだ居ないので空振りする。
    [ADR-0032](../../docs/decisions/0032-認証部品のapp_usersを正典に迎え入れる.md)）
 3. **`admin` でログインし、システム管理の画面で 2 人を作る**——
-   `keiri_tantou`（経理担当）と `keiri_sekininsha`（経理責任者）。
+   `soumu_ippan`（経理担当）と `soumu_bucho`（経理責任者＝総務部長。[docs/02](../../docs/02_ペルソナ.md)）。
+   **利用者名は役職から採る**（開発者が決めた。2026-08-31。**役割そのままの名前は長くて打つのが面倒**だから）。
    **パスワードは開発者が決める**（開発機のローカル DB だけを守る値。ADR-0031）
 4. **`dev/001_demo_user_roles.sql` を流す**（`sql` CLI）。役割が付く
 
