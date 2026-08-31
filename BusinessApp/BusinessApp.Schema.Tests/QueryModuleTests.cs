@@ -107,6 +107,33 @@ public class QueryModuleTests
                 $"候補の値 {value} が SQL に無い（分岐と候補がずれている）"));
     }
 
+    /// <summary>
+    /// <c>LIKE</c> のエスケープが、素通しになっていないこと。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>逃がす順序は「まず <c>\</c> を、次に <c>%</c> と <c>_</c> を」</b>で、
+    /// 最初の 1 手を <c>replace(x, '\', '\')</c>（＝何もしない）と書き損じても
+    /// <b>SQL は正しく走り、例外も出ない</b>。壊れるのは <c>\</c> を含む語で検索したときだけで、
+    /// 利用者には「該当なし」としか見えない（2026-08-31 に新しい 2 本で実際にこう書き損じた。qa/03 L-20）。</para>
+    /// <para><b>既存の検査では永久に捕まらない。</b> 宣言と SQL の突き合わせも列の突き合わせも、
+    /// <b>検索欄を全部 NULL で流す</b>ので LIKE の枝に入らない。</para>
+    /// <para><c>ESCAPE</c> を書いた回数だけ、<c>\</c> の二重化があることを見る。
+    /// <b>静かに壊れるのはこの 1 手だけ</b>である——逃がす対象（<c>%</c> と <c>_</c>）を
+    /// 書き損じた <c>replace(x, '%', '%')</c> はパターンを変えないので、素直に「絞れない」で現れる。</para>
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(QueryModules))]
+    public void LIKE_のエスケープが素通しになっていない(string relativePath)
+    {
+        var module = Load(relativePath);
+
+        Assert.Equal(
+            Count(module.Sql, @"ESCAPE '\\'"),
+            Count(module.Sql, @"'\\', '\\\\'"));
+    }
+
+    private static int Count(string text, string pattern) => Regex.Matches(text, pattern).Count;
+
     [Theory]
     [MemberData(nameof(QueryModules))]
     public void 実テーブルを持たず読み取り専用である(string relativePath)

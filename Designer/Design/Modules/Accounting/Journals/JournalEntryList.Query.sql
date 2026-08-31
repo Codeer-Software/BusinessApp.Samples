@@ -90,12 +90,16 @@ WHERE (@p_fiscal_year_id IS NULL OR @p_fiscal_year_id = ''
   -- 逃がす順序は「まず \ を、次に % と _ を」。逆にすると付けたばかりの \ をもう一度逃がす。
   AND (@p_keyword IS NULL OR @p_keyword = ''
        OR e.description LIKE
-          '%' || replace(replace(replace(@p_keyword, '\', '\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
+          '%' || replace(replace(replace(@p_keyword, '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
 -- **計上日の新しい順**（入力の一覧なので、いま作っているものが上に来る）。
 -- **同じ計上日の中では下書きが先**——番号がまだ無く、これから触るものだからである
 -- （`e.entry_no IS NOT NULL` は下書きで 0、計上済みで 1。昇順で下書きが先に来る）。
--- **代理キーで並べない**（qa/03 L-19）。最後の同着は入力年月日で解く。
+-- **代理キーに順序の意味を持たせない**（qa/03 L-19）。ただし**最後の同着解消は別の話**である——
+-- 下書きは伝票番号を持たないので、同じ計上日・同じ入力年月日（一括取込では同一秒に並ぶ）だと
+-- 並びが一意に決まらず、**ページ送りで行が重複したり欠けたりする**（CLB が LIMIT/OFFSET を外側で付ける）。
+-- id は「何番目に入ったか」しか言っていないので、順序の**意味**ではなく**同着の解き方**として使う。
 ORDER BY date(e.posting_date) DESC,
          (e.entry_no IS NOT NULL),
          e.entry_no DESC,
-         e.entered_at DESC
+         e.entered_at DESC,
+         e.id DESC

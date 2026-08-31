@@ -321,6 +321,7 @@ def check_child_parent_keys(modules, findings):
             for value in node:
                 parent_keys(value, child, into)
 
+    pairs = 0
     for path, doc in modules:
         for field in doc.get("Fields", []):
             if not field.get("TypeFullName", "").endswith("ListFieldDesign"):
@@ -332,6 +333,7 @@ def check_child_parent_keys(modules, findings):
 
             names = set()
             parent_keys(condition.get("Condition"), child, names)
+            pairs += len(names)
             for name in sorted(names):
                 key = fields_by_module[child].get(name)
                 if key is None:
@@ -349,26 +351,52 @@ def check_child_parent_keys(modules, findings):
                                      f"{child}.{name} は親 FK なので IsManualInput: false にする"
                                      "（親が識別子を差し込む欄である。qa/01 D-17）"))
 
+    # **0 は「違反が無い」ではなく「配線が死んだ」を疑う数字**（qa/03 L-15）。
+    # 親子の関係はデザインから読んでいるので、CLB が条件の型名を変えた日に
+    # **1 組も見つからないまま error: 0 で緑になる**。実物には必ず 1 組以上ある。
+    if pairs == 0:
+        findings.append((SEV_ERROR, "D-17", relative(DESIGN_DIR),
+                         "ヘッダ＋明細の組が 1 つも見つからない（検査が空回りしている）"))
 
-def check_cross_frame_links(frames, findings):
-    """フレームを跨ぐリンクの、遷移先での登録漏れ（qa/01 F-17）。
+    return pairs
+
+
+def check_cross_frame_links(frames, findings, modules=(), scripts=()):
+    """遷移先での登録漏れ（qa/01 F-17）。
 
     **登録が無いと画面が静かに真っ白になる。** designcheck は検出しない。
     前回プロジェクトは繰り返し踏んで静的検査を自作した（ADR-0026 §6）。
+
+    **見るのはフレームのサイドバーだけではない。** 遷移は 3 通りの形で書かれる。
+
+    1. フレームの `Links[].PageFrame`（サイドバーから別のフレームへ）
+    2. モジュールの `AnchorTagFieldDesign`（一覧の行から詳細へ。`PageFrame` ＋ `Module`）
+    3. スクリプトの `GetModuleUrl` / `GetModuleDataUrl`（ボタンから遷移する）
+
+    **2 と 3 を見ていないと、いちばん増えた形が素通りする**——`JournalEntryList` の「開く」も
+    `JournalEntryBoard` の「新規作成」もこの形で、`Main.frm.json` の
+    `OtherPageModuleDesigns` から 1 行消すだけで静かに真っ白になる（2026-08-31 の自己レビュー）。
+
+    **引数が省ける形は「現在のフレームで解決される」**（ADR-0027）。だから
+    3 は**そのモジュールが登録されているフレームすべて**で遷移先を要求する。
+    フレーム名を明示した形は、そのフレームだけを見る——
+    **フレーム名とモジュール名が衝突しないことを前提にしている**（本プロジェクトでは衝突しない）。
     """
     registered = {}
     for path, doc in frames:
         name = doc.get("Name", "")
-        modules = set()
+        # **`modules` という名前を使い回さない。** 引数の `modules`（モジュール定義の一覧）を
+        # 上書きしてしまい、後半のループが文字列を展開しようとして落ちた（2026-08-31）。
+        placed = set()
         if doc.get("TopPageModule"):
-            modules.add(doc["TopPageModule"])
+            placed.add(doc["TopPageModule"])
         for side in ("Left", "Right", "Header"):
             for link in (doc.get(side) or {}).get("Links", []):
                 if not link.get("PageFrame"):
-                    modules.add(link.get("Module", ""))
+                    placed.add(link.get("Module", ""))
         for other in doc.get("OtherPageModuleDesigns") or []:
-            modules.add(other.get("Module", ""))
-        registered[name] = modules
+            placed.add(other.get("Module", ""))
+        registered[name] = placed
 
     for path, doc in frames:
         for side in ("Left", "Right", "Header"):
@@ -384,6 +412,42 @@ def check_cross_frame_links(frames, findings):
                     findings.append((SEV_ERROR, "F-17", relative(path),
                                      f"リンク {link.get('Module', '')} が遷移先フレーム"
                                      f"「{target_frame}」に登録されていない（開くと真っ白になる）"))
+
+    def require(path, where, frame, module):
+        if module and frame in registered and module not in registered[frame]:
+            findings.append((SEV_ERROR, "F-17", relative(path),
+                             f"{where} の遷移先 {module} がフレーム「{frame}」に"
+                             "登録されていない（押すと真っ白になる）"))
+
+    # ② モジュールの遷移リンク（一覧の行から詳細へ）
+    for path, doc in modules:
+        for field in doc.get("Fields", []):
+            if not field.get("TypeFullName", "").endswith("AnchorTagFieldDesign"):
+                continue
+            # 相手をスクリプトや変数で決める形は、静的には追えない。
+            if field.get("ModuleVariable"):
+                continue
+            require(path, f"{doc.get('Name', '')}.{field.get('Name', '')}",
+                    field.get("PageFrame", ""), field.get("Module", ""))
+
+    # ③ スクリプトからの遷移
+    frames_of = {}
+    for frame, names in registered.items():
+        for name in names:
+            frames_of.setdefault(name, set()).add(frame)
+
+    for path, text in scripts:
+        owner = os.path.basename(path).split(".", 1)[0]
+        for name, args in re.findall(r"(GetModuleDataUrl|GetModuleUrl)\(([^)]*)\)", text):
+            literals = re.findall(r'"([^"]*)"', args)
+            if not literals:
+                continue    # 相手を変数で決める形は静的には追えない
+            if len(literals) > 1 and literals[0] in registered:
+                require(path, f"{owner} の {name}", literals[0], literals[1])
+                continue
+            # 引数を省いた形は、そのモジュールが載っているフレームで解決される。
+            for frame in sorted(frames_of.get(owner, ())):
+                require(path, f"{owner} の {name}", frame, literals[0])
 
 
 def check_role_conditions(modules, frames, findings):
@@ -687,7 +751,7 @@ def main() -> int:
     for path, text in loaded_scripts:
         check_script(path, text, findings)
 
-    check_cross_frame_links(loaded_frames, findings)
+    check_cross_frame_links(loaded_frames, findings, loaded_modules, loaded_scripts)
     check_child_parent_keys(loaded_modules, findings)
     check_module_references(loaded_modules, loaded_scripts, findings)
     check_role_conditions(loaded_modules, loaded_frames, findings)
@@ -885,19 +949,51 @@ def selftest():
     if (SEV_ERROR, "F-17") not in [(f[0], f[1]) for f in findings]:
         failures.append("フレーム跨ぎの登録漏れ: F-17 が鳴らない")
 
-    # ヘッダ＋明細の親 FK（D-17）。**壊れ方は 3 通りある。**
-    for label, key, expected in [
-        ("参照フィールド", {"Name": "Parent", "TypeFullName": "X.LinkFieldDesign"}, (SEV_ERROR, "D-17")),
+    # **遷移は 3 通りの形で書かれる。** サイドバー以外の 2 つも鳴ることを確かめる。
+    frames = [("a.frm.json", {"Name": "Main", "TopPageModule": "Board", "Left": {"Links": []}})]
+    for label, modules, scripts in [
+        ("モジュールの遷移リンク",
+         [(_self_path(name="List.mod.json"),
+           {"Name": "List", "Fields": [{"TypeFullName": "X.AnchorTagFieldDesign",
+                                        "Name": "OpenLink", "PageFrame": "Main",
+                                        "Module": "Missing", "ModuleVariable": ""}]})], []),
+        ("スクリプトの遷移（フレームを省いた形）", [],
+         [(_self_path(name="Board.mod.cs"), 'GetModuleDataUrl("Missing", "-")')]),
+        ("スクリプトの遷移（フレームを明示した形）", [],
+         [(_self_path(name="Board.mod.cs"), 'GetModuleUrl("Main", "Missing")')]),
+    ]:
+        findings = []
+        check_cross_frame_links(frames, findings, modules, scripts)
+        if (SEV_ERROR, "F-17") not in [(f[0], f[1]) for f in findings]:
+            failures.append(f"{label}: F-17 が鳴らない")
+
+    # 登録されている相手なら鳴らない。
+    findings = []
+    check_cross_frame_links(
+        [("a.frm.json", {"Name": "Main", "TopPageModule": "Board",
+                         "Left": {"Links": []},
+                         "OtherPageModuleDesigns": [{"Module": "Detail"}]})],
+        findings, [], [(_self_path(name="Board.mod.cs"), 'GetModuleDataUrl("Detail", "-")')])
+    if findings:
+        failures.append(f"登録されている遷移先で鳴った: {[(f[0], f[1]) for f in findings]}")
+
+    # ヘッダ＋明細の親 FK（D-17）。**壊れ方は 3 通りあり、言うべきことがそれぞれ違う。**
+    # **文言まで見る**——3 つとも `(error, D-17)` なので、鳴ったことだけでは
+    # 直し方が入れ替わっても気づけない（qa/03 L-17）。
+    for label, key, says in [
+        ("参照フィールド",
+         {"Name": "Parent", "TypeFullName": "X.LinkFieldDesign"}, "IdFieldDesign にする"),
         ("手入力できる識別子",
          {"Name": "Parent", "TypeFullName": "X.IdFieldDesign", "IsManualInput": True},
-         (SEV_ERROR, "D-17")),
-        ("親 FK が無い", None, (SEV_ERROR, "D-17")),
+         "IsManualInput: false にする"),
+        ("親 FK が無い", None, "が無い"),
     ]:
         findings = []
         check_child_parent_keys(_header_detail(key), findings)
-        if expected not in [(f[0], f[1]) for f in findings]:
-            failures.append(f"親 FK（{label}）: D-17 が鳴らない（出たのは "
-                            f"{[(f[0], f[1]) for f in findings]}）")
+        hit = [f for f in findings if (f[0], f[1]) == (SEV_ERROR, "D-17") and says in f[3]]
+        if not hit:
+            failures.append(f"親 FK（{label}）: 「{says}」と言う D-17 が鳴らない"
+                            f"（出たのは {[(f[1], f[3]) for f in findings]}）")
 
     findings = []
     check_child_parent_keys(
@@ -905,6 +1001,12 @@ def selftest():
                         "IsManualInput": False}), findings)
     if findings:
         failures.append(f"正しい親 FK で鳴った: {[(f[0], f[1]) for f in findings]}")
+
+    # **組が 1 つも無ければ鳴る**（検査が空回りしていることを見逃さない）。
+    findings = []
+    check_child_parent_keys([(_self_path(), {"Name": "Alone", "Fields": []})], findings)
+    if (SEV_ERROR, "D-17") not in [(f[0], f[1]) for f in findings]:
+        failures.append("親子の組が 0 でも D-17 が鳴らない")
 
     # 部品をまたぐ参照の向き（D-21）。JSON の 2 つのキーとスクリプトの 2 つの形を見る。
     for label, modules, scripts in [

@@ -176,6 +176,35 @@ internal sealed class AccountingServer : IDisposable
         };
 
     /// <summary>
+    /// 伝票番号の採番を、<b>行の識別子とずれた値から始める</b>。
+    /// </summary>
+    /// <remarks>
+    /// <b>既定では伝票 1 件目の <c>id</c> も <c>entry_no</c> も 1 になる。</b> そのままだと
+    /// 「番号を出しているつもりで識別子を出している」実装と区別が付かず、
+    /// 文言や API の表明が全部素通りする（qa/03 L-02 の縮退）。
+    /// 実機では <c>id = 33</c> が「伝票 27」のようにずれているので、
+    /// <b>ずれている状態こそが本番の姿</b>である。
+    /// </remarks>
+    public void StartEntryNumbersAt(int first)
+        => Execute($"update journal_entry_sequences set next_entry_no = {first}");
+
+    /// <summary>
+    /// CLB の削除の代わり。<b>伝票と明細を実際に消す</b>（親の <c>DeleteTogether</c> と同じ形）。
+    /// </summary>
+    /// <remarks>
+    /// <b>「削除が通る」を、何も消さない保存で表明しない。</b> 空リストを返すだけの偽物を渡すと、
+    /// 関門が止めなかったことしか言えず、<b>行が消えることは一度も検査されない</b>
+    /// （2026-08-31 の自己レビューで、まさにその状態だった）。
+    /// </remarks>
+    public Func<Task<List<ModuleSubmitResult>>> Deleting(JournalEntryId id)
+        => () =>
+        {
+            Execute($"delete from journal_lines where journal_entry_id = {id.Value}");
+            Execute($"delete from journal_entries where id = {id.Value}");
+            return Task.FromResult(new List<ModuleSubmitResult>());
+        };
+
+    /// <summary>
     /// 日付の列に、<b>CLB と同じ形</b>で書く。
     /// </summary>
     /// <remarks>

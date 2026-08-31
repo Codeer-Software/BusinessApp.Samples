@@ -115,8 +115,10 @@ public class JournalAmendmentEndpointTests
     public async Task 取り消し済みならできないと返す()
     {
         using var server = new AccountingServer();
+        // **識別子と伝票番号をずらす**（既定ではどちらも 1 から並び、取り違えを検出できない）。
+        server.StartEntryNumbersAt(101);
         var original = Original(server);
-        await server.Amendment.ReverseAsync(server.Text(original.Value));
+        var reversal = await server.Amendment.ReverseAsync(server.Text(original.Value));
 
         var result = await server.Amendment.AvailabilityAsync(server.Text(original.Value));
 
@@ -127,6 +129,13 @@ public class JournalAmendmentEndpointTests
         Assert.False(result.CanReverse);
         Assert.False(result.CanCorrect);
         Assert.NotEqual(string.Empty, result.Message);
+
+        // **サービスが引いた番号が、この入口を通って出ること。**
+        // ここを見ていないと、`AvailabilityAsync` が結果を組み直すときに
+        // 番号を落としても全部緑になる（`AmendResult.Available` の注記が警戒している事故）。
+        var reversalNo = (await server.EntryStore.LoadAsync(new JournalEntryId(reversal.OpenEntryId))).EntryNo;
+        Assert.Equal($"{reversalNo}", result.ReversalEntryNo);
+        Assert.Equal(string.Empty, result.CorrectionEntryNo);
     }
 
     // --- 取り消す ---

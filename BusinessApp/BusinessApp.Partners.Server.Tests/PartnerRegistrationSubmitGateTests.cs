@@ -491,6 +491,109 @@ public class PartnerRegistrationSubmitGateTests
         Assert.False(save.Called);
     }
 
+    // --- 取引先の付け替え（docs/07 §3-4）---
+
+    /// <summary>
+    /// <b>既にある登録の取引先を、別の相手へ付け替える保存を止める。</b>
+    /// </summary>
+    /// <remarks>
+    /// 2026-08-31 まで止めていたのは画面側の <c>IsUpdateProtected</c> で、
+    /// 入力を取引先の詳細へ移したときに一緒に外れていた（自己レビューで発見）。
+    /// <b>画面の形は守りではない</b>ので、関門に移した。
+    /// </remarks>
+    [Fact]
+    public async Task 既にある登録の取引先を付け替える保存を止める()
+    {
+        using var server = new PartnerServer();
+        var owner = InsertPartner(server, "P901");
+        var other = InsertPartner(server, "P902");
+        var row = InsertRegistration(server, owner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Updating(Registration(partnerId: other, id: row))], save.SaveAsync));
+
+        Assert.Contains("取引先は、保存したあとは変更できません", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+        Assert.Equal(owner, server.Scalar<long>(
+            $"select partner_id from partner_invoice_registrations where id = {row}"));
+    }
+
+    /// <summary>同じ相手を送り直すだけの保存は通す（親が FK を毎回載せてくる経路）。</summary>
+    [Fact]
+    public async Task 同じ取引先を送り直す保存は通す()
+    {
+        using var server = new PartnerServer();
+        var owner = InsertPartner(server, "P901");
+        var row = InsertRegistration(server, owner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        // **先頭 0 付きで送っても同じ相手と見なす**（鍵の正規化。Key）。
+        var data = Registration(id: row);
+        data.Fields["Partner"] = new IdFieldData
+        {
+            Value = "00" + owner.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        };
+
+        await Gate(server).SubmitAsync([Updating(data)], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>取引先が差分に無い保存は、付け替えの検査をしない。</b>
+    /// CLB は変更されたフィールドしか送ってこない（qa/01 F-11）。
+    /// </summary>
+    [Fact]
+    public async Task 取引先を触らない更新は付け替えとみなさない()
+    {
+        using var server = new PartnerServer();
+        var owner = InsertPartner(server, "P901");
+        var row = InsertRegistration(server, owner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(Registration(no: "T9999999999999", id: row))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>新規は付け替えではない。</b> 仮の識別子で来るので、保存済みの行と比べようがない。
+    /// </summary>
+    [Fact]
+    public async Task 新規の登録は付け替えの検査に掛からない()
+    {
+        using var server = new PartnerServer();
+        var owner = InsertPartner(server, "P901");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Adding(Registration(no: ValidNo, partnerId: owner, validFrom: new DateOnly(2023, 10, 1)))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// 保存済みの行が引けないとき（消えている）は、この関門は黙って通す。
+    /// その保存は外部キーで別に失敗するので、ここで違う言葉を被せない。
+    /// </summary>
+    [Fact]
+    public async Task 保存済みの行が無い更新は付け替えとみなさない()
+    {
+        using var server = new PartnerServer();
+        var owner = InsertPartner(server, "P901");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(Registration(partnerId: owner, id: 900))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
     /// <summary>
     /// <b>親 FK が参照フィールドで来ても、二重登録を止める。</b>
     /// </summary>

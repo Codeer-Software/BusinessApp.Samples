@@ -37,7 +37,7 @@ WHERE (@p_partner_id IS NULL OR @p_partner_id = '' OR r.partner_id = @p_partner_
   -- 逃がす順序は「まず \ を、次に % と _ を」。逆にすると付けたばかりの \ をもう一度逃がす。
   AND (@p_registration_no IS NULL OR @p_registration_no = ''
        OR r.registration_no LIKE
-          '%' || replace(replace(replace(@p_registration_no, '\', '\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
+          '%' || replace(replace(replace(@p_registration_no, '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
   AND (@p_valid_from_from IS NULL OR @p_valid_from_from = ''
        OR date(r.valid_from) >= date(@p_valid_from_from))
   AND (@p_valid_from_to IS NULL OR @p_valid_from_to = ''

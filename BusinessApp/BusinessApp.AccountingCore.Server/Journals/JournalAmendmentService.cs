@@ -59,24 +59,26 @@ public sealed class JournalAmendmentService(
             return AmendmentAvailability.None("対象の伝票が見つかりません。");
         }
 
+        // **取り消された・訂正されたことは、できることの判定より先に引く。**
+        // 理由の文言に混ぜると画面が拾い分けられないので別に返す（ADR-0027 §3）。
+        // **「できない」で早く返る経路でも詰める**——一覧の逆引きはカレンダーと無関係に出続けるので、
+        // ここで落とすと**一覧には「取り消されています」と出るのに詳細では消える**。
+        // 会計期間をまだ作っていない年度で現実に起きる（2026-08-31 の自己レビュー）。
+        var amendments = await entryStore.FindAmendmentEntryNosAsync(original.Id!.Value);
+
         var context = await masterLoader.LoadAsync();
         var today = DateOnly.FromDateTime(DatabaseTimeZone.ToWallClock(timeProvider.GetUtcNow()));
 
         if (context.Calendar.ResolvePeriod(today) is not AccountingPeriod period)
         {
             return AmendmentAvailability.None(
-                $"今日（{today:yyyy-MM-dd}）に対応する会計期間がありません。");
+                $"今日（{today:yyyy-MM-dd}）に対応する会計期間がありません。", amendments);
         }
 
         var reversedOn = await entryStore.FindReversedOnAsync(original.Id!.Value);
         var reversal = JournalReversal.Reverse(
             original, today, timeProvider.GetUtcNow(),
             new ReversalContext(reversedOn is not null, period.FiscalYearId));
-
-        // **取り消された・訂正されたことは、できないことの理由とは別に返す。**
-        // 理由の文言に混ぜると画面が拾い分けられず、一覧（取消伝票の番号を出す）と
-        // 詳細で見えるものが食い違う（ADR-0027 §3）。
-        var amendments = await entryStore.FindAmendmentEntryNosAsync(original.Id!.Value);
 
         // **訂正は「取消 ＋ 再計上」なので、取り消せる伝票と訂正できる伝票は今のところ同じである。**
         // 「既に訂正されている」を別に見る必要は無い——訂正があるなら必ず取消もあるので、
@@ -231,8 +233,16 @@ public readonly record struct AmendmentAvailability(
     bool CanReverse, bool CanCorrect, string Reason,
     int? ReversalEntryNo = null, int? CorrectionEntryNo = null)
 {
-    /// <summary>どちらもできない（対象が無い・期間が無い）。<b>取消・訂正の番号も分からない。</b></summary>
-    public static AmendmentAvailability None(string reason) => new(false, false, reason);
+    /// <summary>
+    /// どちらもできない。<b>取消・訂正の番号は、分かっているなら落とさずに返す。</b>
+    /// </summary>
+    /// <remarks>
+    /// 「取り消せるか」と「取り消されているか」は別の問いである。前者が答えられなくても
+    /// 後者は答えられることがあり、<b>落とすと一覧と詳細で見えるものが食い違う</b>（ADR-0027 §3）。
+    /// 対象の伝票そのものが無いときだけ、引数を省いて既定（どちらも null）にする。
+    /// </remarks>
+    public static AmendmentAvailability None(string reason, AmendmentEntryNumbers amendments = default)
+        => new(false, false, reason, amendments.ReversalEntryNo, amendments.CorrectionEntryNo);
 }
 
 /// <summary>訂正を始めた結果。画面は再計上の下書きを開く。</summary>

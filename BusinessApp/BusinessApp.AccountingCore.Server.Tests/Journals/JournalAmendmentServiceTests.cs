@@ -240,6 +240,9 @@ public class JournalAmendmentServiceTests
     public async Task 取り消し済みの伝票は取消伝票の番号を返す()
     {
         using var server = new AccountingServer();
+        // **識別子と伝票番号をずらす。** 既定では id も entry_no も 1 から並ぶので、
+        // `select entry_no` を `select id` に取り違えても全部緑になる（qa/03 L-02）。
+        server.StartEntryNumbersAt(101);
         var original = Original(server);
         var reversalId = await server.AmendAsync(s => s.ReverseAsync(original));
         var reversalNo = (await server.EntryStore.LoadAsync(reversalId)).EntryNo;
@@ -255,6 +258,7 @@ public class JournalAmendmentServiceTests
     public async Task 訂正済みの伝票は取消と訂正の両方の番号を返す()
     {
         using var server = new AccountingServer();
+        server.StartEntryNumbersAt(101);
         var original = Original(server);
         var started = await server.AmendAsync(s => s.CorrectAsync(original));
         await PostAsync(server, started.CorrectionId);
@@ -277,6 +281,7 @@ public class JournalAmendmentServiceTests
     public async Task 訂正の下書きは訂正済みに数えない()
     {
         using var server = new AccountingServer();
+        server.StartEntryNumbersAt(101);
         var original = Original(server);
         var started = await server.AmendAsync(s => s.CorrectAsync(original));
 
@@ -308,6 +313,33 @@ public class JournalAmendmentServiceTests
 
         Assert.Null(available.ReversalEntryNo);
         Assert.Null(available.CorrectionEntryNo);
+    }
+
+    /// <summary>
+    /// <b>今日の会計期間が無くても、取り消されていることは答える。</b>
+    /// </summary>
+    /// <remarks>
+    /// 一覧の逆引きはカレンダーと無関係に出続けるので、ここで落とすと
+    /// <b>一覧には「取り消されています」と出るのに、詳細を開くと消える</b>。
+    /// ADR-0027 §3 が「一覧と詳細で同じ事実が見える」と決めたことに正面から反する。
+    /// </remarks>
+    [Fact]
+    public async Task 会計期間が無くても取り消されていることは答える()
+    {
+        using var server = new AccountingServer();
+        server.StartEntryNumbersAt(101);
+        var original = Original(server);
+        var reversalId = await server.AmendAsync(s => s.ReverseAsync(original));
+        server.Execute("""
+            delete from accounting_periods
+            where date(start_date) <= '2026-08-24' and date(end_date) >= '2026-08-24'
+            """);
+
+        var available = await server.AmendmentService.DescribeAsync(original);
+
+        Assert.False(available.CanReverse);
+        Assert.Contains("会計期間がありません", available.Reason, StringComparison.Ordinal);
+        Assert.Equal((await server.EntryStore.LoadAsync(reversalId)).EntryNo, available.ReversalEntryNo);
     }
 
     // --- 訂正する ---
