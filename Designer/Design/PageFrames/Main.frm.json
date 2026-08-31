@@ -17,11 +17,11 @@
         "Icon": "",
         "IconType": "Font",
         "HideTitle": false,
-        "ModulePageType": "Auto",
+        "ModulePageType": "Detail",
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "",
-        "Module": "JournalEntry",
+        "Module": "JournalEntryBoard",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -32,10 +32,10 @@
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
-          "UseNavigateToCreate": true,
+          "UseNavigateToCreate": false,
           "ListFieldDesign": {
             "LayoutName": "",
-            "CanNavigateToDetail": true,
+            "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
             "FixedColumnCount": 0,
@@ -44,16 +44,7 @@
             "SearchCondition": {
               "LimitCount": 50,
               "SelectFields": [],
-              "SortConditions": [
-                {
-                  "Variable": "PostingDate.Value",
-                  "IsDescending": true
-                },
-                {
-                  "Variable": "EntryNo.Value",
-                  "IsDescending": true
-                }
-              ],
+              "SortConditions": [],
               "SortFieldVariable": "",
               "SortDescending": false,
               "ModuleName": ""
@@ -63,8 +54,8 @@
             "DeleteTogether": false,
             "CanCreate": false,
             "CanUpdate": false,
-            "CanDelete": true,
-            "CanUserSort": true,
+            "CanDelete": false,
+            "CanUserSort": false,
             "CanSelect": false,
             "UseIndexSort": false,
             "OnDataChanged": "",
@@ -442,7 +433,70 @@
   "BackgroundColor": "",
   "Color": "",
   "FontFamily": "",
-  "OtherPageModuleDesigns": [],
+  "OtherPageModuleDesigns": [
+    {
+      "ModulePageType": "Auto",
+      "ModuleUrlSegment": "",
+      "ActiveModuleSegments": [],
+      "PageFrame": "",
+      "Module": "JournalEntry",
+      "Id": "",
+      "Parameters": "",
+      "ListPageDesign": {
+        "SearchLayoutName": "",
+        "UserUrlParameter": true,
+        "PageTitle": "",
+        "HeaderTitle": "",
+        "CanBulkDataUpdate": false,
+        "CanBulkDataDownload": false,
+        "UseSubmitButton": false,
+        "UseNavigateToCreate": false,
+        "ListFieldDesign": {
+          "LayoutName": "",
+          "CanNavigateToDetail": false,
+          "NavigateModuleUrlSegment": "",
+          "CanCustomizeColumns": false,
+          "FixedColumnCount": 0,
+          "ApplyBackgroundToBoxInput": false,
+          "DisplayName": "",
+          "SearchCondition": {
+            "LimitCount": 50,
+            "SelectFields": [],
+            "SortConditions": [],
+            "SortFieldVariable": "",
+            "SortDescending": false,
+            "ModuleName": ""
+          },
+          "PagerPosition": "Top",
+          "ReplaceMode": "None",
+          "DeleteTogether": false,
+          "CanCreate": false,
+          "CanUpdate": false,
+          "CanDelete": false,
+          "CanUserSort": false,
+          "CanSelect": false,
+          "UseIndexSort": false,
+          "OnDataChanged": "",
+          "OnSearchDataChanged": "",
+          "OnSelectedIndexChanged": "",
+          "OnSelectedIndexChanging": "",
+          "OnDoubleClickRow": "",
+          "Name": "",
+          "IgnoreModification": false,
+          "OnValidateInput": "",
+          "IsFocusSkip": false,
+          "NextFocusField": "",
+          "OnFocusMoving": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+        }
+      },
+      "DetailPageDesign": {
+        "PageTitle": "",
+        "LayoutName": "",
+        "UrlParameter": ""
+      }
+    }
+  ],
   "TopPageModuleDesign": {
     "ModulePageType": "Auto",
     "ModuleUrlSegment": "",

@@ -119,11 +119,12 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
     /// 送られてきた取引先の識別子。<b>参照フィールドでも識別子フィールドでも読む。</b>
     /// </summary>
     /// <remarks>
-    /// <para><b>型を 1 つに決め打ちしない。</b> いまは <see cref="LinkFieldData"/> だが、
-    /// 登録の入力を取引先の詳細に移すと親 FK は <c>IdFieldDesign</c> になる
-    /// （ヘッダ＋明細の正典。qa/01 D-17）。決め打ちにすると、その日に
-    /// <b>この関門が丸ごと素通しに落ちる——しかもテストは緑のまま</b>である
-    /// （フィクスチャが自分で <see cref="LinkFieldData"/> を組むため。2026-08-31 の自己レビュー）。</para>
+    /// <para><b>型を 1 つに決め打ちしない。</b> 画面が送ってくるのは <see cref="IdFieldData"/> である
+    /// （2026-08-31 に入力を取引先の詳細へ移し、親 FK を <c>IdFieldDesign</c> にした。
+    /// ヘッダ＋明細の正典。qa/01 D-17）。それでも <see cref="LinkFieldData"/> も読むのは、
+    /// <b>取込（フェーズ 6）と API を直に叩く経路が同じ入口を通る</b>からである。
+    /// 決め打ちにすると、型が動いた日に<b>この関門が丸ごと素通しに落ちる——
+    /// しかもフィクスチャが型を自分で組むのでテストは緑のまま</b>になる。</para>
     /// <para><b>読めない型で来たときは null を返す</b>（＝突き合わせの対象にしない）。
     /// CLB は宣言した型でしか送らないので、ここに来るのは API を直に叩いた経路だけである。</para>
     /// </remarks>
@@ -192,7 +193,45 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
             field.Value = InvoiceRegistrationNumber.Normalize(field.Value);
         }
 
+        await RejectRepointAsync(data);
         await RejectDuplicateAsync(data, moving);
+    }
+
+    /// <summary>
+    /// <b>既にある登録の取引先を、別の相手へ付け替える保存を止める。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>付け替えると <b>A 社の履歴に穴が空き、B 社に他人の登録番号が生える</b>（docs/07 §3-4）。
+    /// しかも<b>計上済みの明細に焼き込んだ写しと食い違い</b>、計上済みは直せない（ADR-0004）。
+    /// 二重登録の関門は「同じ取引先に同じ日から始まる 2 件」しか見ないので、付け替えは素通りする。</para>
+    /// <para><b>2026-08-31 まで、これを止めていたのは画面側の <c>IsUpdateProtected: true</c> だった。</b>
+    /// 入力を取引先の詳細へ移して親 FK を <c>IdFieldDesign</c> にしたとき、その設定ごと外した——
+    /// 「取引先を選ぶ欄が画面に無い」ことを守りに数えてしまったが、
+    /// <b>画面の形は守りではない</b>（qa/01 F-24。<c>*.mod.cs</c> も JSON も、
+    /// API を直に叩く経路には効かない）。同じ日の自己レビューで見つけて、ここへ移した。</para>
+    /// <para><b>差分に無ければ何もしない。</b> CLB は変更されたフィールドしか送ってこない（qa/01 F-11）ので、
+    /// 取引先を触っていない保存では、そもそも比べるものが無い。</para>
+    /// </remarks>
+    private async Task RejectRepointAsync(ModuleData data)
+    {
+        if (Id(data) is not long rowId || SubmittedPartner(data) is not string submitted)
+        {
+            return;
+        }
+
+        // **保存済みの相手が引けないなら黙って通す。** 行が消えているだけで、
+        // その保存は別の理由（外部キー）で失敗する。ここで別の言葉を被せない。
+        if (await store.FindPartnerOfAsync(rowId) is not PartnerId stored)
+        {
+            return;
+        }
+
+        if (Key(stored.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)) != submitted)
+        {
+            throw new PartnerRegistrationRejectedException(
+                "登録の取引先は、保存したあとは変更できません。"
+                + "別の取引先の登録にするときは、その取引先の画面で入力し直してください。");
+        }
     }
 
     private async Task RejectDuplicateAsync(ModuleData data, IReadOnlySet<long> moving)

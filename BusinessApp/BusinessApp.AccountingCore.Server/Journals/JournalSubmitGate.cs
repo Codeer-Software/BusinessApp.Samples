@@ -1,5 +1,6 @@
 namespace BusinessApp.AccountingCore.Server.Journals;
 
+using System.Globalization;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Server.Shared;
 using BusinessApp.AccountingCore.Shared;
@@ -85,6 +86,10 @@ public sealed class JournalSubmitGate(
 
         var pending = RewriteForDraftSave(transactionData);
 
+        // **削除は別に断る。** 見出しは押したボタンで決まる（qa/02 R24-23）ので、
+        // 「削除」を押した人に「保存できません」と言わない。
+        await RejectDeletionsAsync(transactionData);
+
         // **見出しは操作で決める。** 計上待ちが 1 件でもあれば、利用者は「計上する」を押している。
         // 関門ごとに決めると、同じ違反でも捕まえた場所で言葉が変わる。
         await RejectBeforeSaveAsync(transactionData, pending.Count > 0);
@@ -138,6 +143,75 @@ public sealed class JournalSubmitGate(
     }
 
     /// <summary>
+    /// <b>消せない伝票の削除を、保存へ渡す前に止める。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>削除は「下書きを捨てる」操作である。一覧をクエリモジュールにして標準の削除アイコンが
+    /// 無くなったので、詳細画面のボタンへ移した（ADR-0027 §4。2026-08-28 開発者が承認）。</para>
+    /// <para>止めるのは 2 つ。</para>
+    /// <list type="number">
+    ///   <item><b>計上済み</b>——計上済みは不変である（ADR-0004）。取消か訂正で表す。</item>
+    ///   <item><b>締め済みの会計期間・会計年度に属するもの</b>——ADR-0027 §4 が求めた形。</item>
+    /// </list>
+    /// <para><b>DDL のトリガも計上済みの削除を拒むが、トリガは最後の砦であって日常の分岐ではない。</b>
+    /// 正常系でトリガに当てると、利用者には生の SQLite の例外がそのまま出る（qa/01 F-16）。</para>
+    /// <para><b>会計期間が無い伝票は止めない。</b> 期間が無ければ締めようもなく、
+    /// 期間の設定を直すまで消せない下書きが残るほうが困る。</para>
+    /// <para><b>締めの側は、いまのところ完結していない。</b> 締め済み期間の下書きは
+    /// <b>編集を止めていない</b>ので、計上日を開いている期間へ動かしてから消せば通る。
+    /// 下書きは帳簿に載っていない（帳簿は <c>status = 'posted'</c> だけを出す）ので、
+    /// 消しても帳簿は 1 行も動かない——<b>この関門が守っているのは「締めた期間は触らない」という
+    /// 建前だけ</b>である。締め（月次締め・年度締め）を実装するフェーズ 4 で、
+    /// <b>編集も止めるか、下書きは締めの対象外にするか</b>を揃えて決める
+    /// （2026-08-31 の自己レビューで、理由文が実態と合っていないと指摘された。qa/02）。</para>
+    /// </remarks>
+    private async Task RejectDeletionsAsync(IReadOnlyList<ModuleSubmitData> transactionData)
+    {
+        var deleted = DeletedEntryIdsIn(transactionData);
+        if (deleted.Count == 0)
+        {
+            // **削除が無い保存でマスタを読みに行かない。** 保存のたびに会計年度と期間を
+            // 引くのは、いちばん多い経路（下書き保存）に無駄な往復を足すことになる。
+            return;
+        }
+
+        var calendar = (await masterLoader.LoadAsync()).Calendar;
+        var violations = new List<Violation>();
+
+        foreach (var submittedId in deleted)
+        {
+            // 保存されていない行（仮 ID）は、消しても帳簿は動かない。
+            if (!long.TryParse(submittedId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)
+                || await entryStore.FindAsync(new JournalEntryId(id)) is not JournalEntry stored)
+            {
+                continue;
+            }
+
+            if (stored.Status == EntryStatus.Posted)
+            {
+                violations.Add(new Violation(
+                    JournalViolationCodes.AlreadyPosted,
+                    $"計上済みの伝票（伝票番号 {stored.EntryNo}）は削除できません。"
+                    + "取り消すか、訂正してください。"));
+            }
+            else if (calendar.ResolvePeriod(stored.PostingDate) is not null
+                     && !calendar.IsPostable(stored.PostingDate))
+            {
+                violations.Add(new Violation(
+                    JournalViolationCodes.PeriodClosed,
+                    $"計上日（{stored.PostingDate:yyyy-MM-dd}）の会計期間は締められているので、"
+                    + "この伝票は削除できません。締めを解除してから削除してください。"));
+            }
+        }
+
+        if (violations.HasError())
+        {
+            throw new JournalPostingRejectedException(
+                violations, JournalPostingRejectedException.DeletionHeadline);
+        }
+    }
+
+    /// <summary>
     /// 既にある伝票の<b>種別を変える保存</b>を見つける。
     /// </summary>
     /// <remarks>
@@ -155,7 +229,8 @@ public sealed class JournalSubmitGate(
         foreach (var data in EntriesIn(transactionData, d => d.Update))
         {
             var submitted = GetSelect(data, "EntryType");
-            if (submitted.Length == 0 || !long.TryParse(GetId(data), out var id))
+            if (submitted.Length == 0
+                || !long.TryParse(GetId(data), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id))
             {
                 continue;
             }
@@ -300,6 +375,25 @@ public sealed class JournalSubmitGate(
         IReadOnlyList<ModuleSubmitData> transactionData,
         Func<ModuleSubmitData, List<ModuleData>> part)
         => transactionData.SelectMany(part).Where(d => d.Name == EntryModuleName).ToList();
+
+    /// <summary>
+    /// 削除しようとしている伝票の識別子。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>削除だけ器が違う。</b> 追加・更新は <c>ModuleData</c>（フィールドの束）で来るが、
+    /// 削除は <c>ModuleDeleteInfo</c>（識別子とモジュール名だけ）で来る。
+    /// <see cref="EntriesIn"/> をそのまま使えないのはそのためである。</para>
+    /// <para><b><c>ModuleSubmitData.SearchDelete</c>（検索条件で消す経路）は見ていない。</b>
+    /// 見なくてよい根拠は<b>設計側にある</b>——本プロジェクトのどの <c>ListField</c> も
+    /// <c>ReplaceMode</c> が <c>"None"</c> なので、この経路は発火しない。
+    /// <b>入れた日に、明細の一括削除が関門を通らず DDL のトリガの生の例外として出る</b>
+    /// （qa/01 F-16 の形）。<c>ReplaceMode</c> を触るときは、ここも一緒に見ること。</para>
+    /// </remarks>
+    private static List<string> DeletedEntryIdsIn(IReadOnlyList<ModuleSubmitData> transactionData)
+        => [.. transactionData
+            .SelectMany(d => d.Delete)
+            .Where(d => d.ModuleName == EntryModuleName)
+            .Select(d => d.Id)];
 
     private static string GetId(ModuleData data)
         => Field<IdFieldData>(data, "Id")?.Value ?? string.Empty;

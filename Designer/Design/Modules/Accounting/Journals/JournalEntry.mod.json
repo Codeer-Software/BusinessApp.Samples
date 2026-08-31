@@ -172,7 +172,7 @@
       "AllowEmptySearch": false,
       "OnSearchDataChanged": "",
       "DisplayName": "種別",
-      "IsRequired": true,
+      "IsRequired": false,
       "OnDataChanged": "",
       "Name": "EntryType",
       "IgnoreModification": false,
@@ -607,6 +607,30 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
+      "Text": "削除",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "Icon": "",
+      "Variant": "Danger",
+      "OnClick": "DeleteButton_OnClick",
+      "ShowTextInToolTip": false,
+      "IsHtml": false,
+      "Name": "DeleteButton",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign",
+      "IsBlock": false
+    },
+    {
       "Text": "下書き保存",
       "ImageResourcePath": "",
       "ImageResourceSet": {
@@ -717,6 +741,21 @@
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign",
       "IsBlock": false
+    },
+    {
+      "Text": "",
+      "Icon": "",
+      "IsHtml": false,
+      "Style": "Default",
+      "RelativeField": "",
+      "OnClick": "",
+      "Name": "AmendmentNoticeLabel",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
       "Text": "入場券等の回収特例（1 回 3 万円以上）に当たる仕入れは、明細の「内容」欄に取引先の住所を記載してください。",
@@ -953,6 +992,45 @@
                   "FieldName": "RequiredLegendLabel",
                   "ContextMenu": "",
                   "ClassName": "required-legend",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {
+              "Bottom": 8
+            },
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None",
+                "Layout": {
+                  "FieldName": "AmendmentNoticeLabel",
+                  "ContextMenu": "",
+                  "ClassName": "amendment-notice",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",
@@ -1215,7 +1293,7 @@
                 "Layout": {
                   "FieldName": "EntryTypeLabel",
                   "ContextMenu": "",
-                  "ClassName": "required-label",
+                  "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",
@@ -1667,6 +1745,31 @@
                 "Border": "None",
                 "Layout": {
                   "FieldName": "PostButton",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "HorizontalAlignment": "End"
+              },
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None",
+                "Layout": {
+                  "FieldName": "DeleteButton",
                   "ContextMenu": "",
                   "ClassName": "",
                   "FontFamily": "",

@@ -30,6 +30,21 @@ internal static class SubmitData
         => new() { ModuleName = "JournalEntry", Update = [.. data] };
 
     /// <summary>
+    /// 1 つの保存。<c>Delete</c> に載せる。
+    /// </summary>
+    /// <remarks>
+    /// <b>削除だけ器が違う。</b> 追加・更新はフィールドの束（<see cref="ModuleData"/>）で来るが、
+    /// 削除は識別子とモジュール名だけの <see cref="ModuleDeleteInfo"/> で来る。
+    /// <b>ここを ModuleData で作ると、関門が本番で見ている場所を 1 度も通らない。</b>
+    /// </remarks>
+    public static ModuleSubmitData Deleting(params string[] ids)
+        => new()
+        {
+            ModuleName = "JournalEntry",
+            Delete = [.. ids.Select(id => new ModuleDeleteInfo { Id = id, ModuleName = "JournalEntry" })],
+        };
+
+    /// <summary>
     /// <b>更新の</b>伝票。<c>Id</c> と、指定した状態だけを載せる（触っていない項目は差分に無い）。
     /// </summary>
     /// <remarks>

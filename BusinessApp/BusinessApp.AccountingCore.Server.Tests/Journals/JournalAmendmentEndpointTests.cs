@@ -115,8 +115,10 @@ public class JournalAmendmentEndpointTests
     public async Task 取り消し済みならできないと返す()
     {
         using var server = new AccountingServer();
+        // **識別子と伝票番号をずらす**（既定ではどちらも 1 から並び、取り違えを検出できない）。
+        server.StartEntryNumbersAt(101);
         var original = Original(server);
-        await server.Amendment.ReverseAsync(server.Text(original.Value));
+        var reversal = await server.Amendment.ReverseAsync(server.Text(original.Value));
 
         var result = await server.Amendment.AvailabilityAsync(server.Text(original.Value));
 
@@ -127,6 +129,13 @@ public class JournalAmendmentEndpointTests
         Assert.False(result.CanReverse);
         Assert.False(result.CanCorrect);
         Assert.NotEqual(string.Empty, result.Message);
+
+        // **サービスが引いた番号が、この入口を通って出ること。**
+        // ここを見ていないと、`AvailabilityAsync` が結果を組み直すときに
+        // 番号を落としても全部緑になる（`AmendResult.Available` の注記が警戒している事故）。
+        var reversalNo = (await server.EntryStore.LoadAsync(new JournalEntryId(reversal.OpenEntryId))).EntryNo;
+        Assert.Equal($"{reversalNo}", result.ReversalEntryNo);
+        Assert.Equal(string.Empty, result.CorrectionEntryNo);
     }
 
     // --- 取り消す ---
@@ -285,7 +294,8 @@ public class JournalAmendmentEndpointTests
         // **名前を並び順ごと固定する。** スクリプトはキーを文字列で引くので、
         // 1 つ落ちても改名されてもコンパイルは通り、画面が黙って値を読めなくなる。
         Assert.Equal(
-            ["status", "openEntryId", "reversalId", "message", "violations", "canReverse", "canCorrect"],
+            ["status", "openEntryId", "reversalId", "message", "violations", "canReverse", "canCorrect",
+             "reversalEntryNo", "correctionEntryNo"],
             root.EnumerateObject().Select(property => property.Name));
         Assert.Equal(
             ["code", "message", "lineNo"],
@@ -308,11 +318,15 @@ public class JournalAmendmentEndpointTests
         Assert.Equal(2, succeeded.RootElement.GetProperty("openEntryId").GetInt64());
         Assert.Equal(1, succeeded.RootElement.GetProperty("reversalId").GetInt64());
 
-        using var available = JsonDocument.Parse(
-            JsonSerializer.Serialize(AmendResult.Available(true, false, "理由")));
+        using var available = JsonDocument.Parse(JsonSerializer.Serialize(
+            AmendResult.Available(new AmendmentAvailability(true, false, "理由", 12, null))));
         Assert.Equal("ok", available.RootElement.GetProperty("status").GetString());
         Assert.True(available.RootElement.GetProperty("canReverse").GetBoolean());
         Assert.False(available.RootElement.GetProperty("canCorrect").GetBoolean());
+
+        // **無いことは空文字で表す**（画面が 1 つの見方で判定できるように）。
+        Assert.Equal("12", available.RootElement.GetProperty("reversalEntryNo").GetString());
+        Assert.Equal(string.Empty, available.RootElement.GetProperty("correctionEntryNo").GetString());
     }
 
     /// <summary>

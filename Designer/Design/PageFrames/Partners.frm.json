@@ -92,7 +92,7 @@
         "ModuleUrlSegment": "",
         "ActiveModuleSegments": [],
         "PageFrame": "",
-        "Module": "PartnerInvoiceRegistration",
+        "Module": "PartnerRegistrationList",
         "Id": "",
         "Parameters": "",
         "ListPageDesign": {
@@ -103,28 +103,19 @@
           "CanBulkDataUpdate": false,
           "CanBulkDataDownload": false,
           "UseSubmitButton": false,
-          "UseNavigateToCreate": true,
+          "UseNavigateToCreate": false,
           "ListFieldDesign": {
             "LayoutName": "",
-            "CanNavigateToDetail": true,
+            "CanNavigateToDetail": false,
             "NavigateModuleUrlSegment": "",
             "CanCustomizeColumns": false,
             "FixedColumnCount": 0,
             "ApplyBackgroundToBoxInput": false,
             "DisplayName": "",
             "SearchCondition": {
-              "LimitCount": 50,
+              "LimitCount": 100,
               "SelectFields": [],
-              "SortConditions": [
-                {
-                  "Variable": "Partner.Value",
-                  "IsDescending": false
-                },
-                {
-                  "Variable": "ValidFrom.Value",
-                  "IsDescending": true
-                }
-              ],
+              "SortConditions": [],
               "SortFieldVariable": "",
               "SortDescending": false,
               "ModuleName": ""
@@ -135,7 +126,7 @@
             "CanCreate": false,
             "CanUpdate": false,
             "CanDelete": false,
-            "CanUserSort": true,
+            "CanUserSort": false,
             "CanSelect": false,
             "UseIndexSort": false,
             "OnDataChanged": "",

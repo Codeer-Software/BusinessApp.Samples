@@ -31,7 +31,8 @@ public class PartnerSubmitPipelineTests
     {
         var data = new ModuleData { Name = PartnerRegistrationSubmitGate.ModuleName };
         data.Fields["RegistrationNo"] = new TextFieldData { Value = no };
-        data.Fields["Partner"] = new LinkFieldData
+        // 画面が送ってくるのは識別子フィールド（登録は取引先の詳細に置いてある。qa/01 D-17）。
+        data.Fields["Partner"] = new IdFieldData
         {
             Value = partnerId.ToString(CultureInfo.InvariantCulture),
         };

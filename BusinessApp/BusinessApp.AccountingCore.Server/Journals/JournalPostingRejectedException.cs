@@ -41,6 +41,9 @@ public sealed class JournalPostingRejectedException(
     /// <summary>「訂正する」を止めたときの見出し。<see cref="ReversalHeadline"/> と同じ理由。</summary>
     public const string CorrectionHeadline = "訂正できません";
 
+    /// <summary>「削除」を止めたときの見出し。<see cref="ReversalHeadline"/> と同じ理由。</summary>
+    public const string DeletionHeadline = "削除できません";
+
     /// <summary>並べられる番号（それを超えたら番号なしで続ける）。</summary>
     private static readonly string[] Numbers = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
 

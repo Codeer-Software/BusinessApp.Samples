@@ -499,6 +499,146 @@ public class JournalSubmitGateTests
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
     }
 
+    // --- 削除（ADR-0027 §4。一覧の削除アイコンが無くなり、詳細画面のボタンへ移した）---
+
+    /// <summary>
+    /// <b>計上済みの伝票は削除できない。</b> DDL のトリガも拒むが、そこまで行かせない
+    /// （行かせると生の SQLite の例外が利用者に出る。qa/01 F-16）。
+    /// </summary>
+    [Fact]
+    public async Task 計上済みの伝票の削除は関門が止める()
+    {
+        using var server = new AccountingServer();
+        // **識別子と伝票番号をずらす**（既定ではどちらも 1 になり、取り違えを検出できない）。
+        server.StartEntryNumbersAt(101);
+        var id = server.InsertDraft();
+        server.InsertLine(id, 1, "debit", "1100", 1000);
+        server.InsertLine(id, 2, "credit", "2100", 1000);
+        await PostSavedAsync(server, id);
+
+        var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value))], NothingSaved));
+
+        Assert.StartsWith(JournalPostingRejectedException.DeletionHeadline, thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("伝票番号 101", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains(JournalViolationCodes.AlreadyPosted, thrown.Violations.Select(v => v.Code));
+        Assert.Equal(1, server.Scalar<long>("select count(*) from journal_entries"));
+    }
+
+    /// <summary>締め済みの会計期間に属する下書きは削除できない。</summary>
+    [Fact]
+    public async Task 締め済みの期間の下書きの削除は関門が止める()
+    {
+        using var server = new AccountingServer();
+        // **取引日と計上日をずらす。** 同じ日にすると、文言が計上日を出しているのか
+        // 取引日を出しているのか区別できない（qa/03 L-02）。締めは計上日で見る。
+        var id = server.InsertDraft(transactionDate: "2026-08-20", postingDate: "2026-08-24");
+        server.Execute("update accounting_periods set status = 'closed' where start_date <= '2026-08-24 00:00:00' and '2026-08-24 00:00:00' <= end_date");
+
+        var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value))], NothingSaved));
+
+        Assert.StartsWith(JournalPostingRejectedException.DeletionHeadline, thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("2026-08-24", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("2026-08-20", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains(JournalViolationCodes.PeriodClosed, thrown.Violations.Select(v => v.Code));
+    }
+
+    /// <summary>会計年度を締めても同じ（期間だけを見ていると素通りする）。</summary>
+    [Fact]
+    public async Task 締め済みの年度の下書きの削除も関門が止める()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+        server.Execute("update fiscal_years set status = 'closed'");
+
+        var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value))], NothingSaved));
+
+        Assert.Contains(JournalViolationCodes.PeriodClosed, thrown.Violations.Select(v => v.Code));
+    }
+
+    /// <summary>
+    /// 開いている期間の下書きは、<b>明細ごと消える</b>。
+    /// </summary>
+    /// <remarks>
+    /// <b>「関門が止めなかった」ではなく「行が消えた」を表明する。</b>
+    /// 明細まで見るのは、親の <c>ListField</c> が <c>DeleteTogether: true</c> で
+    /// 子を一緒に消す形にしてあるからである（qa/01 C-03b）——
+    /// 子が残ると外部キーで親が消せず、CLB は <c>false</c> を返して静かに終わる（C-03）。
+    /// </remarks>
+    [Fact]
+    public async Task 開いている期間の下書きは明細ごと削除できる()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+        server.InsertLine(id, 1, "debit", "1100", 1000);
+        server.InsertLine(id, 2, "credit", "2100", 1000);
+
+        await server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value))], server.Deleting(id));
+
+        Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
+        Assert.Equal(0, server.Scalar<long>("select count(*) from journal_lines"));
+    }
+
+    /// <summary>
+    /// <b>会計期間が無い日の下書きは止めない。</b> 締めようもない期間で消せなくすると、
+    /// 期間の設定を直すまで消せない下書きが残る。
+    /// </summary>
+    [Fact]
+    public async Task 会計期間が無い日の下書きの削除は通る()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+        server.Execute("delete from accounting_periods");
+
+        await server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value))], server.Deleting(id));
+
+        Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
+    }
+
+    /// <summary>保存されていない行（仮の識別子・消えている行）は、消しても帳簿が動かない。</summary>
+    [Theory]
+    [InlineData(TemporaryId)]
+    [InlineData("999")]
+    public async Task 保存されていない伝票の削除は通る(string id)
+    {
+        using var server = new AccountingServer();
+        var untouched = server.InsertDraft();
+
+        await server.SubmitAsync([SubmitData.Deleting(id)], NothingSaved);
+
+        // **関係の無い行を巻き込んでいない。** 「例外が出なかった」だけでは、
+        // 削除の対象を取り違えていても通る。
+        Assert.Equal(1, server.Scalar<long>("select count(*) from journal_entries"));
+        Assert.Equal(untouched.Value, server.Scalar<long>("select id from journal_entries"));
+    }
+
+    /// <summary>
+    /// <b>削除が無い保存では、会計年度と期間を読みに行かない。</b>
+    /// いちばん多い経路（下書き保存）に無駄な往復を足さないための早期 return を固定する。
+    /// </summary>
+    [Fact]
+    public async Task 削除が無い保存はマスタを読みに行かない()
+    {
+        using var server = new AccountingServer();
+        var entry = SubmitData.NewEntry(TemporaryId, status: "draft");
+        var readPeriods = 0;
+        server.FailBeforeStatement = sql =>
+        {
+            if (sql.Contains("accounting_periods", StringComparison.Ordinal))
+            {
+                readPeriods++;
+            }
+
+            return null;
+        };
+
+        await server.SubmitAsync([SubmitData.Adding(entry)], server.Saving(entry, Balanced));
+
+        Assert.Equal(0, readPeriods);
+    }
+
     /// <summary>保存が済んでいる下書きを、保存経路を通して計上させる。</summary>
     private static Task PostSavedAsync(AccountingServer server, JournalEntryId id)
     {

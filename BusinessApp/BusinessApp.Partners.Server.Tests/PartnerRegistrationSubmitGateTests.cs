@@ -44,9 +44,12 @@ public class PartnerRegistrationSubmitGateTests
 
         if (partnerId is long partner)
         {
-            // 参照フィールド（LinkFieldDesign）のデータは LinkFieldData で、識別子は Value に入る。
+            // **画面が送ってくるのは識別子フィールドである**（2026-08-31 に移設）。
+            // 登録の入力は取引先の詳細に置いてあり、親 FK は IdFieldDesign でなければ
+            // 追加が静かに消える（qa/01 D-17）。フィクスチャが実際と違う型を組むと、
+            // 関門が素通しに落ちてもテストが緑のままになる（R28-07 で踏んだ型）。
             // ModuleFieldData.Id と取り違えると、関門はいつも null を見て素通しする。
-            data.Fields["Partner"] = new LinkFieldData
+            data.Fields["Partner"] = new IdFieldData
             {
                 Value = partner.ToString(System.Globalization.CultureInfo.InvariantCulture),
             };
@@ -398,8 +401,8 @@ public class PartnerRegistrationSubmitGateTests
 
         var first = Registration(no: ValidNo, validFrom: new DateOnly(2023, 10, 1));
         var second = Registration(no: "T9999999999999", validFrom: new DateOnly(2023, 10, 1));
-        first.Fields["Partner"] = new LinkFieldData { Value = "@temporary:aaaa-bbbb" };
-        second.Fields["Partner"] = new LinkFieldData { Value = "@temporary:aaaa-bbbb" };
+        first.Fields["Partner"] = new IdFieldData { Value = "@temporary:aaaa-bbbb" };
+        second.Fields["Partner"] = new IdFieldData { Value = "@temporary:aaaa-bbbb" };
 
         await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
             () => Gate(server).SubmitAsync([Adding(first, second)], save.SaveAsync));
@@ -415,8 +418,8 @@ public class PartnerRegistrationSubmitGateTests
 
         var first = Registration(no: ValidNo, validFrom: new DateOnly(2023, 10, 1));
         var second = Registration(no: "T9999999999999", validFrom: new DateOnly(2023, 10, 1));
-        first.Fields["Partner"] = new LinkFieldData { Value = "@temporary:aaaa" };
-        second.Fields["Partner"] = new LinkFieldData { Value = "@temporary:bbbb" };
+        first.Fields["Partner"] = new IdFieldData { Value = "@temporary:aaaa" };
+        second.Fields["Partner"] = new IdFieldData { Value = "@temporary:bbbb" };
 
         await Gate(server).SubmitAsync([Adding(first, second)], save.SaveAsync);
 
@@ -488,18 +491,121 @@ public class PartnerRegistrationSubmitGateTests
         Assert.False(save.Called);
     }
 
+    // --- 取引先の付け替え（docs/07 §3-4）---
+
     /// <summary>
-    /// <b>親 FK が識別子フィールドで来ても、二重登録を止める。</b>
+    /// <b>既にある登録の取引先を、別の相手へ付け替える保存を止める。</b>
     /// </summary>
     /// <remarks>
-    /// 登録の入力を取引先の詳細に移すと、親 FK は <c>IdFieldDesign</c> になる
-    /// （ヘッダ＋明細の正典。qa/01 D-17）。<b>参照フィールド決め打ちだと、その日に
-    /// この関門が丸ごと素通しに落ちる</b>——しかもフィクスチャが自分で
-    /// <c>LinkFieldData</c> を組むので、既存のテストは全部緑のままである
-    /// （2026-08-31 の自己レビュー）。
+    /// 2026-08-31 まで止めていたのは画面側の <c>IsUpdateProtected</c> で、
+    /// 入力を取引先の詳細へ移したときに一緒に外れていた（自己レビューで発見）。
+    /// <b>画面の形は守りではない</b>ので、関門に移した。
     /// </remarks>
     [Fact]
-    public async Task 親FKが識別子フィールドでも二重登録を止める()
+    public async Task 既にある登録の取引先を付け替える保存を止める()
+    {
+        using var server = new PartnerServer();
+        var owner = InsertPartner(server, "P901");
+        var other = InsertPartner(server, "P902");
+        var row = InsertRegistration(server, owner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Updating(Registration(partnerId: other, id: row))], save.SaveAsync));
+
+        Assert.Contains("取引先は、保存したあとは変更できません", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+        Assert.Equal(owner, server.Scalar<long>(
+            $"select partner_id from partner_invoice_registrations where id = {row}"));
+    }
+
+    /// <summary>同じ相手を送り直すだけの保存は通す（親が FK を毎回載せてくる経路）。</summary>
+    [Fact]
+    public async Task 同じ取引先を送り直す保存は通す()
+    {
+        using var server = new PartnerServer();
+        var owner = InsertPartner(server, "P901");
+        var row = InsertRegistration(server, owner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        // **先頭 0 付きで送っても同じ相手と見なす**（鍵の正規化。Key）。
+        var data = Registration(id: row);
+        data.Fields["Partner"] = new IdFieldData
+        {
+            Value = "00" + owner.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        };
+
+        await Gate(server).SubmitAsync([Updating(data)], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>取引先が差分に無い保存は、付け替えの検査をしない。</b>
+    /// CLB は変更されたフィールドしか送ってこない（qa/01 F-11）。
+    /// </summary>
+    [Fact]
+    public async Task 取引先を触らない更新は付け替えとみなさない()
+    {
+        using var server = new PartnerServer();
+        var owner = InsertPartner(server, "P901");
+        var row = InsertRegistration(server, owner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(Registration(no: "T9999999999999", id: row))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>新規は付け替えではない。</b> 仮の識別子で来るので、保存済みの行と比べようがない。
+    /// </summary>
+    [Fact]
+    public async Task 新規の登録は付け替えの検査に掛からない()
+    {
+        using var server = new PartnerServer();
+        var owner = InsertPartner(server, "P901");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Adding(Registration(no: ValidNo, partnerId: owner, validFrom: new DateOnly(2023, 10, 1)))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// 保存済みの行が引けないとき（消えている）は、この関門は黙って通す。
+    /// その保存は外部キーで別に失敗するので、ここで違う言葉を被せない。
+    /// </summary>
+    [Fact]
+    public async Task 保存済みの行が無い更新は付け替えとみなさない()
+    {
+        using var server = new PartnerServer();
+        var owner = InsertPartner(server, "P901");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(Registration(partnerId: owner, id: 900))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>親 FK が参照フィールドで来ても、二重登録を止める。</b>
+    /// </summary>
+    /// <remarks>
+    /// 画面が送ってくるのは識別子フィールドだが（移設後の正典。qa/01 D-17）、
+    /// <b>関門は型を 1 つに決め打ちしない</b>。取込（フェーズ 6）も API を直に叩く経路も
+    /// 同じ入口を通るからで、どちらか片方しか読めない関門は、型が動いた日に
+    /// <b>丸ごと素通しに落ちる——しかもフィクスチャが型を自分で組むのでテストは緑のまま</b>
+    /// である（2026-08-31 の自己レビュー）。この 1 本が、もう一方の経路を押さえる。
+    /// </remarks>
+    [Fact]
+    public async Task 親FKが参照フィールドでも二重登録を止める()
     {
         using var server = new PartnerServer();
         var partner = InsertPartner(server);
@@ -507,7 +613,7 @@ public class PartnerRegistrationSubmitGateTests
         var save = new SaveSpy();
 
         var row = Registration(no: "T9999999999999", validFrom: new DateOnly(2023, 10, 1));
-        row.Fields["Partner"] = new IdFieldData
+        row.Fields["Partner"] = new LinkFieldData
         {
             Value = partner.ToString(System.Globalization.CultureInfo.InvariantCulture),
         };
@@ -537,7 +643,7 @@ public class PartnerRegistrationSubmitGateTests
         var moved = Registration(validFrom: new DateOnly(2026, 1, 1), id: existing);
         // 2 件目は新規で、取引先を**先頭 0 付き**の文字列で指す。
         var added = Registration(no: "T9999999999999", validFrom: new DateOnly(2026, 1, 1));
-        added.Fields["Partner"] = new LinkFieldData
+        added.Fields["Partner"] = new IdFieldData
         {
             Value = "00" + partner.ToString(System.Globalization.CultureInfo.InvariantCulture),
         };
@@ -669,8 +775,8 @@ public class PartnerRegistrationSubmitGateTests
 
         var first = Registration(no: ValidNo, validFrom: new DateOnly(2023, 10, 1));
         var second = Registration(no: "T9999999999999", validFrom: new DateOnly(2023, 10, 1));
-        first.Fields["Partner"] = new LinkFieldData { Value = string.Empty };
-        second.Fields["Partner"] = new LinkFieldData { Value = string.Empty };
+        first.Fields["Partner"] = new IdFieldData { Value = string.Empty };
+        second.Fields["Partner"] = new IdFieldData { Value = string.Empty };
 
         await Gate(server).SubmitAsync([Adding(first, second)], save.SaveAsync);
 
