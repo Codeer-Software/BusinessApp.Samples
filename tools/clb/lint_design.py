@@ -290,6 +290,66 @@ def check_module_references(modules, scripts, findings):
                 report(path, owner, target, "読んでいる")
 
 
+def check_child_parent_keys(modules, findings):
+    """ヘッダ＋明細の、**明細側の親 FK が `IdFieldDesign` ＋ `IsManualInput: false` か**（qa/01 D-17）。
+
+    **`LinkFieldDesign` にすると、行を「追加」した保存が静かに消える。**
+    ボタンは押せるのに保存要求が 1 本も飛ばず、エラーもトーストも出ない。
+    **読み取りは動く**ので気づけない——既存の行は逆引きで正しく出て、
+    リロードして初めて消えたと分かる（2026-08-30 実測 1.3.20）。
+    `designcheck` は緑のままである。
+
+    **親子の関係はデザインから読む。モジュール名を並べない**（増えるたびに腐る）。
+    親の `ListField` が「子の `<X>.Value` ＝ 自分の `Id.Value`」で絞っていれば、
+    その `<X>` が明細側の親 FK である——つまり**この検査の対象は、親が自分で名乗っている**。
+    """
+    fields_by_module = {
+        doc["Name"]: {f.get("Name", ""): f for f in doc.get("Fields", [])}
+        for _, doc in modules if doc.get("Name")
+    }
+
+    def parent_keys(node, child, into):
+        """子モジュールを絞る条件から、親 FK の名前を拾う。"""
+        if isinstance(node, dict):
+            if (node.get("TypeFullName", "").endswith("FieldVariableMatchCondition")
+                    and node.get("Variable") == "Id.Value"
+                    and node.get("SearchTargetVariable", "").endswith(".Value")):
+                into.add(node["SearchTargetVariable"][:-len(".Value")])
+            for value in node.values():
+                parent_keys(value, child, into)
+        elif isinstance(node, list):
+            for value in node:
+                parent_keys(value, child, into)
+
+    for path, doc in modules:
+        for field in doc.get("Fields", []):
+            if not field.get("TypeFullName", "").endswith("ListFieldDesign"):
+                continue
+            condition = field.get("SearchCondition") or {}
+            child = condition.get("ModuleName", "")
+            if child not in fields_by_module:
+                continue
+
+            names = set()
+            parent_keys(condition.get("Condition"), child, names)
+            for name in sorted(names):
+                key = fields_by_module[child].get(name)
+                if key is None:
+                    findings.append((SEV_ERROR, "D-17", relative(path),
+                                     f"{doc.get('Name', '')}.{field.get('Name', '')} が絞る "
+                                     f"{child}.{name} が無い（親子の逆引きが効かない）"))
+                    continue
+                if not key.get("TypeFullName", "").endswith("IdFieldDesign"):
+                    findings.append((SEV_ERROR, "D-17", relative(path),
+                                     f"{child}.{name} は親 FK なので IdFieldDesign にする"
+                                     f"（今は {key.get('TypeFullName', '').rsplit('.', 1)[-1]}）。"
+                                     "参照フィールドだと行の追加が静かに消える（qa/01 D-17）"))
+                elif key.get("IsManualInput"):
+                    findings.append((SEV_ERROR, "D-17", relative(path),
+                                     f"{child}.{name} は親 FK なので IsManualInput: false にする"
+                                     "（親が識別子を差し込む欄である。qa/01 D-17）"))
+
+
 def check_cross_frame_links(frames, findings):
     """フレームを跨ぐリンクの、遷移先での登録漏れ（qa/01 F-17）。
 
@@ -628,6 +688,7 @@ def main() -> int:
         check_script(path, text, findings)
 
     check_cross_frame_links(loaded_frames, findings)
+    check_child_parent_keys(loaded_modules, findings)
     check_module_references(loaded_modules, loaded_scripts, findings)
     check_role_conditions(loaded_modules, loaded_frames, findings)
     app_settings = os.path.join(DESIGN_DIR, "app.clprj")
@@ -692,8 +753,8 @@ SELFTEST_CASES = [
 # 呼び出しを 1 行消しても緑になる作りだと、検査は在っても効かない（qa/03 L-15）。
 WIRED_CHECKS = [
     "check_module", "check_page_frame", "check_application_root", "check_script",
-    "check_cross_frame_links", "check_module_references", "check_role_conditions",
-    "check_app_access_condition",
+    "check_cross_frame_links", "check_child_parent_keys", "check_module_references",
+    "check_role_conditions", "check_app_access_condition",
 ]
 
 
@@ -734,6 +795,40 @@ def _role_condition(values, is_or=True, is_not=False, comparison="Equal"):
             } for v in values],
         },
     }
+
+
+def _header_detail(parent_key):
+    """親（`ListField` で子を絞る）と子（親 FK を持つ）の 2 モジュール。
+
+    **実物と同じ形で作る**——親の絞り込みは `SearchCondition.Condition` の中に
+    入れ子で入っており、そこから親 FK の名前を拾えることがこの検査の要である。
+    `parent_key` が `None` なら、子に親 FK が無い姿になる。
+    """
+    header = {
+        "Name": "Header",
+        "Fields": [{
+            "Name": "Rows",
+            "TypeFullName": "X.ListFieldDesign",
+            "SearchCondition": {
+                "ModuleName": "Row",
+                "Condition": {
+                    "TypeFullName": "X.MultiMatchCondition",
+                    "Children": [{
+                        "TypeFullName": "X.FieldMatchCondition",
+                        "Children": [{
+                            "SearchTargetVariable": "Parent.Value",
+                            "Comparison": "Equal",
+                            "Variable": "Id.Value",
+                            "TypeFullName": "X.FieldVariableMatchCondition",
+                        }],
+                    }],
+                },
+            },
+        }],
+    }
+    row = {"Name": "Row", "Fields": [f for f in [parent_key] if f is not None]}
+    return [(_self_path(name="Header.mod.json"), header),
+            (_self_path(name="Row.mod.json"), row)]
 
 
 def _self_path(app="Accounting", name="SelfTest.mod.json"):
@@ -789,6 +884,27 @@ def selftest():
     ], findings)
     if (SEV_ERROR, "F-17") not in [(f[0], f[1]) for f in findings]:
         failures.append("フレーム跨ぎの登録漏れ: F-17 が鳴らない")
+
+    # ヘッダ＋明細の親 FK（D-17）。**壊れ方は 3 通りある。**
+    for label, key, expected in [
+        ("参照フィールド", {"Name": "Parent", "TypeFullName": "X.LinkFieldDesign"}, (SEV_ERROR, "D-17")),
+        ("手入力できる識別子",
+         {"Name": "Parent", "TypeFullName": "X.IdFieldDesign", "IsManualInput": True},
+         (SEV_ERROR, "D-17")),
+        ("親 FK が無い", None, (SEV_ERROR, "D-17")),
+    ]:
+        findings = []
+        check_child_parent_keys(_header_detail(key), findings)
+        if expected not in [(f[0], f[1]) for f in findings]:
+            failures.append(f"親 FK（{label}）: D-17 が鳴らない（出たのは "
+                            f"{[(f[0], f[1]) for f in findings]}）")
+
+    findings = []
+    check_child_parent_keys(
+        _header_detail({"Name": "Parent", "TypeFullName": "X.IdFieldDesign",
+                        "IsManualInput": False}), findings)
+    if findings:
+        failures.append(f"正しい親 FK で鳴った: {[(f[0], f[1]) for f in findings]}")
 
     # 部品をまたぐ参照の向き（D-21）。JSON の 2 つのキーとスクリプトの 2 つの形を見る。
     for label, modules, scripts in [
