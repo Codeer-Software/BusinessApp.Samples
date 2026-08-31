@@ -499,6 +499,120 @@ public class JournalSubmitGateTests
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
     }
 
+    // --- 削除（ADR-0027 §4。一覧の削除アイコンが無くなり、詳細画面のボタンへ移した）---
+
+    /// <summary>
+    /// <b>計上済みの伝票は削除できない。</b> DDL のトリガも拒むが、そこまで行かせない
+    /// （行かせると生の SQLite の例外が利用者に出る。qa/01 F-16）。
+    /// </summary>
+    [Fact]
+    public async Task 計上済みの伝票の削除は関門が止める()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+        server.InsertLine(id, 1, "debit", "1100", 1000);
+        server.InsertLine(id, 2, "credit", "2100", 1000);
+        await PostSavedAsync(server, id);
+
+        var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value))], NothingSaved));
+
+        Assert.StartsWith(JournalPostingRejectedException.DeletionHeadline, thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("伝票番号 1", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains(JournalViolationCodes.AlreadyPosted, thrown.Violations.Select(v => v.Code));
+        Assert.Equal(1, server.Scalar<long>("select count(*) from journal_entries"));
+    }
+
+    /// <summary>締め済みの会計期間に属する下書きは削除できない。</summary>
+    [Fact]
+    public async Task 締め済みの期間の下書きの削除は関門が止める()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+        server.Execute("update accounting_periods set status = 'closed' where start_date <= '2026-08-24 00:00:00' and '2026-08-24 00:00:00' <= end_date");
+
+        var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value))], NothingSaved));
+
+        Assert.StartsWith(JournalPostingRejectedException.DeletionHeadline, thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("2026-08-24", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains(JournalViolationCodes.PeriodClosed, thrown.Violations.Select(v => v.Code));
+    }
+
+    /// <summary>会計年度を締めても同じ（期間だけを見ていると素通りする）。</summary>
+    [Fact]
+    public async Task 締め済みの年度の下書きの削除も関門が止める()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+        server.Execute("update fiscal_years set status = 'closed'");
+
+        var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value))], NothingSaved));
+
+        Assert.Contains(JournalViolationCodes.PeriodClosed, thrown.Violations.Select(v => v.Code));
+    }
+
+    /// <summary>開いている期間の下書きは、そのまま保存（＝削除）へ渡す。</summary>
+    [Fact]
+    public async Task 開いている期間の下書きの削除は通る()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+
+        await server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value))], NothingSaved);
+    }
+
+    /// <summary>
+    /// <b>会計期間が無い日の下書きは止めない。</b> 締めようもない期間で消せなくすると、
+    /// 期間の設定を直すまで消せない下書きが残る。
+    /// </summary>
+    [Fact]
+    public async Task 会計期間が無い日の下書きの削除は通る()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+        server.Execute("delete from accounting_periods");
+
+        await server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value))], NothingSaved);
+    }
+
+    /// <summary>保存されていない行（仮の識別子・消えている行）は、消しても帳簿が動かない。</summary>
+    [Theory]
+    [InlineData(TemporaryId)]
+    [InlineData("999")]
+    public async Task 保存されていない伝票の削除は通る(string id)
+    {
+        using var server = new AccountingServer();
+
+        await server.SubmitAsync([SubmitData.Deleting(id)], NothingSaved);
+    }
+
+    /// <summary>
+    /// <b>削除が無い保存では、会計年度と期間を読みに行かない。</b>
+    /// いちばん多い経路（下書き保存）に無駄な往復を足さないための早期 return を固定する。
+    /// </summary>
+    [Fact]
+    public async Task 削除が無い保存はマスタを読みに行かない()
+    {
+        using var server = new AccountingServer();
+        var entry = SubmitData.NewEntry(TemporaryId, status: "draft");
+        var readPeriods = 0;
+        server.FailBeforeStatement = sql =>
+        {
+            if (sql.Contains("accounting_periods", StringComparison.Ordinal))
+            {
+                readPeriods++;
+            }
+
+            return null;
+        };
+
+        await server.SubmitAsync([SubmitData.Adding(entry)], server.Saving(entry, Balanced));
+
+        Assert.Equal(0, readPeriods);
+    }
+
     /// <summary>保存が済んでいる下書きを、保存経路を通して計上させる。</summary>
     private static Task PostSavedAsync(AccountingServer server, JournalEntryId id)
     {

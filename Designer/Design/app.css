@@ -58,3 +58,10 @@
 .section-heading {
     font-weight: 600;
 }
+
+/* 取り消された・訂正された伝票であることの断り（ADR-0027 §3）。
+   画面のいちばん上に出す。文言は LabelField が組み立てる。 */
+.amendment-notice {
+    color: #b02a37;
+    font-weight: 600;
+}

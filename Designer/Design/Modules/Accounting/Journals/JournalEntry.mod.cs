@@ -45,13 +45,17 @@ void ApplyPostedLock()
     //            計上まで進み、ボタンのラベルが嘘になる
     //   会計年度 計上日から決まる（下の SelectFiscalYear）。選んでも上書きされ、
     //            食い違えばサーバが差し戻す
-    //   種別     保存したあとは変えられない（サーバの関門と DB のトリガが拒む）。
-    //            新規のうちだけ選ばせる
+    //   種別     **6 値のうち、利用者が選べるものが 1 つも無い**（qa/02 R26-25）。
+    //            取消・訂正はサーバが作るもので、期首残高・決算振替・繰越は未実装なので、
+    //            選ぶと必ず差し戻される。保存したあとは変えられもしない（関門とトリガが拒む）。
+    //            **候補を絞る代わりに表示専用にしてある**——Candidates で絞ると
+    //            デザイン enum を捨てることになり、既にある取消・訂正の伝票の表示が壊れる。
+    //            種別が増えた日に、ここを戻す
     //
     // **これは見た目の話で、守りではない**（qa/01 F-24）。守るのはサーバ側の関門である。
     Status.IsViewOnly = true;
     FiscalYear.IsViewOnly = true;
-    EntryType.IsViewOnly = !IsNewData;
+    EntryType.IsViewOnly = true;
 
     // **計上済みの画面に必須の印の説明を出さない。** 計上済みは書き込み条件から外れていて
     // 画面全体が読むだけになる（qa/01 F-14）ので、「必須項目です」は
@@ -68,6 +72,13 @@ void ApplyPostedLock()
     // 下書きは自由に直せるし、いらなければ削除すればよい。
     CorrectButton.IsVisible = false;
     ReverseButton.IsVisible = false;
+
+    // **削除は下書きにだけ出す。** 計上済みは不変（ADR-0004）で、取消か訂正で表す。
+    // 新規（まだ保存していない）伝票にも出さない——消すものがまだ無い。
+    DeleteButton.IsVisible = !posted && !IsNewData;
+
+    // 取り消された・訂正されたことの断り。計上済みを開いたときにサーバが答える。
+    AmendmentNoticeLabel.IsVisible = false;
 
     // **押せる状態に戻す。** 計上済みの伝票は書き込み条件（Status = draft）から外れており、
     // そのままだとボタンが残ったまま無反応になる（qa/01 D-01・F-14）。
@@ -93,12 +104,71 @@ void ApplyAmendmentAvailability()
     CorrectButton.IsVisible = $"{result.JsonObject.canCorrect}".ToLower() == "true";
     ReverseButton.IsVisible = $"{result.JsonObject.canReverse}".ToLower() == "true";
 
+    var noticed = ShowAmendmentNotice(
+        $"{result.JsonObject.reversalEntryNo}", $"{result.JsonObject.correctionEntryNo}");
+
     // 両方できないなら、その理由を出す。押せないボタンを探させない。
-    if (!CorrectButton.IsVisible && !ReverseButton.IsVisible)
+    //
+    // **ただし、上の断りが同じことを言っているときは繰り返さない**（docs/09 §2）。
+    // 取り消し済みの伝票では理由も「既に取り消されています」なので、
+    // 画面の 2 か所に同じ事実が並ぶ。**理由が要るのは、断りに出せない理由のとき**——
+    // 会計期間が無い・種別が取消の対象外、といった場合である。
+    if (!CorrectButton.IsVisible && !ReverseButton.IsVisible && !noticed)
     {
         var reason = $"{result.JsonObject.message}";
         if (!string.IsNullOrEmpty(reason)) TotalsLabel.Text = $"{TotalsLabel.Text}　（{reason}）";
     }
+}
+
+// 「この伝票は取り消されています」を画面のいちばん上に出す（ADR-0027 §3）。
+//
+// **一覧と同じ事実を、詳細でも見せる。** 一覧は取消・訂正の有無を SQL で逆引きしているが、
+// 詳細まで来て何も書いていないと、「取り消された伝票を見ている」ことに気づかないまま読める。
+//
+// **無いことは空文字で返る**（サーバが数値ではなく文字列で返す。JournalAmendmentEndpoint）。
+// 判定を 1 つの見方（空かどうか）に揃えてある。
+// **引数は文字列で受ける。** CLB のスクリプトはツリーウォーク型インタプリタなので、
+// 枠組みの型（WebApiResult）を引数に取る形は避け、読み出しは呼び出し側に寄せる。
+// **戻り値は「断りを出したか」。** 呼び出し側が、同じ事実を理由としてもう一度書かないために使う。
+bool ShowAmendmentNotice(string reversalNo, string correctionNo)
+{
+    if (!string.IsNullOrEmpty(correctionNo))
+    {
+        // 訂正されている伝票は、必ず取り消されてもいる。**両方の行き先を出す。**
+        AmendmentNoticeLabel.Text =
+            $"この伝票は訂正されています（取消伝票 {reversalNo} ／ 訂正の伝票 {correctionNo}）。";
+    }
+    else if (!string.IsNullOrEmpty(reversalNo))
+    {
+        AmendmentNoticeLabel.Text = $"この伝票は取り消されています（取消伝票 {reversalNo}）。";
+    }
+
+    AmendmentNoticeLabel.IsVisible = !string.IsNullOrEmpty(AmendmentNoticeLabel.Text);
+    return AmendmentNoticeLabel.IsVisible;
+}
+
+// 下書きを削除する。
+//
+// **一覧から詳細へ移した操作である**（ADR-0027 §4。一覧をクエリモジュールにしたので
+// 標準の削除アイコンが無くなった。2026-08-28 開発者が承認）。
+//
+// **会計の判断はここに無い。** 計上済みか・締め済みの期間かはサーバ側の関門
+// （JournalSubmitGate）が見て、差し戻しの文言まで返す（ADR-0008）。
+// ここでするのは、確認を取ることと、消えたら一覧へ戻ることだけである。
+void DeleteButton_OnClick()
+{
+    if (MessageBox.ShowWithTitle(
+            "削除の確認",
+            "この下書きを削除します。元に戻せません。よろしいですか？", "はい", "いいえ") != "はい")
+    {
+        return;
+    }
+
+    // **戻り値を必ず見る。** 子（明細）を持つ親の削除は、子側の失敗で false を返して
+    // **静かに終わる**（qa/01 C-03）。関門が止めた場合の理由は CLB がトーストに出す。
+    if (this.Delete() != true) return;
+
+    NavigationService.NavigateTo(NavigationService.GetModuleUrl("JournalEntryBoard"));
 }
 
 // 計上日を変えたら会計年度を付け直す。

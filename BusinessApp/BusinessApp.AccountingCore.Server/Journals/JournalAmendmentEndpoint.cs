@@ -37,7 +37,7 @@ public sealed class JournalAmendmentEndpoint(IDbAccessor accessor, JournalAmendm
         => RunAsync(originalEntryId, async originalId =>
         {
             var available = await service.DescribeAsync(originalId);
-            return AmendResult.Available(available.CanReverse, available.CanCorrect, available.Reason);
+            return AmendResult.Available(available);
         });
 
     /// <summary>取り消す。反対仕訳を作って計上まで進め、その伝票の識別子を返す。</summary>
@@ -113,6 +113,13 @@ public record AmendRequest([property: JsonPropertyName("originalEntryId")] strin
 /// <param name="Violations">差し戻しの内訳。画面はコードで分岐できる。</param>
 /// <param name="CanReverse">取り消せるか（<see cref="Available"/> のときだけ意味を持つ）。</param>
 /// <param name="CanCorrect">訂正できるか（<see cref="Available"/> のときだけ意味を持つ）。</param>
+/// <param name="ReversalEntryNo">
+/// 既に取り消されているなら、その取消伝票の伝票番号。無ければ空文字。
+/// <b>数値ではなく文字列で返す</b>——<c>originalEntryId</c> を文字列で受けているのと同じ理由で、
+/// CLB のスクリプトは値を動的に扱い、<c>null</c> を読ませると型名が画面に出る（qa/01 K-01 の型）。
+/// 空文字なら「無い」と、画面が 1 つの見方で判定できる。
+/// </param>
+/// <param name="CorrectionEntryNo">既に訂正されているなら、その再計上の伝票番号。無ければ空文字。</param>
 public record AmendResult(
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("openEntryId")] long OpenEntryId,
@@ -120,7 +127,9 @@ public record AmendResult(
     [property: JsonPropertyName("message")] string Message,
     [property: JsonPropertyName("violations")] IReadOnlyList<AmendViolation> Violations,
     [property: JsonPropertyName("canReverse")] bool CanReverse = false,
-    [property: JsonPropertyName("canCorrect")] bool CanCorrect = false)
+    [property: JsonPropertyName("canCorrect")] bool CanCorrect = false,
+    [property: JsonPropertyName("reversalEntryNo")] string ReversalEntryNo = "",
+    [property: JsonPropertyName("correctionEntryNo")] string CorrectionEntryNo = "")
 {
     /// <summary>成功したときの文字列（画面はこれと一致するかで判定する）。</summary>
     public const string Succeeded = "ok";
@@ -134,9 +143,22 @@ public record AmendResult(
     public static AmendResult Rejected(string message, IReadOnlyList<AmendViolation> violations)
         => new(RejectedStatus, 0, 0, message, violations);
 
-    /// <summary>できること。<b>成否ではないので status は ok</b> で、内容は 2 つの真偽値で表す。</summary>
-    public static AmendResult Available(bool canReverse, bool canCorrect, string reason)
-        => new(Succeeded, 0, 0, reason, [], canReverse, canCorrect);
+    /// <summary>
+    /// できること。<b>成否ではないので status は ok</b> で、内容は 2 つの真偽値で表す。
+    /// </summary>
+    /// <remarks>
+    /// <b>調べた結果をそのまま受け取る。</b> 項目を 1 つずつ渡す形にすると、
+    /// 調べる側に項目が増えたときに<b>ここで落としても誰も気づかない</b>
+    /// （画面には既定値が届き、取消済みの断りが黙って消える）。
+    /// </remarks>
+    public static AmendResult Available(AmendmentAvailability available)
+        => new(Succeeded, 0, 0, available.Reason, [],
+               available.CanReverse, available.CanCorrect,
+               EntryNoText(available.ReversalEntryNo), EntryNoText(available.CorrectionEntryNo));
+
+    /// <summary>伝票番号を画面へ渡す形にする。<b>無いことは空文字で表す</b>（上の注記）。</summary>
+    private static string EntryNoText(int? entryNo)
+        => entryNo?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
 }
 
 /// <summary>差し戻しの内訳 1 件。</summary>

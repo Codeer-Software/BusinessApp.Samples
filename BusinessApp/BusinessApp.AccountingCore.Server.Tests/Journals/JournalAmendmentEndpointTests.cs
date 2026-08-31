@@ -285,7 +285,8 @@ public class JournalAmendmentEndpointTests
         // **名前を並び順ごと固定する。** スクリプトはキーを文字列で引くので、
         // 1 つ落ちても改名されてもコンパイルは通り、画面が黙って値を読めなくなる。
         Assert.Equal(
-            ["status", "openEntryId", "reversalId", "message", "violations", "canReverse", "canCorrect"],
+            ["status", "openEntryId", "reversalId", "message", "violations", "canReverse", "canCorrect",
+             "reversalEntryNo", "correctionEntryNo"],
             root.EnumerateObject().Select(property => property.Name));
         Assert.Equal(
             ["code", "message", "lineNo"],
@@ -308,11 +309,15 @@ public class JournalAmendmentEndpointTests
         Assert.Equal(2, succeeded.RootElement.GetProperty("openEntryId").GetInt64());
         Assert.Equal(1, succeeded.RootElement.GetProperty("reversalId").GetInt64());
 
-        using var available = JsonDocument.Parse(
-            JsonSerializer.Serialize(AmendResult.Available(true, false, "理由")));
+        using var available = JsonDocument.Parse(JsonSerializer.Serialize(
+            AmendResult.Available(new AmendmentAvailability(true, false, "理由", 12, null))));
         Assert.Equal("ok", available.RootElement.GetProperty("status").GetString());
         Assert.True(available.RootElement.GetProperty("canReverse").GetBoolean());
         Assert.False(available.RootElement.GetProperty("canCorrect").GetBoolean());
+
+        // **無いことは空文字で表す**（画面が 1 つの見方で判定できるように）。
+        Assert.Equal("12", available.RootElement.GetProperty("reversalEntryNo").GetString());
+        Assert.Equal(string.Empty, available.RootElement.GetProperty("correctionEntryNo").GetString());
     }
 
     /// <summary>

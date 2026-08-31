@@ -56,7 +56,7 @@ public sealed class JournalAmendmentService(
         var original = await entryStore.FindAsync(originalId);
         if (original is null)
         {
-            return new AmendmentAvailability(false, false, "対象の伝票が見つかりません。");
+            return AmendmentAvailability.None("対象の伝票が見つかりません。");
         }
 
         var context = await masterLoader.LoadAsync();
@@ -64,8 +64,8 @@ public sealed class JournalAmendmentService(
 
         if (context.Calendar.ResolvePeriod(today) is not AccountingPeriod period)
         {
-            return new AmendmentAvailability(
-                false, false, $"今日（{today:yyyy-MM-dd}）に対応する会計期間がありません。");
+            return AmendmentAvailability.None(
+                $"今日（{today:yyyy-MM-dd}）に対応する会計期間がありません。");
         }
 
         var reversedOn = await entryStore.FindReversedOnAsync(original.Id!.Value);
@@ -73,11 +73,18 @@ public sealed class JournalAmendmentService(
             original, today, timeProvider.GetUtcNow(),
             new ReversalContext(reversedOn is not null, period.FiscalYearId));
 
+        // **取り消された・訂正されたことは、できないことの理由とは別に返す。**
+        // 理由の文言に混ぜると画面が拾い分けられず、一覧（取消伝票の番号を出す）と
+        // 詳細で見えるものが食い違う（ADR-0027 §3）。
+        var amendments = await entryStore.FindAmendmentEntryNosAsync(original.Id!.Value);
+
         // **訂正は「取消 ＋ 再計上」なので、取り消せる伝票と訂正できる伝票は今のところ同じである。**
         // 「既に訂正されている」を別に見る必要は無い——訂正があるなら必ず取消もあるので、
         // 取消の判定（既に取り消されている）で先に落ちる。
         // 2 つの値に分けてあるのは、片方だけできる状態が将来生まれうるからである。
-        return new AmendmentAvailability(reversal.Created, reversal.Created, Describe(reversal));
+        return new AmendmentAvailability(
+            reversal.Created, reversal.Created, Describe(reversal),
+            amendments.ReversalEntryNo, amendments.CorrectionEntryNo);
     }
 
     /// <summary>できない理由。<b>できるときは空</b>にして、画面が出し分けなくてよいようにする。</summary>
@@ -218,7 +225,15 @@ public sealed class JournalAmendmentService(
 /// <param name="CanReverse">取り消せるか。</param>
 /// <param name="CanCorrect">訂正できるか。</param>
 /// <param name="Reason">できない理由。できるときは空文字。</param>
-public readonly record struct AmendmentAvailability(bool CanReverse, bool CanCorrect, string Reason);
+/// <param name="ReversalEntryNo">既に取り消されているなら、その取消伝票の伝票番号。</param>
+/// <param name="CorrectionEntryNo">既に訂正されているなら、その再計上の伝票番号。</param>
+public readonly record struct AmendmentAvailability(
+    bool CanReverse, bool CanCorrect, string Reason,
+    int? ReversalEntryNo = null, int? CorrectionEntryNo = null)
+{
+    /// <summary>どちらもできない（対象が無い・期間が無い）。<b>取消・訂正の番号も分からない。</b></summary>
+    public static AmendmentAvailability None(string reason) => new(false, false, reason);
+}
 
 /// <summary>訂正を始めた結果。画面は再計上の下書きを開く。</summary>
 /// <param name="ReversalId">計上した取消の識別子。</param>

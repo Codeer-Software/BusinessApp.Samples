@@ -175,6 +175,42 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
     }
 
     /// <summary>
+    /// この原仕訳を取り消した・訂正した、<b>計上済みの</b>伝票の番号。無ければ null。
+    /// </summary>
+    /// <remarks>
+    /// <para>詳細画面が「この伝票は取り消されています（取消伝票 12）」と出すために使う
+    /// （ADR-0027 §3）。<b>一覧は同じ事実を SQL で引く</b>——どちらも
+    /// 「取消伝票のほうが原仕訳を指している」逆引きで、原仕訳の行は自分が
+    /// 取り消されたことを知らない（ADR-0027 §2）。</para>
+    /// <para><b>下書きは数えない。</b> 訂正の再計上は下書きのまま返る（ADR-0015）ので、
+    /// 数えると<b>訂正の途中で放棄した伝票が「訂正済み」に見える</b>。
+    /// 途中で放棄して取消だけが残るのは正当な状態である。</para>
+    /// <para>計上済みの取消・訂正は原仕訳 1 本につき 1 本まで（部分 UNIQUE インデックス）なので、
+    /// どちらも多くとも 1 件しか無い。</para>
+    /// </remarks>
+    public async Task<AmendmentEntryNumbers> FindAmendmentEntryNosAsync(JournalEntryId originalId)
+        => new(
+            await AmendmentEntryNoAsync(
+                """
+                select entry_no from journal_entries
+                 where original_entry_id = @p1 and entry_type = 'reversal' and status = 'posted'
+                """,
+                originalId),
+            await AmendmentEntryNoAsync(
+                """
+                select entry_no from journal_entries
+                 where original_entry_id = @p1 and entry_type = 'correction' and status = 'posted'
+                """,
+                originalId));
+
+    private async Task<int?> AmendmentEntryNoAsync(string sql, JournalEntryId originalId)
+    {
+        var rows = await QueryAsync(sql, originalId.Value);
+
+        return rows.Count == 0 ? null : DbValue.ToNullableInt(rows[0]["entry_no"]);
+    }
+
+    /// <summary>
     /// 保存済みの種別だけを読む。無ければ null。
     /// </summary>
     /// <remarks>
@@ -367,3 +403,15 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
     /// </remarks>
     private static ParamAndRawDbTypeName Param(object? value) => new() { Value = value };
 }
+
+/// <summary>
+/// 原仕訳を取り消した／訂正した、<b>計上済みの</b>伝票の番号。それぞれ無ければ null。
+/// </summary>
+/// <remarks>
+/// 2 つを 1 つの型で返すのは、<b>画面が「取消だけ」と「訂正まで済んでいる」を
+/// 出し分ける</b>ためである（ADR-0027 §3）。訂正されている伝票は必ず取り消されてもいるので、
+/// 片方だけを返すと一覧（訂正済みと出す）と詳細（取消済みと出す）で言うことが食い違う。
+/// </remarks>
+/// <param name="ReversalEntryNo">取り消した反対仕訳の伝票番号。</param>
+/// <param name="CorrectionEntryNo">訂正の再計上の伝票番号。</param>
+public readonly record struct AmendmentEntryNumbers(int? ReversalEntryNo, int? CorrectionEntryNo);
