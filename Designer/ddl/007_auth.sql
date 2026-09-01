@@ -6,7 +6,7 @@
 -- `WHERE user_name = @Id` の 1 件を引いてハッシュを照合するだけである。
 --
 -- **それでも正典に置く理由。** 役割の列（下の 4 本）は本プロジェクトが足すもので、
--- **`app_users` に間借りする**（ADR-0026 §1）。CLB の権限条件は
+-- **`app_users` に間借りする**（ADR-0034）。CLB の権限条件は
 -- **ログインユーザーのレコードの列しか参照できない**（関連テーブルを辿れない。qa/01 F-21）ので、
 -- 別テーブルに逃がすことができない。正典が知らないままにすると、
 -- **間借りの列が欠けていても・型が違っても、誰も気づかない**——マイグレーションの同値検査も
@@ -22,7 +22,7 @@ CREATE TABLE app_users (
     hash                        TEXT NOT NULL,
     salt                        TEXT NOT NULL,
 
-    -- ここから下が本プロジェクトの間借り（ADR-0026 §1・ADR-0032）。
+    -- ここから下が本プロジェクトの間借り（ADR-0034・ADR-0032）。
     -- 新しい列は末尾に置く（migrations/README の規約。ALTER TABLE ADD COLUMN と同値になる）。
 
     -- **このアプリに入れるか。** `app.clprj` の「アプリ全体のアクセス条件」がこれを見る
@@ -33,7 +33,7 @@ CREATE TABLE app_users (
     -- 偽を既定にすると、その `admin` が生まれた瞬間に締め出される。
     can_access_app              INTEGER NOT NULL DEFAULT 1 CHECK (can_access_app IN (0, 1)),
 
-    -- 権限の軸は**機能（部品）ごとに直交**する（開発者の整理。2026-08-28。ADR-0026 §1 の追記）。
+    -- 権限の軸は**機能（部品）ごとに直交**する（開発者の整理。2026-08-28。ADR-0034）。
     -- システム管理の権限を業務側の条件に混ぜない。
     is_sysadmin                 INTEGER NOT NULL DEFAULT 0 CHECK (is_sysadmin IN (0, 1)),
 

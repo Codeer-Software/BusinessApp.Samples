@@ -42,7 +42,7 @@ public class EnumConsistencyTests
         { "登録情報の出所",            "partner_invoice_registrations.source",     "RegistrationSources",    null },
         // C# は null: 権限を判定するのは CLB（app.clprj とフレームの条件）であって C# ではない。
         // 会計コアが役割を読む場面は無い——読むと「取引先を触るのに会計権限を確かめる」形になり、
-        // 依存方向が逆になる（ADR-0026 §1 の追記③）。
+        // 依存方向が逆になる（ADR-0034）。
         { "会計の役割",                "app_users.accounting_role",           "AccountingRoles",   null },
         { "取引先の役割",              "app_users.partner_role",              "PartnerRoles",      null },
     };

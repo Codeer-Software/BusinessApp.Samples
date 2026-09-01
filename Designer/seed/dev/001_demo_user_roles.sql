@@ -21,12 +21,12 @@ UPDATE app_users
  WHERE user_name = 'soumu_ippan';
 
 -- 経理責任者（総務部長。docs/02）。**担当の画面にも入れる**——
--- 階層は条件の OR で表す（ADR-0026 §1 の追記②）。
+-- 階層は条件の OR で表す（ADR-0034）。
 UPDATE app_users
    SET can_access_app = 1, is_sysadmin = 0, accounting_role = 'manager', partner_role = 'editor'
  WHERE user_name = 'soumu_bucho';
 
--- 情報システム管理者。**会計は触れない**（開発者の決定。2026-08-28。ADR-0026 の帰結）。
+-- 情報システム管理者。**会計は触れない**（開発者の決定。2026-08-28。ADR-0034 の帰結）。
 -- admin は CLB がユーザーテーブルの空のときに作るので、ここでは役割だけを付ける。
 UPDATE app_users
    SET can_access_app = 1, is_sysadmin = 1, accounting_role = NULL, partner_role = NULL
