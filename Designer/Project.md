@@ -4,9 +4,9 @@ status: current
 scope: 会計コア
 audience: [開発]
 growth: append
-updated: 2026-08-31
+updated: 2026-09-01
 supersedes: []
-related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/decisions/0026-画面は役割で分け玄関のページフレームを置く.md]
+related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md]
 ---
 # Project.md（CLB デザインプロジェクト固有ルール）
 
@@ -45,7 +45,7 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/d
 アプリの中の分け方（`Books/` `Journals/` `Masters/` `Settings/`）はその下に置く。
 
 - **フォルダ（アプリ）と PageFrame（役割ごとの導線）は別の軸である。一致させない**
-  （[ADR-0026](../docs/decisions/0026-画面は役割で分け玄関のページフレームを置く.md)）。
+  （[ADR-0035 §2](../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md)）。
   前回プロジェクトは両者を一致させようとして、フレームを 7 回作り直したうえに
   「勘定科目は業務マスタのフレームだがシステムマスタのフォルダ」という食い違いが残った
 - **モジュール名はデザイン全体でフラットな名前空間**なので、フォルダを動かしても参照は壊れない。

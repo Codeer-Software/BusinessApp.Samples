@@ -133,7 +133,7 @@ def check_module(path, doc, findings):
 
     # D-24 データを持つモジュールに書き込み条件が書かれているか（qa/01 F-18）。
     # **空＝全開放である。** 前回プロジェクトは 104 本になってから全数監査をして穴を 28 本見つけた
-    # （ADR-0026 の教訓）。新しいモジュールは条件が空で生まれるので、増えた日に鳴らす。
+    # （ADR-0026 の教訓。lint-docs:ignore 経緯）。新しいモジュールは条件が空で生まれるので、増えた日に鳴らす。
     if doc.get("DbTable") and not (doc.get("UserWriteCondition") or {}).get("ModuleName"):
         findings.append((SEV_ERROR, "D-24", relative(path),
                          f"{module}: データを持つモジュールに UserWriteCondition が要る"
@@ -365,7 +365,7 @@ def check_cross_frame_links(frames, findings, modules=(), scripts=()):
     """遷移先での登録漏れ（qa/01 F-17）。
 
     **登録が無いと画面が静かに真っ白になる。** designcheck は検出しない。
-    前回プロジェクトは繰り返し踏んで静的検査を自作した（ADR-0026 §6）。
+    前回プロジェクトは繰り返し踏んで静的検査を自作した（ADR-0035 §3）。
 
     **見るのはフレームのサイドバーだけではない。** 遷移は 3 通りの形で書かれる。
 
@@ -451,7 +451,7 @@ def check_cross_frame_links(frames, findings, modules=(), scripts=()):
 
 
 def check_role_conditions(modules, frames, findings):
-    """役割で絞る条件が、階層を **OR-of-Equal** で表しているか（ADR-0026 §1 の追記）。
+    """役割で絞る条件が、階層を **OR-of-Equal** で表しているか（ADR-0034）。
 
     **階層方式の唯一の弱点は書き忘れである。** 見るのは 3 つ。
 
@@ -525,7 +525,7 @@ def check_role_conditions(modules, frames, findings):
                 if missing:
                     findings.append((SEV_ERROR, "D-22", relative(path),
                                      f"{where}: {variable} を {sorted(values)} で絞るなら、"
-                                     f"上位の {missing} も OR で入れる（ADR-0026 §1 の追記②）"))
+                                     f"上位の {missing} も OR で入れる（ADR-0034）"))
 
             groups = []
             groups_of(condition, groups)
