@@ -8,6 +8,10 @@ using BusinessApp.TestSupport;
 /// サーバ層のどこが<b>取引先部品を名指ししてよいか</b>（ADR-0025 §4・ADR-0029 §2）。
 /// </summary>
 /// <remarks>
+/// <para><b>見るのは部品の境界をまたぐ参照だけ</b>である。サーバ層の中の向き
+/// （<c>Journals</c> ↔ <c>Settings</c> ↔ <c>Shared</c>）は、いま誰も見ていない——
+/// 純粋層の同名クラスが持つ 4 種の検査のうち 1 種だけをここに置いている
+/// （2026-09-02 の自己レビュー。表を足すかは、サーバ層のフォルダが増えた日に決める）。</para>
 /// <para><b>純粋層にしか規則が無かった。</b> <c>AccountingCore.Tests</c> の
 /// <c>ModuleDependencyTests</c> は「<c>Journals</c> だけが取引先部品を知ってよい」を守っているが、
 /// 見ているのは <c>BusinessApp.AccountingCore</c> だけである。**サーバ層は素通りしていた**——
@@ -72,12 +76,18 @@ public class ModuleDependencyTests
         Assert.True(stale.Count == 0, string.Join(Environment.NewLine, stale));
     }
 
-    /// <summary>検査が「1 件も見つからず素通り」で緑にならないための土台（qa/03 L-15）。</summary>
+    /// <summary>
+    /// 読む対象そのものを見つけられている（qa/03 L-15）。
+    /// </summary>
+    /// <remarks>
+    /// <b>参照が 1 件以上あることは上の「腐り」検査が既に要求している</b>ので、ここでは重ねない
+    /// （2026-09-02 の自己レビュー）。ここが守るのは<b>ソースを 1 本も読めていない</b>状態である。
+    /// </remarks>
     [Fact]
-    public void 取引先部品への参照を実際に見つけられている()
+    public void サーバ層のソースを読めている()
     {
         Assert.True(Directory.Exists(SourceProject), "BusinessApp.AccountingCore.Server が見つからない");
-        Assert.NotEmpty(PartnerReferences());
+        Assert.NotEmpty(ProjectFiles());
     }
 
     /// <summary>取引先部品（<c>BusinessApp.Partners</c>）を名指ししているファイル。</summary>
@@ -95,7 +105,11 @@ public class ModuleDependencyTests
             var relative = Path.GetRelativePath(SourceProject, path);
             if (pattern.IsMatch(File.ReadAllText(path)))
             {
-                found.Add((Path.GetDirectoryName(relative) ?? string.Empty, relative));
+                // **先頭のフォルダで見る**（docstring の「粒度はフォルダ」どおり）。
+                // 相対パス全体をキーにすると、`Journals/Amendments/` を作った日に誤検知する
+                // （2026-09-02 の自己レビュー）。
+                var segments = relative.Split(Path.DirectorySeparatorChar);
+                found.Add((segments.Length > 1 ? segments[0] : string.Empty, relative));
             }
         }
 

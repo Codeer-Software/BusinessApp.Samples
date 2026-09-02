@@ -181,6 +181,10 @@ public class QueryModuleTests
     [InlineData("select 1 order by date(fy.start_date), e.fiscal_year_id", "fiscal_year_id")]
     // **窓関数の中の違反**（qa/03 L-19 の事故そのもの）。
     [InlineData("select sum(x) over (partition by a order by e.fiscal_year_id) from t", "fiscal_year_id")]
+    // **注釈に括弧を書いた後ろに隠れた違反。** コメントを落とさないと、その `)` で節が切れる。
+    [InlineData("select 1 order by a.code, -- 通達 8-14 (注)\n         e.fiscal_year_id", "fiscal_year_id")]
+    // **注釈に `LIMIT` の語を書いた後ろ。** 節を終わらせるキーワードと読むと切れる。
+    [InlineData("select 1 order by a.code, -- LIMIT は付けない\n         e.fiscal_year_id", "fiscal_year_id")]
     public void 順序に使えない代理キーを見つける(string sql, string expected)
         => Assert.Contains(expected, ForeignKeysInOrderBy(sql), StringComparer.Ordinal);
 
@@ -218,13 +222,18 @@ public class QueryModuleTests
     {
         var clauses = new List<string>();
 
-        foreach (Match start in Regex.Matches(sql ?? string.Empty, @"ORDER\s+BY\s+", RegexOptions.IgnoreCase))
+        // **コメントを落としてから走る**（2026-09-02 の自己レビュー）。このリポジトリの SQL は
+        // `-- 通達 8-14 (注)` のように注釈へ括弧を普通に書いており、落とさないと
+        // その `)` で節が切れて**2 項目め以降を永久に見なくなる**。
+        sql = WithoutSqlComments(sql ?? string.Empty);
+
+        foreach (Match start in Regex.Matches(sql, @"ORDER\s+BY\s+", RegexOptions.IgnoreCase))
         {
             var depth = 0;
             var index = start.Index + start.Length;
             var from = index;
 
-            while (index < sql!.Length)
+            while (index < sql.Length)
             {
                 var c = sql[index];
                 if (c == '(')
@@ -248,6 +257,21 @@ public class QueryModuleTests
 
         return clauses;
     }
+
+    /// <summary>
+    /// 行コメント（<c>--</c> から行末）を、<b>同じ長さの空白</b>に置き換える。
+    /// </summary>
+    /// <remarks>
+    /// 消さずに空白にするのは、<b>切り出した節の中身を元の並びのまま読むため</b>である。
+    /// <b>文字列リテラルの中の <c>--</c> は落とさない</b>——SQL の値そのものが消える。
+    /// </remarks>
+    internal static string WithoutSqlComments(string sql)
+        => Regex.Replace(
+            sql,
+            @"'[^'\n]*'|--[^\n]*",
+            match => match.Value.StartsWith("--", StringComparison.Ordinal)
+                ? new string(' ', match.Value.Length)
+                : match.Value);
 
     /// <summary><c>ORDER BY</c> 節を終わらせるキーワードが、この位置から始まっているか。</summary>
     private static bool IsClauseKeywordAt(string sql, int index)

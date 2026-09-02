@@ -757,12 +757,33 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     private static IEnumerable<SyntaxNode> ForeignDateFormats(SyntaxNode root)
         => root.DescendantNodes()
             .OfType<InterpolationFormatClauseSyntax>()
-            .Where(clause =>
-            {
-                var format = clause.FormatStringToken.ValueText;
-                return format.Contains("yyyy", StringComparison.Ordinal)
-                       && !format.Contains("yyyy/MM/dd", StringComparison.Ordinal);
-            });
+            .Where(clause => IsForeignDateFormat(clause.FormatStringToken.ValueText))
+            .Cast<SyntaxNode>()
+            .Concat(CultureLessDateFormats(root));
+
+    /// <summary>
+    /// 文化を指定せずに <c>ToString("…")</c> で日付を組み立てている箇所。
+    /// </summary>
+    /// <remarks>
+    /// <b>文字列補間だけを見ていると、いちばん自然な逃げ道が空いている</b>
+    /// （2026-09-02 の自己レビュー）。<c>date.ToString("yyyy年M月d日")</c> は
+    /// 利用者に見せる文言なのに、補間ではないので当たらなかった。
+    /// <b>第 2 引数に <see cref="System.Globalization.CultureInfo"/> を渡した形は機械に渡す値</b>
+    /// （SQL・CSV）なので、そちらは対象外にする——docs/09 §2-5 が決めた書き分けそのものである。
+    /// </remarks>
+    private static IEnumerable<SyntaxNode> CultureLessDateFormats(SyntaxNode root)
+        => root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Where(invocation =>
+                invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "ToString" }
+                && invocation.ArgumentList.Arguments.Count == 1
+                && invocation.ArgumentList.Arguments[0].Expression
+                    is LiteralExpressionSyntax { Token.ValueText: var format }
+                && IsForeignDateFormat(format));
+
+    private static bool IsForeignDateFormat(string format)
+        => format.Contains("yyyy", StringComparison.Ordinal)
+           && !format.Contains("yyyy/MM/dd", StringComparison.Ordinal);
 
     private static int Line(SyntaxNode node)
         => node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;

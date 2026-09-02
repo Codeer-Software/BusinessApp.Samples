@@ -15,7 +15,4 @@ public sealed class PartnerRegistrationRejectedException(string reason)
 {
     /// <summary>登録番号の登録を止めたときの見出し。</summary>
     public const string Headline = "登録できません";
-
-    /// <summary>見出しを除いた理由。</summary>
-    public string Reason { get; } = reason;
 }

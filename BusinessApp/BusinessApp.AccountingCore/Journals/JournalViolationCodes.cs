@@ -78,6 +78,15 @@ public static class JournalViolationCodes
     /// </remarks>
     public const string ChoiceNotStorable = "E-CHOICE";
 
+    /// <summary>
+    /// その操作を行う会計の役割を持っていない（ADR-0034）。
+    /// </summary>
+    /// <remarks>
+    /// <b>データの誤りではない。</b> 直すのは入力ではなく、誰が操作するかである。
+    /// 画面がこのコードで分岐して、押せないボタンを消せるようにしてある。
+    /// </remarks>
+    public const string NotAuthorized = "E-NOT-AUTHORIZED";
+
     /// <summary>計上日が取引日より前になっている。</summary>
     public const string PostingDateBeforeTransaction = "E-DATE-ORDER";
 

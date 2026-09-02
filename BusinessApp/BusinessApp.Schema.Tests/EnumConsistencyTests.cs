@@ -40,10 +40,14 @@ public class EnumConsistencyTests
         // C# は null: 登録の判定ロジック（tax_point で引く）はフェーズ 3、取込はフェーズ 6 で作る。
         { "登録の終わりの理由",        "partner_invoice_registrations.end_reason", "RegistrationEndReasons", null },
         { "登録情報の出所",            "partner_invoice_registrations.source",     "RegistrationSources",    null },
-        // C# は null: 権限を判定するのは CLB（app.clprj とフレームの条件）であって C# ではない。
-        // 会計コアが役割を読む場面は無い——読むと「取引先を触るのに会計権限を確かめる」形になり、
-        // 依存方向が逆になる（ADR-0034）。
-        { "会計の役割",                "app_users.accounting_role",           "AccountingRoles",   null },
+        // 権限を判定するのは原則として CLB（app.clprj とフレームとモジュールの条件）である。
+        // **会計の役割だけは C# にも列挙子がある**——取消・訂正の Web API（ADR-0016）は
+        // IDbAccessor を直に使い、モジュールの条件が 1 つも効かないので、
+        // そこだけは C# が自分の軸を確かめる（2026-09-02。qa/03 L-22）。
+        // **「依存方向が逆になる」は他の部品の軸を見る形の話**で（ADR-0034）、
+        // 会計コアが会計の役割を見るのはそれに当たらない。
+        { "会計の役割",                "app_users.accounting_role",           "AccountingRoles",   "BusinessApp.AccountingCore.Shared.AccountingRole" },
+        // 取引先の役割は CLB の条件だけが見る（C# から読む経路がまだ無い）。
         { "取引先の役割",              "app_users.partner_role",              "PartnerRoles",      null },
     };
 
@@ -105,11 +109,17 @@ public class EnumConsistencyTests
     /// 検査が「1 件も見つからず素通り」で緑にならないための土台。
     /// DDL の整形を変えた拍子に正規表現が外れると、この検査は静かに形骸化する。
     /// </summary>
+    /// <remarks>
+    /// <b>対応表と<u>過不足なく</u>一致することを見る</b>（2026-09-02 の自己レビュー）。
+    /// この読み手が使われるのは「余分が無い」向きの検査だけなので、
+    /// <b>網が 15 列から 1 列に縮んでも両方緑になる</b>——「1 件以上ある」では固定できない。
+    /// </remarks>
     [Fact]
     public void 区分値を持つ列を実際に見つけられている()
     {
-        Assert.NotEmpty(CheckConstraintColumns());
-        Assert.Contains("accounts.category", CheckConstraintColumns());
+        var declared = Mappings().Select(row => (string)row[1]!).OrderBy(c => c, StringComparer.Ordinal);
+
+        Assert.Equal(declared, CheckConstraintColumns().OrderBy(c => c, StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -130,6 +140,12 @@ public class EnumConsistencyTests
     [InlineData("CREATE TABLE t (\n    kind TEXT NOT NULL, -- 区分。a, b の 2 つ\n    CHECK (kind IN ('a', 'b'))\n);")]
     // **NULL を許す形**（冗長な 1 句を足すだけで抜けられないこと）。
     [InlineData("CREATE TABLE t (\n    kind TEXT CHECK (kind IS NULL OR kind IN ('a', 'b'))\n);")]
+    // **`IF NOT EXISTS`**（この書き方で表が丸ごと落ちない）。
+    [InlineData("CREATE TABLE IF NOT EXISTS t (\n    kind TEXT NOT NULL CHECK (kind IN ('a', 'b'))\n);")]
+    // **同じ列に、列をまたぐ規則の CHECK が併記されている**
+    // （値の集合はあくまで「その IN だけで閉じている」ほう。2026-09-02 に実データで崩れた）。
+    [InlineData("CREATE TABLE t (\n    kind TEXT NOT NULL CHECK (kind IN ('a', 'b')),\n"
+                + "    rate TEXT,\n    CHECK (kind IN ('a') OR rate IS NULL)\n);")]
     public void 書き方を変えても区分値の列を拾える(string ddl)
     {
         Assert.Equal(["t.kind"], CheckConstraintColumnsIn(ddl));
@@ -202,16 +218,29 @@ public class EnumConsistencyTests
     /// 拾えないと、<b>冗長な 1 句を足すだけで対応表の検査をすり抜けられる</b>
     /// （2026-08-31 に <c>app_users</c> の役割の列で実際に起きた）。
     /// <b>ただし 2 つの列名が違うときは拾わない</b>——別の列を見ている条件文である。
+    /// <para><b>その <c>IN</c> だけで閉じている CHECK に限る。</b>
+    /// <c>CHECK (taxation_type IN (…) OR rate_kind IS NULL)</c> は<b>列をまたぐ規則</b>であって、
+    /// 値の集合の定義ではない——同じ列に 2 つの CHECK があると、
+    /// <b>同じ列を 2 度拾って対応表との突き合わせが崩れる</b>（2026-09-02 に実際に崩れた）。</para>
     /// </remarks>
     private static IEnumerable<string> CheckedColumnsIn(string body)
-        => Regex.Matches(body, @"CHECK\s*\(\s*(?:(\w+)\s+IS\s+NULL\s+OR\s+)?(\w+)\s+IN\s*\(")
+        => ValueSetChecks(body)
             .Where(match => match.Groups[1].Value.Length == 0
                             || string.Equals(match.Groups[1].Value, match.Groups[2].Value, StringComparison.Ordinal))
-            .Select(match => match.Groups[2].Value);
+            .Select(match => match.Groups[2].Value)
+            .Distinct(StringComparer.Ordinal);
+
+    /// <summary>値の集合を定義している <c>CHECK</c>（その <c>IN</c> だけで閉じているもの）。</summary>
+    private static IEnumerable<Match> ValueSetChecks(string body)
+        => Regex.Matches(body, @"CHECK\s*\(\s*(?:(\w+)\s+IS\s+NULL\s+OR\s+)?(\w+)\s+IN\s*\(([^)]*)\)\s*\)")
+            .Cast<Match>();
 
     /// <summary><c>CREATE TABLE</c> ごとの (表の名前, 括弧の中身)。コメントは落としてある。</summary>
     private static IEnumerable<(string Table, string Body)> TableBodies(string ddl)
-        => Regex.Matches(WithoutComments(ddl), @"CREATE TABLE (\w+)\s*\((.*?)\n\s*\);", RegexOptions.Singleline)
+        => Regex.Matches(
+                WithoutComments(ddl),
+                @"CREATE TABLE (?:IF NOT EXISTS )?(\w+)\s*\((.*?)\n\s*\);",
+                RegexOptions.Singleline)
             .Select(match => (match.Groups[1].Value, match.Groups[2].Value));
 
     /// <summary>
@@ -292,13 +321,11 @@ public class EnumConsistencyTests
                 continue;
             }
 
-            var check = Regex.Match(
-                body,
-                $@"CHECK\s*\(\s*(?:{column}\s+IS\s+NULL\s+OR\s+)?{column}\s+IN\s*\(([^)]*)\)",
-                RegexOptions.Singleline);
-            if (check.Success)
+            var check = ValueSetChecks(body).FirstOrDefault(
+                m => string.Equals(m.Groups[2].Value, column, StringComparison.Ordinal));
+            if (check is not null)
             {
-                return [.. Regex.Matches(check.Groups[1].Value, @"'([^']+)'")
+                return [.. Regex.Matches(check.Groups[3].Value, @"'([^']+)'")
                     .Select(m => m.Groups[1].Value)
                     .OrderBy(v => v, StringComparer.Ordinal)];
             }

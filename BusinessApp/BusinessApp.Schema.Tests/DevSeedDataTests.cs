@@ -96,7 +96,15 @@ public class DevSeedDataTests
     public void 開発用の初期データを実際に見つけられている()
         => Assert.NotEmpty(TestDatabase.DevSeedFiles());
 
-    /// <summary>seed が名指ししている 3 人を入れてから流す。</summary>
+    /// <summary>
+    /// seed が名指ししている 3 人を入れてから流す。
+    /// </summary>
+    /// <remarks>
+    /// <b>4 列すべてを「期待の逆」で入れる</b>（2026-09-02 の自己レビュー）。
+    /// DDL の既定は <c>can_access_app = 1</c> / <c>is_sysadmin = 0</c> / 役割は NULL で、
+    /// これは <c>soumu_ippan</c> と <c>soumu_bucho</c> の期待と<b>ほぼ同じ</b>である——
+    /// 既定のまま入れると、seed の <c>SET</c> 句を消しても全部緑になる（qa/03 L-02 の縮退）。
+    /// </remarks>
     private static Microsoft.Data.Sqlite.SqliteConnection WithDevSeedApplied()
     {
         var db = TestDatabase.CreateWithSeed();
@@ -105,7 +113,11 @@ public class DevSeedDataTests
         {
             // ハッシュとソルトは NOT NULL。**値は使わない**（ログインはしない）。
             TestDatabase.Execute(db,
-                $"insert into app_users (user_name, name, hash, salt) values ('{(string)row[0]!}', 'X', 'h', 's')");
+                $"""
+                insert into app_users
+                    (user_name, name, hash, salt, can_access_app, is_sysadmin, accounting_role, partner_role)
+                values ('{(string)row[0]!}', 'X', 'h', 's', 0, 1, 'viewer', 'viewer')
+                """);
         }
 
         ApplyDevSeed(db);

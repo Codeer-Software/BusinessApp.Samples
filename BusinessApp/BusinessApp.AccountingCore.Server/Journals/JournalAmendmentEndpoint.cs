@@ -22,15 +22,24 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 /// 要求が正しく処理された結果である。想定外の例外はそのまま投げ、コントローラの外側の
 /// 例外ハンドラに任せる（ADR-0016）。</para>
 /// </remarks>
-public sealed class JournalAmendmentEndpoint(IDbAccessor accessor, JournalAmendmentService service)
+public sealed class JournalAmendmentEndpoint(
+    IDbAccessor accessor, JournalAmendmentService service, AccountingRoleStore roles)
 {
+    /// <summary>会計の役割を持たない利用者に返す文言。</summary>
+    /// <remarks>
+    /// <b>何が足りないかを言う</b>（docs/09 §2-3）。ただし<b>誰に頼めばよいかまでは書かない</b>——
+    /// 役割を与える人は会社によって違う。
+    /// </remarks>
+    public const string NotAuthorized = "この操作を行う権限がありません。会計の権限を持つ利用者で操作してください。";
+
     /// <summary>本番もテストもここで組み立てる（<see cref="JournalAmendmentService.Create"/> と同じ理由）。</summary>
     public static JournalAmendmentEndpoint Create(
         IDbAccessor dbAccessor, string dataSourceName, TimeProvider timeProvider,
         IAuthenticationContext authenticationContext)
         => new(
             dbAccessor,
-            JournalAmendmentService.Create(dbAccessor, dataSourceName, timeProvider, authenticationContext));
+            JournalAmendmentService.Create(dbAccessor, dataSourceName, timeProvider, authenticationContext),
+            new AccountingRoleStore(dbAccessor, dataSourceName, authenticationContext));
 
     /// <summary>この伝票にできること（取り消せるか・訂正できるか）を返す。<b>何も書かない。</b></summary>
     public Task<AmendResult> AvailabilityAsync(string? originalEntryId)
@@ -69,6 +78,16 @@ public sealed class JournalAmendmentEndpoint(IDbAccessor accessor, JournalAmendm
     private async Task<AmendResult> RunAsync(
         string? originalEntryId, Func<JournalEntryId, Task<AmendResult>> operation)
     {
+        // **ここが、この経路にとって唯一の権限の関門である**（qa/03 L-22）。
+        // CLB のモジュールの条件は `IDbAccessor` を直に使うこの経路に届かない。
+        // **調べる操作（できること）も閉じる**——伝票が在るか・取り消せるかは会計のデータである。
+        if (await roles.FindCurrentRoleAsync() is not AccountingRole role || !role.CanAmendJournals())
+        {
+            return AmendResult.Rejected(
+                NotAuthorized,
+                [new AmendViolation(JournalViolationCodes.NotAuthorized, NotAuthorized, null)]);
+        }
+
         if (!long.TryParse(originalEntryId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id))
         {
             return AmendResult.Rejected(

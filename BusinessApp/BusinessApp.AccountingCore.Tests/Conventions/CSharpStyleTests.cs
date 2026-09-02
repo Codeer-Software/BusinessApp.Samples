@@ -291,6 +291,11 @@ public class CSharpStyleTests
     [InlineData("var s = $\"{date:yyyy/MM/dd}\";", false)]
     [InlineData("var s = $\"{at:yyyy/MM/dd HH:mm}\";", false)]
     [InlineData("var s = $\"{amount:#,0}\";", false)]
+    // **`ToString` も見る。** 補間だけを見ていると、いちばん自然な逃げ道が空く。
+    [InlineData("var s = date.ToString(\"yyyy年M月d日\");", true)]
+    [InlineData("var s = date.ToString(\"yyyy-MM-dd\");", true)]
+    [InlineData("var s = date.ToString(\"yyyy/MM/dd\");", false)]
+    // **文化を明示した形は機械に渡す値**（SQL・CSV）なので対象外（docs/09 §2-5）。
     [InlineData("var s = date.ToString(\"yyyy-MM-dd\", CultureInfo.InvariantCulture);", false)]
     public void 利用者向け文言の日付は_yyyy_MM_dd_に揃える(string source, bool caught)
         => Assert.Equal(caught, Find(source, ForbiddenFormSet.MessageLayer).Count > 0);

@@ -1,5 +1,6 @@
 namespace BusinessApp.AccountingCore.Server.Journals;
 
+using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Shared;
 using BusinessApp.ServerSupport;
@@ -130,6 +131,11 @@ internal static class JournalSubmitRequirements
 
         AddIfUndefinedChoice<DebitCredit>(
             data, "DebitCredit", JournalLineRules.DebitCreditNotStorable, lineNo, violations);
+
+        // **用途区分もこの形である**（2026-09-02 の自己レビュー）。使い始めるのはフェーズ 3 だが、
+        // 列は既にあり、DDL の CHECK も既にある——**空けておく理由が無い**。
+        AddIfUndefinedChoice<TaxTreatment>(
+            data, "TaxTreatment", JournalLineRules.TaxTreatmentNotStorable, lineNo, violations);
     }
 
     /// <summary>
@@ -144,6 +150,12 @@ internal static class JournalSubmitRequirements
     /// <para>受理集合は<b>列挙子から引く</b>。値を書き並べると、
     /// 列挙子と DDL と 3 か所目が生まれる（<c>EnumConsistencyTests</c> が
     /// 列挙子と DDL の一致を守っているので、列挙子を見れば DDL を見たことになる）。</para>
+    /// <para><b>照合は <see cref="DbValue.ToSnakeCase{T}"/> で行う。</b>
+    /// <c>ToDefinedEnum</c> は使わない——あれは<b>DB から読んだ値を C# に直す寛容な読み手</b>で、
+    /// <c>ToPascalCase</c> を通してから名前を照合するので <c>"Debit"</c> も <c>"_debit"</c> も通す。
+    /// DDL の <c>CHECK</c> が受け取るのは <c>'debit'</c> だけなので、
+    /// <b>関門が通して DB が拒む</b>——qa/03 L-21 が閉じようとした穴そのものが残る
+    /// （2026-09-02 の自己レビューで指摘され、実際に <c>"Debit"</c> が通ることを確かめた）。</para>
     /// <para><b>空欄は見ない。</b> それは必須の検査（<see cref="RequiredLineValues"/>）の仕事で、
     /// ここで重ねて鳴らすと同じ 1 つの誤りが 2 件になる。</para>
     /// </remarks>
@@ -153,11 +165,16 @@ internal static class JournalSubmitRequirements
     {
         var value = data.Fields.TryGetValue(fieldName, out var field) ? (field as SelectFieldData)?.Value : null;
 
-        if (!string.IsNullOrEmpty(value) && DbValue.ToDefinedEnum<T>(value) is null)
+        if (!string.IsNullOrEmpty(value) && !IsStorableChoice<T>(value))
         {
             violations.Add(new Violation(JournalViolationCodes.ChoiceNotStorable, message, lineNo));
         }
     }
+
+    /// <summary>DDL の <c>CHECK</c> が受け取る値か（列挙子を DB の書き方に直して照合する）。</summary>
+    private static bool IsStorableChoice<T>(string value) where T : struct, Enum
+        => Enum.GetValues<T>().Any(member => string.Equals(
+            DbValue.ToSnakeCase(member), value, StringComparison.Ordinal));
 
     /// <summary>
     /// 0 以下と「持てない形」を分ける。<b>直し方が違う</b>（借方貸方の入れ替えか、桁と単位か）。

@@ -1,4 +1,4 @@
-namespace BusinessApp.AccountingCore.Server.Journals;
+﻿namespace BusinessApp.AccountingCore.Server.Journals;
 
 using System.Globalization;
 using BusinessApp.AccountingCore.Journals;
@@ -83,6 +83,12 @@ public sealed class JournalSubmitGate(
     {
         ArgumentNullException.ThrowIfNull(transactionData);
         ArgumentNullException.ThrowIfNull(save);
+
+        // **空にした参照は「無い」に直す**（2026-09-02 の実機で見つけた。qa/03 L-23）。
+        // 画面で参照欄を空にすると `LinkFieldData.Value` は空文字になり、CLB はそれをそのまま
+        // 書きに行く。相手が `INTEGER REFERENCES …` の列だと **FOREIGN KEY constraint failed** で
+        // 保存ごと落ちる——利用者には「保存できませんでした」としか出ない。
+        NormalizeEmptyLinks(transactionData);
 
         var pending = RewriteForDraftSave(transactionData);
 
@@ -248,6 +254,36 @@ public sealed class JournalSubmitGate(
         }
 
         return violations;
+    }
+
+    /// <summary>
+    /// 空にした参照フィールドを、<b>DB が受け取れる「無い」</b>に直す。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>空文字は外部キーの値ではない。</b> 画面で参照欄の × を押すと
+    /// <c>LinkFieldData.Value</c> は空文字になり、CLB はそれをそのまま
+    /// <c>INTEGER REFERENCES …</c> の列へ書きに行って
+    /// <c>SQLite Error 19: 'FOREIGN KEY constraint failed'</c> で落ちる
+    /// （2026-09-02 実測 1.3.20。補助科目を空にした下書き保存で踏んだ。qa/03 L-23）。</para>
+    /// <para><b>必須の参照は先に止まっているので、区別せずに直してよい。</b>
+    /// <c>JournalSubmitRequirements</c> は空文字を「入っていない」とみなして差し戻すので
+    /// （<c>IsEmpty</c>）、ここへ空文字のまま届く参照は<b>空にしてよい列だけ</b>である。</para>
+    /// <para><b>関門の役目は「DB が拒む値を保存へ渡さない」ところまで</b>である（qa/03 L-14）。
+    /// 差し戻すのではなく直すのは、<b>利用者の操作が正しいから</b>——
+    /// 参照を空にするのは正規の入力であって、誤りではない。</para>
+    /// </remarks>
+    private static void NormalizeEmptyLinks(IReadOnlyList<ModuleSubmitData> transactionData)
+    {
+        foreach (var data in transactionData.SelectMany(d => d.Add.Concat(d.Update)))
+        {
+            foreach (var field in data.Fields.Values.OfType<LinkFieldData>())
+            {
+                if (field.Value?.Length == 0)
+                {
+                    field.Value = null;
+                }
+            }
+        }
     }
 
     /// <summary>計上を待っている伝票。<see cref="SubmittedId"/> は保存前の値（仮 ID のことがある）。</summary>

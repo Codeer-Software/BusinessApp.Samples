@@ -1,10 +1,11 @@
-namespace BusinessApp.AccountingCore.Server.Tests.Journals;
+﻿namespace BusinessApp.AccountingCore.Server.Tests.Journals;
 
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Server.Journals;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
+using Microsoft.Data.Sqlite;
 
 /// <summary>
 /// 保存時の関門。
@@ -644,6 +645,82 @@ public class JournalSubmitGateTests
     {
         var entry = SubmitData.Entry(server.Text(id.Value), status: "posted");
         return server.SubmitAsync([SubmitData.Updating(entry)], NothingSaved);
+    }
+
+    // --- 空にした参照（qa/03 L-23）---
+
+    /// <summary>
+    /// <b>参照欄を空にした保存が、DB に拒まれない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>画面で参照欄の × を押すと <c>LinkFieldData.Value</c> は<b>空文字</b>になる。
+    /// そのまま <c>INTEGER REFERENCES …</c> の列へ書くと
+    /// <c>SQLite Error 19: 'FOREIGN KEY constraint failed'</c> で保存ごと落ち、
+    /// 利用者には「保存できませんでした」としか出ない（2026-09-02 実測 1.3.20）。</para>
+    /// <para><b>DB が実際に拒むことも同じテストで見る。</b> 関門が直したことだけを見ると、
+    /// 「そもそも DB は空文字を受け取れた」との区別が付かない。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 空にした参照は無いに直してから保存へ渡す()
+    {
+        using var server = new AccountingServer();
+        var line = SubmitData.LineWith(3, "SubAccount", new LinkFieldData { Value = string.Empty });
+        var passed = new List<ModuleSubmitData>();
+
+        await server.Gate.SubmitAsync([SubmitData.Adding(line)], () =>
+        {
+            passed.Add(new ModuleSubmitData());
+            return Task.FromResult(new List<ModuleSubmitResult>());
+        });
+
+        Assert.Single(passed);
+        Assert.Null((line.Fields["SubAccount"] as LinkFieldData)?.Value);
+
+        // **空文字のままなら DB が拒む。** 直した意味がここにある。
+        var entry = server.InsertDraft();
+        server.InsertLine(entry, 1, "debit", "1100", 1000);
+        var thrown = Assert.Throws<SqliteException>(() => server.Execute(
+            $"update journal_lines set sub_account_id = '' where journal_entry_id = {entry.Value}"));
+        Assert.Contains("FOREIGN KEY", thrown.Message, StringComparison.Ordinal);
+
+        // **NULL は受け取れる**（直した先が DB の受理集合の中にある）。
+        server.Execute($"update journal_lines set sub_account_id = null where journal_entry_id = {entry.Value}");
+    }
+
+    /// <summary>
+    /// <b>既に「無い」参照は触らない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 2 度目の保存では <c>Value</c> が <c>null</c> のまま届く。ここで例外にすると、
+    /// <b>空にした行をもう一度保存できなくなる</b>。
+    /// </remarks>
+    [Fact]
+    public async Task 既に無い参照はそのまま通す()
+    {
+        using var server = new AccountingServer();
+        var line = SubmitData.LineWith(3, "SubAccount", new LinkFieldData { Value = null });
+
+        await server.Gate.SubmitAsync([SubmitData.Adding(line)], NothingSaved);
+
+        Assert.Null((line.Fields["SubAccount"] as LinkFieldData)?.Value);
+    }
+
+    /// <summary>
+    /// <b>更新で空にした参照も直す。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>参照を空に戻す操作は、ほとんど更新で起きる</b>——一度選んだものを消すのだから、
+    /// その行はもう DB にある。<c>Add</c> だけ直すと、<b>実機で実際に踏む側が直らない</b>。
+    /// </remarks>
+    [Fact]
+    public async Task 更新で空にした参照も無いに直す()
+    {
+        using var server = new AccountingServer();
+        var line = SubmitData.LineChanging("12", "SubAccount", new LinkFieldData { Value = string.Empty });
+
+        await server.Gate.SubmitAsync([SubmitData.Updating(line)], NothingSaved);
+
+        Assert.Null((line.Fields["SubAccount"] as LinkFieldData)?.Value);
     }
 
     /// <summary>何も書かない保存（既に DB にある行を計上するときに使う）。</summary>

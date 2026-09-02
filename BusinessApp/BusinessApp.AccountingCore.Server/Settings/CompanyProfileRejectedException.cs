@@ -15,7 +15,4 @@ public sealed class CompanyProfileRejectedException(string reason)
 {
     /// <summary>自社情報の保存を止めたときの見出し。</summary>
     public const string Headline = "保存できません";
-
-    /// <summary>見出しを除いた理由。</summary>
-    public string Reason { get; } = reason;
 }

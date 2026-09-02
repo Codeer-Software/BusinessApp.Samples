@@ -76,6 +76,9 @@ public static class JournalLineRules
     /// <summary>種別が、扱える 6 種のどれでもない。</summary>
     public const string EntryTypeNotStorable = "伝票の種別が正しくありません。伝票を入力し直してください。";
 
+    /// <summary>用途区分が、扱える 3 種のどれでもない（使い始めるのはフェーズ 3）。</summary>
+    public const string TaxTreatmentNotStorable = "明細の用途区分が正しくありません。明細を入力し直してください。";
+
     // --- 入っていない項目（すべて JournalViolationCodes.RequiredValueMissing）---
     //
     // **画面に出ている見出しの語をそのまま使う**（docs/09 §2-2「内部表現を出さない」）。
