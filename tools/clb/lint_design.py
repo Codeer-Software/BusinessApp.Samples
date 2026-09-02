@@ -47,6 +47,15 @@ ALLOWED_VARIANTS = {"Primary", "Danger", "Secondary"}
 # 必須の印を出すクラス（app.css）。ラベル側の要素に付ける。
 REQUIRED_LABEL_CLASS = "required-label"
 
+# 利用者に見せる日時の書式（docs/09 §2-5。D-30）。
+#
+# **`Format` が空だと CLB の既定が出る**——実機では `2026/08/24 18:56:09` と**秒まで**並んだ
+# （2026-09-02 実測 1.3.20。仕訳帳の「入力年月日」）。09 §2-5 が決めたのは
+# `yyyy/MM/dd HH:mm` なので、**画面に出す日時のフィールドには書式を書く**。
+# 日付だけの `DateFieldDesign` はブラウザ標準の `<input type="date">` で、
+# 日本語環境では `yyyy/MM/dd` に見える——**こちらは書式を書かなくてよい**（09 §2-5）。
+DATETIME_DISPLAY_FORMAT = "yyyy/MM/dd HH:mm"
+
 # 洗い替え（`ListFieldDesignBase.ReplaceMode`）の既定。
 # **`None` 以外にすると、保存が `SearchDelete`（検索条件に一致する行の一括削除）を起こす。**
 # この経路はサーバ側の関門（`AccountingSubmitPipeline`）を通らないので、
@@ -276,6 +285,9 @@ def check_module(path, doc, findings):
     # そちらは文字列に「*」を入れてある（qa/01 D-16）。
     _check_required_marks(path, doc, findings)
 
+    # D-30 画面に出す日時は書式を書く（docs/09 §2-5）。
+    _check_datetime_formats(path, doc, findings)
+
     field_names = {f.get("Name", "") for f in doc.get("Fields", [])}
     for kind, layouts in (("Detail", doc.get("DetailLayouts", {})),
                           ("Search", doc.get("SearchLayouts", {}))):
@@ -433,6 +445,41 @@ def _has_class(doc, field_name, class_name):
 
     _walk(doc.get("DetailLayouts", {}), visit)
     return any(found)
+
+
+def _check_datetime_formats(path, doc, findings):
+    """**画面に出す日時に書式が書いてあるか**（docs/09 §2-5）。
+
+    `DateTimeFieldDesign` の `Format` が空だと CLB の既定が出て、**秒まで並ぶ**
+    （2026-09-02 実測 1.3.20。仕訳帳の「入力年月日」が `2026/08/24 18:56:09` だった）。
+    09 §2-5 が決めた書式は `yyyy/MM/dd HH:mm` である。
+
+    **見るのはレイアウトに置いた欄だけ。** `CreatedAt` / `UpdatedAt` のように
+    どの画面にも出していない監査用の列まで縛ると、**書式が要らない欄に書式が増える**——
+    出していないものの見た目を決めても、次に出す人がそれを読むとは限らない。
+    """
+    module = doc.get("Name", "")
+    wrong = {f.get("Name", ""): f.get("Format", "") for f in doc.get("Fields", [])
+             if f.get("TypeFullName", "").endswith("DateTimeFieldDesign")
+             and f.get("Format", "") != DATETIME_DISPLAY_FORMAT}
+    if not wrong:
+        return
+
+    placed = set()
+
+    def visit(node):
+        name = node.get("FieldName", "")
+        if name in wrong:
+            placed.add(name)
+
+    for kind in ("DetailLayouts", "ListLayouts", "SearchLayouts"):
+        _walk(doc.get(kind) or {}, visit)
+
+    for name in sorted(placed):
+        findings.append((SEV_ERROR, "D-30", relative(path),
+                         f"{module}: {name} は画面に出す日時なので "
+                         f'"Format": "{DATETIME_DISPLAY_FORMAT}" を書く'
+                         f"（空だと秒まで出る。docs/09 §2-5）"))
 
 
 def _check_required_marks(path, doc, findings):
@@ -1312,6 +1359,20 @@ SELFTEST_CASES = [
     ("データを持つのに読み取り条件が無い",
      lambda: _module(DbTable="x", UserWriteCondition={"ModuleName": "AppUser"}),
      (SEV_ERROR, "D-29")),
+    # **画面に出す日時に書式が無いと、秒まで並ぶ**（2026-09-02 に仕訳帳で実際に出した）。
+    ("画面に出す日時に書式が無い",
+     lambda: _module(Fields=[{"Name": "EnteredAt", "TypeFullName": "X.DateTimeFieldDesign",
+                              "Format": ""}],
+                     ListLayouts={"": {"Layout": {"Rows": [
+                         {"Columns": [{"Layout": {"FieldName": "EnteredAt"}}]}]}}}),
+     (SEV_ERROR, "D-30"), DATETIME_DISPLAY_FORMAT),
+    # **別の書式でも鳴る。** 「空でない」だけを見ると、秒つきを書いた日に黙る。
+    ("画面に出す日時に別の書式を書いている",
+     lambda: _module(Fields=[{"Name": "EnteredAt", "TypeFullName": "X.DateTimeFieldDesign",
+                              "Format": "yyyy-MM-dd HH:mm:ss"}],
+                     ListLayouts={"": {"Layout": {"Rows": [
+                         {"Columns": [{"Layout": {"FieldName": "EnteredAt"}}]}]}}}),
+     (SEV_ERROR, "D-30"), DATETIME_DISPLAY_FORMAT),
     ("担当の条件に責任者が入っていない",
      lambda: _module(UserWriteCondition=_role_condition(["staff"])), (SEV_ERROR, "D-22")),
     ("役割を AND で並べている",
@@ -1487,6 +1548,15 @@ def selftest():
         ("洗い替えを使わない一覧",
          _module(Fields=[{"Name": "Lines", "TypeFullName": "X.ListFieldDesign",
                           "ReplaceMode": "None"}])),
+        ("書式を書いた日時の欄",
+         _module(Fields=[{"Name": "EnteredAt", "TypeFullName": "X.DateTimeFieldDesign",
+                          "Format": DATETIME_DISPLAY_FORMAT}],
+                 ListLayouts={"": {"Layout": {"Rows": [
+                     {"Columns": [{"Layout": {"FieldName": "EnteredAt"}}]}]}}})),
+        # **どの画面にも置いていない日時は対象外**（CreatedAt / UpdatedAt がこれである）。
+        ("画面に出していない日時の欄",
+         _module(Fields=[{"Name": "CreatedAt", "TypeFullName": "X.DateTimeFieldDesign",
+                          "Format": ""}])),
     ]:
         findings = []
         run_module_checks(doc, findings)

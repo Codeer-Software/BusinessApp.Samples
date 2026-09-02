@@ -201,6 +201,10 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     public IReadOnlyList<(string Path, string Source)> FilesToScan()
         => [.. SourceFiles(RepositoryRoot).Select(file => (file, File.ReadAllText(file)))];
 
+    /// <summary>検査対象の C# の<b>先頭 3 バイト</b>（BOM の検査に使う）。</summary>
+    public IReadOnlyList<(string Path, byte[] Head)> FileHeadsToScan()
+        => [.. SourceFiles(RepositoryRoot).Select(file => (file, ReadHead(file)))];
+
     /// <summary>
     /// リポジトリ内のすべての <c>.editorconfig</c>（浅い順）。
     /// </summary>
@@ -512,6 +516,31 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
         ];
     }
 
+    /// <summary>
+    /// 先頭に BOM が付いている C#。
+    /// </summary>
+    /// <remarks>
+    /// <para><b><c>.editorconfig</c> の <c>charset = utf-8</c> は「BOM なし」の意味である</b>
+    /// （BOM 付きは <c>utf-8-bom</c>）。ところが<b>これを守らせる仕組みが 1 つも無かった</b>——
+    /// ツールがファイルを書き直したときに BOM が付き、そのままコミットまで通った
+    /// （2026-09-02。qa/03 L-24）。</para>
+    /// <para><b>文字列では見えない。</b> <c>File.ReadAllText</c> は BOM を取り除いて返すので、
+    /// <see cref="CarriageReturnProblems"/> と同じ形では書けない。<b>先頭のバイトを見る。</b></para>
+    /// </remarks>
+    public static IReadOnlyList<string> ByteOrderMarkProblems(IEnumerable<(string Path, byte[] Head)> files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+
+        return
+        [
+            .. files
+                .Where(file => file.Head.Length >= 3
+                    && file.Head[0] == 0xEF && file.Head[1] == 0xBB && file.Head[2] == 0xBF)
+                .Select(file => $"{file.Path}: 先頭に BOM が付いている（.editorconfig の charset = utf-8 は BOM なし）")
+                .Order(StringComparer.Ordinal),
+        ];
+    }
+
     /// <summary>改行が CRLF になっている C#。</summary>
     public static IReadOnlyList<string> CarriageReturnProblems(IEnumerable<(string Path, string Source)> files)
     {
@@ -631,6 +660,14 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// <c>StrykerOutput</c> と <c>TestResults</c> も、ツールが吐いた写しを検査しても意味が無いので見ない。
     /// <b>拾うのは <c>*.cs</c> だけである。</b> <c>*.razor</c> の中の C# は対象外（qa/02 R8-19）。
     /// </remarks>
+    /// <summary>ファイルの先頭 3 バイト（短いファイルはあるだけ）。</summary>
+    private static byte[] ReadHead(string path)
+    {
+        using var stream = File.OpenRead(path);
+        var head = new byte[3];
+        return head[..stream.Read(head, 0, head.Length)];
+    }
+
     public static IEnumerable<string> SourceFiles(string directory)
         => Directory.Exists(directory)
             ? Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories)

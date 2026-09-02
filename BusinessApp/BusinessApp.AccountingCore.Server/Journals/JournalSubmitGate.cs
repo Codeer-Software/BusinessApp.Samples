@@ -1,4 +1,4 @@
-﻿namespace BusinessApp.AccountingCore.Server.Journals;
+namespace BusinessApp.AccountingCore.Server.Journals;
 
 using System.Globalization;
 using BusinessApp.AccountingCore.Journals;

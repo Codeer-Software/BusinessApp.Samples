@@ -86,6 +86,26 @@ public class CSharpStyleTests
     }
 
     /// <summary>
+    /// ソースの先頭に BOM を付けない。
+    /// </summary>
+    /// <remarks>
+    /// <b>実際に付けてコミットまで通した</b>（2026-09-02。qa/03 L-24）。
+    /// <c>.editorconfig</c> は <c>charset = utf-8</c>（＝ BOM なし）と書いてあるのに、
+    /// <b>それを守らせる仕組みが 1 つも無かった</b>。
+    /// <b>検査が鳴ることも同じテストで見る</b>——BOM の付いた検体を 1 つ食わせる。
+    /// </remarks>
+    [Fact]
+    public void ソースに_BOM_を付けない()
+    {
+        AssertNone(CSharpStyleConvention.ByteOrderMarkProblems(Convention.FileHeadsToScan()));
+
+        Assert.NotEmpty(CSharpStyleConvention.ByteOrderMarkProblems(
+            [("A.cs", [0xEF, 0xBB, 0xBF])]));
+        Assert.Empty(CSharpStyleConvention.ByteOrderMarkProblems(
+            [("A.cs", [0x6E, 0x61, 0x6D]), ("B.cs", [0x2F]), ("C.cs", [])]));
+    }
+
+    /// <summary>
     /// 検査が実際にソースを読んでいる。
     /// </summary>
     /// <remarks>

@@ -1,4 +1,4 @@
-﻿namespace BusinessApp.AccountingCore.Server.Tests.Journals;
+namespace BusinessApp.AccountingCore.Server.Tests.Journals;
 
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Server.Journals;

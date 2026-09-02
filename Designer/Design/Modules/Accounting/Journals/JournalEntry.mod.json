@@ -311,7 +311,7 @@
     },
     {
       "SaveAsUtc": false,
-      "Format": "",
+      "Format": "yyyy/MM/dd HH:mm",
       "DbColumn": "entered_at",
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
