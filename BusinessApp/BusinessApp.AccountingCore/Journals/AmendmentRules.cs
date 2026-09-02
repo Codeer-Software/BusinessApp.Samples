@@ -45,7 +45,7 @@ internal static class AmendmentRules
         {
             yield return new Violation(
                 JournalViolationCodes.AmendmentBeforeOriginal,
-                $"{kind.Noun}の計上日（{postingDate:yyyy-MM-dd}）が、元の伝票の計上日（{original.PostingDate:yyyy-MM-dd}）より前になっています。");
+                $"{kind.Noun}の計上日（{postingDate:yyyy/MM/dd}）が、元の伝票の計上日（{original.PostingDate:yyyy/MM/dd}）より前になっています。");
         }
 
         // **対象は通常の仕訳と訂正だけ。**

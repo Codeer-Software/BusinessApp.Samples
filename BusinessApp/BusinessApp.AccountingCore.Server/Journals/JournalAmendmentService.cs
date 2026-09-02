@@ -72,7 +72,7 @@ public sealed class JournalAmendmentService(
         if (context.Calendar.ResolvePeriod(today) is not AccountingPeriod period)
         {
             return AmendmentAvailability.None(
-                $"今日（{today:yyyy-MM-dd}）に対応する会計期間がありません。", amendments);
+                $"今日（{today:yyyy/MM/dd}）に対応する会計期間がありません。", amendments);
         }
 
         var reversedOn = await entryStore.FindReversedOnAsync(original.Id!.Value);
@@ -202,7 +202,7 @@ public sealed class JournalAmendmentService(
             [
                 new Violation(
                     JournalViolationCodes.PeriodNotFound,
-                    $"今日（{today:yyyy-MM-dd}）に対応する会計期間がありません。"),
+                    $"今日（{today:yyyy/MM/dd}）に対応する会計期間がありません。"),
             ]);
         }
 

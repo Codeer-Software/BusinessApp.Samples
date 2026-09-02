@@ -91,7 +91,7 @@ public class InvoiceRegistrationHistoryTests
         var thrown = Assert.Throws<InvalidOperationException>(
             () => InvoiceRegistrationHistory.InEffectOn(registrations, D(8, 10)));
 
-        Assert.Contains("2026-08-01", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("2026/08/01", thrown.Message, StringComparison.Ordinal);
         Assert.Contains("T1000000000001", thrown.Message, StringComparison.Ordinal);
         Assert.Contains("T2000000000002", thrown.Message, StringComparison.Ordinal);
     }

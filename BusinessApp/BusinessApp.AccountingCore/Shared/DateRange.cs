@@ -15,7 +15,7 @@ public readonly record struct DateRange
     {
         if (to < from)
         {
-            throw new ArgumentException($"終わりが始まりより前になっている: {from:yyyy-MM-dd} 〜 {to:yyyy-MM-dd}", nameof(to));
+            throw new ArgumentException($"終わりが始まりより前になっている: {from:yyyy/MM/dd} 〜 {to:yyyy/MM/dd}", nameof(to));
         }
         From = from;
         To = to;
@@ -31,5 +31,5 @@ public readonly record struct DateRange
 
     public bool Overlaps(DateRange other) => From <= other.To && other.From <= To;
 
-    public override string ToString() => $"{From:yyyy-MM-dd}〜{To:yyyy-MM-dd}";
+    public override string ToString() => $"{From:yyyy/MM/dd}〜{To:yyyy/MM/dd}";
 }

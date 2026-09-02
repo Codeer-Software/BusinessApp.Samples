@@ -134,6 +134,134 @@ public class QueryModuleTests
 
     private static int Count(string text, string pattern) => Regex.Matches(text, pattern).Count;
 
+    /// <summary>
+    /// 並び順に<b>外部キー</b>を使っていないこと。
+    /// </summary>
+    /// <remarks>
+    /// <para><c>fiscal_years.id</c> のような代理キーは <c>AUTOINCREMENT</c> の挿入順でしかなく、
+    /// <b>年代とは無関係</b>である。第 17 期のデモデータを後から入れれば id は第 18 期より大きくなり、
+    /// <b>元帳が新しい年度から先に出る</b>——しかも列は並べ替え不可なので利用者は戻せない
+    /// （2026-08-30 に実際にそう書いた。qa/03 L-19）。順序は「順番に意味がある列」
+    /// （開始日・日付・コード）で表す。</para>
+    /// <para><b>見るのは <c>_id</c> で終わる列だけ</b>である。裸の <c>id</c> は
+    /// <b>同着の解き方</b>として正しく使える——下書きは伝票番号を持たないので、
+    /// 同じ計上日・同じ入力年月日だと並びが一意に決まらず、ページ送りで行が重複したり欠けたりする
+    /// （qa/02 R29-08 で <c>JournalEntryList</c> の <c>ORDER BY</c> 末尾に足した）。
+    /// <b>禁じているのは順序の「意味」を代理キーに持たせること</b>で、同着の解消は別の話である。</para>
+    /// <para><c>PARTITION BY</c> は対象外。あちらは<b>同一性</b>で束ねるので、識別子が正しい。</para>
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(QueryModules))]
+    public void 並び順に外部キーを使っていない(string relativePath)
+    {
+        var module = Load(relativePath);
+
+        Assert.All(ForeignKeysInOrderBy(module.Sql), column =>
+            Assert.Fail($"ORDER BY に {column} がある。代理キーは順序に使えない（qa/03 L-19）"));
+    }
+
+    /// <summary>この検査が「1 本も ORDER BY を見つけられず素通り」で緑にならないための土台。</summary>
+    /// <remarks>帳簿は必ず並び順を決めている。0 本なら読み方が壊れている（qa/03 L-15）。</remarks>
+    [Fact]
+    public void 並び順を実際に読めている()
+        => Assert.NotEmpty(Discover().SelectMany(path => OrderByClauses(new QueryModule(path).Sql)));
+
+    /// <summary>
+    /// 壊した SQL を食わせて、実際に鳴ることを確かめる。
+    /// </summary>
+    /// <remarks>
+    /// <b>「違反 0 件」を表明するだけのテストは、読み方が壊れても緑になる</b>（qa/03 L-15）。
+    /// とくに <c>date(...)</c> の閉じ括弧で節を切ってしまう読み方は、
+    /// <b>1 項目めだけを見て残りを見逃す</b>——実データがまさにその形である。
+    /// </remarks>
+    [Theory]
+    // 素直な違反。
+    [InlineData("select 1 order by e.fiscal_year_id", "fiscal_year_id")]
+    // **関数の後ろに隠れた違反。** 「次の `)` まで」と読むと見逃す。
+    [InlineData("select 1 order by date(fy.start_date), e.fiscal_year_id", "fiscal_year_id")]
+    // **窓関数の中の違反**（qa/03 L-19 の事故そのもの）。
+    [InlineData("select sum(x) over (partition by a order by e.fiscal_year_id) from t", "fiscal_year_id")]
+    public void 順序に使えない代理キーを見つける(string sql, string expected)
+        => Assert.Contains(expected, ForeignKeysInOrderBy(sql), StringComparer.Ordinal);
+
+    /// <summary>正しい書き方では鳴らない（鳴りっぱなしの関門は、赤を無視させる）。</summary>
+    [Theory]
+    // 裸の id は**同着の解き方**として正しい（qa/02 R29-08）。
+    [InlineData("select 1 order by date(e.posting_date) desc, e.id desc")]
+    // `PARTITION BY` は**同一性**で束ねるので識別子が正しい。
+    [InlineData("select sum(x) over (partition by e.fiscal_year_id order by e.entry_no) from t")]
+    // 並びの外にある `_id` は関係ない。
+    [InlineData("select l.account_id from t where l.account_id = @a order by a.code")]
+    public void 正しい並び順では鳴らない(string sql)
+        => Assert.Empty(ForeignKeysInOrderBy(sql));
+
+    /// <summary><c>ORDER BY</c> 節に現れる、<c>_id</c> で終わる列。</summary>
+    internal static IReadOnlyList<string> ForeignKeysInOrderBy(string sql)
+        => [.. OrderByClauses(sql)
+            .SelectMany(clause => Regex.Matches(clause, @"\b(?:\w+\.)?(\w+_id)\b")
+                .Select(match => match.Groups[1].Value))
+            .Distinct(StringComparer.Ordinal)];
+
+    /// <summary>
+    /// <c>ORDER BY</c> から、その節の終わりまで。
+    /// </summary>
+    /// <remarks>
+    /// <para>窓関数の中（<c>OVER (PARTITION BY ... ORDER BY ...)</c>）も対象である——
+    /// <b>累計の並びを代理キーにしたのが qa/03 L-19 の事故そのもの</b>だった。</para>
+    /// <para><b>括弧の深さを数える。</b> 単純に「次の <c>)</c> まで」で切ると、
+    /// <c>ORDER BY date(fy.start_date), e.entry_no</c> が <c>date(</c> の閉じ括弧で切れて、
+    /// <b>2 項目め以降を一度も見ない</b>。節の終わりは、外側の括弧が閉じたところか、
+    /// 次のキーワード（<c>LIMIT</c> / <c>OFFSET</c> / <c>ROWS</c>）か、文の終わりである。
+    /// </para>
+    /// </remarks>
+    internal static IReadOnlyList<string> OrderByClauses(string sql)
+    {
+        var clauses = new List<string>();
+
+        foreach (Match start in Regex.Matches(sql ?? string.Empty, @"ORDER\s+BY\s+", RegexOptions.IgnoreCase))
+        {
+            var depth = 0;
+            var index = start.Index + start.Length;
+            var from = index;
+
+            while (index < sql!.Length)
+            {
+                var c = sql[index];
+                if (c == '(')
+                {
+                    depth++;
+                }
+                else if (c == ')' && depth-- == 0)
+                {
+                    break;
+                }
+                else if (depth == 0 && (c == ';' || IsClauseKeywordAt(sql, index)))
+                {
+                    break;
+                }
+
+                index++;
+            }
+
+            clauses.Add(sql[from..index]);
+        }
+
+        return clauses;
+    }
+
+    /// <summary><c>ORDER BY</c> 節を終わらせるキーワードが、この位置から始まっているか。</summary>
+    private static bool IsClauseKeywordAt(string sql, int index)
+        => IsWordBoundary(sql, index - 1)
+           && ClauseKeywords.Any(keyword =>
+               sql.Length - index >= keyword.Length
+               && sql.AsSpan(index, keyword.Length).Equals(keyword, StringComparison.OrdinalIgnoreCase)
+               && IsWordBoundary(sql, index + keyword.Length));
+
+    private static bool IsWordBoundary(string sql, int index)
+        => index < 0 || index >= sql.Length || (!char.IsLetterOrDigit(sql[index]) && sql[index] != '_');
+
+    private static readonly string[] ClauseKeywords = ["LIMIT", "OFFSET", "ROWS", "RANGE"];
+
     [Theory]
     [MemberData(nameof(QueryModules))]
     public void 実テーブルを持たず読み取り専用である(string relativePath)

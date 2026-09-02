@@ -60,6 +60,22 @@ public static class JournalLineRules
     /// <summary>税区分が空（<see cref="JournalViolationCodes.TaxCategoryMissing"/>）。</summary>
     public const string TaxCategoryMissing = "税区分を選んでください。税に関係のない行にも「対象外」を選びます。";
 
+    // --- 選択肢の値が DDL の CHECK の外（すべて JournalViolationCodes.ChoiceNotStorable）---
+    //
+    // **画面からは起こらない。** 借貸・状態・種別はどれも選択欄で、候補は画面が出す。
+    // 起こるのは画面を通らない経路（取込・API）だけなので、
+    // **「選び直してください」ではなく「入力し直してください」と言う**（docs/09 §2-3。
+    // 直す欄が画面に無い状態で「選べ」と言わない——行番号の 2 つと同じ扱い）。
+
+    /// <summary>借方貸方が `debit` / `credit` のどちらでもない。</summary>
+    public const string DebitCreditNotStorable = "「借貸」の値が正しくありません。明細を入力し直してください。";
+
+    /// <summary>状態が「下書き」「計上済み」のどちらでもない。</summary>
+    public const string StatusNotStorable = "伝票の状態が正しくありません。伝票を入力し直してください。";
+
+    /// <summary>種別が、扱える 6 種のどれでもない。</summary>
+    public const string EntryTypeNotStorable = "伝票の種別が正しくありません。伝票を入力し直してください。";
+
     // --- 入っていない項目（すべて JournalViolationCodes.RequiredValueMissing）---
     //
     // **画面に出ている見出しの語をそのまま使う**（docs/09 §2-2「内部表現を出さない」）。

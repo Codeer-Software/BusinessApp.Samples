@@ -112,6 +112,41 @@ public class EnumConsistencyTests
         Assert.Contains("accounts.category", CheckConstraintColumns());
     }
 
+    /// <summary>
+    /// <b>書き方を変えただけで網から漏れない</b>（2026-08-31 の自己レビュー R28-16）。
+    /// </summary>
+    /// <remarks>
+    /// もとの読み方は「列定義の行に書いた CHECK」しか拾えず、<b>下の 3 通りはすべて素通りした</b>。
+    /// 素通りしても検査は緑になる——<b>網が縮んだことは誰にも見えない</b>ので、ここで固定する。
+    /// </remarks>
+    [Theory]
+    // 素直な形（もとの読み方でも拾えた）。
+    [InlineData("CREATE TABLE t (\n    kind TEXT NOT NULL CHECK (kind IN ('a', 'b'))\n);")]
+    // **表制約**として別行に書く。SQLite では同じ意味である。
+    [InlineData("CREATE TABLE t (\n    kind TEXT NOT NULL,\n    CHECK (kind IN ('a', 'b'))\n);")]
+    // **空白を詰める。**
+    [InlineData("CREATE TABLE t (\n    kind TEXT NOT NULL CHECK(kind IN('a','b'))\n);")]
+    // **行内コメントに読点を打つ。** 列定義の途中を「カンマまで」で追う読み方はここで外れた。
+    [InlineData("CREATE TABLE t (\n    kind TEXT NOT NULL, -- 区分。a, b の 2 つ\n    CHECK (kind IN ('a', 'b'))\n);")]
+    // **NULL を許す形**（冗長な 1 句を足すだけで抜けられないこと）。
+    [InlineData("CREATE TABLE t (\n    kind TEXT CHECK (kind IS NULL OR kind IN ('a', 'b'))\n);")]
+    public void 書き方を変えても区分値の列を拾える(string ddl)
+    {
+        Assert.Equal(["t.kind"], CheckConstraintColumnsIn(ddl));
+        Assert.Equal(["a", "b"], ValuesFromCheckConstraintIn(ddl, "t.kind"));
+    }
+
+    /// <summary>区分値ではないものを拾わない（鳴りっぱなしの関門は、赤を無視させる）。</summary>
+    [Theory]
+    // 真偽値は区分値ではない（対応する CLB の enum も C# の列挙型も持たない）。
+    [InlineData("CREATE TABLE t (\n    is_active INTEGER NOT NULL CHECK (is_active IN (0, 1))\n);")]
+    // **別の列を見ている条件文**（`IS NULL OR` の左右で列名が違う）。
+    [InlineData("CREATE TABLE t (\n    kind TEXT,\n    other TEXT,\n    CHECK (other IS NULL OR kind IN ('a'))\n);")]
+    // 範囲の CHECK は値の集合ではない。
+    [InlineData("CREATE TABLE t (\n    n INTEGER NOT NULL CHECK (n > 0)\n);")]
+    public void 区分値でない_CHECK_は拾わない(string ddl)
+        => Assert.Empty(CheckConstraintColumnsIn(ddl));
+
     /// <summary>対応表に載っていない CHECK 制約が増えていないか。増やしたら表に足す。</summary>
     [Fact]
     public void 区分値を持つ列はすべて対応表に載っている()
@@ -123,30 +158,75 @@ public class EnumConsistencyTests
 
     /// <summary>DDL の中で「値の集合を CHECK で縛っている TEXT 列」を拾う。</summary>
     private static IReadOnlyList<string> CheckConstraintColumns()
+        => [.. TestDatabase.DdlFiles().SelectMany(file => CheckConstraintColumnsIn(File.ReadAllText(file)))];
+
+    /// <summary>
+    /// 1 本の DDL から、値の集合を <c>CHECK</c> で縛っている TEXT 列を拾う。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>もとは「列定義の行に書いた CHECK」しか拾えなかった</b>（2026-08-31 の自己レビュー
+    /// R28-16）。<c>^\s*(\w+)\s+TEXT[^,]*?CHECK \(</c> という 1 本の正規表現で列名と CHECK を
+    /// 同時に読んでいたので、<b>表制約として別行に書く・空白を詰める・行内コメントに読点を打つ</b>の
+    /// どれでも外れた。外れても<b>「対応表に載っていない列は無い」と言えてしまう</b>——
+    /// 網が縮んだことは誰にも見えない。</para>
+    /// <para><b>読む順を変えた。</b> ①コメントを落とす ②<c>CREATE TABLE</c> の本体を切り出す
+    /// ③本体の中の <c>CHECK (… IN (…))</c> を全部拾い、<b>CHECK 自身が名指ししている列名</b>を使う
+    /// ④その列が TEXT かを本体で確かめる。列定義に書いても表制約に書いても同じ結果になる。</para>
+    /// <para><b>TEXT に限るのは意図である。</b> <c>CHECK (is_active IN (0, 1))</c> のような
+    /// 真偽値は区分値ではなく、対応する CLB の enum も C# の列挙型も持たない。</para>
+    /// </remarks>
+    internal static IReadOnlyList<string> CheckConstraintColumnsIn(string ddl)
     {
         var found = new List<string>();
-        foreach (var file in TestDatabase.DdlFiles())
+
+        foreach (var (table, body) in TableBodies(ddl))
         {
-            var text = File.ReadAllText(file);
-            // **`CHECK (col IS NULL OR col IN (...))` の形も拾う。** SQLite の CHECK は NULL を
-            // 通すので `IS NULL OR` は冗長だが、書いてあっても区分値であることに変わりはない。
-            // 拾えないと、**冗長な 1 句を足すだけで対応表の検査をすり抜けられる**
-            // （2026-08-31 に app_users の役割の列で実際に起きた）。
-            foreach (Match match in Regex.Matches(
-                text,
-                @"^\s*(\w+)\s+TEXT[^,]*?CHECK \((?:\1 IS NULL OR )?\1 IN \(",
-                RegexOptions.Multiline))
+            foreach (var column in CheckedColumnsIn(body))
             {
-                var owner = Regex.Matches(text[..match.Index], @"CREATE TABLE (\w+)").LastOrDefault()?.Groups[1].Value;
-                if (owner is not null)
+                if (Regex.IsMatch(body, $@"^\s*{column}\s+TEXT\b", RegexOptions.Multiline))
                 {
-                    found.Add($"{owner}.{match.Groups[1].Value}");
+                    found.Add($"{table}.{column}");
                 }
             }
         }
 
         return found;
     }
+
+    /// <summary>
+    /// <c>CHECK (… IN (…))</c> が縛っている列の名前。
+    /// </summary>
+    /// <remarks>
+    /// <b><c>CHECK (col IS NULL OR col IN (…))</c> の形も拾う。</b> SQLite の CHECK は NULL を
+    /// 通すので <c>IS NULL OR</c> は冗長だが、書いてあっても区分値であることに変わりはない。
+    /// 拾えないと、<b>冗長な 1 句を足すだけで対応表の検査をすり抜けられる</b>
+    /// （2026-08-31 に <c>app_users</c> の役割の列で実際に起きた）。
+    /// <b>ただし 2 つの列名が違うときは拾わない</b>——別の列を見ている条件文である。
+    /// </remarks>
+    private static IEnumerable<string> CheckedColumnsIn(string body)
+        => Regex.Matches(body, @"CHECK\s*\(\s*(?:(\w+)\s+IS\s+NULL\s+OR\s+)?(\w+)\s+IN\s*\(")
+            .Where(match => match.Groups[1].Value.Length == 0
+                            || string.Equals(match.Groups[1].Value, match.Groups[2].Value, StringComparison.Ordinal))
+            .Select(match => match.Groups[2].Value);
+
+    /// <summary><c>CREATE TABLE</c> ごとの (表の名前, 括弧の中身)。コメントは落としてある。</summary>
+    private static IEnumerable<(string Table, string Body)> TableBodies(string ddl)
+        => Regex.Matches(WithoutComments(ddl), @"CREATE TABLE (\w+)\s*\((.*?)\n\s*\);", RegexOptions.Singleline)
+            .Select(match => (match.Groups[1].Value, match.Groups[2].Value));
+
+    /// <summary>
+    /// 行コメント（<c>--</c> から行末）を落とす。
+    /// </summary>
+    /// <remarks>
+    /// <b>コメントの中の語を DDL として読まない。</b> 読点や括弧を含む説明文が 1 行あるだけで、
+    /// 「列定義の途中」を追う読み方は外れる（R28-16）。
+    /// <b>文字列リテラルの中の <c>--</c> は落とさない</b>——区分値に <c>--</c> は現れないが、
+    /// 落とすと値そのものが消えるので、引用符の内側は素通しする。
+    /// </remarks>
+    private static string WithoutComments(string ddl)
+        => Regex.Replace(ddl, @"'[^'\n]*'|--[^\n]*", match => match.Value.StartsWith("--", StringComparison.Ordinal)
+            ? string.Empty
+            : match.Value);
 
     /// <summary>
     /// <b>デザイン enum が全部、対応表に載っているか</b>（逆向きの網）。
@@ -189,29 +269,38 @@ public class EnumConsistencyTests
         Path.Combine(Path.GetDirectoryName(TestDatabase.DdlDirectory)!, "Design", "Enums");
 
     private static IReadOnlyList<string> ValuesFromCheckConstraint(string qualifiedColumn)
+        => TestDatabase.DdlFiles()
+            .Select(file => ValuesFromCheckConstraintIn(File.ReadAllText(file), qualifiedColumn))
+            .FirstOrDefault(values => values.Count > 0) ?? [];
+
+    /// <summary>
+    /// 1 本の DDL から、その列を縛っている <c>CHECK</c> の値を読む。
+    /// </summary>
+    /// <remarks>
+    /// <b>拾う側（<see cref="CheckConstraintColumnsIn"/>）と同じ読み方にしてある。</b>
+    /// 片方だけが表制約や空白詰めを読めると、<b>「列は見つかるのに値が空」</b>で落ちる——
+    /// 落ちるのは良いが、原因が「網の縮み」だと分からない。
+    /// </remarks>
+    internal static IReadOnlyList<string> ValuesFromCheckConstraintIn(string ddl, string qualifiedColumn)
     {
         var (table, column) = qualifiedColumn.Split('.') switch { var parts => (parts[0], parts[1]) };
 
-        foreach (var file in TestDatabase.DdlFiles())
+        foreach (var (name, body) in TableBodies(ddl))
         {
-            var text = File.ReadAllText(file);
-            var create = Regex.Match(text, $@"CREATE TABLE {table} \((.*?)\n\);", RegexOptions.Singleline);
-            if (!create.Success)
+            if (!string.Equals(name, table, StringComparison.Ordinal))
             {
                 continue;
             }
 
-            // 値を読む側も `IS NULL OR` の形に合わせる（拾う側と同じ理由）。
             var check = Regex.Match(
-                create.Groups[1].Value,
-                $@"CHECK \((?:{column} IS NULL OR )?{column} IN \(([^)]*)\)\)",
+                body,
+                $@"CHECK\s*\(\s*(?:{column}\s+IS\s+NULL\s+OR\s+)?{column}\s+IN\s*\(([^)]*)\)",
                 RegexOptions.Singleline);
             if (check.Success)
             {
-                return Regex.Matches(check.Groups[1].Value, @"'([^']+)'")
+                return [.. Regex.Matches(check.Groups[1].Value, @"'([^']+)'")
                     .Select(m => m.Groups[1].Value)
-                    .OrderBy(v => v, StringComparer.Ordinal)
-                    .ToList();
+                    .OrderBy(v => v, StringComparer.Ordinal)];
             }
         }
 

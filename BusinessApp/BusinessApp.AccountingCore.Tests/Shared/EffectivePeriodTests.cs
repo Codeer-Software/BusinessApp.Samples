@@ -71,7 +71,7 @@ public class EffectivePeriodTests
     [Fact]
     public void 文字列表現は終期なしを空で表す()
     {
-        Assert.Equal("2026-10-01〜2028-09-30", Closed.ToString());
-        Assert.Equal("2031-10-01〜", new EffectivePeriod(new DateOnly(2031, 10, 1), null).ToString());
+        Assert.Equal("2026/10/01〜2028/09/30", Closed.ToString());
+        Assert.Equal("2031/10/01〜", new EffectivePeriod(new DateOnly(2031, 10, 1), null).ToString());
     }
 }

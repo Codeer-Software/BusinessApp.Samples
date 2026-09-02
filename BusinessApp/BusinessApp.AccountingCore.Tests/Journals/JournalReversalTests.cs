@@ -271,7 +271,7 @@ public class JournalReversalTests
         // **完全一致で固定する。** 前半だけを見ていると、日付をはさんだ後半
         //（＝文をつないでいる側）が無防備になる（qa/02 R8-09）。
         Assert.Equal(
-            "取消の計上日（2026-05-19）が、元の伝票の計上日（2026-05-22）より前になっています。",
+            "取消の計上日（2026/05/19）が、元の伝票の計上日（2026/05/22）より前になっています。",
             Message(result, JournalViolationCodes.AmendmentBeforeOriginal));
     }
 

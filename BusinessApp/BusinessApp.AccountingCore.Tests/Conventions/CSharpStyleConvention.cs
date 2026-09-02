@@ -321,6 +321,14 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
                 CarriageReturnLiterals(root),
                 "リテラルの中の CR",
                 "利用者に見せる文言の改行は LF に統一する（ADR-0021 §2）");
+
+            // 文言に埋める日付の書式（docs/09 §2-5）。
+            ReportNodes(
+                ForeignDateFormats(root),
+                "yyyy/MM/dd 以外の日付書式",
+                "利用者に見せる日付は yyyy/MM/dd に揃える（docs/09 §2-5）。"
+                + "SQL に渡す ISO の日付は ToString(\"yyyy-MM-dd\", CultureInfo.InvariantCulture) と"
+                + "明示して書く（文字列補間に混ぜない）");
         }
 
         return [.. found.OrderBy(entry => entry.Line)];
@@ -731,6 +739,30 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
             InterpolatedStringTextSyntax text => text.TextToken.ValueText.Contains('\r'),
             _ => false,
         });
+
+    /// <summary>
+    /// 文字列補間に書かれた、<c>yyyy/MM/dd</c> 以外の日付書式。
+    /// </summary>
+    /// <remarks>
+    /// <para>会計は <c>yyyy-MM-dd</c>、取引先は <c>yyyy/MM/dd</c> と<b>部品の間で割れていた</b>
+    /// （2026-08-31 の自己レビュー R26-27）。<c>yyyy/MM/dd</c> に揃えると開発者が決めた
+    /// （2026-09-02。CLB の日付欄はブラウザ標準の <c>&lt;input type="date"&gt;</c> で、
+    /// 日本語環境では <c>2026/09/02</c> と表示される——<b>欄と文言が食い違わない</b>）。</para>
+    /// <para><b>見るのは文字列補間の書式指定だけ</b>である。SQL に渡す ISO の日付は
+    /// <c>ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)</c> と明示して書く決まりにしてあり、
+    /// そちらには当たらない。<b>「利用者に見せる文言」と「機械に渡す値」を、書き方で分ける。</b></para>
+    /// <para><c>yyyy</c> を含む書式だけを見る。<c>{amount:#,0}</c> のような数値の書式や、
+    /// 時刻だけの書式は対象外である。<c>yyyy/MM/dd HH:mm</c> は通る。</para>
+    /// </remarks>
+    private static IEnumerable<SyntaxNode> ForeignDateFormats(SyntaxNode root)
+        => root.DescendantNodes()
+            .OfType<InterpolationFormatClauseSyntax>()
+            .Where(clause =>
+            {
+                var format = clause.FormatStringToken.ValueText;
+                return format.Contains("yyyy", StringComparison.Ordinal)
+                       && !format.Contains("yyyy/MM/dd", StringComparison.Ordinal);
+            });
 
     private static int Line(SyntaxNode node)
         => node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;

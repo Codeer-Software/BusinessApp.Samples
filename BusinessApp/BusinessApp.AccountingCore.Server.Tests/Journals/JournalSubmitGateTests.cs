@@ -539,8 +539,8 @@ public class JournalSubmitGateTests
             () => server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value))], NothingSaved));
 
         Assert.StartsWith(JournalPostingRejectedException.DeletionHeadline, thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("2026-08-24", thrown.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("2026-08-20", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("2026/08/24", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("2026/08/20", thrown.Message, StringComparison.Ordinal);
         Assert.Contains(JournalViolationCodes.PeriodClosed, thrown.Violations.Select(v => v.Code));
     }
 

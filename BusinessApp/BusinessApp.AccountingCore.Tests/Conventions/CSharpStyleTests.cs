@@ -277,6 +277,25 @@ public class CSharpStyleTests
     }
 
     /// <summary>
+    /// 利用者に見せる日付は <c>yyyy/MM/dd</c> に揃える（docs/09 §2-5）。
+    /// </summary>
+    /// <remarks>
+    /// <b>見るのは文字列補間の書式指定だけ</b>である。SQL に渡す ISO の日付は
+    /// <c>ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)</c> と明示して書くので当たらない
+    /// （その 1 本が <c>PartnerRegistrationStore</c> にある）。
+    /// </remarks>
+    [Theory]
+    [InlineData("var s = $\"{date:yyyy-MM-dd}\";", true)]
+    [InlineData("var s = $\"{date:yyyy年M月d日}\";", true)]
+    [InlineData("var s = $\"{date:yyyy/M/d}\";", true)]
+    [InlineData("var s = $\"{date:yyyy/MM/dd}\";", false)]
+    [InlineData("var s = $\"{at:yyyy/MM/dd HH:mm}\";", false)]
+    [InlineData("var s = $\"{amount:#,0}\";", false)]
+    [InlineData("var s = date.ToString(\"yyyy-MM-dd\", CultureInfo.InvariantCulture);", false)]
+    public void 利用者向け文言の日付は_yyyy_MM_dd_に揃える(string source, bool caught)
+        => Assert.Equal(caught, Find(source, ForbiddenFormSet.MessageLayer).Count > 0);
+
+    /// <summary>
     /// 読めなかったことを「違反 0 件」と混同しない。
     /// </summary>
     /// <remarks>

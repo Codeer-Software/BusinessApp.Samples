@@ -199,7 +199,7 @@ public sealed class JournalSubmitGate(
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.PeriodClosed,
-                    $"計上日（{stored.PostingDate:yyyy-MM-dd}）の会計期間は締められているので、"
+                    $"計上日（{stored.PostingDate:yyyy/MM/dd}）の会計期間は締められているので、"
                     + "この伝票は削除できません。締めを解除してから削除してください。"));
             }
         }

@@ -88,6 +88,17 @@ public static class TestDatabase
     /// <summary>同値検査の起点（<c>ddl/</c> の凍結コピー）。番号順。</summary>
     public static IReadOnlyList<string> BaselineFiles() => NumberedSqlFiles(BaselineDirectory);
 
+    /// <summary>
+    /// 開発・デモ専用の初期データ（<c>Designer/seed/dev/</c>）。番号順。
+    /// </summary>
+    /// <remarks>
+    /// <b>実運用には投入しない</b>（ADR-0031）。ここに置いてあるのは、
+    /// <b>誰も実行しないファイルを追跡下に置かない</b>ためである——
+    /// 列名も役割の値も、流してみるまで誰も確かめていなかった（qa/02 R28-13）。
+    /// </remarks>
+    public static IReadOnlyList<string> DevSeedFiles()
+        => NumberedSqlFiles(Path.Combine(SeedDirectory, "dev"));
+
     private static IReadOnlyList<string> NumberedSqlFiles(string directory)
         => Directory.GetFiles(directory, "*.sql")
             .OrderBy(Path.GetFileName, StringComparer.Ordinal)

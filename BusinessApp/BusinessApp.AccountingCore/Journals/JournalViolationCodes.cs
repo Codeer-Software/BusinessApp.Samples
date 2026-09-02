@@ -68,6 +68,16 @@ public static class JournalViolationCodes
     /// <summary>行番号が重複している、または正の整数でない。</summary>
     public const string LineNoInvalid = "E-LINE-NO";
 
+    /// <summary>
+    /// 選択肢の値が、DDL の <c>CHECK</c> が並べている値のどれでもない。
+    /// </summary>
+    /// <remarks>
+    /// <b>「入っていない」（<see cref="RequiredValueMissing"/>）とは別である。</b>
+    /// 空欄なら入れさせればよいが、こちらは<b>画面が出さない値が入っている</b>——
+    /// 画面を通らない経路（取込・API）でしか起こらない。対処も違う（入れる／入力し直す）ので分ける。
+    /// </remarks>
+    public const string ChoiceNotStorable = "E-CHOICE";
+
     /// <summary>計上日が取引日より前になっている。</summary>
     public const string PostingDateBeforeTransaction = "E-DATE-ORDER";
 
