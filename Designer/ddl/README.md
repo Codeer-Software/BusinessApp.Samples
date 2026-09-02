@@ -3,7 +3,7 @@ title: ddl — スキーマ定義
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-08-31
+updated: 2026-09-03
 supersedes: []
 related: [../Project.md, ../../docs/04_会計ドメイン設計.md, ../../docs/08_マスタ台帳.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---
@@ -93,7 +93,7 @@ dotnet test BusinessApp.slnx
 | I-01 伝票単位で貸借一致 | — （行をまたぐので `CHECK` では書けない） | `I-01` |
 | I-03 有効な会計期間に属する | — | `I-03` ＋ `E-PERIOD-ORPHAN` |
 | I-04 締め済み期間に計上できない | — | `I-04` |
-| I-05 計上済み仕訳は変更も削除もされない | `journal_entries` / `journal_lines` の `BEFORE UPDATE` / `BEFORE DELETE` トリガ | `I-05` |
+| I-05 計上済み仕訳は変更も削除もされない | `journal_entries` / `journal_lines` の `BEFORE UPDATE` / `BEFORE DELETE` トリガ（**明細を計上済みの伝票へ付け替える UPDATE も止める**。`NEW` 側を見るトリガが要る。qa/03 L-25） | `I-05` |
 | I-06 訂正・取消は原仕訳を持つ | `CHECK`（自己参照の禁止も） | `I-06` |
 | I-13 損益科目の明細には部門がある | — （科目区分が要る） | `I-13` |
 | I-14 外部伝票の二重計上を防ぐ | `idempotency_key` の `UNIQUE` | — （フェーズ 6 の投入 API） |

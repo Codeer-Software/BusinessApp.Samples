@@ -4,7 +4,7 @@ status: current
 scope: 会計コア
 audience: [開発]
 growth: append
-updated: 2026-09-02
+updated: 2026-09-03
 supersedes: []
 related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md]
 ---
@@ -121,8 +121,11 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
 - 2026-08-24: **予約名フィールドは規定のデザイン型で作る。** `OptimisticLocking` は
   `OptimisticLockingFieldDesign` ＋ `IncrementVersion: true`（SQLite）。型が違うと
   designcheck 緑・HTTP 200 のまま更新だけが失敗する（qa/01 F-09）。
-  `creator` / `updater` 列は型が未決なので、当面モジュールに持たせない
-  （**優良な電子帳簿のチェックシート対応表を書くときに、記録事項の棚卸しと一緒に決める**。qa/02 R5-08）。
+  **`Creator` / `Updater` は `LinkFieldDesign`**（参照先は `AppUser`。`ValueVariable` は `Id.Value`、
+  `DisplayTextVariable` は `表示名.Value`）。2026-09-03 に `JournalEntry` へ持たせた（qa/02 R5-08 の決着）。
+  **`Docs/CommonMistakes.md` #42-A の表だけが `TextFieldDesign` と書いており誤り**——
+  同じファイルの #41 と `AppPatterns/system_fields.md` は `LinkFieldDesign` である（qa/01 F-09）。
+  **実機では未確認**（qa/04 の J-16）。
 - 2026-08-24: マスタは**物理削除させない**（`CanDelete: false`。「削除ではなく無効化」——[docs/08_マスタ台帳](../docs/08_マスタ台帳.md)）。
   一覧の削除ボタンは PageFrame の `Link.ListPageDesign.ListFieldDesign.CanDelete` でも切る。
 - 2026-08-24: 一覧の既定の並び順は PageFrame の `Link...SearchCondition.SortConditions` で指定する。

@@ -80,12 +80,42 @@ void ApplyPostedLock()
     // 取り消された・訂正されたことの断り。計上済みを開いたときにサーバが答える。
     AmendmentNoticeLabel.IsVisible = false;
 
+    ShowSnapshotPartner(posted);
+
     // **押せる状態に戻す。** 計上済みの伝票は書き込み条件（Status = draft）から外れており、
     // そのままだとボタンが残ったまま無反応になる（qa/01 D-01・F-14）。
     CorrectButton.IsViewOnly = false;
     ReverseButton.IsViewOnly = false;
 
     if (posted) ApplyAmendmentAvailability();
+}
+
+// 計上済みの伝票は、取引先も計上時の姿で見せる（ADR-0037）。
+//
+// **欄は 1 つのまま、表示テキストだけを写しに差し替える。**
+// 桝を 2 つ並べて出し分ける形は**実機で崩れた**（2026-09-03。隠した側の桝が幅を持ったまま残り、
+// 取引先の値がラベルから大きく離れて右へ飛ぶ。qa/01 D-08 の症状で、その処方の CSS は
+// このプロジェクトに入っていない）。**欄が 1 つなら、そもそも空の桝ができない。**
+//
+// **写しは `DataOnlyFields` で読む**（qa/01 F-34）。レイアウトに出していない欄は
+// CLB が取ってこないので、書かないと**全件で空**になる。
+//
+// **写しが無ければ触らない。** 空になるのは「この列より前に計上された伝票」と
+// 「取引先の無い伝票」で、前者で空欄にすると**記録が無いのか出せないのかが読めない**（docs/09 §1）。
+// **振替伝票の一覧の `COALESCE(写し, 現在名)` と同じ見方**である。
+//
+// **計上済みの画面は読むだけ**なので（書き込み条件から外れている）、`LinkField` は
+// 候補ダイアログもリンクも出さず、ただの文字列として出る。
+//
+// **入力の事実（入力年月日・作成者）と計上の事実（計上した日時・計上者）は出しっぱなしにする**
+// （qa/02 R6-01・R5-08 の決着）。状態で消すと、幅 120px のラベルの列が空の桝として残る。
+// 下書きでは計上の 2 つが空欄になるが、**「まだ計上していない」がそのまま読める**ので、消すより素直である。
+void ShowSnapshotPartner(bool posted)
+{
+    if (!posted) return;
+    if (string.IsNullOrEmpty(PartnerNameSnapshot.Value)) return;
+
+    Partner.DisplayText = PartnerNameSnapshot.Value;
 }
 
 // できない操作のボタンは出さない。

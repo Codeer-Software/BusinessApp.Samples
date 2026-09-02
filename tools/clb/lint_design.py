@@ -35,8 +35,16 @@ RESERVED_FIELD_TYPES = {
     "OptimisticLocking": "OptimisticLockingFieldDesign",
     "CreatedAt": "DateTimeFieldDesign",
     "UpdatedAt": "DateTimeFieldDesign",
-    "Creator": "TextFieldDesign",
-    "Updater": "TextFieldDesign",
+    # **`LinkFieldDesign` である**（`Docs/AppPatterns/system_fields.md` の表。DB 列は
+    # `creator` / `updater` の INTEGER で、参照先は認証部品の利用者）。
+    # `Docs/CommonMistakes.md` #42-A の表だけが `TextFieldDesign` を「推奨」と書いているが、
+    # **同じファイルの本文（予約名の一覧）は `LinkFieldDesign` と書いており、食い違っている**。
+    # CLAUDE.md §3-2 が `Docs/AppPatterns/` を正典と定めているので、そちらに従う。
+    # **型を間違えると自動セットそのものが効かない**（F-09 の機序）。
+    # 「文字列だと利用者表と突き合わせられない」ではない——SQLite の INTEGER 親和性は
+    # `'3'` を格納時に整数へ直すので、比較も結合も当たる（2026-09-03 実測）。
+    "Creator": "LinkFieldDesign",
+    "Updater": "LinkFieldDesign",
 }
 
 LEGACY_ALIGNMENTS = {"Left", "Right"}

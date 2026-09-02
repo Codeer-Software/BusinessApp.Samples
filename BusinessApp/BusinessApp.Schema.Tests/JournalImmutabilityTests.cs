@@ -68,6 +68,110 @@ public class JournalImmutabilityTests
             """));
     }
 
+    /// <summary>
+    /// <b>下書きの明細を、計上済みの伝票へ付け替えられない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 上の 2 本のトリガは <c>OLD</c> の伝票（＝いま所属している伝票）しか見ないので、
+    /// <b>この経路だけが 2026-09-03 まで開いていた</b>（qa/03 L-25）。通ると、計上済みの伝票に
+    /// 身に覚えのない行が増える——貸借一致（I-01）も不変性（I-05）もその瞬間に破れ、
+    /// しかも計上済みなので訂正も取消もできない行が恒久的に残る。
+    /// </remarks>
+    [Fact]
+    public void 下書きの明細を計上済みの伝票へ移せない()
+    {
+        using var db = WithPostedAndDraft();
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(
+            db, "UPDATE journal_lines SET journal_entry_id = 1 WHERE journal_entry_id = 2"));
+
+        // **どの制約で落ちたかまで見る。** 例外の型だけだと、seed の形が変わって
+        // 別の制約（UNIQUE(journal_entry_id, line_no) など）に当たっても緑のままになる。
+        Assert.Contains("計上済みの仕訳へ明細を移動できない", thrown.Message, StringComparison.Ordinal);
+
+        // 計上済みは増えず、下書きの側も残っている（＝文が丸ごと巻き戻った）。
+        Assert.Equal(2L, TestDatabase.ScalarOf<long>(
+            db, "SELECT COUNT(*) FROM journal_lines WHERE journal_entry_id = 1"));
+        Assert.Equal(1L, TestDatabase.ScalarOf<long>(
+            db, "SELECT COUNT(*) FROM journal_lines WHERE journal_entry_id = 2"));
+    }
+
+    [Fact]
+    public void 計上済みの明細を下書きへ逃がせない()
+    {
+        using var db = WithPostedAndDraft();
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(
+            db, "UPDATE journal_lines SET journal_entry_id = 2 WHERE journal_entry_id = 1"));
+
+        Assert.Contains("計上済みの仕訳明細は変更できない", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>REPLACE の暗黙の DELETE で、計上済みが音もなく消えない。</b>
+    /// </summary>
+    /// <remarks>
+    /// SQLite は、REPLACE が制約充足のために消す行の DELETE トリガを
+    /// <c>PRAGMA recursive_triggers</c> が OFF のあいだ発火しない（既定は OFF）。
+    /// <b>接続の設定に頼らず、衝突そのものを拒む</b>（qa/03 L-26）。
+    /// </remarks>
+    [Theory]
+    [InlineData(
+        "INSERT OR REPLACE INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at) "
+        + "VALUES (1, 1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00')",
+        "計上済みの仕訳を上書きできない")]
+    [InlineData(
+        "UPDATE OR REPLACE journal_entries SET idempotency_key = 'K1' WHERE id = 2",
+        "計上済みの仕訳を上書きできない")]
+    [InlineData(
+        "INSERT OR REPLACE INTO journal_lines (id, journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id) "
+        + "VALUES (1, 2, 5, 'debit', 1, 7, 1)",
+        "計上済みの仕訳明細を上書きできない")]
+    [InlineData(
+        "UPDATE OR REPLACE journal_lines SET id = 1 WHERE id = 3",
+        "計上済みの仕訳明細を上書きできない")]
+    public void REPLACEで計上済みを置き換えられない(string sql, string message)
+    {
+        using var db = WithPostedAndDraft();
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, sql));
+
+        Assert.Contains(message, thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("posted", TestDatabase.ScalarOf<string>(db, "SELECT status FROM journal_entries WHERE id = 1"));
+        Assert.Equal(2L, TestDatabase.ScalarOf<long>(
+            db, "SELECT COUNT(*) FROM journal_lines WHERE journal_entry_id = 1"));
+    }
+
+    /// <summary>
+    /// 計上済みの伝票 1 件（id = 1・明細 2 行・冪等キー <c>K1</c>）と、
+    /// 下書き 1 件（id = 2・明細 1 行＝id 3）。
+    /// </summary>
+    private static SqliteConnection WithPostedAndDraft()
+    {
+        var db = SchemaSeed.CreateWithPostedEntry();
+        TestDatabase.Execute(db, """
+            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES (1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (2, 9, 'credit', 1, 999, 1);
+            """);
+
+        // 冪等キーは計上済みに付ける。計上済みは UPDATE できないので、トリガを外して書く
+        // ——**この経路はテストの都合であって、製品には無い**。
+        TestDatabase.Execute(db, """
+            DROP TRIGGER trg_journal_entries_posted_no_update;
+            UPDATE journal_entries SET idempotency_key = 'K1' WHERE id = 1;
+            CREATE TRIGGER trg_journal_entries_posted_no_update
+            BEFORE UPDATE ON journal_entries
+            FOR EACH ROW WHEN OLD.status = 'posted'
+            BEGIN
+                SELECT RAISE(ABORT, '計上済みの仕訳は変更できない。訂正・取消は反対仕訳で行う。');
+            END;
+            """);
+
+        return db;
+    }
+
     /// <summary>訂正・取消は反対仕訳で行う。原仕訳は残したまま新しい伝票が増える。</summary>
     [Fact]
     public void 取消は反対仕訳として別の伝票になる()

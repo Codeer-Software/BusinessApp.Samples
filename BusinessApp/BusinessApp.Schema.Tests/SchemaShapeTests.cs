@@ -132,6 +132,11 @@ public class SchemaShapeTests
         Assert.Contains("trg_journal_lines_posted_no_update", triggers);
         Assert.Contains("trg_journal_lines_posted_no_delete", triggers);
         Assert.Contains("trg_journal_lines_posted_no_insert", triggers);
+        Assert.Contains("trg_journal_lines_no_move_into_posted", triggers);
+        Assert.Contains("trg_journal_entries_no_replace_posted_insert", triggers);
+        Assert.Contains("trg_journal_entries_no_replace_posted_update", triggers);
+        Assert.Contains("trg_journal_lines_no_replace_posted_insert", triggers);
+        Assert.Contains("trg_journal_lines_no_replace_posted_update", triggers);
     }
 
     /// <summary>
