@@ -104,6 +104,67 @@ public class JournalSubmitGateTests
         Assert.False(entry.Fields.ContainsKey("EnteredAt"));
     }
 
+    [Theory]
+    // **デザインの型と同じ型を差し込む。** いまは Fields.Remove が型を見ないので何でも通るが、
+    // 型ごとの処理に変えた日に「本番では起きない形」でだけ緑になる（qa/03 L-02 の縮退と同じ型）。
+    [InlineData("PostedBy", "link")]
+    [InlineData("Creator", "link")]
+    [InlineData("Updater", "link")]
+    [InlineData("PostedAt", "datetime")]
+    [InlineData("CreatedAt", "datetime")]
+    [InlineData("UpdatedAt", "datetime")]
+    [InlineData("EntryNo", "number")]
+    [InlineData("PartnerNameSnapshot", "text")]
+    public async Task システムが決める欄は送られてきても採らない(string field, string kind)
+    {
+        using var server = new AccountingServer();
+
+        // 守っているのは**画面を通らない経路**である（ADR-0004）。画面の欄は閲覧専用だが、
+        // Web API を直に叩けば載せられる。**通すと記帳者・計上日時・写しを詐称できる。**
+        var entry = SubmitData.Entry("1");
+        entry.Fields[field] = Forged(kind);
+
+        await server.SubmitAsync([SubmitData.Updating(entry)], NothingSaved);
+
+        Assert.False(entry.Fields.ContainsKey(field));
+    }
+
+    /// <summary>
+    /// <b>楽観ロックは捨てない。</b> 利用者が決める値ではないが、
+    /// <b>画面が持ってくるべき値</b>で、捨てると CLB の同時更新の検出が働かなくなる。
+    /// </summary>
+    [Fact]
+    public async Task 楽観ロックの版は捨てない()
+    {
+        using var server = new AccountingServer();
+        var entry = SubmitData.Entry("1");
+        entry.Fields["OptimisticLocking"] = new NumberFieldData { Value = 3 };
+
+        await server.SubmitAsync([SubmitData.Updating(entry)], NothingSaved);
+
+        Assert.True(entry.Fields.ContainsKey("OptimisticLocking"));
+    }
+
+    [Fact]
+    public async Task 新規の保存でもシステムが決める欄は採らない()
+    {
+        using var server = new AccountingServer();
+        var entry = SubmitData.NewEntry(TemporaryId, status: "draft");
+        entry.Fields["PostedBy"] = Forged("link");
+
+        await server.SubmitAsync([SubmitData.Adding(entry)], server.Saving(entry, Balanced));
+
+        Assert.False(entry.Fields.ContainsKey("PostedBy"));
+    }
+
+    private static FieldDataBase Forged(string kind) => kind switch
+    {
+        "link" => new LinkFieldData { Value = "999" },
+        "datetime" => new DateTimeFieldData { Value = new DateTime(2020, 1, 1) },
+        "number" => new NumberFieldData { Value = 999 },
+        _ => new TextFieldData { Value = "999" },
+    };
+
     [Fact]
     public async Task 下書き保存も状態を送らない保存も計上ではない()
     {

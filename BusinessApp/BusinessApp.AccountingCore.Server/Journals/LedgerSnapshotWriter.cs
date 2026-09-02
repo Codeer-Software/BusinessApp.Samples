@@ -54,11 +54,18 @@ public sealed class LedgerSnapshotWriter(IDbAccessor dbAccessor, string dataSour
         // 取消は原仕訳の写しを引き継ぐ（ADR-0018）。訂正の再計上は利用者が取引先を直せるので焼き直す。
         if (draft.EntryType == EntryType.Reversal)
         {
+            await InheritEntryNameAsync(id);
             return;
         }
 
         // 同じ取引先が何行にも出るのが普通なので、取引先ごとに 1 回だけ読む。
         var cache = new Dictionary<long, PartnerSnapshot>();
+
+        await WriteEntryNameAsync(
+            id,
+            draft.PartnerId is PartnerId entryPartnerId
+                ? (await CachedAsync(cache, entryPartnerId)).Name
+                : null);
 
         foreach (var line in draft.Lines)
         {
@@ -159,6 +166,66 @@ public sealed class LedgerSnapshotWriter(IDbAccessor dbAccessor, string dataSour
         {
             throw new InvalidOperationException(
                 $"仕訳 {id.Value} の {lineNo} 行目に写しを書けなかった（{affected} 行）。");
+        }
+    }
+
+    /// <summary>
+    /// 伝票の取引先の名前を焼く。<b>画面が計上時の姿を見せるためのもの</b>（ADR-0037）。
+    /// </summary>
+    /// <remarks>
+    /// <b>明細の写しとは役割が違う。</b> あちらは帳簿の法定記載事項（消法 30 ⑧）で、
+    /// こちらは伝票の詳細と入力の一覧が「計上したときに選んでいた取引先」を出すためのものである。
+    /// <b>取引先の無い伝票には NULL を焼く</b>——飛ばすと、利用者が送ってきた文字列が残る。
+    /// </remarks>
+    private Task WriteEntryNameAsync(JournalEntryId id, string? name)
+        => ExecuteOnEntryAsync(
+            id,
+            "update journal_entries set partner_name_snapshot = @p2 where id = @p1",
+            new() { { "@p2", name } },
+            "焼けなかった");
+
+    /// <summary>
+    /// 反対仕訳に、原仕訳の写しを引き継ぐ。<b>焼き直さない</b>（ADR-0018）。
+    /// </summary>
+    /// <remarks>
+    /// 焼き直すと、原仕訳の計上後に改名された相手で<b>同じ取引の表と裏が違う名前になる</b>
+    /// （明細で実際に起きた。qa/03 L-13）。取消の <c>partner_id</c> は原仕訳の写しなので、
+    /// 名前も原仕訳のものをそのまま持ってくる。
+    /// </remarks>
+    private Task InheritEntryNameAsync(JournalEntryId id)
+        => ExecuteOnEntryAsync(
+            id,
+            """
+            update journal_entries
+               set partner_name_snapshot =
+                   (select o.partner_name_snapshot
+                      from journal_entries o where o.id = journal_entries.original_entry_id)
+             where id = @p1
+            """,
+            [],
+            "原仕訳から引き継げなかった");
+
+    /// <summary>
+    /// 伝票 1 件に書く。<b>1 件に当たらなければ止める。</b>
+    /// </summary>
+    /// <remarks>
+    /// 黙って 0 件で通すと、計上済みは不変（ADR-0004）なので<b>写しが永久に空のまま残る</b>。
+    /// 明細側（<see cref="WriteAsync"/>）と同じ理由・同じ守り方である。
+    /// </remarks>
+    private async Task ExecuteOnEntryAsync(
+        JournalEntryId id, string sql, Dictionary<string, object?> parameters, string what)
+    {
+        // **渡された辞書を書き換えない。** いまはどちらの呼び出しも新しいリテラルだが、
+        // 使い回した辞書を渡した日に静かに壊れる形にしない。
+        var bound = new Dictionary<string, object?>(parameters) { ["@p1"] = id.Value };
+
+        var affected = await dbAccessor.ExecuteAsync(dataSourceName, sql, bound);
+        if (affected != 1)
+        {
+            // **経路で文言を分ける。** 引き継ぎが 0 件なのは「原仕訳ごと消えている」という
+            // 別の壊れ方なので、同じ文言だと調査が遠回りになる。
+            throw new InvalidOperationException(
+                $"伝票 {id.Value} の取引先名の写しを{what}（{affected} 行）。");
         }
     }
 

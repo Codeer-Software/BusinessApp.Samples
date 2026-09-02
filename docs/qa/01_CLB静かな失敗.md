@@ -4,7 +4,7 @@ status: current
 scope: 全体
 audience: [開発]
 growth: append
-updated: 2026-09-02
+updated: 2026-09-03
 supersedes: []
 related: [../11_CLB改善提案/README.md, ../decisions/0033-読み取りはそのアプリの役割を持つ人だけに開く.md, ../decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md, ../decisions/0036-権限は到達と書き込みに書き分け守りは保存の関門に置く.md]
 ---
@@ -103,7 +103,7 @@ F-09（予約名のデザイン型）・**F-15（`Submit()` の前の `ValidateI
 | D-05 | 詳細 URL が真っ白 | 一覧→詳細のリンクは `ModulePageType: "Auto"`。`"List"` だと `/Module/{id}` のルートが登録されない。**`"Detail"` は別物で、正規の使い方である**——1 行しか持たないモジュール（自社情報。`Id` を添える）と、表を持たない表示専用モジュール（[ADR-0027](../decisions/0027-入力の一覧はラップモジュールとクエリモジュールで作る.md) の `JournalEntryBoard`）を一覧を挟まずに開く。**`lint_design.py` は 2026-08-30 まで `Detail` も叩いていた**（qa/02 R25-01） |
 | D-06 | メニューから消したモジュールが真っ白 | `OtherPageModuleDesigns` に登録する |
 | D-07 | 条件が黙って捨てられ全件表示になる | リンクを複製したら `ListPageDesign.ListFieldDesign.SearchCondition.ModuleName` を遷移先に直す |
-| D-08 | 非表示にしたフィールドの位置に空白が残る | 固定幅カラムは空 div として残る。`app.css` で `.grid-column:not(:has(.field-layout)){display:none}` |
+| D-08 | 非表示にしたフィールドの位置に空白が残る | 固定幅カラムは空 div として残る。`app.css` で `.grid-column:not(:has(.field-layout)){display:none}`<br>**2026-09-03 に実際に踏んだ。** 同じ行に幅の無い値の列を 2 つ置き、状態でどちらかを隠したところ、**隠した側の桝が残って値がラベルから大きく離れた**（振替伝票の取引先）。上の処方の CSS は本プロジェクトの `app.css` に入っていない。**桝を 2 つ並べて出し分ける形をやめ、欄を 1 つにして表示テキストだけを差し替えた**（`JournalEntry.mod.cs`）——**欄が 1 つなら空の桝ができない** |
 | D-09 | 検索欄が右に見切れる | 検索レイアウトの行は **`IsWrap: true` を標準**にする。1 行は 3 組（ラベル＋入力）まで |
 | D-10 | ラベルだけがセル上端に張り付く | 「ラベル列 + 入力列」の 2 カラム行では、**ラベル列に `VerticalAlignment: "Middle"` を必ず設定** |
 | D-11 | 行ごとのスタイル制御 | `ListLayouts[""].OnAfterInitialization` は**行モジュールごとに発火**する。`ClassName` の付与は効くが、`IsVisible` の切替は反映されない |
@@ -142,7 +142,7 @@ F-09（予約名のデザイン型）・**F-15（`Submit()` の前の `ValidateI
 | F-06 | 追加はできるのに直せない・消せない | `DataWriteCondition` は画面側で評価される。条件が参照する列がレイアウトにも `DataOnlyFields` にも無いと null になり、常に偽になる |
 | F-07 | 画面のインスタンスの値が黙って落ちる | 別インスタンスで `Submit()` した後は、画面のインスタンスに値を入れ直してから表示を組み直す |
 | F-08 | `Submit()` の失敗に気づけない | 戻り値は `bool?`（`null`=送信なし / `false`=失敗 / `true`=成功）。**必ず検査**して失敗を通知する |
-| F-09 | 一覧も詳細も正しく出るのに、更新すると必ず「更新に失敗しました」。`designcheck` は緑、`POST /api/module_data` は 200、サーバログにも何も出ない | **予約名フィールドは専用のデザイン型でなければならない**（2026-08-24 実測 1.3.20）。`OptimisticLocking` を `NumberFieldDesign`、`Creator` / `Updater` を `NumberFieldDesign` にしていたのが原因。`OptimisticLocking` は `OptimisticLockingFieldDesign` ＋ **SQLite では `IncrementVersion: true`**、`Creator` / `Updater` は `TextFieldDesign` にする |
+| F-09 | 一覧も詳細も正しく出るのに、更新すると必ず「更新に失敗しました」。`designcheck` は緑、`POST /api/module_data` は 200、サーバログにも何も出ない | **予約名フィールドは専用のデザイン型でなければならない**（2026-08-24 実測 1.3.20）。`OptimisticLocking` を `NumberFieldDesign`、`Creator` / `Updater` を `NumberFieldDesign` にしていたのが原因。`OptimisticLocking` は `OptimisticLockingFieldDesign` ＋ **SQLite では `IncrementVersion: true`**、`Creator` / `Updater` は **`LinkFieldDesign`**（参照先は認証部品の利用者。`ValueVariable` は `Id.Value`）にする。<br>**2026-09-03 訂正**: この行はもともと `Creator` / `Updater` を `TextFieldDesign` と書いていた。**当時直したのは `OptimisticLocking` で、`Creator` / `Updater` の型は確かめていない**。正しいのは `LinkFieldDesign` で、根拠は `Docs/AppPatterns/system_fields.md` の表・`_specs/ModuleDesign.md` のシステムフィールド一覧・CLB 公式マニュアルの `fields/field.md`・前回プロジェクトの実運用（**22 モジュールすべて `LinkFieldDesign`**）の 4 つ。`Docs/CommonMistakes.md` #42-A の**表だけ**が `TextFieldDesign (推奨)` と書いており、同じファイルの本文と矛盾している（CLB 開発元へ報告する）。**この行の「実測 1.3.20」は `OptimisticLocking` にかかるもので、`Creator` / `Updater` の型は実機で確かめていない**（qa/04 の J-16）。**根拠の格が違う**——上の 3 つは資料、4 つ目は前回プロジェクトの運用実績である。**「INTEGER 列に文字列を入れると突き合わせられない」ではない**——SQLite の INTEGER 親和性は `'3'` を格納時に整数へ直すので比較も結合も当たる（2026-09-03 実測）。**効かなくなるのは自動セットそのもの**である |
 | F-10 | 新規作成したマスタが最初から無効になり、入力候補に出ない | **Boolean の初期値は DB の `DEFAULT` を見ない。**画面は必ず false 始まりになる（2026-08-24 実測 1.3.20）。`DetailLayout.OnAfterInitialization` で `IsNewData` ガードを付けて代入する。新規判定は `Id.Value == null` ではなく `IsNewData` |
 | F-11 | サーバ側の関門で親子を見ようとすると、子の `ModuleSubmitData` が 1 つも無い | **ヘッダ＋明細の保存は `ModuleSubmitData` 1 つにまとまって届く。**親も子も同じ `Add` / `Update` に混ざって入る（2026-08-24 実測 1.3.20）。`ModuleSubmitData.ModuleName` ではなく **`ModuleData.Name`** で見分ける |
 | F-12 | サーバ側の関門で読んだ値が既定値（日付が `0001-01-01`、明細が 0 件）になる | **`ModuleData` には変更されたフィールドしか入らない。**画面で触っていない項目は `Fields` に存在しない（`Id` と `OptimisticLocking` は常に来る）。書き込みたいフィールドも**無ければ自分で作る**必要がある（2026-08-24 実測 1.3.20）。<br>**送られてきた差分だけで業務検証をしてはいけない。** 既存データを開いて 1 項目だけ変えた保存では、他の項目が差分に載らず必ず誤判定する。いったん保存させてから DB を読み直して検証し、違反なら例外を投げて巻き戻す |
@@ -176,6 +176,8 @@ F-09（予約名のデザイン型）・**F-15（`Submit()` の前の `ValidateI
 | F-31 | **読み取りを閉じたモジュールを API から引くと、`500` と英語が返る** | `POST /api/module_data/list` に `UserReadCondition` を満たさない利用者で投げると、**`500 Internal Server Error` ＋ 本文 `No permission to read module`**（`text/plain`）が返る（2026-09-02 実測 1.3.20。役割を持たない `admin` で `JournalEntry` を引いた）。**閉じてはいる**——行は 1 件も返らない。ただし**権限の拒否が `403` ではなく `500`** で、文言も英語である（F-27 と同じ形）。**画面から踏む経路は無い**（フレームが先に止める）ので利用者には出ないが、**監視でサーバエラーとして数えられる**。[FB-012](../11_CLB改善提案/01_機能改善提案.md) へ回した |
 | F-32 | **必須の印が `*` `*` と 2 つ並ぶ** | `LabelFieldDesign` の **`RelativeField` を必須の欄に向けると、CLB が `<span class="text-danger">*</span>` を自分で足す**（2026-09-02 実測 1.3.20）。そこへ本プロジェクトの `required-label`（`app.css` の `::after`）を重ねると印が 2 つになる。**印の出し方は 2 通りあり、どちらか一方だけを使う**——`Text` を直に書いたラベル（会計側の全画面）はクラスで、`RelativeField` を使うラベル（認証部品の `AppUser`）は CLB に任せる。**2026-09-02 から `lint_design.py` が両方を見ている**（D-20） |
 | F-33 | **一度選んだ参照欄を空にして保存すると、保存ごと落ちる。トーストには `SQLite Error 19: 'FOREIGN KEY constraint failed'` が出る** | **`LinkField` を空にすると `Value` は `null` ではなく空文字になり、CLB はそれをそのまま外部キーの列へ書きに行く**（2026-09-02 実測 1.3.20。仕訳明細の補助科目を × で消して下書き保存した）。`''` は「参照先が無い」ではなく**「`id` が `''` の行を指す」**なので、`INTEGER REFERENCES …` の列では必ず外部キー違反になる。**どの欄で起きるかは、まだ 3 例しか確かめていない**——踏んだのは**`ListField` の行**（仕訳明細の補助科目）で、**トップレベルの参照欄 2 つ**（取引先の名寄せの親・伝票の取引先）は**空にすると NULL で保存された**（同日実測）。**必須の欄は先に「必須項目です」で止まる**ので、踏むのは必須でない参照だけである。直しは保存の関門で空文字の `LinkFieldData.Value` を `null` にする（`JournalSubmitGate.NormalizeEmptyLinks`。**明細もヘッダも通る**）。出るメッセージ自体は F-16 の経路に載る |
+| F-34 | `ListField` の行から、レイアウトに出していないフィールドを読むと**必ず空**。`designcheck` も lint も何も言わない | **CLB が取ってくるのは「そのレイアウトに出ている欄 ＋ `DataOnlyFields` ＋ `Id` / `OptimisticLocking`」だけ**である（`JP/module/module.md`。F-06 と同じ機構）。**`ListField` が使うのは子モジュールの一覧レイアウト**（詳細レイアウトではない）。画面に出さずに値だけ要るなら **`DataOnlyFields` に名前を書く**。2026-09-03 の自己レビューで、明細の写しを読むスクリプトが**全行で空振り**していたのを見つけた。**トップレベルのモジュールでも同じ**——伝票の詳細で写しの欄をレイアウトから外したときは、`DetailLayouts[""].DataOnlyFields` に名前を書いて読めるようにした（同日、実機で確認） |
+| F-35 | `LinkFieldNames` に**フィールド名だけ**を書いても効かない（黙って無視される） | **書式は `"{LinkField の名前}.{参照先のフィールド名}"`**（`_specs/ModuleDesign.md`・`Docs/CommonMistakes.md` #20）。**CLB のサンプルは両方の形を持つ**——`_samples` で `LinkFieldNames` に値がある 15 モジュール・28 エントリを数えると、**ドット形式 23 件・裸の名前 5 件**（裸はどれも子 `ListField` の名前）。**裸が本当に無視されるかは未確認**である（#40 は「`LinkFieldNames` だけでは絞り込みは効かない」と言うが、宣言そのものの可否は書いていない）。本プロジェクトで `LinkFieldNames` を持つ 5 モジュールは全部裸の名前で、`DisplayTextVariable` は別経路で解けるので実害は出ていない。**直すのは実機で見られる回**（2026-09-03 発見） |
 
 ## G. ブラウザ自動操作（アプリの不具合ではない）
 

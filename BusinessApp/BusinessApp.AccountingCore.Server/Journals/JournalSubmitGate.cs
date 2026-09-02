@@ -67,6 +67,23 @@ public sealed class JournalSubmitGate(
 
     // 状態の文字列は列挙子から導く。手で "posted" と書くと、列挙子や DB の値を変えたときに
     // 黙って一致しなくなり、計上ボタンが下書き保存に化ける（qa/01 の静かな失敗そのもの）。
+    /// <summary>
+    /// システムが決める欄。<b>保存で送られてきても採らない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><c>EnteredAt</c> はここに入れない——<b>捨てるだけでなく打つ</b>ので、別に扱う。</para>
+    /// <para><c>EntryNo</c> は<b>入れる</b>。DDL の <c>CHECK (status = 'posted' OR entry_no IS NULL)</c> が
+    /// 詐称そのものは止めるが、<b>止め方が生の SQLite 例外</b>である。制約は最後の砦であって
+    /// 日常の分岐ではない（qa/01 F-16）。正規の採番は計上のときだけ行われる。</para>
+    /// <para><b><c>OptimisticLocking</c> は入れてはいけない。</b> 落とすと CLB の同時更新の検出が
+    /// 働かなくなる——利用者が決める値ではないが、<b>利用者の画面が持ってくるべき値</b>である。</para>
+    /// </remarks>
+    private static readonly string[] SystemAssignedFields =
+    [
+        "PostedBy", "PostedAt", "EntryNo", "PartnerNameSnapshot",
+        "Creator", "Updater", "CreatedAt", "UpdatedAt",
+    ];
+
     private static readonly string DraftStatus = DbValue.ToSnakeCase(EntryStatus.Draft);
     private static readonly string PostedStatus = DbValue.ToSnakeCase(EntryStatus.Posted);
 
@@ -311,6 +328,26 @@ public sealed class JournalSubmitGate(
         foreach (var data in updated)
         {
             data.Fields.Remove("EnteredAt");
+        }
+
+        // **システムが決める欄は、送られてきても採らない。**
+        //
+        // 守っているのは画面ではなく、**画面を通らない経路**である（ADR-0004「迂回路を作らない」）。
+        // 画面の欄は閲覧専用にしてあるので普通の保存では差分に載らないが、
+        // Web API を直に叩けば載せられる。載せたまま書くと、
+        // **記帳者・計上日時・作成者を詐称した伝票が作れ、計上したあとは不変なので直せない。**
+        //
+        // 計上日時と伝票番号を書くのは JournalPoster だけ、取引先名の写しを書くのは
+        // LedgerSnapshotWriter だけ、作成者・更新者を書くのは CLB だけである。
+        // **CLB が「送られてきた値を上書きする」とはどの資料も書いていない**ので、
+        // 充填しかしない可能性に備えて Creator / Updater もここで落とす
+        // （正規の経路では CLB がこの直後に入れ直すので、落として困ることはない）。
+        foreach (var data in added.Concat(updated))
+        {
+            foreach (var field in SystemAssignedFields)
+            {
+                data.Fields.Remove(field);
+            }
         }
 
         var pending = new List<PendingPosting>();

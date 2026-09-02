@@ -48,6 +48,14 @@ CREATE TABLE journal_entries (
     -- 新しい列は末尾（テーブル制約の前）に置く規約（migrations/README。ADD COLUMN と同値になる位置）。
     posted_by                   INTEGER,
 
+    -- 伝票の取引先の名前の写し。計上時にサーバが焼く（ADR-0018・ADR-0037）。
+    -- **明細の写し（journal_lines.partner_name_snapshot）とは役割が違う。**
+    -- あちらは帳簿の法定記載事項（消法 30 ⑧）で、こちらは**伝票の画面が計上時の姿を見せる**ためのもの。
+    -- 計上済みの伝票は不変（I-05）なのに、参照先のマスタを改名すると画面の表示だけが動く——
+    -- それを止める。**反対仕訳は原仕訳の値を引き継ぐ**（焼き直すと表と裏で名前が変わる）。
+    -- この列より前に計上された伝票は NULL のまま。取引先の無い伝票も NULL。
+    partner_name_snapshot       TEXT,
+
     -- I-06 訂正・取消は原仕訳を一意に特定する情報を持つ
     CHECK (entry_type NOT IN ('correction', 'reversal') OR original_entry_id IS NOT NULL),
     -- 自分自身を原仕訳にできない（自分を取り消す伝票は意味を成さない）
@@ -246,9 +254,80 @@ BEGIN
     SELECT RAISE(ABORT, '計上済みの仕訳明細は削除できない。');
 END;
 
+-- **明細を計上済みの伝票へ「付け替える」道を塞ぐ。**
+--
+-- 上の 2 本は OLD の伝票（＝いま所属している伝票）の状態しか見ないので、
+-- **下書きの明細の journal_entry_id を計上済みの伝票の id へ UPDATE する**経路は
+-- どれにも当たらず通っていた（2026-09-03 の自己レビューで発見。qa/03 L-25）。
+-- 通ると、計上済みの伝票に身に覚えのない行が増える——貸借一致（I-01）も
+-- 不変性（I-05）もその瞬間に破れ、しかも訂正も取消もできない。
+CREATE TRIGGER trg_journal_lines_no_move_into_posted
+BEFORE UPDATE ON journal_lines
+FOR EACH ROW WHEN (SELECT status FROM journal_entries WHERE id = NEW.journal_entry_id) = 'posted'
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳へ明細を移動できない。');
+END;
+
 CREATE TRIGGER trg_journal_lines_posted_no_insert
 BEFORE INSERT ON journal_lines
 FOR EACH ROW WHEN (SELECT status FROM journal_entries WHERE id = NEW.journal_entry_id) = 'posted'
 BEGIN
     SELECT RAISE(ABORT, '計上済みの仕訳に明細を追加できない。');
+END;
+
+--------------------------------------------------------------------------------
+-- REPLACE の暗黙の DELETE を塞ぐ
+--
+-- **SQLite は、REPLACE が制約充足のために消す行の DELETE トリガを、
+-- `PRAGMA recursive_triggers` が OFF のあいだ発火しない**（既定は OFF）。
+-- そのため `INSERT OR REPLACE INTO journal_entries (id, ..., 'draft', ...)` の 1 文で、
+-- **計上済みの伝票が音もなく下書きに戻る**（2026-09-03 に再現。qa/03 L-26）。
+-- 明細も同じで、`id` をぶつけると計上済みの明細が 1 行黙って消える（I-01 が同時に破れる）。
+--
+-- **接続の PRAGMA に頼らない。** ここは「手作業の SQL からでも通る最後の関門」であり、
+-- 接続ごとの設定は、まさにその手作業の経路で外れる。**衝突そのものを拒む。**
+--------------------------------------------------------------------------------
+
+CREATE TRIGGER trg_journal_entries_no_replace_posted_insert
+BEFORE INSERT ON journal_entries
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳を上書きできない。訂正・取消は反対仕訳で行う。')
+     WHERE EXISTS (SELECT 1 FROM journal_entries e
+                    WHERE e.status = 'posted'
+                      AND (e.id = NEW.id
+                           OR (NEW.idempotency_key IS NOT NULL
+                               AND e.idempotency_key = NEW.idempotency_key)));
+END;
+
+CREATE TRIGGER trg_journal_entries_no_replace_posted_update
+BEFORE UPDATE ON journal_entries
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳を上書きできない。訂正・取消は反対仕訳で行う。')
+     WHERE EXISTS (SELECT 1 FROM journal_entries e
+                    WHERE e.status = 'posted' AND e.id <> OLD.id
+                      AND (e.id = NEW.id
+                           OR (NEW.idempotency_key IS NOT NULL
+                               AND e.idempotency_key = NEW.idempotency_key)));
+END;
+
+CREATE TRIGGER trg_journal_lines_no_replace_posted_insert
+BEFORE INSERT ON journal_lines
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細を上書きできない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.id = NEW.id AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_journal_lines_no_replace_posted_update
+BEFORE UPDATE ON journal_lines
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細を上書きできない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.id = NEW.id AND l.id <> OLD.id AND e.status = 'posted');
 END;

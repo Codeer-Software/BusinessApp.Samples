@@ -43,6 +43,14 @@ public class LedgerSnapshotWriterTests
             """);
     }
 
+    /// <summary>伝票（ヘッダ）に焼かれた取引先名。<b>明細の写しとは別の列である</b>（ADR-0037）。</summary>
+    private static string? EntrySnapshot(AccountingServer server, long entryId)
+        => server.Scalar<string?>(
+            $"select partner_name_snapshot from journal_entries where id = {entryId}");
+
+    private static void SetEntryPartner(AccountingServer server, long entryId, long partnerId)
+        => server.Execute($"update journal_entries set partner_id = {partnerId} where id = {entryId}");
+
     private static string? Snapshot(AccountingServer server, long entryId, int lineNo, string column)
         => server.Scalar<string?>(
             $"select {column} from journal_lines where journal_entry_id = {entryId} and line_no = {lineNo}");
@@ -133,6 +141,10 @@ public class LedgerSnapshotWriterTests
 
         Assert.Equal("明細の取引先", Snapshot(server, entry, 1, "partner_name_snapshot"));
         Assert.Equal("伝票の取引先", Snapshot(server, entry, 2, "partner_name_snapshot"));
+
+        // **伝票の写しは明細の写しではない**（ADR-0037 §1）。ここが 2 つの列の役割を分ける唯一の検体で、
+        // 他のテストは伝票と明細の取引先が同じなので、取り違えても緑になる。
+        Assert.Equal("伝票の取引先", EntrySnapshot(server, entry));
     }
 
     /// <summary>
@@ -438,6 +450,10 @@ public class LedgerSnapshotWriterTests
         Assert.Equal("draft", server.Scalar<string>($"select status from journal_entries where id = {entry}"));
         Assert.Null(server.Scalar<long?>($"select entry_no from journal_entries where id = {entry}"));
         Assert.Null(Snapshot(server, entry, 1, "partner_name_snapshot"));
+
+        // **伝票の列は明細より先に書かれる**（LedgerSnapshotWriter）。
+        // ここを見ないと、「途中まで書けた写しが残る」新しい経路が緑のまま通る。
+        Assert.Null(EntrySnapshot(server, entry));
     }
 
     /// <summary>
@@ -493,5 +509,112 @@ public class LedgerSnapshotWriterTests
             () => server.SnapshotWriter.BurnAsync(draft));
 
         Assert.Contains("写しを書けなかった", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>伝票の取引先も計上時に焼く</b>（ADR-0037）。計上済みの伝票は不変（I-05）なのに、
+    /// 参照先を改名すると画面の表示だけが動く——それを止めるための列である。
+    /// </summary>
+    [Fact]
+    public async Task 伝票の取引先の名前を計上時に写し_改名しても動かない()
+    {
+        using var server = new AccountingServer();
+        var partner = InsertPartner(server, "P900", "計上したときの名前");
+        var entry = PostableDraft(server);
+        SetEntryPartner(server, entry, partner);
+
+        await PostAsync(server, entry);
+        server.Execute($"update partners set name = '改名したあとの名前' where id = {partner}");
+
+        Assert.Equal("計上したときの名前", EntrySnapshot(server, entry));
+    }
+
+    [Fact]
+    public async Task 取引先の無い伝票には写しを残さない()
+    {
+        using var server = new AccountingServer();
+        var entry = PostableDraft(server);
+
+        await PostAsync(server, entry);
+
+        Assert.Null(EntrySnapshot(server, entry));
+    }
+
+    /// <summary>
+    /// 取消は<b>伝票の写しも</b>原仕訳から引き継ぐ。焼き直すと表と裏で名前が変わる。
+    /// </summary>
+    [Fact]
+    public async Task 取消は伝票の写しも引き継ぐ()
+    {
+        using var server = new AccountingServer();
+        var partner = InsertPartner(server, "P900", "計上したときの名前");
+        var entry = PostableDraft(server);
+        SetEntryPartner(server, entry, partner);
+        await PostAsync(server, entry);
+
+        server.Execute($"update partners set name = '取り消すときの名前' where id = {partner}");
+
+        var reversal = await server.AmendAsync(s => s.ReverseAsync(new(entry)));
+
+        Assert.Equal("計上したときの名前", EntrySnapshot(server, reversal.Value));
+    }
+
+    /// <summary>
+    /// <b>訂正の再計上は焼き直す。</b> 取消と違い、利用者が取引先を直せるからである。
+    /// </summary>
+    /// <remarks>
+    /// これが <c>EntryType.Reversal</c> の分岐の<b>反対側</b>である。
+    /// 条件を <c>Reversal or Correction</c> に書き換えても、この検体が無ければ全部緑になる——
+    /// そのとき再計上には<b>原仕訳の取引先の名前</b>が焼かれ、伝票の取引先と写しが
+    /// 食い違ったまま計上済み＝不変になる。
+    /// </remarks>
+    [Fact]
+    public async Task 訂正の再計上は取引先を焼き直す()
+    {
+        using var server = new AccountingServer();
+        var before = InsertPartner(server, "P900", "訂正する前の取引先");
+        var after = InsertPartner(server, "P901", "訂正したあとの取引先");
+        var entry = PostableDraft(server);
+        SetEntryPartner(server, entry, before);
+        SetLinePartner(server, entry, 1, before, "2026-08-19");
+        await PostAsync(server, entry);
+
+        // 訂正すると、取消が計上され、原仕訳を写した下書き（再計上）が返る（ADR-0015）。
+        // その下書きの取引先を直して計上する。
+        var started = await server.AmendAsync(s => s.CorrectAsync(new(entry)));
+        var correction = started.CorrectionId.Value;
+        SetEntryPartner(server, correction, after);
+        SetLinePartner(server, correction, 1, after, "2026-08-19");
+        await PostAsync(server, correction);
+
+        Assert.Equal("訂正したあとの取引先", EntrySnapshot(server, correction));
+        Assert.Equal("訂正したあとの取引先", Snapshot(server, correction, 1, "partner_name_snapshot"));
+
+        // 取消のほうは原仕訳から引き継ぐ（焼き直さない）。分岐の両側をこの 1 本で固定する。
+        Assert.Equal("訂正する前の取引先", EntrySnapshot(server, started.ReversalId.Value));
+    }
+
+    /// <summary>
+    /// <b>伝票の写しが 1 件に当たらなければ止める。</b> 明細側と同じ理由——
+    /// 黙って 0 件で通すと、計上済みは不変なので写しが永久に空のまま残る。
+    /// </summary>
+    [Fact]
+    public async Task 伝票の写しが_1_件に当たらなければ止まる()
+    {
+        using var server = new AccountingServer();
+        var partner = InsertPartner(server, "P900", "株式会社ベガ商会");
+        var entry = PostableDraft(server);
+        SetEntryPartner(server, entry, partner);
+
+        var draft = await server.EntryStore.LoadAsync(new(entry));
+
+        // 伝票ごと消して、UPDATE が 1 件にも当たらない状況を作る（明細から先に消す）。
+        server.Execute($"delete from journal_lines where journal_entry_id = {entry}");
+        server.Execute($"delete from journal_entries where id = {entry}");
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => server.SnapshotWriter.BurnAsync(draft));
+
+        Assert.Contains("取引先名の写しを焼けなかった", thrown.Message, StringComparison.Ordinal);
     }
 }

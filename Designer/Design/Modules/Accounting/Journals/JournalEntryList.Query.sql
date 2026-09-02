@@ -28,7 +28,13 @@ SELECT
     e.entry_type                AS entry_type,
     e.transaction_date          AS transaction_date,
     e.posting_date              AS posting_date,
-    p.name                      AS partner_name,
+    -- **計上済みは計上時の写し、下書きは今のマスタ名**（ADR-0037）。
+    -- 一覧は「いま探す」ための道具だが、**同じ伝票の詳細と名前が食い違うと、
+    -- どちらが正典か分からなくなる**（開発者の指摘。2026-09-02）。
+    -- 写しが無いのは取引先の無い伝票と、この列より前に計上された伝票である。
+    -- **空文字も「無い」として扱う**（`NULLIF`）。帳簿の空値検索が同じ見方をしており
+    -- （`JournalBook.Query.sql`）、片方だけ素通しにすると、同じ行が一覧では空欄・帳簿では現在名になる。
+    COALESCE(NULLIF(e.partner_name_snapshot, ''), p.name) AS partner_name,
     e.description               AS description,
     -- 借方合計。**貸借は一致している**（I-01）ので、片側だけ出せば伝票の大きさが分かる。
     -- 下書きは一致していないことがあるが、そのときも「いま入っている借方の合計」で正しい。
