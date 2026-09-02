@@ -94,6 +94,31 @@ public sealed class PartnerRegistrationStore(IDbAccessor dbAccessor, string data
         return rows.Count == 0 ? null : new PartnerId(DbValue.ToLong(rows[0]["partner_id"]));
     }
 
+    /// <summary>
+    /// 1 つの取引先の登録の行を、<b>識別子つきで</b>全部読む（期間の検査用）。
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="LoadRegistrationsAsync"/> と分けてあるのは用途が違うからである——
+    /// あちらは計上時の写し（識別子は要らない）、こちらは保存の関門が
+    /// 「保存後にできあがる履歴」を組み立てるために、<b>差分の行と保存済みの行を
+    /// 識別子で突き合わせる</b>（docs/07 §3-5 R-I4）。</para>
+    /// </remarks>
+    public async Task<IReadOnlyList<RegistrationRow>> LoadRegistrationRowsAsync(PartnerId id)
+    {
+        var rows = await QueryAsync(
+            """
+            select id, valid_from, ended_on, end_reason
+            from partner_invoice_registrations where partner_id = @p1
+            """,
+            id.Value);
+
+        return rows.Select(r => new RegistrationRow(
+            DbValue.ToLong(r["id"]),
+            DbValue.ToDate(r["valid_from"]),
+            DbValue.IsNull(r["ended_on"]) ? null : DbValue.ToDate(r["ended_on"]),
+            DbValue.IsNull(r["end_reason"]) ? null : DbValue.ToText(r["end_reason"]))).ToList();
+    }
+
     private async Task<IReadOnlyList<IDictionary<string, object>>> QueryAsync(string sql, long parameter)
         => await dbAccessor.QueryAsync(dataSourceName, sql, new() { { "@p1", Param(parameter) } });
 
@@ -106,3 +131,7 @@ public sealed class PartnerRegistrationStore(IDbAccessor dbAccessor, string data
     /// </remarks>
     private static ParamAndRawDbTypeName Param(object? value) => new() { Value = value };
 }
+
+/// <summary>保存済みの登録 1 行（期間の検査に要る列だけ）。</summary>
+public readonly record struct RegistrationRow(
+    long Id, DateOnly ValidFrom, DateOnly? EndedOn, string? EndReason);

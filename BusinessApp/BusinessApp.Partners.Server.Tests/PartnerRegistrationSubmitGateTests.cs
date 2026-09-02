@@ -10,7 +10,7 @@ using Codeer.LowCode.Blazor.Repository.Data;
 /// 登録を保存するときの関門（docs/07 §3-2）。
 /// </summary>
 /// <remarks>
-/// <b>止めるのは書式と、同じ日から始まる二重登録の 2 つだけ</b>。
+/// <b>止めるのは docs/07 §3-5 の不変条件（書式・付け替え・二重登録・期間・削除・取引先の実在）</b>。
 /// ここを通った番号は、計上のときにそのまま明細へ焼き込まれる（計上済みは不変）。
 /// </remarks>
 public class PartnerRegistrationSubmitGateTests
@@ -24,8 +24,12 @@ public class PartnerRegistrationSubmitGateTests
         => new() { ModuleName = PartnerRegistrationSubmitGate.ModuleName, Update = [.. data] };
 
     /// <summary>CLB は<b>変更されたフィールドしか送ってこない</b>ので、渡された項目だけ載せる。</summary>
+    /// <remarks><c>clearEndedOn</c> / <c>clearEndReason</c> は「欄を空にする変更」——
+    /// フィールドは差分に載るが値が空、という形を組む（触っていない＝載らない、とは別）。</remarks>
     private static ModuleData Registration(
-        string? no = null, long? partnerId = null, DateOnly? validFrom = null, long? id = null)
+        string? no = null, long? partnerId = null, DateOnly? validFrom = null, long? id = null,
+        DateOnly? endedOn = null, string? endReason = null,
+        bool clearEndedOn = false, bool clearEndReason = false)
     {
         var data = new ModuleData { Name = PartnerRegistrationSubmitGate.ModuleName };
 
@@ -60,6 +64,16 @@ public class PartnerRegistrationSubmitGateTests
             data.Fields["ValidFrom"] = new DateFieldData { Value = from };
         }
 
+        if (endedOn is not null || clearEndedOn)
+        {
+            data.Fields["EndedOn"] = new DateFieldData { Value = endedOn };
+        }
+
+        if (endReason is not null || clearEndReason)
+        {
+            data.Fields["EndReason"] = new SelectFieldData { Value = endReason };
+        }
+
         return data;
     }
 
@@ -70,12 +84,26 @@ public class PartnerRegistrationSubmitGateTests
     }
 
     private static long InsertRegistration(
-        PartnerServer server, long partnerId, string no, string validFrom)
+        PartnerServer server, long partnerId, string no, string validFrom,
+        string? endedOn = null, string reason = "revoked")
     {
-        server.Execute($"""
-            insert into partner_invoice_registrations (partner_id, registration_no, valid_from)
-            values ({partnerId}, '{no}', {PartnerServer.DateLiteral(validFrom)})
-            """);
+        if (endedOn is null)
+        {
+            server.Execute($"""
+                insert into partner_invoice_registrations (partner_id, registration_no, valid_from)
+                values ({partnerId}, '{no}', {PartnerServer.DateLiteral(validFrom)})
+                """);
+        }
+        else
+        {
+            server.Execute($"""
+                insert into partner_invoice_registrations
+                    (partner_id, registration_no, valid_from, ended_on, end_reason)
+                values ({partnerId}, '{no}', {PartnerServer.DateLiteral(validFrom)},
+                        {PartnerServer.DateLiteral(endedOn)}, '{reason}')
+                """);
+        }
+
         return server.Scalar<long>("select last_insert_rowid()");
     }
 
@@ -137,9 +165,10 @@ public class PartnerRegistrationSubmitGateTests
         using var server = new PartnerServer();
         var save = new SaveSpy();
 
-        await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
             () => Gate(server).SubmitAsync([Updating(Registration("T12"))], save.SaveAsync));
 
+        Assert.Contains("登録番号の形が違います", thrown.Message, StringComparison.Ordinal);
         Assert.False(save.Called);
     }
 
@@ -174,6 +203,8 @@ public class PartnerRegistrationSubmitGateTests
                 [Adding(Registration(ValidNo, partner, new DateOnly(2023, 10, 1)))], save.SaveAsync));
 
         Assert.Contains("2023/10/01", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("既にあります", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("先にある登録を直して", thrown.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("\n", thrown.Message, StringComparison.Ordinal);
         Assert.False(save.Called);
     }
@@ -208,15 +239,8 @@ public class PartnerRegistrationSubmitGateTests
     {
         using var server = new PartnerServer();
         var partner = InsertPartner(server);
-        server.Execute($"""
-            insert into partner_invoice_registrations (partner_id, registration_no, valid_from)
-            values ({partner}, 'T1111111111111', {PartnerServer.DateLiteral("2023-10-01")})
-            """);
-        server.Execute($"""
-            insert into partner_invoice_registrations (partner_id, registration_no, valid_from)
-            values ({partner}, '{ValidNo}', {PartnerServer.DateLiteral("2026-04-01")})
-            """);
-        var moving = server.Scalar<long>("select last_insert_rowid()");
+        InsertRegistration(server, partner, "T1111111111111", "2023-10-01", "2026-03-31");
+        var moving = InsertRegistration(server, partner, ValidNo, "2026-04-01");
         var save = new SaveSpy();
 
         // **取引先は差分に載せない。** CLB は変えたフィールドしか送ってこないので、
@@ -380,8 +404,9 @@ public class PartnerRegistrationSubmitGateTests
             Registration(no: ValidNo, partnerId: partner, validFrom: new DateOnly(2023, 10, 1)),
             Registration(no: "T9999999999999", partnerId: partner, validFrom: new DateOnly(2023, 10, 1)));
 
-        await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
             () => Gate(server).SubmitAsync([submit], save.SaveAsync));
+        Assert.Contains("2 件入力しています", thrown.Message, StringComparison.Ordinal);
         Assert.False(save.Called);
         Assert.Equal(0L, server.Scalar<long>("select count(*) from partner_invoice_registrations"));
     }
@@ -427,6 +452,7 @@ public class PartnerRegistrationSubmitGateTests
     }
 
     /// <summary>同じ相手でも、始まる日が違えば通す（登録 → 取消 → 再登録の履歴）。</summary>
+    /// <remarks>先の登録は閉じておく——終わりのない行のあとに行は作れない（docs/07 §3-5 R-I5）。</remarks>
     [Fact]
     public async Task 同じ相手でも始まる日が違えば通す()
     {
@@ -436,7 +462,8 @@ public class PartnerRegistrationSubmitGateTests
 
         await Gate(server).SubmitAsync(
             [Adding(
-                Registration(no: ValidNo, partnerId: partner, validFrom: new DateOnly(2023, 10, 1)),
+                Registration(no: ValidNo, partnerId: partner, validFrom: new DateOnly(2023, 10, 1),
+                    endedOn: new DateOnly(2025, 3, 31), endReason: "revoked"),
                 Registration(no: "T9999999999999", partnerId: partner, validFrom: new DateOnly(2025, 4, 1)))],
             save.SaveAsync);
 
@@ -478,7 +505,7 @@ public class PartnerRegistrationSubmitGateTests
     {
         using var server = new PartnerServer();
         var partner = InsertPartner(server);
-        var first = InsertRegistration(server, partner, ValidNo, "2023-10-01");
+        var first = InsertRegistration(server, partner, ValidNo, "2023-10-01", "2025-03-31");
         var second = InsertRegistration(server, partner, "T9999999999999", "2025-04-01");
         var save = new SaveSpy();
 
@@ -515,6 +542,7 @@ public class PartnerRegistrationSubmitGateTests
                 [Updating(Registration(partnerId: other, id: row))], save.SaveAsync));
 
         Assert.Contains("取引先は、保存したあとは変更できません", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("その取引先の画面で入力し直して", thrown.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("\n", thrown.Message, StringComparison.Ordinal);
         Assert.False(save.Called);
         Assert.Equal(owner, server.Scalar<long>(
@@ -695,19 +723,529 @@ public class PartnerRegistrationSubmitGateTests
     /// 当たって「既にあります」で誤って止まる（2026-08-31 の自己レビュー）。
     /// <b>この保存で日付が動く行は、保存済みの値で数えない。</b>
     /// </remarks>
+    /// <remarks>
+    /// <para>期間ごと入れ替える——登録年月日だけ入れ替えると期間が壊れる（docs/07 §3-5 R-I2）。</para>
+    /// <para><b>ここで表明しているのは関門の判定（最終状態が正しければ通す）だけ</b>である。
+    /// DB の一意索引・トリガは文単位で検査するので、1 回の保存で実際に入れ替えられるかは
+    /// **文の順序に依存する**（docs/07 §3-5 の帰結）。画面は 1 行ずつ保存するのでこの形は出ない。
+    /// 複数行を 1 保存で送る取込（フェーズ 6）の設計時に、実際の保存で確かめる。</para>
+    /// </remarks>
     [Fact]
     public async Task 同じ保存で二行の登録年月日を入れ替えられる()
     {
         using var server = new PartnerServer();
         var partner = InsertPartner(server);
-        var a = InsertRegistration(server, partner, ValidNo, "2023-10-01");
-        var b = InsertRegistration(server, partner, "T9999999999999", "2025-04-01");
+        var a = InsertRegistration(server, partner, ValidNo, "2023-10-01", "2024-03-31");
+        var b = InsertRegistration(server, partner, "T9999999999999", "2025-04-01", "2026-03-31");
         var save = new SaveSpy();
 
         await Gate(server).SubmitAsync(
             [Updating(
-                Registration(validFrom: new DateOnly(2025, 4, 1), id: a),
-                Registration(validFrom: new DateOnly(2023, 10, 1), id: b))],
+                Registration(validFrom: new DateOnly(2025, 4, 1), id: a, endedOn: new DateOnly(2026, 3, 31)),
+                Registration(validFrom: new DateOnly(2023, 10, 1), id: b, endedOn: new DateOnly(2024, 3, 31)))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    // --- 期間の不変条件（docs/07 §3-5 R-I1・R-I2・R-I4・R-I5）---
+
+    /// <summary>新規の行に登録年月日が無ければ、言葉で断る（DB の NOT NULL を生で見せない）。</summary>
+    [Fact]
+    public async Task 登録年月日のない新規を止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Adding(Registration(no: ValidNo, partnerId: partner))], save.SaveAsync));
+
+        Assert.Contains("登録年月日を入力", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>終わりの日だけで理由が無い行を止める（R-I1）。</summary>
+    [Fact]
+    public async Task 終わりの日だけで理由のない新規を止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Adding(Registration(no: ValidNo, partnerId: partner, validFrom: new DateOnly(2023, 10, 1),
+                    endedOn: new DateOnly(2026, 3, 31)))],
+                save.SaveAsync));
+
+        Assert.Contains("両方入力するか、両方空に", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>理由だけで終わりの日が無い行を止める（R-I1）。</summary>
+    [Fact]
+    public async Task 理由だけで終わりの日のない新規を止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Adding(Registration(no: ValidNo, partnerId: partner, validFrom: new DateOnly(2023, 10, 1),
+                    endReason: "revoked"))],
+                save.SaveAsync));
+
+        Assert.Contains("両方入力するか、両方空に", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>登録より前に終わる行を止める（R-I2。DB の CHECK を生で見せない）。</summary>
+    [Fact]
+    public async Task 登録より前に終わる新規を止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Adding(Registration(no: ValidNo, partnerId: partner, validFrom: new DateOnly(2023, 10, 1),
+                    endedOn: new DateOnly(2023, 9, 30), endReason: "revoked"))],
+                save.SaveAsync));
+
+        Assert.Contains("2023/09/30", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("2023/10/01", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>登録と同じ日に終わる行は通す（同日はあり得るか未確認なので許す——docs/07 §3-2）。</summary>
+    [Fact]
+    public async Task 登録と同じ日に終わる新規は通す()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Adding(Registration(no: ValidNo, partnerId: partner, validFrom: new DateOnly(2023, 10, 1),
+                endedOn: new DateOnly(2023, 10, 1), endReason: "expired"))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>終わりの日だけ直した更新は、保存済みの登録年月日と突き合わせる。</b>
+    /// CLB は変更されたフィールドしか送ってこないので、差分だけ見ると登録年月日が読めない。
+    /// </summary>
+    [Fact]
+    public async Task 終わりの日だけ直した更新も保存済みの登録年月日と突き合わせる()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var row = InsertRegistration(server, partner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Updating(Registration(id: row, endedOn: new DateOnly(2020, 1, 1), endReason: "revoked"))],
+                save.SaveAsync));
+
+        Assert.Contains("2020/01/01", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>終わりの日をクリアして理由を残す更新を止める（欄を空にする変更も差分に載る）。</summary>
+    [Fact]
+    public async Task 終わりの日をクリアして理由を残す更新を止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var row = InsertRegistration(server, partner, ValidNo, "2023-10-01", "2026-03-31");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Updating(Registration(id: row, clearEndedOn: true))], save.SaveAsync));
+
+        Assert.Contains("両方入力するか、両方空に", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>終わりの日と理由を両方クリアする更新は通す（取消の記録の取り消し）。</summary>
+    [Fact]
+    public async Task 終わりの日と理由を両方クリアする更新は通す()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var row = InsertRegistration(server, partner, ValidNo, "2023-10-01", "2026-03-31");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(Registration(id: row, clearEndedOn: true, clearEndReason: true))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>前の登録が終わった日に次が始まる再登録（隣接）は通す。</b>
+    /// 計上時の引き当ては「終わりの日を含み、同日は新しいほうを採る」（docs/07 §3-5）。
+    /// </summary>
+    [Fact]
+    public async Task 前の登録が終わった日に始まる再登録は通す()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2023-10-01", "2026-03-31");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Adding(Registration(no: ValidNo, partnerId: partner, validFrom: new DateOnly(2026, 3, 31)))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>先の登録の終わりより前に始まる新規を止める（R-I4）。</summary>
+    [Fact]
+    public async Task 先の登録の終わりより前に始まる新規を止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2023-10-01", "2026-03-31");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Adding(Registration(no: "T9999999999999", partnerId: partner,
+                    validFrom: new DateOnly(2026, 3, 30)))],
+                save.SaveAsync));
+
+        Assert.Contains("期間が重なっています", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("2023/10/01", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("2026/03/31", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("2026/03/30", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>終わりのない登録があるうちは、次の登録を作れない（R-I5）。</summary>
+    [Fact]
+    public async Task 終わりのない登録のあとの新規を止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Adding(Registration(no: "T9999999999999", partnerId: partner,
+                    validFrom: new DateOnly(2024, 1, 1)))],
+                save.SaveAsync));
+
+        Assert.Contains("取消・失効の記録がない登録", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("2023/10/01", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>同じ保存の中の 2 行どうしでも、期間の重なりを止める。</summary>
+    [Fact]
+    public async Task 同じ保存の二行の期間の重なりを止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Adding(
+                    Registration(no: ValidNo, partnerId: partner, validFrom: new DateOnly(2023, 10, 1),
+                        endedOn: new DateOnly(2024, 12, 31), endReason: "revoked"),
+                    Registration(no: "T9999999999999", partnerId: partner, validFrom: new DateOnly(2024, 1, 1)))],
+                save.SaveAsync));
+
+        Assert.Contains("期間が重なっています", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>終わりの記録を消して、後続の登録と重ねる更新を止める（R-I5）。</summary>
+    [Fact]
+    public async Task 終わりを消して後続と重ねる更新を止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var first = InsertRegistration(server, partner, ValidNo, "2023-10-01", "2024-03-31");
+        InsertRegistration(server, partner, "T9999999999999", "2024-04-01");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Updating(Registration(id: first, clearEndedOn: true, clearEndReason: true))],
+                save.SaveAsync));
+
+        Assert.Contains("取消・失効の記録がない登録", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>終わりの日を伸ばして、後続の登録に食い込む更新を止める（R-I4）。</summary>
+    [Fact]
+    public async Task 終わりを伸ばして後続に食い込む更新を止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var first = InsertRegistration(server, partner, ValidNo, "2023-10-01", "2024-03-31");
+        InsertRegistration(server, partner, "T9999999999999", "2024-04-01");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Updating(Registration(id: first, endedOn: new DateOnly(2024, 6, 30)))],
+                save.SaveAsync));
+
+        Assert.Contains("期間が重なっています", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>保存済みの行どうしの違反は、触らない保存を止めない。</b>
+    /// トリガ導入（2026-09-02）前に入った古いデータがあっても、無関係な行は直せる。
+    /// </summary>
+    /// <remarks>DDL のトリガが今は同じ形を拒むので、古いデータはトリガを外して再現する。</remarks>
+    [Fact]
+    public async Task 保存済みどうしの違反は触らない行の保存を止めない()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var early = InsertRegistration(server, partner, "T5555555555555", "2020-01-01", "2020-12-31");
+        server.Execute("drop trigger if exists trg_partner_invoice_registrations_no_overlap_insert");
+        server.Execute("drop trigger if exists trg_partner_invoice_registrations_no_overlap_update");
+        InsertRegistration(server, partner, ValidNo, "2023-10-01");
+        InsertRegistration(server, partner, "T9999999999999", "2024-01-01");
+        var save = new SaveSpy();
+
+        // 違反ペア（2023-10-01 と 2024-01-01。どちらも終わりが無い）は触らず、その前の行だけ直す。
+        await Gate(server).SubmitAsync(
+            [Updating(Registration(id: early, endedOn: new DateOnly(2020, 6, 30)))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>別の取引先の期間とは重ねて数えない（軸は取引先ごと）。</summary>
+    [Fact]
+    public async Task 別の取引先の期間とは重ねて数えない()
+    {
+        using var server = new PartnerServer();
+        var owner = InsertPartner(server, "P901");
+        var other = InsertPartner(server, "P902");
+        InsertRegistration(server, owner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Adding(Registration(no: "T9999999999999", partnerId: other, validFrom: new DateOnly(2024, 1, 1)))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>古い違反データが間に挟まっても、触った行が絡む違反は見逃さない。</b>
+    /// 隣どうしだけ比べると、違反ペアを 1 つ挟んだ先の行が素通りする（2026-09-02 のレビュー指摘）。
+    /// </summary>
+    [Fact]
+    public async Task 古い違反データを挟んでも触った行の違反を見逃さない()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        server.Execute("drop trigger if exists trg_partner_invoice_registrations_no_overlap_insert");
+        server.Execute("drop trigger if exists trg_partner_invoice_registrations_no_overlap_update");
+        InsertRegistration(server, partner, ValidNo, "2023-10-01");                       // 終わりが無い
+        InsertRegistration(server, partner, "T9999999999999", "2024-02-01", "2024-03-01"); // ↑の中（違反）
+        var save = new SaveSpy();
+
+        // 新しい行は、閉じた 2024-03-01 の隣ではなく、開いた 2023-10-01 の中にある
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Adding(Registration(no: "T5555555555555", partnerId: partner,
+                    validFrom: new DateOnly(2024, 4, 1)))],
+                save.SaveAsync));
+
+        Assert.Contains("2023/10/01", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>閉じた新規の行が、既存の行の前に始まって食い込む形も止める（逆向きの R-I4）。</summary>
+    [Fact]
+    public async Task 既存の行の前に始まって食い込む新規を止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Adding(Registration(no: "T9999999999999", partnerId: partner,
+                    validFrom: new DateOnly(2020, 1, 1),
+                    endedOn: new DateOnly(2023, 10, 2), endReason: "expired"))],
+                save.SaveAsync));
+
+        Assert.Contains("期間が重なっています", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>逆向きの隣接（新規の行の終わり＝既存の行の始まり）は通す。</summary>
+    [Fact]
+    public async Task 既存の行の始まりの日に終わる新規は通す()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Adding(Registration(no: "T9999999999999", partnerId: partner,
+                validFrom: new DateOnly(2020, 1, 1),
+                endedOn: new DateOnly(2023, 10, 1), endReason: "expired"))],
+            save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>更新で登録年月日を、前の行の期間の中へ動かす形も止める。</summary>
+    [Fact]
+    public async Task 登録年月日を前の行の期間の中へ動かす更新を止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2023-10-01", "2024-03-31");
+        var moving = InsertRegistration(server, partner, "T9999999999999", "2024-04-01", "2024-12-31");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Updating(Registration(id: moving, validFrom: new DateOnly(2024, 2, 1)))],
+                save.SaveAsync));
+
+        Assert.Contains("期間が重なっています", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    // --- 取引先の実在（docs/07 §3-5 R-I9）と行の削除（R-I8）---
+
+    /// <summary>実在しない取引先への新規の行を、言葉で断る（外部キーの生エラーにしない）。</summary>
+    [Fact]
+    public async Task 実在しない取引先への新規を止める()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Adding(Registration(no: ValidNo, partnerId: 999999,
+                    validFrom: new DateOnly(2023, 10, 1)))],
+                save.SaveAsync));
+
+        Assert.Contains("取引先が見つかりません", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("入り直してください", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>更新の行が混ざっていても、新規の行があるなら実在の検査は掛かる。</summary>
+    [Fact]
+    public async Task 実在しない取引先は更新の行が混ざっても止める()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [new ModuleSubmitData
+                {
+                    ModuleName = PartnerRegistrationSubmitGate.ModuleName,
+                    Add = [Registration(no: ValidNo, partnerId: 999999, validFrom: new DateOnly(2023, 10, 1))],
+                    Update = [Registration(partnerId: 999999, id: 900)],
+                }],
+                save.SaveAsync));
+        Assert.False(save.Called);
+    }
+
+    /// <summary>更新の行だけなら実在は見ない（保存済みに紐づかない更新は黙って通す倒し方と同じ）。</summary>
+    [Fact]
+    public async Task 実在しない取引先でも更新の行だけなら実在を見ない()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Updating(Registration(partnerId: 999999, id: 900))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>仮の識別子（同じ保存で作る取引先）は実在の検査に掛けない。</summary>
+    [Fact]
+    public async Task 仮の識別子の取引先は実在の検査に掛けない()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        var row = Registration(no: ValidNo, validFrom: new DateOnly(2023, 10, 1));
+        row.Fields["Partner"] = new IdFieldData { Value = "@temporary:aaaa" };
+
+        await Gate(server).SubmitAsync([Adding(row)], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>登録の行の削除を止める（R-I8。CanDelete: false は画面の形であって守りではない）。</summary>
+    [Fact]
+    public async Task 登録の行の削除を止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var row = InsertRegistration(server, partner, ValidNo, "2023-10-01");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [new ModuleSubmitData
+                {
+                    ModuleName = PartnerRegistrationSubmitGate.ModuleName,
+                    Delete = [new ModuleDeleteInfo
+                    {
+                        ModuleName = PartnerRegistrationSubmitGate.ModuleName,
+                        Id = row.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    }],
+                }],
+                save.SaveAsync));
+
+        Assert.Contains("削除できません", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("取消・失効年月日と理由を記録して", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>別のモジュールの削除は素通しする。</summary>
+    [Fact]
+    public async Task 別のモジュールの削除は素通しする()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [new ModuleSubmitData
+            {
+                ModuleName = "Partner",
+                Delete = [new ModuleDeleteInfo { ModuleName = "Partner", Id = "1" }],
+            }],
             save.SaveAsync);
 
         Assert.True(save.Called);

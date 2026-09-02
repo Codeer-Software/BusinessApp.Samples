@@ -466,7 +466,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "LayoutName": "",
+      "LayoutName": "Embedded",
       "CanNavigateToDetail": false,
       "NavigateModuleUrlSegment": "",
       "CanCustomizeColumns": false,
@@ -475,15 +475,10 @@
       "DisplayName": "",
       "SearchCondition": {
         "SelectFields": [],
-        "SortConditions": [
-          {
-            "Variable": "ValidFrom.Value",
-            "IsDescending": false
-          }
-        ],
+        "SortConditions": [],
         "SortFieldVariable": "",
         "SortDescending": false,
-        "ModuleName": "PartnerInvoiceRegistration",
+        "ModuleName": "PartnerRegistrationList",
         "LimitCount": 2147483647,
         "Condition": {
           "IsOrMatch": false,
@@ -512,8 +507,8 @@
       "PagerPosition": "Bottom",
       "ReplaceMode": "None",
       "DeleteTogether": false,
-      "CanCreate": true,
-      "CanUpdate": true,
+      "CanCreate": false,
+      "CanUpdate": false,
       "CanDelete": false,
       "CanUserSort": false,
       "CanSelect": false,
@@ -567,6 +562,30 @@
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "登録番号を追加する",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "AddRegistrationButton_OnClick",
+      "ShowTextInToolTip": false,
+      "IsHtml": false,
+      "Name": "AddRegistrationButton",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign",
+      "IsBlock": false
     }
   ],
   "UserWriteCondition": {
@@ -1166,6 +1185,47 @@
                   "FieldName": "RegistrationsLabel",
                   "ContextMenu": "",
                   "ClassName": "section-heading",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "VerticalAlignment": "Middle"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {
+              "Top": 16,
+              "Bottom": 4
+            },
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None",
+                "Layout": {
+                  "FieldName": "AddRegistrationButton",
+                  "ContextMenu": "",
+                  "ClassName": "",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",
