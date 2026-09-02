@@ -186,6 +186,185 @@ public class PartnerSchemaTests
             """);
     }
 
+    // --- 期間の重なり（docs/07 §3-5 R-I4・R-I5。トリガ。2026-09-02）---
+    // 本線の関門は PartnerRegistrationSubmitGate。ここは API を迂回した経路への最後の守りが
+    // 実際に書き込みを拒むことを検査する。
+
+    [Fact]
+    public void 期間が重なる登録は書けない()
+    {
+        using var db = Seeded();
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations
+                (partner_id, registration_no, valid_from, ended_on, end_reason)
+            VALUES (1, 'T1234567890123', '2023-10-01', '2026-03-31', 'revoked');
+            """);
+
+        // 先の登録の終わり（2026-03-31）より前に始まる
+        Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+            VALUES (1, 'T9999999999999', '2026-03-30');
+            """));
+
+        // 逆向き（新しい行が先に始まり、先の登録に食い込んで終わる）
+        Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations
+                (partner_id, registration_no, valid_from, ended_on, end_reason)
+            VALUES (1, 'T9999999999999', '2020-01-01', '2023-10-02', 'expired');
+            """));
+    }
+
+    /// <summary>隣接（前の行の終わりの日＝次の行の登録年月日）は書ける（docs/07 §3-5。正常形かは未確認）。</summary>
+    [Fact]
+    public void 前の登録が終わった日に始まる再登録は書ける()
+    {
+        using var db = Seeded();
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations
+                (partner_id, registration_no, valid_from, ended_on, end_reason)
+            VALUES (1, 'T1234567890123', '2023-10-01', '2026-03-31', 'revoked');
+            """);
+
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+            VALUES (1, 'T1234567890123', '2026-03-31');
+            """);
+
+        Assert.Equal(2L, TestDatabase.ScalarOf<long>(db,
+            "SELECT COUNT(*) FROM partner_invoice_registrations"));
+    }
+
+    [Fact]
+    public void 終わりのない登録のあとには書けない()
+    {
+        using var db = Seeded();
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+            VALUES (1, 'T1234567890123', '2023-10-01');
+            """);
+
+        Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+            VALUES (1, 'T9999999999999', '2024-01-01');
+            """));
+    }
+
+    [Fact]
+    public void 更新でも期間を重ねられない()
+    {
+        using var db = Seeded();
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations
+                (partner_id, registration_no, valid_from, ended_on, end_reason)
+            VALUES (1, 'T1234567890123', '2023-10-01', '2024-03-31', 'revoked');
+            """);
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+            VALUES (1, 'T9999999999999', '2024-04-01');
+            """);
+
+        // 先の行の終わりを伸ばして、後続の行に食い込ませる
+        Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
+            UPDATE partner_invoice_registrations SET ended_on = '2024-06-30'
+             WHERE registration_no = 'T1234567890123';
+            """));
+    }
+
+    /// <summary>軸は取引先ごと。別の取引先の期間とは重ねて数えない。</summary>
+    [Fact]
+    public void 別の取引先の期間とは重ならない()
+    {
+        using var db = Seeded();
+        TestDatabase.Execute(db,
+            "INSERT INTO partners (code, name) VALUES ('P200', '二社目');");
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+            VALUES (1, 'T1234567890123', '2023-10-01');
+            """);
+
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+            SELECT id, 'T9999999999999', '2024-01-01' FROM partners WHERE code = 'P200';
+            """);
+
+        Assert.Equal(2L, TestDatabase.ScalarOf<long>(db,
+            "SELECT COUNT(*) FROM partner_invoice_registrations"));
+    }
+
+    /// <summary>
+    /// <b>時刻付きの書き方と素の日付が混ざっても、判定が揺れない。</b>
+    /// CLB は日付列に '2023-10-01 00:00:00' と時刻付きで書く。トリガから date() を外すと、
+    /// 書式の揃ったテストデータでは文字列比較が偶然正しく動いて緑のまま抜ける（qa/03 L-12 と同型）。
+    /// </summary>
+    [Fact]
+    public void 書式が混ざっても隣接は書けて重なりは書けない()
+    {
+        using var db = Seeded();
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations
+                (partner_id, registration_no, valid_from, ended_on, end_reason)
+            VALUES (1, 'T1234567890123', '2023-10-01 00:00:00', '2026-03-31 00:00:00', 'revoked');
+            """);
+
+        // 隣接（素の日付で書く）——date() が無いと '2026-03-31' < '2026-03-31 00:00:00' で誤拒否になる
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+            VALUES (1, 'T1234567890123', '2026-03-31');
+            """);
+
+        // 重なり（素の日付で書く）
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations
+                (partner_id, registration_no, valid_from, ended_on, end_reason)
+            VALUES (1, 'T9999999999999', '2020-01-01', '2023-10-02', 'expired');
+            """));
+        Assert.Contains("登録の期間が重なっている", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>正当な単行の更新は通る。</b> UPDATE トリガの「自分の旧値」の除外（o.id &lt;&gt; NEW.id）を
+    /// 消すと、終わりのない行の登録年月日を後ろへ直す正当な更新が旧値の自分に当たって全滅する。
+    /// 拒む側のテストだけだとこの 1 語を消しても緑のまま。
+    /// </summary>
+    [Fact]
+    public void 終わりのない行の登録年月日を動かす更新は通る()
+    {
+        using var db = Seeded();
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+            VALUES (1, 'T1234567890123', '2023-10-01');
+            """);
+
+        TestDatabase.Execute(db,
+            "UPDATE partner_invoice_registrations SET valid_from = '2023-12-01' WHERE registration_no = 'T1234567890123';");
+
+        Assert.Equal("2023-12-01", TestDatabase.ScalarOf<string>(db,
+            "SELECT date(valid_from) FROM partner_invoice_registrations WHERE registration_no = 'T1234567890123'"));
+    }
+
+    /// <summary>取引先の付け替え（UPDATE OF partner_id）も、移り先で重なるならトリガが拒む。</summary>
+    [Fact]
+    public void 付け替えで移り先の期間と重なる更新は書けない()
+    {
+        using var db = Seeded();
+        TestDatabase.Execute(db,
+            "INSERT INTO partners (code, name) VALUES ('P200', '二社目');");
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+            VALUES (1, 'T1234567890123', '2023-10-01');
+            """);
+        TestDatabase.Execute(db, """
+            INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)
+            SELECT id, 'T9999999999999', '2024-01-01' FROM partners WHERE code = 'P200';
+            """);
+
+        Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
+            UPDATE partner_invoice_registrations
+               SET partner_id = (SELECT id FROM partners WHERE code = 'P200')
+             WHERE registration_no = 'T1234567890123';
+            """));
+    }
+
     [Fact]
     public void 同じ取引先に同じ登録は二重に取り込めない()
     {

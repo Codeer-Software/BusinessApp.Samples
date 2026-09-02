@@ -15,6 +15,8 @@
 -- 日付は date() を通して比較する。DATE 列の正規形は 'YYYY-MM-DD 00:00:00' で（qa/01 A-04）、
 -- 検索欄から来る値が時刻付きとは限らないため、辞書順比較のままでは境界の 1 日が落ちうる。
 SELECT
+    -- 行の編集リンクに使う（表には出さない。docs/07 §3-4）。
+    r.id                        AS reg_id,
     -- 取引先の詳細へのリンクに使う（表には出さない）。
     r.partner_id                AS partner_id,
     p.code                      AS partner_code,

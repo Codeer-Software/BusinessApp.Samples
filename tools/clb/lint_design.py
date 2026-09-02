@@ -326,6 +326,14 @@ def check_child_parent_keys(modules, findings):
         for field in doc.get("Fields", []):
             if not field.get("TypeFullName", "").endswith("ListFieldDesign"):
                 continue
+            # **閲覧専用の一覧（クエリモジュールの埋め込み等）は、型の検査だけ免除する。**
+            # D-17 の型は「行の追加が静かに消える」で、追加・更新の経路が無ければ起きない。
+            # 名前を出すためにクエリモジュールを選ぶのは正しい形（qa/01 D-17 の処方）。
+            # ただし**指し先の存在は閲覧専用でも見る**——絞り込みのフィールドが消えると、
+            # クエリの「未指定なら効かない」規約に落ちて**全件が出る**（2026-09-02 のレビュー指摘）。
+            # 注意: `ListField.CanCreate: false` は UI しか塞がない。スクリプトで行を足す設計に
+            # 変えた日は、この免除が効きすぎる。
+            writable = bool(field.get("CanCreate") or field.get("CanUpdate"))
             condition = field.get("SearchCondition") or {}
             child = condition.get("ModuleName", "")
             if child not in fields_by_module:
@@ -340,6 +348,8 @@ def check_child_parent_keys(modules, findings):
                     findings.append((SEV_ERROR, "D-17", relative(path),
                                      f"{doc.get('Name', '')}.{field.get('Name', '')} が絞る "
                                      f"{child}.{name} が無い（親子の逆引きが効かない）"))
+                    continue
+                if not writable:
                     continue
                 if not key.get("TypeFullName", "").endswith("IdFieldDesign"):
                     findings.append((SEV_ERROR, "D-17", relative(path),
@@ -873,6 +883,7 @@ def _header_detail(parent_key):
         "Fields": [{
             "Name": "Rows",
             "TypeFullName": "X.ListFieldDesign",
+            "CanCreate": True,
             "SearchCondition": {
                 "ModuleName": "Row",
                 "Condition": {
@@ -994,6 +1005,34 @@ def selftest():
         if not hit:
             failures.append(f"親 FK（{label}）: 「{says}」と言う D-17 が鳴らない"
                             f"（出たのは {[(f[1], f[3]) for f in findings]}）")
+
+    # **閲覧専用でも「指し先が無い」は鳴る**（絞り込みが外れると全件が出る）。
+    import copy as _c2
+    ro_missing = _c2.deepcopy(_header_detail(None))
+    for _, doc in ro_missing:
+        doc["Name"] = "Rm" + doc["Name"]
+    ro_missing[0][1]["Fields"][0]["CanCreate"] = False
+    ro_missing[0][1]["Fields"][0]["SearchCondition"]["ModuleName"] = "RmRow"
+    findings = []
+    check_child_parent_keys(
+        _header_detail({"Name": "Parent", "TypeFullName": "X.IdFieldDesign",
+                        "IsManualInput": False}) + ro_missing, findings)
+    if not [f for f in findings if f[1] == "D-17" and "が無い" in f[3]]:
+        failures.append("閲覧専用の一覧の消えた指し先: D-17 が鳴らない")
+
+    # **閲覧専用の一覧では鳴らない**（クエリモジュールの埋め込み。追加の経路が無い）。
+    import copy as _copy
+    ro = _copy.deepcopy(_header_detail({"Name": "Parent", "TypeFullName": "X.SelectFieldDesign"}))
+    for _, doc in ro:
+        doc["Name"] = "Ro" + doc["Name"]
+    ro[0][1]["Fields"][0]["CanCreate"] = False
+    ro[0][1]["Fields"][0]["SearchCondition"]["ModuleName"] = "RoRow"
+    ok_pair = _header_detail({"Name": "Parent", "TypeFullName": "X.IdFieldDesign",
+                              "IsManualInput": False})
+    findings = []
+    check_child_parent_keys(ok_pair + ro, findings)
+    if findings:
+        failures.append(f"閲覧専用の一覧で鳴った: {[(f[1], f[3]) for f in findings]}")
 
     findings = []
     check_child_parent_keys(
