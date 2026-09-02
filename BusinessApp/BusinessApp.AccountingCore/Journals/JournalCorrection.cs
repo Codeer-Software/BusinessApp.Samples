@@ -101,7 +101,7 @@ public static class JournalCorrection
             // 取消より前に再計上が載ると、その間の期間だけ二重計上になる。
             violations.Add(new Violation(
                 JournalViolationCodes.CorrectionBeforeReversal,
-                $"訂正の計上日（{correction.PostingDate:yyyy-MM-dd}）が、元の伝票を取り消した日（{reversedOn:yyyy-MM-dd}）より前になっています。"));
+                $"訂正の計上日（{correction.PostingDate:yyyy/MM/dd}）が、元の伝票を取り消した日（{reversedOn:yyyy/MM/dd}）より前になっています。"));
         }
 
         // 再計上が 2 本載れば、直した内容がそのまま二重になる。

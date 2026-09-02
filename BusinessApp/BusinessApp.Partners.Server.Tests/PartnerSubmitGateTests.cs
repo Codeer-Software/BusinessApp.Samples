@@ -8,6 +8,8 @@ using BusinessApp.Partners.Server.Tests.Fixtures;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
 
+using Microsoft.Data.Sqlite;
+
 /// <summary>
 /// 取引先を保存するときの関門（docs/07 §1-2）。
 /// </summary>
@@ -531,7 +533,8 @@ public class PartnerSubmitGateTests
         // **文言まで固定する。** 「同じ事業者なら、どちらかの種別が誤っています」は
         // 関門が「束ねるな」ではなく「先に種別を直せ」と言っている、という設計そのものである。
         Assert.Equal(
-            "個人事業者と法人・人格のない社団等は、互いに名寄せの親にできません。"
+            $"{PartnerRejectedException.Headline}。"
+            + "個人事業者と法人・人格のない社団等は、互いに名寄せの親にできません。"
             + "同じ事業者なら、どちらかの種別が誤っています。",
             rejected.Message);
     }
@@ -655,7 +658,8 @@ public class PartnerSubmitGateTests
             new SaveSpy());
 
         Assert.Equal(
-            "名寄せの親には、さらに親を持つ取引先を選べません。"
+            $"{PartnerRejectedException.Headline}。"
+            + "名寄せの親には、さらに親を持つ取引先を選べません。"
             + "同じ事業者なら、その取引先の親を選んでください。",
             rejected.Message);
     }
@@ -721,7 +725,8 @@ public class PartnerSubmitGateTests
             new SaveSpy());
 
         Assert.Equal(
-            "この取引先は他の取引先の名寄せの親になっているので、親を付けられません。"
+            $"{PartnerRejectedException.Headline}。"
+            + "この取引先は他の取引先の名寄せの親になっているので、親を付けられません。"
             + "先に、子になっている取引先の親を付け替えてください。",
             rejected.Message);
     }
@@ -730,13 +735,20 @@ public class PartnerSubmitGateTests
     /// <b>根どうしなら付けられる。</b>
     /// </summary>
     /// <remarks>
-    /// 拒む側だけを検査すると、「親の指定を一律に拒む」実装でも全件緑になる。
+    /// <para>拒む側だけを検査すると、「親の指定を一律に拒む」実装でも全件緑になる。</para>
+    /// <para><b>検体を縮退させない</b>（2026-08-31 の自己レビュー R28-15）。
+    /// 2 件とも親も子も持たない根だと、<b>「親を持つか」と「子を持つか」のどちらを見ていても同じ結果</b>に
+    /// なる。親のほうに<b>別の子</b>を付けてあるので、<b>「親になっている取引先は親を持てない」を
+    /// 「親になっている取引先は親になれない」と読み違えた実装</b>だけが、ここで落ちる。</para>
+    /// <para><b>DB も受け取ることまで見る。</b> 関門が通しただけでは、トリガが同じ保存を拒む
+    /// （＝関門と DB の規則がずれている）ことに気づけない。</para>
     /// </remarks>
     [Fact]
     public async Task 根どうしなら親を付けられる()
     {
         using var server = new PartnerServer();
         var root = InsertPartner(server, "P800");
+        InsertPartner(server, "P802", parentId: root);    // 親のほうは、既に別の子を持っている
         var child = InsertPartner(server, "P801");
         var save = new SaveSpy();
 
@@ -745,6 +757,10 @@ public class PartnerSubmitGateTests
             save.SaveAsync);
 
         Assert.True(save.Called);
+
+        // 関門が通した保存を、DDL のトリガも受け取る。
+        server.Execute($"update partners set parent_partner_id = {root} where id = {child}");
+        Assert.Equal(root, server.Scalar<long>($"select parent_partner_id from partners where id = {child}"));
     }
 
     /// <summary>
@@ -821,9 +837,12 @@ public class PartnerSubmitGateTests
     /// <b>読めない相手を指した保存は、深さを見ない。</b>
     /// </summary>
     /// <remarks>
-    /// 居ない取引先を親に指した保存（API 直叩き）と、保存されていない行の更新。
+    /// <para>居ない取引先を親に指した保存（API 直叩き）と、保存されていない行の更新。
     /// どちらも深さを判定する材料が無いので、ここでは止めない——外部キーが最後に拒む。
-    /// <b>見つからないことを「深さ 0」と読むと、逆に素通しの穴になる</b>ので、経路を固定する。
+    /// <b>見つからないことを「深さ 0」と読むと、逆に素通しの穴になる</b>ので、経路を固定する。</para>
+    /// <para><b>「外部キーが最後に拒む」を実際に流す</b>（2026-08-31 の自己レビュー R28-15）。
+    /// <c>SaveSpy</c> は DB に書かないので、<b>この主張は書いてあるだけで一度も走っていなかった</b>——
+    /// 外部キーの宣言を落としても、あるいは <c>PRAGMA foreign_keys</c> が効いていなくても緑になる。</para>
     /// </remarks>
     [Fact]
     public async Task 読めない相手を指した保存は深さを見ない()
@@ -840,14 +859,23 @@ public class PartnerSubmitGateTests
             save.SaveAsync);
 
         Assert.True(save.Called);
+
+        // **最後に拒むのは外部キーである。** 関門が通したあと、DB がこの行を受け取らない。
+        var thrown = Assert.Throws<SqliteException>(() => InsertPartner(server, "P801", parentId: 9990));
+        Assert.Equal(SQLitePCL.raw.SQLITE_CONSTRAINT, thrown.SqliteErrorCode);
+        Assert.Contains("FOREIGN KEY", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// <b>DDL のトリガも同じ規則を持っている。</b>
     /// </summary>
     /// <remarks>
-    /// 関門は手前の網で、最後に守るのは DB である（ADR-0004 と同じ形）。
-    /// <b>取込・API・SQL の直打ちは関門を通らない。</b>
+    /// <para>関門は手前の網で、最後に守るのは DB である（ADR-0004 と同じ形）。
+    /// <b>取込・API・SQL の直打ちは関門を通らない。</b></para>
+    /// <para><b>どの規則に当たったかまで見る</b>（2026-08-31 の自己レビュー R28-15）。
+    /// 例外の型だけを見ていると、<b>外部キー違反でも一意制約でも同じく緑</b>になる——
+    /// トリガを消しても、検体がたまたま別の制約に当たれば気づけない。
+    /// トリガは <c>RAISE(ABORT, …)</c> でメッセージを持つので、そこで見分ける。</para>
     /// </remarks>
     [Fact]
     public void 深さ二の親子はDBも拒む()
@@ -856,12 +884,18 @@ public class PartnerSubmitGateTests
         var root = InsertPartner(server, "P800");
         var middle = InsertPartner(server, "P801", parentId: root);
 
-        Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(() => InsertPartner(
-            server, "P802", parentId: middle));
+        // ①親を持つ取引先を、さらに誰かの親にする（INSERT のトリガ）。
+        var adding = Assert.Throws<SqliteException>(() => InsertPartner(server, "P802", parentId: middle));
+        Assert.Contains("名寄せの親には、さらに親を持つ取引先を選べません。", adding.Message, StringComparison.Ordinal);
 
+        // ②誰かの親になっている取引先に、親を付ける（UPDATE のトリガ）。
         var leaf = InsertPartner(server, "P803");
-        Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(() => server.Execute(
+        var updating = Assert.Throws<SqliteException>(() => server.Execute(
             $"update partners set parent_partner_id = {leaf} where id = {root}"));
+        Assert.Contains(
+            "他の取引先の名寄せの親になっている取引先には、親を付けられません。",
+            updating.Message,
+            StringComparison.Ordinal);
     }
 
     private static long InsertPartner(

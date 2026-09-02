@@ -6,6 +6,7 @@ using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 using BusinessApp.AccountingCore.Shared;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
+using Microsoft.Data.Sqlite;
 
 /// <summary>
 /// 伝票と明細が <c>journal_entries</c> / <c>journal_lines</c> の制約に収まっているか（保存の手前の網）。
@@ -124,6 +125,23 @@ public class JournalSubmitRequirementsTests
     public void 想定していない型のフィールドは入っていないものとして止める()
     {
         var line = SubmitData.LineChanging("12", "Account", new TextFieldData { Value = "7" });
+
+        Assert.Equal([JournalViolationCodes.RequiredValueMissing], CodesOf(JournalSubmitRequirements.Check(Updating(line))));
+    }
+
+    /// <summary>
+    /// <b>選択肢も同じ扱い</b>——読めない型は「入っていない」1 件だけにする。
+    /// </summary>
+    /// <remarks>
+    /// ここで「候補外」も鳴らすと、<b>1 つの誤りに 2 つの指摘</b>が出る。
+    /// どちらが本当かを利用者に考えさせない。
+    /// </remarks>
+    [Fact]
+    public void 想定していない型の選択肢は候補外として重ねて鳴らさない()
+    {
+        // **値そのものは候補外にする。** 正しい値を渡すと、型のガードを外しても
+        // 「値がたまたま通った」と区別が付かない（2026-09-02 の自己レビュー）。
+        var line = SubmitData.LineChanging("12", "DebitCredit", new TextFieldData { Value = "both" });
 
         Assert.Equal([JournalViolationCodes.RequiredValueMissing], CodesOf(JournalSubmitRequirements.Check(Updating(line))));
     }
@@ -352,6 +370,132 @@ public class JournalSubmitRequirementsTests
         server.InsertLine(entry, line);
 
         Assert.Equal(AccountingServer.ValuesOf(line), server.StoredLine(entry, 3));
+    }
+
+    /// <summary>
+    /// <b>DDL の <c>CHECK</c> が並べていない選択肢を、保存へ渡さない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>「入っているか」しか見ていなかった（2026-09-02 のフェーズ 2.5 の D で見つけた）。
+    /// <c>debit_credit</c> / <c>status</c> / <c>entry_type</c> にはどれも
+    /// <c>CHECK (… IN (…))</c> が付いていて、候補外の値は <b>DB が拒む</b>——
+    /// そこまで届くと、利用者には <c>SQLite Error 19</c> がそのまま出る（qa/01 F-16・qa/03 L-14）。</para>
+    /// <para><b>DB が実際に拒むことも同じテストで確かめる。</b> 関門だけを見ていると、
+    /// 「関門は止めるが DB は受け取れた」（＝過剰な関門）と
+    /// 「関門は通すが DB が拒む」（＝穴）の区別が付かない。</para>
+    /// </remarks>
+    /// <remarks>
+    /// <b>検体に「大文字小文字だけが違う値」を入れる</b>（2026-09-02 の自己レビュー）。
+    /// 綴りの違う値（<c>"both"</c>）だけだと、
+    /// <b>「候補外を弾く実装」と「PascalCase を通す寛容な読み手」を区別できない</b>——
+    /// <c>DbValue.ToDefinedEnum</c> は <c>"Debit"</c> を通してしまい、DDL の
+    /// <c>CHECK (debit_credit IN ('debit','credit'))</c> が拒む（qa/03 L-21）。
+    /// </remarks>
+    [Theory]
+    [InlineData("both")]
+    [InlineData("Debit")]
+    [InlineData("_debit")]
+    public void 候補外の借方貸方は保存へ渡さず_DB_も拒む(string value)
+    {
+        using var server = new AccountingServer();
+        var line = StorableLine(server, 1000);
+        line.Fields["DebitCredit"] = new SelectFieldData { Value = value };
+
+        var violations = JournalSubmitRequirements.Check(Adding(line));
+
+        Assert.Equal([JournalViolationCodes.ChoiceNotStorable], CodesOf(violations));
+        Assert.Equal([JournalLineRules.DebitCreditNotStorable], MessagesOf(violations));
+        Assert.Equal(3, violations[0].LineNo);
+
+        var entry = server.InsertDraft();
+        Assert.Throws<SqliteException>(() => server.InsertLine(entry, line));
+    }
+
+    /// <summary>用途区分も同じ形で守る（列も CHECK も既にある。使い始めるのはフェーズ 3）。</summary>
+    [Fact]
+    public void 候補外の用途区分は保存へ渡さない()
+    {
+        var line = SubmitData.Line();
+        line.Fields["TaxTreatment"] = new SelectFieldData { Value = "ForTaxableSales" };
+
+        var violations = JournalSubmitRequirements.Check(Adding(line));
+
+        Assert.Equal([JournalViolationCodes.ChoiceNotStorable], CodesOf(violations));
+        Assert.Equal([JournalLineRules.TaxTreatmentNotStorable], MessagesOf(violations));
+    }
+
+    /// <summary>正しい書き方（snake_case）は通る（鳴りっぱなしの関門にしない）。</summary>
+    [Theory]
+    [InlineData("for_taxable_sales")]
+    [InlineData("common")]
+    [InlineData("for_exempt_sales")]
+    public void 正しい用途区分は通る(string value)
+    {
+        var line = SubmitData.Line();
+        line.Fields["TaxTreatment"] = new SelectFieldData { Value = value };
+
+        Assert.Empty(JournalSubmitRequirements.Check(Adding(line)));
+    }
+
+    [Theory]
+    [InlineData("Status", "archived", JournalLineRules.StatusNotStorable)]
+    [InlineData("Status", "Draft", JournalLineRules.StatusNotStorable)]
+    [InlineData("EntryType", "adjustment", JournalLineRules.EntryTypeNotStorable)]
+    [InlineData("EntryType", "Normal", JournalLineRules.EntryTypeNotStorable)]
+    public void 候補外の伝票の選択肢は保存へ渡さない(string fieldName, string value, string message)
+    {
+        var entry = SubmitData.NewEntry("@temporary:1", "draft");
+        entry.Fields[fieldName] = new SelectFieldData { Value = value };
+
+        var violations = JournalSubmitRequirements.Check(Adding(entry));
+
+        Assert.Equal([JournalViolationCodes.ChoiceNotStorable], CodesOf(violations));
+        Assert.Equal([message], MessagesOf(violations));
+
+        // 伝票の違反に行番号は付かない。
+        Assert.Null(violations[0].LineNo);
+    }
+
+    /// <summary>
+    /// <b>伝票の選択肢も、DB が実際に拒むところまで見る。</b>
+    /// </summary>
+    /// <remarks>
+    /// 関門が鳴ることだけを見ていると、<b>DDL から <c>CHECK</c> が消えた日に
+    /// 関門だけが過剰なまま残る</b>——「関門は止めるが DB は受け取れる」と
+    /// 「関門は通すが DB が拒む」の区別が付かない（2026-09-02 の自己レビュー）。
+    /// </remarks>
+    [Theory]
+    [InlineData("status", "archived")]
+    [InlineData("entry_type", "adjustment")]
+    public void 候補外の伝票の選択肢は_DB_も拒む(string column, string value)
+    {
+        using var server = new AccountingServer();
+
+        Assert.Throws<SqliteException>(() => server.Execute(
+            $"""
+            insert into journal_entries (fiscal_year_id, transaction_date, posting_date, {column})
+            values (1, '2026-08-24 00:00:00', '2026-08-24 00:00:00', '{value}')
+            """));
+    }
+
+    /// <summary>
+    /// <b>空欄は「候補外」ではない。</b> 同じ 1 つの誤りを 2 件にしない。
+    /// </summary>
+    /// <remarks>
+    /// 必須の検査（<c>RequiredLineValues</c>）が「選んでください」と言う場所である。
+    /// ここも鳴ると、利用者は 1 つの空欄に 2 つの指摘を読むことになる。
+    /// <b>欄を落とすのではなく空文字を渡す</b>——落とす形は上の Theory が既に見ており、
+    /// 空文字の経路（画面が値を消したとき）はこちらでしか通らない。
+    /// </remarks>
+    [Fact]
+    public void 空文字の選択肢は必須の検査だけが鳴らす()
+    {
+        var line = SubmitData.LineWith(3, "DebitCredit", new SelectFieldData { Value = string.Empty });
+
+        var violations = JournalSubmitRequirements.Check(Adding(line));
+
+        Assert.Equal([JournalViolationCodes.RequiredValueMissing], CodesOf(violations));
+        Assert.Equal([JournalLineRules.DebitCreditMissing], MessagesOf(violations));
     }
 
     /// <summary>

@@ -311,7 +311,7 @@
     },
     {
       "SaveAsUtc": false,
-      "Format": "",
+      "Format": "yyyy/MM/dd HH:mm",
       "DbColumn": "entered_at",
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
@@ -911,7 +911,33 @@
     }
   },
   "UserReadCondition": {
-    "ModuleName": ""
+    "ModuleName": "AppUser",
+    "Condition": {
+      "IsOrMatch": true,
+      "IsNot": false,
+      "Children": [
+        {
+          "SearchTargetVariable": "AccountingRole.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "staff",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        },
+        {
+          "SearchTargetVariable": "AccountingRole.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "manager",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        }
+      ],
+      "Name": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+    }
   },
   "DataWriteCondition": {
     "ModuleName": "JournalEntry",

@@ -55,7 +55,7 @@ public sealed class JournalReversalPosting(JournalEntryStore entryStore)
             [
                 new Violation(
                     JournalViolationCodes.PeriodNotFound,
-                    $"計上日（{draft.PostingDate:yyyy-MM-dd}）に対応する会計期間がありません。"),
+                    $"計上日（{draft.PostingDate:yyyy/MM/dd}）に対応する会計期間がありません。"),
             ]);
         }
 

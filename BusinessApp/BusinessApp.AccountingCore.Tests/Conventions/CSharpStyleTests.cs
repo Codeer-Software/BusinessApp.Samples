@@ -86,6 +86,26 @@ public class CSharpStyleTests
     }
 
     /// <summary>
+    /// ソースの先頭に BOM を付けない。
+    /// </summary>
+    /// <remarks>
+    /// <b>実際に付けてコミットまで通した</b>（2026-09-02。qa/03 L-24）。
+    /// <c>.editorconfig</c> は <c>charset = utf-8</c>（＝ BOM なし）と書いてあるのに、
+    /// <b>それを守らせる仕組みが 1 つも無かった</b>。
+    /// <b>検査が鳴ることも同じテストで見る</b>——BOM の付いた検体を 1 つ食わせる。
+    /// </remarks>
+    [Fact]
+    public void ソースに_BOM_を付けない()
+    {
+        AssertNone(CSharpStyleConvention.ByteOrderMarkProblems(Convention.FileHeadsToScan()));
+
+        Assert.NotEmpty(CSharpStyleConvention.ByteOrderMarkProblems(
+            [("A.cs", [0xEF, 0xBB, 0xBF])]));
+        Assert.Empty(CSharpStyleConvention.ByteOrderMarkProblems(
+            [("A.cs", [0x6E, 0x61, 0x6D]), ("B.cs", [0x2F]), ("C.cs", [])]));
+    }
+
+    /// <summary>
     /// 検査が実際にソースを読んでいる。
     /// </summary>
     /// <remarks>
@@ -275,6 +295,30 @@ public class CSharpStyleTests
         Assert.NotEmpty(Find($"var s = \"a{cr}b\"u8;", ForbiddenFormSet.MessageLayer));
         Assert.Empty(Find("var s = string.Join(\"x\", lines);", ForbiddenFormSet.MessageLayer));
     }
+
+    /// <summary>
+    /// 利用者に見せる日付は <c>yyyy/MM/dd</c> に揃える（docs/09 §2-5）。
+    /// </summary>
+    /// <remarks>
+    /// <b>見るのは文字列補間の書式指定だけ</b>である。SQL に渡す ISO の日付は
+    /// <c>ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)</c> と明示して書くので当たらない
+    /// （その 1 本が <c>PartnerRegistrationStore</c> にある）。
+    /// </remarks>
+    [Theory]
+    [InlineData("var s = $\"{date:yyyy-MM-dd}\";", true)]
+    [InlineData("var s = $\"{date:yyyy年M月d日}\";", true)]
+    [InlineData("var s = $\"{date:yyyy/M/d}\";", true)]
+    [InlineData("var s = $\"{date:yyyy/MM/dd}\";", false)]
+    [InlineData("var s = $\"{at:yyyy/MM/dd HH:mm}\";", false)]
+    [InlineData("var s = $\"{amount:#,0}\";", false)]
+    // **`ToString` も見る。** 補間だけを見ていると、いちばん自然な逃げ道が空く。
+    [InlineData("var s = date.ToString(\"yyyy年M月d日\");", true)]
+    [InlineData("var s = date.ToString(\"yyyy-MM-dd\");", true)]
+    [InlineData("var s = date.ToString(\"yyyy/MM/dd\");", false)]
+    // **文化を明示した形は機械に渡す値**（SQL・CSV）なので対象外（docs/09 §2-5）。
+    [InlineData("var s = date.ToString(\"yyyy-MM-dd\", CultureInfo.InvariantCulture);", false)]
+    public void 利用者向け文言の日付は_yyyy_MM_dd_に揃える(string source, bool caught)
+        => Assert.Equal(caught, Find(source, ForbiddenFormSet.MessageLayer).Count > 0);
 
     /// <summary>
     /// 読めなかったことを「違反 0 件」と混同しない。

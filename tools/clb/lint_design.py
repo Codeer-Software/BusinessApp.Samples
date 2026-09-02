@@ -47,10 +47,88 @@ ALLOWED_VARIANTS = {"Primary", "Danger", "Secondary"}
 # 必須の印を出すクラス（app.css）。ラベル側の要素に付ける。
 REQUIRED_LABEL_CLASS = "required-label"
 
+# 利用者に見せる日時の書式（docs/09 §2-5。D-30）。
+#
+# **`Format` が空だと CLB の既定が出る**——実機では `2026/08/24 18:56:09` と**秒まで**並んだ
+# （2026-09-02 実測 1.3.20。仕訳帳の「入力年月日」）。09 §2-5 が決めたのは
+# `yyyy/MM/dd HH:mm` なので、**画面に出す日時のフィールドには書式を書く**。
+# 日付だけの `DateFieldDesign` はブラウザ標準の `<input type="date">` で、
+# 日本語環境では `yyyy/MM/dd` に見える——**こちらは書式を書かなくてよい**（09 §2-5）。
+DATETIME_DISPLAY_FORMAT = "yyyy/MM/dd HH:mm"
+
+# 洗い替え（`ListFieldDesignBase.ReplaceMode`）の既定。
+# **`None` 以外にすると、保存が `SearchDelete`（検索条件に一致する行の一括削除）を起こす。**
+# この経路はサーバ側の関門（`AccountingSubmitPipeline`）を通らないので、
+# 計上済みの明細を守っている DDL のトリガが**生の例外**として出る（qa/02 R29-08）。
+# いま発火しないのは設計側が全部 `None` だからであり、**入れた日に鳴らす**。
+ALLOWED_REPLACE_MODE = "None"
+
+# 読み取り条件を空のままにしてよいモジュールと、その理由（D-29。ADR-0033）。
+#
+# **既定は「そのアプリの役割を 1 つも持たない利用者は、そのアプリのデータを読めない」**である。
+# 空＝全開放なので、**例外は理由を書いて 1 件ずつ置く**（qa/01 F-18 と同じ性質）。
+# **期限のある例外には期限を書く**——書かないと、例外が既定に育つ。
+READ_CONDITION_EXEMPTIONS = {
+    "AppUser": "認証部品のユーザー表。読み取り条件を付けられない（qa/01 F-20）。"
+               "役割の列が全利用者から読めることは ADR-0032 の帰結",
+    "Account": "マスタ。フェーズ 4——viewer を効かせる回でないと「読ませるが編集させない」を表せない",
+    "Department": "同上",
+    "SubAccount": "同上",
+    "TaxCategory": "同上",
+    "CompanyProfile": "設定。フェーズ 4（同上）",
+    "FiscalYear": "設定。フェーズ 4（同上）",
+    "AccountingPeriod": "設定。フェーズ 4（同上）",
+    "Partner": "取引先マスタ。フェーズ 4——閉じると会計側の 5 か所を出し分ける必要がある"
+               "（ADR-0033 の帰結）",
+    "PortalHome": "玄関。どの役割の人も着地する画面で、閉じるとルート URL の着地先が無くなる"
+                  "（ADR-0033 決定④の例外）",
+}
+
+# 関門が名指ししている語（qa/02 R26-22）。
+# **デザイン側で名前が変わると、関門は何も言わずに外れて全テストが緑になる。**
+# `EnumConsistencyTests` の「3 者一致」と同じ作法を、関門の名指しにも当てる。
+VOCABULARY_MODULE = "AppUser"
+
+# 役割の軸 → (デザイン enum の名前, 下位から上位への順)。
+# **順序はここでしか表せない**（enum は集合しか持たない）ので、値の集合が一致することを検査する。
+ROLE_HIERARCHY = {
+    "AccountingRole.Value": ("AccountingRoles", ["viewer", "staff", "manager"]),
+    "PartnerRole.Value": ("PartnerRoles", ["viewer", "editor"]),
+}
+
+# アプリ全体のアクセス条件が見ている変数（D-23）。
+ACCESS_FLAG_VARIABLE = "CanAccessApp.Value"
+
 # 参照してはならない向き（ADR-0025 §4）。`Modules/` のトップレベルのフォルダ＝アプリ（部品）で
 # 判定する（Designer/Project.md のフォルダ規約）——モジュール名を並べると、増えるたびに腐る。
 # **認証部品（Platform）は誰が参照してもよい**——権限の条件は AppUser の列でしか書けない（qa/01 F-21）。
 FORBIDDEN_REFERENCES = {"Partners": {"Accounting"}}
+
+
+def ddl_tables():
+    """DDL のテーブル → 列定義の行（列名 → その行の本文）。
+
+    **列定義の行だけを拾う。** `UNIQUE (...)` のような表制約は列ではないので落とす。
+    """
+    tables = {}
+    for path in sorted(glob.glob(os.path.join(DDL_DIR, "*.sql"))):
+        text = io.open(path, encoding="utf-8").read()
+        # **`IF NOT EXISTS` も空白の詰め方も受ける。** 外れると、その表が丸ごと
+        # `DDL_TABLES` から落ちて D-25 が無音で消える（2026-09-02 の自己レビュー）。
+        for match in re.finditer(
+                r"CREATE TABLE (?:IF NOT EXISTS )?(\w+)\s*\((.*?)\n\s*\);", text, re.DOTALL):
+            columns = {}
+            for line in match.group(2).split("\n"):
+                line = line.split("--")[0].strip().rstrip(",")
+                head = re.match(r"^(\w+)\s+\w", line)
+                if head and head.group(1).upper() not in (
+                        "UNIQUE", "CHECK", "FOREIGN", "PRIMARY", "CONSTRAINT"):
+                    columns[head.group(1)] = line
+            tables[match.group(1)] = columns
+    return tables
+
+
+DDL_TABLES = ddl_tables()
 
 
 def tables_with_optimistic_locking():
@@ -58,16 +136,44 @@ def tables_with_optimistic_locking():
 
     認証部品の app_users のように、こちらが定義していないテーブルまで規約の対象にしない。
     """
-    tables = set()
-    for path in sorted(glob.glob(os.path.join(DDL_DIR, "*.sql"))):
-        text = io.open(path, encoding="utf-8").read()
-        for match in re.finditer(r"CREATE TABLE (\w+) \((.*?)\);", text, re.DOTALL):
-            if "optimistic_locking" in match.group(2):
-                tables.add(match.group(1))
-    return tables
+    return {t for t, columns in DDL_TABLES.items() if "optimistic_locking" in columns}
 
 
 OPTIMISTIC_LOCKING_TABLES = tables_with_optimistic_locking()
+
+
+def columns_the_user_must_fill(table):
+    """その表で「誰かが値を入れないと INSERT が落ちる」列（D-25）。
+
+    `NOT NULL` かつ `DEFAULT` が無く、主キーでもない列。
+    **`DEFAULT` のある列を入れない**——DB が埋めるので、画面が空でも落ちない。
+    """
+    required = set()
+    for column, line in DDL_TABLES.get(table, {}).items():
+        # **`DEFAULT` は語として見る。** 部分一致だと `default_tax_treatment` のような
+        # 列名を「既定値がある」と読み違える（2026-09-02 の自己レビュー）。
+        upper = line.upper()
+        if ("NOT NULL" in upper
+                and not re.search(r"\bDEFAULT\b", upper)
+                and "PRIMARY KEY" not in upper):
+            required.add(column)
+    return required
+
+
+# `NOT NULL` なのに `IsRequired` を立てない欄と、その理由（D-25）。
+# **理由の無い免除を置かない**——外してよいかを、次に見る人が判断できる形で書く。
+# `IsRequired` は「**利用者が埋める**必須欄」の 1 意味に揃えてある（Designer/Project.md）ので、
+# **画面やサーバが自動で入れる列はここに載る**。印（D-20）が付いてしまうのを避ける意味もある。
+REQUIRED_EXEMPTIONS = {
+    ("JournalEntry", "fiscal_year_id"): "計上日から画面が入れる（表示専用。利用者は選ばない）",
+    ("JournalEntry", "entered_at"): "入力年月日はサーバが入れる",
+    ("JournalLine", "journal_entry_id"): "親 FK。親が識別子を差し込む（qa/01 D-17）。"
+                                          "qa/01 H-02 は「親子の FK に NOT NULL を付けない」と書いているが、"
+                                          "1.3.20 では NOT NULL のまま明細の追加も計上も通っている（実測。"
+                                          "H-02 は前回プロジェクト由来の未確認）",
+    ("JournalLine", "line_no"): "行番号は親の画面が自動で採る",
+    ("PartnerInvoiceRegistration", "partner_id"): "URL の ?partner で決まり、画面は表示だけ（07 §3-4）",
+}
 
 
 def design_files(pattern):
@@ -115,21 +221,33 @@ def check_module(path, doc, findings):
         findings.append((SEV_ERROR, "F-09", relative(path),
                          f"{module}: 更新できるモジュールには OptimisticLocking フィールドが要る"))
 
-    # D-18 ボタンの色は 3 値だけ（docs/09 §4・ADR-0030）
-    for field in doc.get("Fields", []):
-        variant = field.get("Variant")
-        if variant and variant not in ALLOWED_VARIANTS:
-            findings.append((SEV_ERROR, "D-18", relative(path),
-                             f"{module}.{field.get('Name', '')}: Variant「{variant}」は使わない"
-                             f"（{' / '.join(sorted(ALLOWED_VARIANTS))} のどれかにする）"))
+    # D-18 ボタンの色は 3 値だけ（docs/09 §4・ADR-0030）。
+    # **`check_module` の中から呼ぶ。** `main()` から別に呼ぶ形にすると、
+    # モジュール側の呼び出しを消してもフレーム側が残るので `WIRED_CHECKS` が緑になった
+    # （2026-09-02 に壊して確かめた）。**呼ぶ人を 1 か所にすると、消えたことが検体で分かる。**
+    check_variants(path, doc, findings)
 
     # D-19 検索欄を持つレイアウトは既定で開く（docs/09 §3）。
+    #
+    # **名前つきの検索レイアウトも見る。** 既定（`""`）だけを見ていたので、
+    # レイアウトを名前つきで足した日に素通りしていた（2026-08-31 の自己レビュー R28-17）。
     # **空の検索レイアウトは対象にしない**——開いても空箱が出るだけである。
-    search = (doc.get("SearchLayouts") or {}).get("") or {}
-    search_layout = search.get("Layout") or {}
-    if _field_count(search_layout) > 0 and not search_layout.get("IsExpanderDefaultOpened"):
-        findings.append((SEV_ERROR, "D-19", relative(path),
-                         f"{module}: 検索条件は既定で開く（IsExpanderDefaultOpened: true）"))
+    # **折りたためないレイアウトも対象にしない**——`IsExpandable: false` は常に開いた姿で、
+    # `IsExpanderDefaultOpened` はそもそも読まれない（同 R28-17 の誤検知）。
+    for layout_name, search in (doc.get("SearchLayouts") or {}).items():
+        search_layout = search.get("Layout") or {}
+        if (_field_count(search_layout) > 0
+                and search_layout.get("IsExpandable")
+                and not search_layout.get("IsExpanderDefaultOpened")):
+            where = f"{module}{'/' + layout_name if layout_name else ''}"
+            findings.append((SEV_ERROR, "D-19", relative(path),
+                             f"{where}: 検索条件は既定で開く（IsExpanderDefaultOpened: true）"))
+
+    # D-26 洗い替えは使わない（関門を通らない削除が起きる。qa/02 R29-08）
+    _check_replace_mode(path, doc, findings)
+
+    # D-25 DDL が必須にしている欄は、画面でも必須にする
+    _check_required_columns(path, doc, findings)
 
     # D-24 データを持つモジュールに書き込み条件が書かれているか（qa/01 F-18）。
     # **空＝全開放である。** 前回プロジェクトは 104 本になってから全数監査をして穴を 28 本見つけた
@@ -139,10 +257,36 @@ def check_module(path, doc, findings):
                          f"{module}: データを持つモジュールに UserWriteCondition が要る"
                          "（空＝全開放。qa/01 F-18）"))
 
+    # D-29 データを持つモジュールに読み取り条件が書かれているか（ADR-0033）。
+    #
+    # **D-24 の読み取り版である。** 既定は「そのアプリの役割を 1 つも持たない利用者は、
+    # そのアプリのデータを読めない」で、空＝全開放だと **`is_sysadmin` だけの利用者や
+    # 取引先だけの利用者が、API から下書きを含む全伝票を読める**（qa/01 F-18）。
+    #
+    # **機械で守れるのは「空でないこと」までである**（ADR-0033 の帰結）。
+    # 「軸の全ての値が OR で入っている」という形にはできない——**下位は上位専用のものを読めない**と
+    # 決めた（決定②）ので、どの役割まで開くかはモジュールごとの判断になる。
+    #
+    # **表を持たないモジュールも見る**（2026-09-02 の自己レビューで 2 人が独立に指摘）。
+    # `DbTable` を入口にしていたので、**帳簿と入力の一覧（クエリモジュール）が丸ごと外**にあった——
+    # ADR-0033 の状況節が名指ししたのはまさにその 3 本（下書きを含む全伝票が読める）で、
+    # qa/01 F-23 も「`UserReadCondition` はクエリモジュールに効く」と書いている。
+    # **いちばん広い読み取り面が網の外にあった。**
+    if (_shows_data(doc)
+            and module not in READ_CONDITION_EXEMPTIONS
+            and not (doc.get("UserReadCondition") or {}).get("ModuleName")):
+        findings.append((SEV_ERROR, "D-29", relative(path),
+                         f"{module}: データを持つモジュールに UserReadCondition が要る"
+                         "（空＝全開放。ADR-0033。開けたままにするなら "
+                         "READ_CONDITION_EXEMPTIONS に理由つきで載せる）"))
+
     # D-20 必須の欄には印が要る（docs/09 §1）。
     # **見るのは詳細レイアウトのラベルだけ**——一覧の見出し（<th>）には class が付かないので、
     # そちらは文字列に「*」を入れてある（qa/01 D-16）。
     _check_required_marks(path, doc, findings)
+
+    # D-30 画面に出す日時は書式を書く（docs/09 §2-5）。
+    _check_datetime_formats(path, doc, findings)
 
     field_names = {f.get("Name", "") for f in doc.get("Fields", [])}
     for kind, layouts in (("Detail", doc.get("DetailLayouts", {})),
@@ -160,6 +304,116 @@ def check_module(path, doc, findings):
                     if element.get(key) in LEGACY_ALIGNMENTS:
                         findings.append((SEV_ERROR, "A-01", relative(path),
                                          f"{where}: {key} の旧値 {element[key]} は Start / End に化ける"))
+
+
+def _shows_data(doc):
+    """そのモジュールが**利用者にデータを見せる**か（D-29 の対象）。
+
+    表を持つモジュール（`DbTable`）と、SQL でデータを出すクエリモジュール（`QueryFieldDesign`）。
+    **ラベルと遷移だけの箱は含めない**——玄関の見出しに読み取り条件を求めても意味が無い。
+    """
+    if doc.get("DbTable"):
+        return True
+    return any(f.get("TypeFullName", "").endswith("QueryFieldDesign")
+               for f in doc.get("Fields", []))
+
+
+def _walk(node, visit):
+    """JSON の木を全部たどり、辞書のノードごとに `visit` を呼ぶ。"""
+    if isinstance(node, dict):
+        visit(node)
+        for value in node.values():
+            _walk(value, visit)
+    elif isinstance(node, list):
+        for value in node:
+            _walk(value, visit)
+
+
+def check_variants(path, doc, findings):
+    """ボタンの色は 3 値だけ（docs/09 §4・ADR-0030）。
+
+    **`Fields` だけを見ない。** `Variant` はレイアウトの入れ子にも `.frm.json` にも
+    現れうるキーで、`Fields` の直下しか見ていなかった（2026-08-31 の自己レビュー R28-17）。
+    **どこに書かれても同じ色が出る**以上、検査も書かれる場所を選ばない。
+    """
+    def visit(node):
+        variant = node.get("Variant")
+        if variant and variant not in ALLOWED_VARIANTS:
+            findings.append((SEV_ERROR, "D-18", relative(path),
+                             f"{doc.get('Name', '')}.{node.get('Name') or node.get('FieldName') or '?'}: "
+                             f"Variant「{variant}」は使わない"
+                             f"（{' / '.join(sorted(ALLOWED_VARIANTS))} のどれかにする）"))
+
+    _walk(doc, visit)
+
+
+def _check_replace_mode(path, doc, findings):
+    """洗い替え（`ReplaceMode`）を使っていないか（qa/02 R29-08）。
+
+    **`None` 以外は `SearchDelete` を起こす。** 保存が「条件に一致する行の一括削除」に化け、
+    サーバ側の関門（`AccountingSubmitPipeline`）を通らない。計上済みの明細を守っているのは
+    DDL のトリガなので、**利用者には生の例外が出る**（qa/01 F-16）。
+    """
+    def visit(node):
+        mode = node.get("ReplaceMode")
+        if mode and mode != ALLOWED_REPLACE_MODE:
+            findings.append((SEV_ERROR, "D-26", relative(path),
+                             f"{doc.get('Name', '')}.{node.get('Name', '?')}: "
+                             f"ReplaceMode「{mode}」は関門を通らない削除（SearchDelete）を起こす。"
+                             "入れるなら、その削除を止める関門を先に作る（qa/02 R29-08）"))
+
+    _walk(doc, visit)
+
+
+def _check_required_columns(path, doc, findings):
+    """DDL が `NOT NULL` にした列が、画面でも必須になっているか（qa/02 R28-11）。
+
+    **見るのは「誰かが入れないと INSERT が落ちる列」だけ**である
+    （`DEFAULT` のある列は DB が埋める）。空のまま保存へ進むと、
+    **生の `SQLite Error 19` がトーストに出る**（qa/01 F-16・qa/03 L-16 で実際に出した）。
+
+    **書き込み経路の無いモジュールは対象外**（`CanCreate` も `CanUpdate` も偽）——
+    画面から値が入ることが無いので、必須の印は意味を持たない。
+
+    列は `DbColumn` 以外のキーでも指せる（`PasswordHashFieldDesign` の
+    `DbColumnHash` / `DbColumnSalt`）。**そちらは「誰かが書く」までしか言わない**ので、
+    `IsRequired` は見ない——書く側の部品が自分で必須を判定する
+    （`AppUser` のパスワードは空のまま登録すると CLB が「不正な入力があります」で止める。
+    2026-09-02 実測 1.3.20）。**どのフィールドからも指されていない列は鳴らす**——
+    値を入れる者が居ないということである。
+    """
+    module = doc.get("Name", "")
+    table = doc.get("DbTable")
+    if not table or table not in DDL_TABLES:
+        return
+    # **既定は「書ける」に倒す**（F-09 の `doc.get("CanUpdate", True)` と揃える）。
+    # 書かなかったモジュールで検査だけが静かに外れる形を作らない。
+    if not (doc.get("CanCreate", True) or doc.get("CanUpdate", True)):
+        return
+
+    by_column = {}
+    mentioned = set()
+    for field in doc.get("Fields", []):
+        for key, value in field.items():
+            if key.startswith("DbColumn") and value:
+                mentioned.add(value)
+                if key == "DbColumn":
+                    by_column[value] = field
+
+    for column in sorted(columns_the_user_must_fill(table)):
+        if (module, column) in REQUIRED_EXEMPTIONS:
+            continue
+        if column not in mentioned:
+            findings.append((SEV_ERROR, "D-25", relative(path),
+                             f"{module}: {table}.{column} は NOT NULL なのに、"
+                             "値を書くフィールドがどこにも無い"))
+            continue
+        field = by_column.get(column)
+        if field is not None and not field.get("IsRequired"):
+            findings.append((SEV_ERROR, "D-25", relative(path),
+                             f"{module}.{field.get('Name', '')}: {table}.{column} は NOT NULL なので "
+                             "IsRequired: true にする（空のまま保存すると生の SQLite の文言が出る。"
+                             "画面が自動で入れる欄なら REQUIRED_EXEMPTIONS に理由つきで載せる）"))
 
 
 def _field_count(layout):
@@ -181,16 +435,78 @@ def _field_count(layout):
     return count
 
 
+def _has_class(doc, field_name, class_name):
+    """詳細レイアウトのその要素に、そのクラスが付いているか。"""
+    found = []
+
+    def visit(node):
+        if node.get("FieldName") == field_name:
+            found.append(class_name in (node.get("ClassName") or "").split())
+
+    _walk(doc.get("DetailLayouts", {}), visit)
+    return any(found)
+
+
+def _check_datetime_formats(path, doc, findings):
+    """**画面に出す日時に書式が書いてあるか**（docs/09 §2-5）。
+
+    `DateTimeFieldDesign` の `Format` が空だと CLB の既定が出て、**秒まで並ぶ**
+    （2026-09-02 実測 1.3.20。仕訳帳の「入力年月日」が `2026/08/24 18:56:09` だった）。
+    09 §2-5 が決めた書式は `yyyy/MM/dd HH:mm` である。
+
+    **見るのはレイアウトに置いた欄だけ。** `CreatedAt` / `UpdatedAt` のように
+    どの画面にも出していない監査用の列まで縛ると、**書式が要らない欄に書式が増える**——
+    出していないものの見た目を決めても、次に出す人がそれを読むとは限らない。
+    """
+    module = doc.get("Name", "")
+    wrong = {f.get("Name", ""): f.get("Format", "") for f in doc.get("Fields", [])
+             if f.get("TypeFullName", "").endswith("DateTimeFieldDesign")
+             and f.get("Format", "") != DATETIME_DISPLAY_FORMAT}
+    if not wrong:
+        return
+
+    placed = set()
+
+    def visit(node):
+        name = node.get("FieldName", "")
+        if name in wrong:
+            placed.add(name)
+
+    for kind in ("DetailLayouts", "ListLayouts", "SearchLayouts"):
+        _walk(doc.get(kind) or {}, visit)
+
+    for name in sorted(placed):
+        findings.append((SEV_ERROR, "D-30", relative(path),
+                         f"{module}: {name} は画面に出す日時なので "
+                         f'"Format": "{DATETIME_DISPLAY_FORMAT}" を書く'
+                         f"（空だと秒まで出る。docs/09 §2-5）"))
+
+
 def _check_required_marks(path, doc, findings):
-    """必須のフィールドのラベルに、印を出すクラスが付いているか（docs/09 §1）。
+    """必須のフィールドのラベルに、印が出るか（docs/09 §1）。
 
     **`IsRequired` は「利用者が埋める必須欄」の 1 意味に揃えてある**（Designer/Project.md）。
     画面が自動で入れる欄には立てないので、ここは例外なしの規則でよい。
+
+    **印の出し方は 2 通りある**（2026-09-02 に実機で分かった）。
+
+    1. ラベルのレイアウト要素に `"ClassName": "required-label"`（app.css の `::after`）
+    2. **`LabelFieldDesign` の `RelativeField` を必須の欄に向ける**——
+       CLB が `<span class="text-danger">*</span>` を自分で足す
+
+    **見るのは「印が出るか」であって、どちらの書き方かではない。** 2 の形に 1 を重ねると
+    **`*` が 2 つ並ぶ**（認証部品の `AppUser` が 2 の形で、実際に重ねて出した）。
     """
     module = doc.get("Name", "")
     required = {f.get("Name", "") for f in doc.get("Fields", []) if f.get("IsRequired")}
     if not required:
         return
+
+    # CLB が自分で印を足すラベル → その持ち主（`RelativeField` が必須の欄を向いている）。
+    # **持ち主は `RelativeField` から取る。** ラベル名から `Label` を削る形にすると、
+    # `CodeCaption` のような命名で二重印の検査が黙る（2026-09-02 の自己レビュー）。
+    drawn_by_clb = {f.get("Name", ""): f["RelativeField"] for f in doc.get("Fields", [])
+                    if f.get("RelativeField") in required}
 
     marked = set()
     unmarked = {}
@@ -202,16 +518,17 @@ def _check_required_marks(path, doc, findings):
             if node.get("TypeFullName", "").endswith("FieldLayoutDesign"):
                 if name in required:
                     placed.add(name)
-                if name.endswith("Label"):
-                    owner = name[:-len("Label")]
-                    if owner in required:
-                        # **クラスは分割して見る。** `"required-label ms-2"` のように
-                        # 他のクラスと併記できる（app.css はクラスセレクタなので印は出る）。
-                        # 完全一致で見ると、正しい書き方を誤検知する。
-                        if REQUIRED_LABEL_CLASS in (node.get("ClassName") or "").split():
-                            marked.add(owner)
-                        else:
-                            unmarked[owner] = name
+                owner = drawn_by_clb.get(name) or (
+                    name[:-len("Label")] if name.endswith("Label") else "")
+                if owner in required:
+                    # **クラスは分割して見る。** `"required-label ms-2"` のように
+                    # 他のクラスと併記できる（app.css はクラスセレクタなので印は出る）。
+                    # 完全一致で見ると、正しい書き方を誤検知する。
+                    if (REQUIRED_LABEL_CLASS in (node.get("ClassName") or "").split()
+                            or name in drawn_by_clb):
+                        marked.add(owner)
+                    else:
+                        unmarked[owner] = name
             for value in node.values():
                 walk(value)
         elif isinstance(node, list):
@@ -220,12 +537,20 @@ def _check_required_marks(path, doc, findings):
 
     walk(doc.get("DetailLayouts", {}))
 
+    # **両方を書いたら `*` が 2 つ並ぶ。** 実機で出した（2026-09-02。`AppUser`）。
+    for name in sorted(drawn_by_clb):
+        if _has_class(doc, name, REQUIRED_LABEL_CLASS):
+            findings.append((SEV_ERROR, "D-20", relative(path),
+                             f"{module}: {name} は RelativeField で CLB が印を出すので、"
+                             f'"ClassName": "{REQUIRED_LABEL_CLASS}" を重ねない（* が 2 つ並ぶ）'))
+
     for owner, label in sorted(unmarked.items()):
         if owner in marked:
             continue    # 同じ欄が複数のレイアウトにあり、片方には付いている
         findings.append((SEV_ERROR, "D-20", relative(path),
-                         f"{module}: 必須の {owner} のラベル {label} に "
-                         f'"ClassName": "{REQUIRED_LABEL_CLASS}" が要る（docs/09 §1）'))
+                         f"{module}: 必須の {owner} のラベル {label} に印が出ない。"
+                         f'"ClassName": "{REQUIRED_LABEL_CLASS}" を付けるか、'
+                         "ラベルの RelativeField をその欄に向ける（docs/09 §1）"))
 
     # **ラベル要素そのものが無い場合を見落とさない。** これがいちばん起きやすい書き忘れで、
     # 「`<Field>Label` があるときにしか見ない」実装では素通りしていた（2026-08-31 の自己レビュー）。
@@ -290,6 +615,77 @@ def check_module_references(modules, scripts, findings):
                 report(path, owner, target, "読んでいる")
 
 
+def child_parent_keys(modules):
+    """親の `ListField` が絞っている「子モジュール → 親 FK の名前」。
+
+    **親子の関係はデザインから読む。モジュール名を並べない**（増えるたびに腐る）。
+    親の `ListField` が「子の `<X>.Value` ＝ 自分の `Id.Value`」で絞っていれば、
+    その `<X>` が明細側の親 FK である——つまり**親が自分で名乗っている**。
+    """
+    def collect(node, into):
+        if isinstance(node, dict):
+            if (node.get("TypeFullName", "").endswith("FieldVariableMatchCondition")
+                    and node.get("Variable") == "Id.Value"
+                    and node.get("SearchTargetVariable", "").endswith(".Value")):
+                into.add(node["SearchTargetVariable"][:-len(".Value")])
+            for value in node.values():
+                collect(value, into)
+        elif isinstance(node, list):
+            for value in node:
+                collect(value, into)
+
+    for path, doc in modules:
+        for field in doc.get("Fields", []):
+            if not field.get("TypeFullName", "").endswith("ListFieldDesign"):
+                continue
+            condition = field.get("SearchCondition") or {}
+            names = set()
+            collect(condition.get("Condition"), names)
+            for name in sorted(names):
+                yield path, doc, field, condition.get("ModuleName", ""), name
+
+
+def check_child_detail_screens(modules, frames, scripts, findings):
+    """明細モジュールをフレームに登録するなら、親 FK を埋める経路が要る（qa/02 R29-13）。
+
+    **明細モジュールは詳細レイアウトを持っている**（必須の印を置く場所として。qa/02 R26-31）。
+    そこにどのフレームからも到達できないうちは無害だが、**登録した日に
+    「親の無い明細を新規作成できる画面」が生まれる**——親 FK は `NOT NULL` なので、
+    保存は DB に拒まれ、**生の SQLite の文言がトーストに出る**（qa/01 F-16）。
+
+    **登録そのものは禁じない。** `PartnerInvoiceRegistration` は 2026-09-02 に
+    正面の到達先へ昇格し、URL の `?partner=` から親 FK を入れている（07 §3-4）。
+    **要求するのは「親 FK に値が入る経路があること」**だけである。
+
+    **新規作成できる子だけを見る。** 親の詳細に埋め込んだクエリモジュール
+    （`PartnerRegistrationList`）は `CanCreate` が偽で、作る経路がそもそも無い。
+    """
+    registered = set()
+    for _, frame in frames:
+        registered |= modules_on_frame(frame)
+
+    creatable = {doc.get("Name") for _, doc in modules if doc.get("CanCreate")}
+
+    # **コメントと文字列リテラルを潰してから読む**（2026-09-02 の自己レビュー）。
+    # 潰さないと「`// Parent.Value = q` と説明に書いただけ」で緑になる。
+    assigns = {os.path.basename(path).split(".", 1)[0]: _blank(_blank(text, _COMMENTS), _STRINGS)
+               for path, text in scripts}
+
+    for path, doc, field, child, key in child_parent_keys(modules):
+        if child not in registered or child not in creatable:
+            continue
+        script = assigns.get(child, "")
+        # **代入だけを見る。** `\s*=` だと `if (Parent.Value == q)` という**比較**にも当たり、
+        # 値を入れていないのに緑になる（同じ自己レビュー）。
+        if re.search(rf"(?<![\w.]){re.escape(key)}\.Value\s*=(?!=)", script):
+            continue
+        findings.append((SEV_ERROR, "D-28", relative(path),
+                         f"{child} はフレームに登録されているのに、親 FK {child}.{key} に "
+                         f"値を入れる経路がスクリプトに無い（{doc.get('Name', '')}."
+                         f"{field.get('Name', '')} の明細である）。"
+                         "親の無い行を新規作成でき、保存は DB に拒まれる（qa/02 R29-13）"))
+
+
 def check_child_parent_keys(modules, findings):
     """ヘッダ＋明細の、**明細側の親 FK が `IdFieldDesign` ＋ `IsManualInput: false` か**（qa/01 D-17）。
 
@@ -299,67 +695,44 @@ def check_child_parent_keys(modules, findings):
     リロードして初めて消えたと分かる（2026-08-30 実測 1.3.20）。
     `designcheck` は緑のままである。
 
-    **親子の関係はデザインから読む。モジュール名を並べない**（増えるたびに腐る）。
-    親の `ListField` が「子の `<X>.Value` ＝ 自分の `Id.Value`」で絞っていれば、
-    その `<X>` が明細側の親 FK である——つまり**この検査の対象は、親が自分で名乗っている**。
+    **親子の関係は `child_parent_keys` がデザインから読む**（モジュール名を並べない）。
     """
     fields_by_module = {
         doc["Name"]: {f.get("Name", ""): f for f in doc.get("Fields", [])}
         for _, doc in modules if doc.get("Name")
     }
 
-    def parent_keys(node, child, into):
-        """子モジュールを絞る条件から、親 FK の名前を拾う。"""
-        if isinstance(node, dict):
-            if (node.get("TypeFullName", "").endswith("FieldVariableMatchCondition")
-                    and node.get("Variable") == "Id.Value"
-                    and node.get("SearchTargetVariable", "").endswith(".Value")):
-                into.add(node["SearchTargetVariable"][:-len(".Value")])
-            for value in node.values():
-                parent_keys(value, child, into)
-        elif isinstance(node, list):
-            for value in node:
-                parent_keys(value, child, into)
-
     pairs = 0
-    for path, doc in modules:
-        for field in doc.get("Fields", []):
-            if not field.get("TypeFullName", "").endswith("ListFieldDesign"):
-                continue
-            # **閲覧専用の一覧（クエリモジュールの埋め込み等）は、型の検査だけ免除する。**
-            # D-17 の型は「行の追加が静かに消える」で、追加・更新の経路が無ければ起きない。
-            # 名前を出すためにクエリモジュールを選ぶのは正しい形（qa/01 D-17 の処方）。
-            # ただし**指し先の存在は閲覧専用でも見る**——絞り込みのフィールドが消えると、
-            # クエリの「未指定なら効かない」規約に落ちて**全件が出る**（2026-09-02 のレビュー指摘）。
-            # 注意: `ListField.CanCreate: false` は UI しか塞がない。スクリプトで行を足す設計に
-            # 変えた日は、この免除が効きすぎる。
-            writable = bool(field.get("CanCreate") or field.get("CanUpdate"))
-            condition = field.get("SearchCondition") or {}
-            child = condition.get("ModuleName", "")
-            if child not in fields_by_module:
-                continue
+    for path, doc, field, child, name in child_parent_keys(modules):
+        if child not in fields_by_module:
+            continue
+        # **閲覧専用の一覧（クエリモジュールの埋め込み等）は、型の検査だけ免除する。**
+        # D-17 の型は「行の追加が静かに消える」で、追加・更新の経路が無ければ起きない。
+        # 名前を出すためにクエリモジュールを選ぶのは正しい形（qa/01 D-17 の処方）。
+        # ただし**指し先の存在は閲覧専用でも見る**——絞り込みのフィールドが消えると、
+        # クエリの「未指定なら効かない」規約に落ちて**全件が出る**（2026-09-02 のレビュー指摘）。
+        # 注意: `ListField.CanCreate: false` は UI しか塞がない。スクリプトで行を足す設計に
+        # 変えた日は、この免除が効きすぎる。
+        writable = bool(field.get("CanCreate") or field.get("CanUpdate"))
+        pairs += 1
 
-            names = set()
-            parent_keys(condition.get("Condition"), child, names)
-            pairs += len(names)
-            for name in sorted(names):
-                key = fields_by_module[child].get(name)
-                if key is None:
-                    findings.append((SEV_ERROR, "D-17", relative(path),
-                                     f"{doc.get('Name', '')}.{field.get('Name', '')} が絞る "
-                                     f"{child}.{name} が無い（親子の逆引きが効かない）"))
-                    continue
-                if not writable:
-                    continue
-                if not key.get("TypeFullName", "").endswith("IdFieldDesign"):
-                    findings.append((SEV_ERROR, "D-17", relative(path),
-                                     f"{child}.{name} は親 FK なので IdFieldDesign にする"
-                                     f"（今は {key.get('TypeFullName', '').rsplit('.', 1)[-1]}）。"
-                                     "参照フィールドだと行の追加が静かに消える（qa/01 D-17）"))
-                elif key.get("IsManualInput"):
-                    findings.append((SEV_ERROR, "D-17", relative(path),
-                                     f"{child}.{name} は親 FK なので IsManualInput: false にする"
-                                     "（親が識別子を差し込む欄である。qa/01 D-17）"))
+        key = fields_by_module[child].get(name)
+        if key is None:
+            findings.append((SEV_ERROR, "D-17", relative(path),
+                             f"{doc.get('Name', '')}.{field.get('Name', '')} が絞る "
+                             f"{child}.{name} が無い（親子の逆引きが効かない）"))
+            continue
+        if not writable:
+            continue
+        if not key.get("TypeFullName", "").endswith("IdFieldDesign"):
+            findings.append((SEV_ERROR, "D-17", relative(path),
+                             f"{child}.{name} は親 FK なので IdFieldDesign にする"
+                             f"（今は {key.get('TypeFullName', '').rsplit('.', 1)[-1]}）。"
+                             "参照フィールドだと行の追加が静かに消える（qa/01 D-17）"))
+        elif key.get("IsManualInput"):
+            findings.append((SEV_ERROR, "D-17", relative(path),
+                             f"{child}.{name} は親 FK なので IsManualInput: false にする"
+                             "（親が識別子を差し込む欄である。qa/01 D-17）"))
 
     # **0 は「違反が無い」ではなく「配線が死んだ」を疑う数字**（qa/03 L-15）。
     # 親子の関係はデザインから読んでいるので、CLB が条件の型名を変えた日に
@@ -369,6 +742,25 @@ def check_child_parent_keys(modules, findings):
                          "ヘッダ＋明細の組が 1 つも見つからない（検査が空回りしている）"))
 
     return pairs
+
+
+def modules_on_frame(doc):
+    """そのフレームが着地先として登録しているモジュールの名前。
+
+    **`modules` という名前を使い回さない。** かつて呼び出し側の引数
+    （モジュール定義の一覧）を上書きしてしまい、後半のループが文字列を展開しようとして
+    落ちた（2026-08-31）。
+    """
+    placed = set()
+    if doc.get("TopPageModule"):
+        placed.add(doc["TopPageModule"])
+    for side in ("Left", "Right", "Header"):
+        for link in (doc.get(side) or {}).get("Links", []):
+            if not link.get("PageFrame"):
+                placed.add(link.get("Module", ""))
+    for other in doc.get("OtherPageModuleDesigns") or []:
+        placed.add(other.get("Module", ""))
+    return placed
 
 
 def check_cross_frame_links(frames, findings, modules=(), scripts=()):
@@ -392,21 +784,7 @@ def check_cross_frame_links(frames, findings, modules=(), scripts=()):
     フレーム名を明示した形は、そのフレームだけを見る——
     **フレーム名とモジュール名が衝突しないことを前提にしている**（本プロジェクトでは衝突しない）。
     """
-    registered = {}
-    for path, doc in frames:
-        name = doc.get("Name", "")
-        # **`modules` という名前を使い回さない。** 引数の `modules`（モジュール定義の一覧）を
-        # 上書きしてしまい、後半のループが文字列を展開しようとして落ちた（2026-08-31）。
-        placed = set()
-        if doc.get("TopPageModule"):
-            placed.add(doc["TopPageModule"])
-        for side in ("Left", "Right", "Header"):
-            for link in (doc.get(side) or {}).get("Links", []):
-                if not link.get("PageFrame"):
-                    placed.add(link.get("Module", ""))
-        for other in doc.get("OtherPageModuleDesigns") or []:
-            placed.add(other.get("Module", ""))
-        registered[name] = placed
+    registered = {doc.get("Name", ""): modules_on_frame(doc) for _, doc in frames}
 
     for path, doc in frames:
         for side in ("Left", "Right", "Header"):
@@ -473,10 +851,7 @@ def check_role_conditions(modules, frames, findings):
     **軸ごとに順位を表で持つ。** 名前を書き並べると、役割が増えた日に片方だけ直る。
     見るキーは 4 つ——`AppAccessConditions` は `app.clprj` にしか無いので入れない。
     """
-    hierarchy = {
-        "AccountingRole.Value": ["viewer", "staff", "manager"],
-        "PartnerRole.Value": ["viewer", "editor"],
-    }
+    hierarchy = {variable: order for variable, (_, order) in ROLE_HIERARCHY.items()}
 
     def collect(node, into):
         if isinstance(node, dict):
@@ -571,6 +946,87 @@ def check_app_access_condition(doc, path, findings):
 
 
 
+def check_exemptions(modules, findings):
+    """**免除表が腐っていないか**（2026-09-02 の自己レビュー）。
+
+    `REQUIRED_EXEMPTIONS` も `READ_CONDITION_EXEMPTIONS` も、
+    **キーが実在するか・まだ免除が要るかを誰も見ていなかった**。
+    危ないのは「腐った行が再武装する」形である——フェーズ 4 で `Partner` に読み取り条件を
+    付けても行が残っていれば、**あとで条件が空に戻った日に D-29 は永久に鳴らない**。
+
+    C# 側の `ModuleDependencyTests.許可した相手はすべて実際に取引先部品を名指ししている` は
+    同じことを機械化してある。**作法を揃える。**
+    """
+    by_name = {doc.get("Name"): doc for _, doc in modules}
+    where = relative(__file__)
+
+    for name in sorted(READ_CONDITION_EXEMPTIONS):
+        doc = by_name.get(name)
+        if doc is None:
+            findings.append((SEV_ERROR, "D-29", where,
+                             f"READ_CONDITION_EXEMPTIONS の {name} がデザインに無い（行を消す）"))
+        elif (doc.get("UserReadCondition") or {}).get("ModuleName"):
+            findings.append((SEV_ERROR, "D-29", where,
+                             f"{name} は読み取り条件を持っているので、免除の行は要らない（消す）"))
+
+    for module, column in sorted(REQUIRED_EXEMPTIONS):
+        doc = by_name.get(module)
+        if doc is None:
+            findings.append((SEV_ERROR, "D-25", where,
+                             f"REQUIRED_EXEMPTIONS の {module} がデザインに無い（行を消す）"))
+        elif column not in columns_the_user_must_fill(doc.get("DbTable") or ""):
+            findings.append((SEV_ERROR, "D-25", where,
+                             f"{module}.{column} は DDL が必須にしていないので、"
+                             "免除の行は要らない（消す）"))
+
+
+def check_vocabulary(modules, enums, css, findings):
+    """**関門が名指ししている語が、デザインに実在するか**（qa/02 R26-22）。
+
+    D-22（役割の階層）も D-23（アプリ全体のアクセス条件）も D-20（必須の印）も、
+    **文字列でしかデザインと結ばれていない**。`AppUser.AccountingRole` を改名した瞬間、
+    D-22 はどの条件にも当たらなくなり、**全テストが緑のまま関門だけが消える**。
+    `EnumConsistencyTests` が「デザイン enum・DDL の CHECK・C# の 3 者一致」を見ているのと
+    同じ作法を、こちらにも当てる。
+
+    **役割の値まで見る。** 順序は関門の表にしか無い（enum は集合しか持たない）ので、
+    **集合が一致すること**を確かめる——enum に値を足して表に足し忘れると、
+    「上位が欠けていないか」の検査がその値を知らないまま緑になる。
+    """
+    fields_of = {doc.get("Name"): {f.get("Name", "") for f in doc.get("Fields", [])}
+                 for _, doc in modules}
+    where = relative(__file__)
+
+    if VOCABULARY_MODULE not in fields_of:
+        findings.append((SEV_ERROR, "D-27", where,
+                         f"関門が名指しする {VOCABULARY_MODULE} モジュールがデザインに無い"))
+        return
+
+    names = fields_of[VOCABULARY_MODULE]
+    for variable in list(ROLE_HIERARCHY) + [ACCESS_FLAG_VARIABLE]:
+        field = variable.split(".", 1)[0]
+        if field not in names:
+            findings.append((SEV_ERROR, "D-27", where,
+                             f"関門が名指しする {VOCABULARY_MODULE}.{field} がデザインに無い"
+                             "（改名すると、その条件を見る関門が静かに外れる）"))
+
+    values_of = {doc.get("Name"): {m.get("Value") for m in doc.get("Members", [])}
+                 for doc in enums}
+    for variable, (enum_name, order) in ROLE_HIERARCHY.items():
+        if enum_name not in values_of:
+            findings.append((SEV_ERROR, "D-27", where,
+                             f"関門が名指しする enum {enum_name} がデザインに無い"))
+        elif values_of[enum_name] != set(order):
+            findings.append((SEV_ERROR, "D-27", where,
+                             f"{variable} の順位表 {order} が enum {enum_name} "
+                             f"{sorted(values_of[enum_name])} と食い違っている（ADR-0034）"))
+
+    if REQUIRED_LABEL_CLASS not in css:
+        findings.append((SEV_ERROR, "D-27", where,
+                         f"必須の印のクラス {REQUIRED_LABEL_CLASS} が app.css に無い"
+                         "（印を要求する D-20 が、印の出ないクラスを求めることになる）"))
+
+
 def check_layout(path, where, layout, kind, field_names, findings):
     for row in layout.get("Rows", []):
         columns = row.get("Columns", [])
@@ -625,6 +1081,7 @@ def check_page_frame(path, doc, findings, module_tables=None):
     `module_tables` はモジュール名 → `DbTable`。D-05 が「表を持つモジュールか」を見るために要る。
     """
     module_tables = module_tables or {}
+    check_variants(path, doc, findings)
     targets = []
     for side in ("Left", "Right", "Header"):
         for link in (doc.get(side) or {}).get("Links", []):
@@ -697,8 +1154,29 @@ def check_application_root(frames, findings):
                          "ルート URL を開くと非 root のフレームへ黙って落ちる（CommonMistakes #54）"))
 
 
+def _blank(text, pattern):
+    """`pattern` に当たる部分を、**同じ長さの空白**に置き換える。
+
+    消さずに空白にするのは、**位置がずれると「どちらが先か」の判定が狂う**からである
+    （F-15 は `ValidateInput()` が `Submit()` より前にあるかを見る）。改行は残す。
+    """
+    def blank(match):
+        return "".join(c if c == "\n" else " " for c in match.group(0))
+
+    return re.sub(pattern, blank, text, flags=re.DOTALL)
+
+
+# コメントは検査の対象にしない。**この規則の説明そのものがコメントに書いてある**ので、
+# 素で走らせると自分の解説文を叩く（2026-09-02 に F-15 で実際に起きた）。
+_COMMENTS = r"//[^\n]*|/\*.*?\*/"
+
+# 文字列リテラルも落とす（F-15 だけ）。利用者に見せる文言に `Submit()` と書けば当たってしまう。
+_STRINGS = r'"(?:\\.|[^"\\\n])*"'
+
+
 def check_script(path, text, findings):
     name = relative(path)
+    text = _blank(text, _COMMENTS)
 
     # B-01 try / catch / finally はロードできない
     for match in re.finditer(r"^\s*(try|catch|finally)\b", text, re.MULTILINE):
@@ -715,6 +1193,37 @@ def check_script(path, text, findings):
         if ".Value" not in match.group(2):
             findings.append((SEV_ERROR, "C-01", name,
                              f"{match.group(1)} のラムダは .Value まで書く（今は {match.group(2).strip()}）"))
+
+    # F-15 スクリプトからの Submit() は CLB 本来の入力検証を走らせない
+    for method, body in _methods(_blank(text, _STRINGS)):
+        submit = _SUBMIT.search(body)
+        if not submit:
+            continue
+        validate = _VALIDATE_INPUT.search(body)
+        if validate is None or validate.start() > submit.start():
+            findings.append((SEV_ERROR, "F-15", name,
+                             f"{method}(): Submit() の前に ValidateInput() を呼ぶ。"
+                             "呼ばないと IsRequired が効かず、必須の空欄がそのまま保存へ進んで "
+                             "生の SQLite の文言がトーストに出る（qa/01 F-15・qa/03 L-16）"))
+
+
+# 列 0 から始まるメソッドの見出し（`void Foo()` / `string Bar(DateOnly d)`）。
+# CLB スクリプトはメソッドを平らに並べるので、これで区切れる。
+_METHOD_HEAD = re.compile(r"^[A-Za-z_][\w<>\[\],?\s]*\s+(\w+)\s*\([^)]*\)\s*$", re.MULTILINE)
+
+# **`row.Submit()` は別のインスタンスの保存**なので対象にしない（qa/01 F-03）。
+# `(?<![\w.])` が、直前がドットの形（＝他のオブジェクトのメソッド）を落とす。
+# **引数のある形も見る。** CLB は `Submit()` と `Submit(List<Module>)` の 2 つを公開している。
+_SUBMIT = re.compile(r"(?<![\w.])(?:this\.)?Submit\s*\([^)]*\)")
+_VALIDATE_INPUT = re.compile(r"(?<![\w.])(?:this\.)?ValidateInput\s*\([^)]*\)")
+
+
+def _methods(text):
+    """スクリプトを (メソッド名, 本文) に切り分ける。"""
+    heads = list(_METHOD_HEAD.finditer(text))
+    for index, head in enumerate(heads):
+        end = heads[index + 1].start() if index + 1 < len(heads) else len(text)
+        yield head.group(1), text[head.end():end]
 
 
 def load_json(path, findings):
@@ -763,12 +1272,20 @@ def main() -> int:
 
     check_cross_frame_links(loaded_frames, findings, loaded_modules, loaded_scripts)
     check_child_parent_keys(loaded_modules, findings)
+    check_child_detail_screens(loaded_modules, loaded_frames, loaded_scripts, findings)
     check_module_references(loaded_modules, loaded_scripts, findings)
     check_role_conditions(loaded_modules, loaded_frames, findings)
     app_settings = os.path.join(DESIGN_DIR, "app.clprj")
     if os.path.exists(app_settings):
         check_app_access_condition(
             json.load(io.open(app_settings, encoding="utf-8")), app_settings, findings)
+
+    enums = [d for d in (load_json(p, findings) for p in design_files("*.enum.json"))
+             if d is not None]
+    app_css = os.path.join(DESIGN_DIR, "app.css")
+    css = io.open(app_css, encoding="utf-8").read() if os.path.exists(app_css) else ""
+    check_vocabulary(loaded_modules, enums, css, findings)
+    check_exemptions(loaded_modules, findings)
 
     errors = [f for f in findings if f[0] == SEV_ERROR]
     warns = [f for f in findings if f[0] == SEV_WARN]
@@ -782,7 +1299,10 @@ def main() -> int:
 
 
 SELFTEST_CASES = [
-    # (何を壊すか, 壊した姿, 期待する (severity, ルール))
+    # (何を壊すか, 壊した姿, 期待する (severity, ルール)[, 指摘文に必ず入る語])
+    #
+    # **4 つ目は、同じルールに壊れ方が複数あるときに書く**（qa/03 L-17）。
+    # 鳴ったことだけを見ると、**直し方が入れ替わっても・薄まっても気づけない**。
     ("予約名の型",
      lambda: _module(Fields=[{"Name": "Id", "TypeFullName": "X.NumberFieldDesign"}]),
      (SEV_ERROR, "F-09")),
@@ -797,16 +1317,62 @@ SELFTEST_CASES = [
      lambda: _module(Fields=[{"Name": "B", "TypeFullName": "X.ButtonFieldDesign",
                               "Variant": "Warning"}]),
      (SEV_ERROR, "D-18")),
+    # **入れ子の中に書いても同じ色が出る。** `Fields` の直下しか見ていなかった（R28-17）。
+    ("レイアウトの入れ子に書いたボタンの色",
+     lambda: _module(DetailLayouts={"": {"Layout": {"Rows": [
+         {"Columns": [{"Layout": {"FieldName": "B", "Variant": "Info"}}]}]}}}),
+     (SEV_ERROR, "D-18")),
     ("検索条件が既定で閉じている",
-     lambda: _module(SearchLayouts={"": {"Layout": {"IsExpanderDefaultOpened": False, "Rows": [
-         {"Columns": [{"Layout": {"FieldName": "A"}}]}]}}}),
+     lambda: _module(SearchLayouts={"": {"Layout": {
+         "IsExpandable": True, "IsExpanderDefaultOpened": False,
+         "Rows": [{"Columns": [{"Layout": {"FieldName": "A"}}]}]}}}),
      (SEV_ERROR, "D-19")),
+    # **名前つきの検索レイアウトも見る**（R28-17）。既定（`""`）だけを見ていた。
+    ("名前つきの検索条件が既定で閉じている",
+     lambda: _module(SearchLayouts={"絞り込み": {"Layout": {
+         "IsExpandable": True, "IsExpanderDefaultOpened": False,
+         "Rows": [{"Columns": [{"Layout": {"FieldName": "A"}}]}]}}}),
+     (SEV_ERROR, "D-19")),
+    ("洗い替えを使っている",
+     lambda: _module(Fields=[{"Name": "Lines", "TypeFullName": "X.ListFieldDesign",
+                              "ReplaceMode": "All"}]),
+     (SEV_ERROR, "D-26")),
+    ("DDL が必須にした欄が任意になっている",
+     lambda: _module(DbTable=SELFTEST_TABLE, CanCreate=True,
+                     UserWriteCondition={"ModuleName": "AppUser"},
+                     Fields=[{"Name": "Code", "DbColumn": SELFTEST_REQUIRED_COLUMN,
+                              "TypeFullName": "X.TextFieldDesign", "IsRequired": False}]),
+     (SEV_ERROR, "D-25"), "IsRequired: true にする"),
+    ("必須の列を書くフィールドがどこにも無い",
+     lambda: _module(DbTable=SELFTEST_TABLE, CanCreate=True,
+                     UserWriteCondition={"ModuleName": "AppUser"}, Fields=[]),
+     (SEV_ERROR, "D-25"), "値を書くフィールドがどこにも無い"),
     ("必須の欄に印が無い",
-     lambda: _required_module(class_name=""), (SEV_ERROR, "D-20")),
+     lambda: _required_module(class_name=""), (SEV_ERROR, "D-20"), "印が出ない"),
     ("必須の欄にラベル要素が無い",
-     lambda: _required_module(with_label=False), (SEV_ERROR, "D-20")),
+     lambda: _required_module(with_label=False), (SEV_ERROR, "D-20"), "ラベル要素"),
+    # **両方を書くと `*` が 2 つ並ぶ**（2026-09-02 に AppUser で実際に出した）。
+    ("CLB が出す印にクラスを重ねている",
+     lambda: _required_module(relative=True), (SEV_ERROR, "D-20"), "重ねない"),
     ("データを持つのに書き込み条件が無い",
      lambda: _module(DbTable="x"), (SEV_ERROR, "D-24")),
+    ("データを持つのに読み取り条件が無い",
+     lambda: _module(DbTable="x", UserWriteCondition={"ModuleName": "AppUser"}),
+     (SEV_ERROR, "D-29")),
+    # **画面に出す日時に書式が無いと、秒まで並ぶ**（2026-09-02 に仕訳帳で実際に出した）。
+    ("画面に出す日時に書式が無い",
+     lambda: _module(Fields=[{"Name": "EnteredAt", "TypeFullName": "X.DateTimeFieldDesign",
+                              "Format": ""}],
+                     ListLayouts={"": {"Layout": {"Rows": [
+                         {"Columns": [{"Layout": {"FieldName": "EnteredAt"}}]}]}}}),
+     (SEV_ERROR, "D-30"), DATETIME_DISPLAY_FORMAT),
+    # **別の書式でも鳴る。** 「空でない」だけを見ると、秒つきを書いた日に黙る。
+    ("画面に出す日時に別の書式を書いている",
+     lambda: _module(Fields=[{"Name": "EnteredAt", "TypeFullName": "X.DateTimeFieldDesign",
+                              "Format": "yyyy-MM-dd HH:mm:ss"}],
+                     ListLayouts={"": {"Layout": {"Rows": [
+                         {"Columns": [{"Layout": {"FieldName": "EnteredAt"}}]}]}}}),
+     (SEV_ERROR, "D-30"), DATETIME_DISPLAY_FORMAT),
     ("担当の条件に責任者が入っていない",
      lambda: _module(UserWriteCondition=_role_condition(["staff"])), (SEV_ERROR, "D-22")),
     ("役割を AND で並べている",
@@ -826,10 +1392,17 @@ SELFTEST_CASES = [
 # `main()` が呼ぶべき検査。**ここに載っているものが全部呼ばれているか**を selftest が見る。
 # 呼び出しを 1 行消しても緑になる作りだと、検査は在っても効かない（qa/03 L-15）。
 WIRED_CHECKS = [
-    "check_module", "check_page_frame", "check_application_root", "check_script",
-    "check_cross_frame_links", "check_child_parent_keys", "check_module_references",
-    "check_role_conditions", "check_app_access_condition",
+    "check_module", "check_page_frame", "check_application_root",
+    "check_script", "check_cross_frame_links", "check_child_parent_keys",
+    "check_child_detail_screens", "check_module_references", "check_role_conditions",
+    "check_app_access_condition", "check_vocabulary", "check_exemptions",
 ]
+
+
+# D-25 の検体に使う実在の表。**実物の DDL を使う**——架空の表を置くと、
+# 「NOT NULL の読み方」そのものが壊れたときに検体も一緒に壊れて気づけない。
+SELFTEST_TABLE = "departments"
+SELFTEST_REQUIRED_COLUMN = "code"
 
 
 def _module(**overrides):
@@ -840,8 +1413,12 @@ def _module(**overrides):
     return doc
 
 
-def _required_module(class_name=REQUIRED_LABEL_CLASS, with_label=True):
-    """必須の欄が 1 つある詳細レイアウト。"""
+def _required_module(class_name=REQUIRED_LABEL_CLASS, with_label=True, relative=False):
+    """必須の欄が 1 つある詳細レイアウト。
+
+    `relative` が真なら、ラベルの `RelativeField` を必須の欄に向ける
+    （CLB が自分で印を出す形。認証部品の `AppUser` がこれである）。
+    """
     columns = [{"Layout": {"FieldName": "Code", "ClassName": "",
                            "TypeFullName": "X.FieldLayoutDesign"}}]
     if with_label:
@@ -850,9 +1427,11 @@ def _required_module(class_name=REQUIRED_LABEL_CLASS, with_label=True):
         columns.insert(0, {"VerticalAlignment": "Middle",
                            "Layout": {"FieldName": "CodeLabel", "ClassName": class_name,
                                       "TypeFullName": "X.FieldLayoutDesign"}})
+    label = {"Name": "CodeLabel", "TypeFullName": "X.LabelFieldDesign"}
+    if relative:
+        label["RelativeField"] = "Code"
     return _module(
-        Fields=[{"Name": "Code", "TypeFullName": "X.TextFieldDesign", "IsRequired": True},
-                {"Name": "CodeLabel", "TypeFullName": "X.LabelFieldDesign"}],
+        Fields=[{"Name": "Code", "TypeFullName": "X.TextFieldDesign", "IsRequired": True}, label],
         DetailLayouts={"": {"Layout": {"Rows": [{"Columns": columns}]}}})
 
 
@@ -901,7 +1480,8 @@ def _header_detail(parent_key):
             },
         }],
     }
-    row = {"Name": "Row", "Fields": [f for f in [parent_key] if f is not None]}
+    row = {"Name": "Row", "CanCreate": True,
+           "Fields": [f for f in [parent_key] if f is not None]}
     return [(_self_path(name="Header.mod.json"), header),
             (_self_path(name="Row.mod.json"), row)]
 
@@ -925,30 +1505,172 @@ def selftest():
     if not SELFTEST_CASES:
         failures.append("検体が 0 件である（0 は「違反が無い」ではなく「配線が死んだ」を疑う数字）")
 
-    for label, build, expected in SELFTEST_CASES:
-        findings = []
-        doc = build()
+    def run_module_checks(doc, findings):
         check_module(_self_path(), doc, findings)
         check_role_conditions([(_self_path(), doc)], [], findings)
-        got = [(f[0], f[1]) for f in findings]
-        if expected not in got:
-            failures.append(f"{label}: {expected} が鳴らない（出たのは {got}）")
+
+    for case in SELFTEST_CASES:
+        label, build, expected = case[:3]
+        says = case[3] if len(case) > 3 else ""
+        findings = []
+        run_module_checks(build(), findings)
+        if not [f for f in findings if (f[0], f[1]) == expected and says in f[3]]:
+            failures.append(f"{label}: {expected}{f'（「{says}」と言う）' if says else ''} が鳴らない"
+                            f"（出たのは {[(f[0], f[1], f[3]) for f in findings]}）")
 
     # 正しい姿では鳴らない（鳴りっぱなしの関門は、赤を無視させる）
     for label, doc in [
         ("表を持たないモジュール", _module()),
-        ("書き込み条件のあるモジュール",
-         _module(DbTable="x", UserWriteCondition={"ModuleName": "AppUser"})),
+        ("書き込み条件と読み取り条件のあるモジュール",
+         _module(DbTable="x", UserWriteCondition={"ModuleName": "AppUser"},
+                 UserReadCondition={"ModuleName": "AppUser"})),
+        # **免除表に載っているモジュールは読み取り条件が無くてよい**（ADR-0033 の例外）。
+        ("免除表に載っているモジュール",
+         _module(Name=next(iter(READ_CONDITION_EXEMPTIONS)), DbTable="x",
+                 UserWriteCondition={"ModuleName": "AppUser"})),
         ("印の付いた必須の欄", _required_module()),
         ("他のクラスと併記した印", _required_module(class_name="ms-2 required-label")),
+        # **CLB が RelativeField で出す印だけでよい**（クラスは付けない）。
+        ("CLB が出す印だけの必須の欄", _required_module(class_name="", relative=True)),
         ("階層を OR で書いた条件",
          _module(UserWriteCondition=_role_condition(["staff", "manager"]))),
+        # **折りたためない検索レイアウトは常に開いている**（R28-17 の誤検知）。
+        ("折りたためない検索レイアウト",
+         _module(SearchLayouts={"": {"Layout": {
+             "IsExpandable": False, "IsExpanderDefaultOpened": False,
+             "Rows": [{"IsWrap": True, "Columns": [{"Layout": {"FieldName": "A"}}]}]}}})),
+        # **書き込み経路の無いモジュールは D-25 の対象外**（会計年度・会計期間がこれである）。
+        # **両方を明示する**——実物がそう書いてあり、既定は「書ける」に倒してある。
+        ("参照だけのモジュール",
+         _module(DbTable=SELFTEST_TABLE, CanCreate=False, CanUpdate=False,
+                 UserWriteCondition={"ModuleName": "AppUser"},
+                 UserReadCondition={"ModuleName": "AppUser"})),
+        ("洗い替えを使わない一覧",
+         _module(Fields=[{"Name": "Lines", "TypeFullName": "X.ListFieldDesign",
+                          "ReplaceMode": "None"}])),
+        ("書式を書いた日時の欄",
+         _module(Fields=[{"Name": "EnteredAt", "TypeFullName": "X.DateTimeFieldDesign",
+                          "Format": DATETIME_DISPLAY_FORMAT}],
+                 ListLayouts={"": {"Layout": {"Rows": [
+                     {"Columns": [{"Layout": {"FieldName": "EnteredAt"}}]}]}}})),
+        # **どの画面にも置いていない日時は対象外**（CreatedAt / UpdatedAt がこれである）。
+        ("画面に出していない日時の欄",
+         _module(Fields=[{"Name": "CreatedAt", "TypeFullName": "X.DateTimeFieldDesign",
+                          "Format": ""}])),
     ]:
         findings = []
-        check_module(_self_path(), doc, findings)
-        check_role_conditions([(_self_path(), doc)], [], findings)
+        run_module_checks(doc, findings)
         if findings:
             failures.append(f"正しい{label}で鳴った: {[(f[0], f[1]) for f in findings]}")
+
+    # **フレームに書いたボタンの色も見る**（`check_variants` はモジュール専用ではない）。
+    # **`check_page_frame` 経由で確かめる**——直接呼ぶと、フレーム側の配線を消しても緑になる。
+    findings = []
+    check_page_frame("a.frm.json", {"Name": "A", "Left": {"Links": [
+        {"Module": "X", "Variant": "Link"}]}}, findings)
+    if (SEV_ERROR, "D-18") not in [(f[0], f[1]) for f in findings]:
+        failures.append("フレームに書いたボタンの色: D-18 が鳴らない")
+
+    # スクリプトの検査（R28-17。`check_script` は selftest から一度も呼ばれていなかった）。
+    for label, script, expected, says in [
+        ("try は使えない", "void A()\n{\n    try\n    {\n    }\n}\n", (SEV_ERROR, "B-01"), ""),
+        ("整数専用の書式", 'void A()\n{\n    var s = n.ToString("D2");\n}\n',
+         (SEV_ERROR, "A-06"), ""),
+        ("並べ替えの .Value 落ち", "void A()\n{\n    rows.OrderBy(r => r.Code);\n}\n",
+         (SEV_ERROR, "C-01"), ""),
+        ("検証を呼ばない Submit", "void A()\n{\n    Submit();\n}\n",
+         (SEV_ERROR, "F-15"), "Submit() の前に ValidateInput() を呼ぶ"),
+        # **引数のある形も CLB の仕様にある**（`Submit(List<Module>)`）。
+        ("引数つきの Submit", "void A()\n{\n    this.Submit(rows);\n}\n",
+         (SEV_ERROR, "F-15"), "Submit() の前に ValidateInput() を呼ぶ"),
+        ("検証を Submit の後で呼んでいる",
+         "void A()\n{\n    Submit();\n    ValidateInput();\n}\n",
+         (SEV_ERROR, "F-15"), "Submit() の前に ValidateInput() を呼ぶ"),
+        # **別のメソッドの ValidateInput() は、こちらの Submit() を守らない。**
+        # **どのメソッドかまで見る**——名前が入れ替わると、直しに行く先が変わる。
+        ("隣のメソッドの検証で済ませている",
+         "void A()\n{\n    ValidateInput();\n}\n\nvoid B()\n{\n    this.Submit();\n}\n",
+         (SEV_ERROR, "F-15"), "B(): "),
+    ]:
+        findings = []
+        check_script(_self_path(name="Script.mod.cs"), script, findings)
+        if not [f for f in findings if (f[0], f[1]) == expected and says in f[3]]:
+            failures.append(f"スクリプト（{label}）: {expected}"
+                            f"{f'（「{says}」と言う）' if says else ''} が鳴らない"
+                            f"（出たのは {[(f[0], f[1], f[3]) for f in findings]}）")
+
+    for label, script in [
+        ("検証してから Submit",
+         "void A()\n{\n    if (!ValidateInput()) return;\n    var ok = this.Submit();\n}\n"),
+        # **コメントの中の Submit() を叩かない。** この規則の解説そのものがコメントに書いてある。
+        ("コメントで Submit() に触れているだけ",
+         "// this.Submit() は検証を走らせない。\nvoid A()\n{\n}\n"),
+        # **`row.Submit()` は別インスタンスの保存**（qa/01 F-03）。
+        ("行ごとの Submit", "void A()\n{\n    foreach (var row in Rows) row.Submit();\n}\n"),
+    ]:
+        findings = []
+        check_script(_self_path(name="Script.mod.cs"), script, findings)
+        if findings:
+            failures.append(f"正しいスクリプト（{label}）で鳴った: {[(f[1], f[3]) for f in findings]}")
+
+    # 関門が名指しする語の実在（D-27）
+    good_modules = [(_self_path("Platform", "AppUser.mod.json"),
+                     {"Name": VOCABULARY_MODULE, "Fields": [
+                         {"Name": "AccountingRole"}, {"Name": "PartnerRole"},
+                         {"Name": "CanAccessApp"}]})]
+    # **リテラルで書く。** `ROLE_HIERARCHY` から作ると同語反復になり、
+    # 順位表を書き換えても selftest は常に一致する（2026-09-02 の自己レビュー）。
+    good_enums = [
+        {"Name": "AccountingRoles",
+         "Members": [{"Value": v} for v in ["viewer", "staff", "manager"]]},
+        {"Name": "PartnerRoles", "Members": [{"Value": v} for v in ["viewer", "editor"]]},
+    ]
+    for label, modules, enums, css in [
+        ("モジュールが無い", [], good_enums, REQUIRED_LABEL_CLASS),
+        ("フィールドが改名されている",
+         [(_self_path("Platform", "AppUser.mod.json"),
+           {"Name": VOCABULARY_MODULE, "Fields": [{"Name": "Role"}]})],
+         good_enums, REQUIRED_LABEL_CLASS),
+        ("enum が無い", good_modules, [], REQUIRED_LABEL_CLASS),
+        ("enum に値が増えている",
+         good_modules,
+         [{"Name": name, "Members": [{"Value": v} for v in list(order) + ["auditor"]]}
+          for name, order in ROLE_HIERARCHY.values()],
+         REQUIRED_LABEL_CLASS),
+        ("印のクラスが app.css に無い", good_modules, good_enums, ""),
+    ]:
+        findings = []
+        check_vocabulary(modules, enums, css, findings)
+        if (SEV_ERROR, "D-27") not in [(f[0], f[1]) for f in findings]:
+            failures.append(f"関門が名指しする語（{label}）: D-27 が鳴らない")
+
+    findings = []
+    check_vocabulary(good_modules, good_enums, REQUIRED_LABEL_CLASS, findings)
+    if findings:
+        failures.append(f"正しい名指しで鳴った: {[(f[0], f[3]) for f in findings]}")
+
+    # 免除表の腐り（D-25 / D-29）。**実在しない行**と**もう要らない行**の 2 通り。
+    exempt_module = next(iter(READ_CONDITION_EXEMPTIONS))
+    for label, modules, expected in [
+        ("実在しないモジュールの行", [], (SEV_ERROR, "D-29")),
+        ("読み取り条件を持ったのに残っている行",
+         [(_self_path(), {"Name": exempt_module,
+                          "UserReadCondition": {"ModuleName": "AppUser"}})],
+         (SEV_ERROR, "D-29")),
+    ]:
+        findings = []
+        check_exemptions(modules, findings)
+        if expected not in [(f[0], f[1]) for f in findings]:
+            failures.append(f"免除表の腐り（{label}）: {expected} が鳴らない")
+
+    # **免除の行が要らないと言われない**（読み取り条件が空のままなら、免除はまだ要る）。
+    findings = []
+    check_exemptions(
+        [(_self_path(name=f"{name}.mod.json"),
+          {"Name": name, "UserReadCondition": {"ModuleName": ""}})
+         for name in READ_CONDITION_EXEMPTIONS], findings)
+    if [f for f in findings if "免除の行は要らない" in f[3]]:
+        failures.append(f"条件が空のままの免除で鳴った: {[(f[1], f[3]) for f in findings]}")
 
     # フレーム跨ぎのリンクの登録漏れ（F-17）
     findings = []
@@ -1046,6 +1768,49 @@ def selftest():
     check_child_parent_keys([(_self_path(), {"Name": "Alone", "Fields": []})], findings)
     if (SEV_ERROR, "D-17") not in [(f[0], f[1]) for f in findings]:
         failures.append("親子の組が 0 でも D-17 が鳴らない")
+
+    # 明細モジュールをフレームに登録したときの親 FK（D-28。qa/02 R29-13）。
+    pair = _header_detail({"Name": "Parent", "TypeFullName": "X.IdFieldDesign",
+                           "IsManualInput": False})
+    on_frame = [("a.frm.json", {"Name": "Main", "Left": {"Links": [{"Module": "Row"}]}})]
+    off_frame = [("a.frm.json", {"Name": "Main", "Left": {"Links": [{"Module": "Header"}]}})]
+    for label, frames_, scripts_, expected in [
+        ("登録したのに親 FK を入れていない", on_frame, [], True),
+        ("登録しているが親 FK を入れている", on_frame,
+         [(_self_path(name="Row.mod.cs"), "void A()\n{\n    Parent.Value = q;\n}\n")], False),
+        # **登録されていなければ無害**（`JournalLine` がこれ。qa/02 R26-31 で残すと決めた）。
+        ("フレームに登録していない明細", off_frame, [], False),
+        # **他人の FK を入れても、この明細は守られない。**
+        ("別のフィールドに入れている", on_frame,
+         [(_self_path(name="Row.mod.cs"), "void A()\n{\n    Other.Value = q;\n}\n")], True),
+        # **比較は代入ではない。** 代入を `\s*=` だけで見ると `==` に当たって黙る。
+        ("比較しているだけ", on_frame,
+         [(_self_path(name="Row.mod.cs"),
+           "void A()\n{\n    if (Parent.Value == q) return;\n}\n")], True),
+        # **コメントと文字列は代入ではない。**
+        ("コメントに代入を書いただけ", on_frame,
+         [(_self_path(name="Row.mod.cs"), "// Parent.Value = q; と書けばよい\nvoid A()\n{\n}\n")], True),
+        ("文字列に代入を書いただけ", on_frame,
+         [(_self_path(name="Row.mod.cs"),
+           "void A()\n{\n    Log(\"Parent.Value = q\");\n}\n")], True),
+    ]:
+        findings = []
+        check_child_detail_screens(pair, frames_, scripts_, findings)
+        rang = (SEV_ERROR, "D-28") in [(f[0], f[1]) for f in findings]
+        if rang != expected:
+            failures.append(f"明細の詳細画面（{label}）: D-28 が"
+                            f"{'鳴らない' if expected else '鳴った'}")
+
+    # **作れない子は対象外**（親の詳細に埋め込んだクエリモジュール）。
+    read_only = [(p, dict(doc, CanCreate=False) if doc["Name"] == "Row" else doc)
+                 for p, doc in pair]
+    for label, modules_, expected in [("作れない子", read_only, False)]:
+        findings = []
+        check_child_detail_screens(modules_, on_frame, [], findings)
+        rang = (SEV_ERROR, "D-28") in [(f[0], f[1]) for f in findings]
+        if rang != expected:
+            failures.append(f"明細の詳細画面（{label}）: D-28 が"
+                            f"{'鳴らない' if expected else '鳴った'}")
 
     # 部品をまたぐ参照の向き（D-21）。JSON の 2 つのキーとスクリプトの 2 つの形を見る。
     for label, modules, scripts in [

@@ -49,7 +49,7 @@ public static class InvoiceRegistrationHistory
         if (newestRows.Count > 1)
         {
             throw new InvalidOperationException(
-                $"{newest:yyyy-MM-dd} から始まる登録が {newestRows.Count} 件ある"
+                $"{newest:yyyy/MM/dd} から始まる登録が {newestRows.Count} 件ある"
                 + $"（{string.Join(" / ", newestRows.Select(r => r.RegistrationNo))}）。"
                 + "どれを写すか決められないので、取引先の登録を直すこと。");
         }

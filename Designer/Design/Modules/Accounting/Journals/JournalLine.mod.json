@@ -186,6 +186,12 @@
                 "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"
               },
               "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"
+            },
+            {
+              "SearchTargetVariable": "Account.Value",
+              "Comparison": "Equal",
+              "Variable": "Account.Value",
+              "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldVariableMatchCondition"
             }
           ],
           "Name": "",
@@ -811,7 +817,33 @@
     }
   },
   "UserReadCondition": {
-    "ModuleName": ""
+    "ModuleName": "AppUser",
+    "Condition": {
+      "IsOrMatch": true,
+      "IsNot": false,
+      "Children": [
+        {
+          "SearchTargetVariable": "AccountingRole.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "staff",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        },
+        {
+          "SearchTargetVariable": "AccountingRole.Value",
+          "Comparison": "Equal",
+          "Value": {
+            "Value": "manager",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"
+          },
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"
+        }
+      ],
+      "Name": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+    }
   },
   "DataWriteCondition": {
     "ModuleName": ""

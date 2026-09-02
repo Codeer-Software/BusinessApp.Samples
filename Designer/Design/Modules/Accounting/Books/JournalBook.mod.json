@@ -791,7 +791,7 @@
     },
     {
       "DbColumn": "entered_at",
-      "Format": "",
+      "Format": "yyyy/MM/dd HH:mm",
       "IsYearMonthOnly": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,

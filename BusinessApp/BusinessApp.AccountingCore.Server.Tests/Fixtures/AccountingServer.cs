@@ -32,38 +32,43 @@ internal sealed class AccountingServer : IDisposable
     public static readonly FiscalYearId FiscalYear = new(1);
 
     private readonly SqliteConnection connection;
-    private readonly SqliteDbAccessor accessor;
 
     /// <summary>
-    /// 操作している人の識別子。ユーザーは認証部品のもので、このテスト DB にテーブルも FK も無いので
-    /// 値は自由に選べる。<b>他の id（会計年度 1・伝票 1・伝票番号 1…）と衝突しない値にする</b>
+    /// 操作している人の識別子。<b>他の id（会計年度 1・伝票 1・伝票番号 1…）と衝突しない値にする</b>
     /// （縮退させると、取り違えても全テストが緑のままになる。qa/03 L-02）。
     /// </summary>
+    /// <remarks>
+    /// <b>この利用者は <c>app_users</c> にも入れる</b>（2026-09-02）。
+    /// 取消・訂正の入口が会計の役割を読むようになったので（qa/03 L-22）、
+    /// 行が無いと「役割なし」に倒れて全部差し戻される。既定は<b>経理担当</b>——
+    /// 画面から取消・訂正を押せる最小の役割である。
+    /// </remarks>
     public const long CurrentUser = 91;
 
     public AccountingServer()
     {
         connection = TestDatabase.CreateWithSeed();
-        accessor = new SqliteDbAccessor(connection);
+        Accessor = new SqliteDbAccessor(connection);
+        SetAccountingRole("staff");
 
         var authentication = new TestAuthenticationContext(() => CurrentUserId);
         Authentication = authentication;
-        MasterLoader = new AccountingMasterLoader(accessor, SqliteDbAccessor.DataSourceName);
-        EntryStore = new JournalEntryStore(accessor, SqliteDbAccessor.DataSourceName);
-        SequenceStore = new EntryNumberSequenceStore(accessor, SqliteDbAccessor.DataSourceName);
-        Registrations = new PartnerRegistrationStore(accessor, SqliteDbAccessor.DataSourceName);
-        Partners = new PartnerStore(accessor, SqliteDbAccessor.DataSourceName);
-        SnapshotWriter = new LedgerSnapshotWriter(accessor, SqliteDbAccessor.DataSourceName, Registrations);
+        MasterLoader = new AccountingMasterLoader(Accessor, SqliteDbAccessor.DataSourceName);
+        EntryStore = new JournalEntryStore(Accessor, SqliteDbAccessor.DataSourceName);
+        SequenceStore = new EntryNumberSequenceStore(Accessor, SqliteDbAccessor.DataSourceName);
+        Registrations = new PartnerRegistrationStore(Accessor, SqliteDbAccessor.DataSourceName);
+        Partners = new PartnerStore(Accessor, SqliteDbAccessor.DataSourceName);
+        SnapshotWriter = new LedgerSnapshotWriter(Accessor, SqliteDbAccessor.DataSourceName, Registrations);
         Poster = JournalPoster.Create(
-            accessor, SqliteDbAccessor.DataSourceName, EntryStore, new FixedTimeProvider(Now), authentication);
+            Accessor, SqliteDbAccessor.DataSourceName, EntryStore, new FixedTimeProvider(Now), authentication);
         Gate = JournalSubmitGate.Create(
-            accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
+            Accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
         Pipeline = AccountingSubmitPipeline.Create(
-            accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
+            Accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
         AmendmentService = JournalAmendmentService.Create(
-            accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
+            Accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
         Amendment = JournalAmendmentEndpoint.Create(
-            accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
+            Accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
     }
 
     /// <summary>
@@ -74,6 +79,26 @@ internal sealed class AccountingServer : IDisposable
 
     /// <summary>認証の代わり（<see cref="CurrentUserId"/> を返す）。部品を手で組むテストが使う。</summary>
     public IAuthenticationContext Authentication { get; }
+
+    /// <summary>DB への口。<b>部品を手で組むテスト</b>（読み口 1 つだけを試すもの）が使う。</summary>
+    public SqliteDbAccessor Accessor { get; }
+
+    /// <summary>
+    /// 操作している人の会計の役割を差し替える。<c>null</c> で<b>役割なし</b>にする。
+    /// </summary>
+    /// <remarks>
+    /// 行ごと入れ直すのは、<b>「利用者が居ない」と「居るが役割が無い」を撃ち分ける</b>ため——
+    /// 前者は <see cref="CurrentUserId"/> を別の値にすれば作れる。
+    /// </remarks>
+    public void SetAccountingRole(string? role)
+    {
+        var value = role is null ? "null" : $"'{role}'";
+        Execute($"delete from app_users where id = {CurrentUser}");
+        Execute($"""
+            insert into app_users (id, user_name, name, hash, salt, accounting_role)
+            values ({CurrentUser}, 'test_user', 'テスト利用者', 'h', 's', {value})
+            """);
+    }
 
     public AccountingMasterLoader MasterLoader { get; }
 
@@ -112,8 +137,8 @@ internal sealed class AccountingServer : IDisposable
     /// </summary>
     public Func<string, Exception?>? FailBeforeStatement
     {
-        get => accessor.FailBeforeStatement;
-        set => accessor.FailBeforeStatement = value;
+        get => Accessor.FailBeforeStatement;
+        set => Accessor.FailBeforeStatement = value;
     }
 
     /// <summary>
@@ -127,7 +152,7 @@ internal sealed class AccountingServer : IDisposable
         IReadOnlyList<ModuleSubmitData> transactionData,
         Func<Task<List<ModuleSubmitResult>>> save)
     {
-        return await DbTransactionScope.RunAsync(accessor, () => Pipeline.SubmitAsync(transactionData, save));
+        return await DbTransactionScope.RunAsync(Accessor, () => Pipeline.SubmitAsync(transactionData, save));
     }
 
     /// <summary>
@@ -141,7 +166,7 @@ internal sealed class AccountingServer : IDisposable
     public async Task<T> AmendAsync<T>(Func<JournalAmendmentService, Task<T>> operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
-        return await DbTransactionScope.RunAsync(accessor, () => operation(AmendmentService));
+        return await DbTransactionScope.RunAsync(Accessor, () => operation(AmendmentService));
     }
 
     /// <summary>

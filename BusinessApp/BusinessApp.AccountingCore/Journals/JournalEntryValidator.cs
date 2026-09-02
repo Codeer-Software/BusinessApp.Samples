@@ -100,7 +100,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PostingDateBeforeTransaction,
-                $"計上日（{entry.PostingDate:yyyy-MM-dd}）が取引日（{entry.TransactionDate:yyyy-MM-dd}）より前になっています。"));
+                $"計上日（{entry.PostingDate:yyyy/MM/dd}）が取引日（{entry.TransactionDate:yyyy/MM/dd}）より前になっています。"));
         }
 
         var period = calendar.ResolvePeriod(entry.PostingDate);
@@ -108,7 +108,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PeriodNotFound,
-                $"計上日（{entry.PostingDate:yyyy-MM-dd}）に対応する会計期間がありません。"));
+                $"計上日（{entry.PostingDate:yyyy/MM/dd}）に対応する会計期間がありません。"));
             return;
         }
 
@@ -143,7 +143,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.FiscalYearMismatch,
-                $"伝票の会計年度が、計上日（{entry.PostingDate:yyyy-MM-dd}）の属する「{fiscalYear.Label}」と食い違っています。"));
+                $"伝票の会計年度が、計上日（{entry.PostingDate:yyyy/MM/dd}）の属する「{fiscalYear.Label}」と食い違っています。"));
         }
     }
 

@@ -81,6 +81,84 @@ public class JournalAmendmentEndpointTests
         Assert.Contains("対象の伝票が見つかりません。", result.Message, StringComparison.Ordinal);
     }
 
+    // --- 権限（qa/03 L-22）---
+
+    /// <summary>
+    /// <b>会計の役割を持たない利用者は、取り消すことも訂正することもできない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>この経路には CLB の条件が届かない。</b> モジュールの <c>UserWriteCondition</c> は
+    /// <c>ModuleDataIO</c> の保存にしか効かず、ここは <c>IDbAccessor</c> を直に使う（ADR-0016）。
+    /// 閉じないと、<c>can_access_app</c> が真の利用者なら誰でも任意の伝票に取消を計上できる——
+    /// <b>取消は計上済みで不変（ADR-0004）なので取り返しがつかない</b>。</para>
+    /// <para><b>役割の 3 値すべてを撃つ。</b> 「常に真」でも「常に偽」でも緑にならないようにする。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("viewer")]
+    public async Task 会計の役割が無ければ取り消せない(string? role)
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        server.SetAccountingRole(role);
+        var before = server.Scalar<long>("select count(*) from journal_entries");
+
+        var result = await server.Amendment.ReverseAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.RejectedStatus, result.Status);
+        Assert.Equal(JournalAmendmentEndpoint.NotAuthorized, result.Message);
+        Assert.Equal([JournalViolationCodes.NotAuthorized], result.Violations.Select(v => v.Code));
+
+        // **伝票が 1 件も増えていない。** 差し戻しの文言だけを見ると、書いてから戻したのか
+        // そもそも書かなかったのかが分からない。
+        Assert.Equal(before, server.Scalar<long>("select count(*) from journal_entries"));
+    }
+
+    /// <summary>訂正も同じ関門で止まる（入口が 1 つなので、経路ごとに開かない）。</summary>
+    [Fact]
+    public async Task 会計の役割が無ければ訂正できない()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        server.SetAccountingRole(null);
+        var before = server.Scalar<long>("select count(*) from journal_entries");
+
+        var result = await server.Amendment.CorrectAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.RejectedStatus, result.Status);
+        Assert.Equal(before, server.Scalar<long>("select count(*) from journal_entries"));
+    }
+
+    /// <summary>
+    /// <b>調べる操作も閉じる。</b> 伝票が在るか・取り消せるかは会計のデータである。
+    /// </summary>
+    [Fact]
+    public async Task 会計の役割が無ければできることも答えない()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        server.SetAccountingRole(null);
+
+        var result = await server.Amendment.AvailabilityAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.RejectedStatus, result.Status);
+        Assert.False(result.CanReverse);
+        Assert.False(result.CanCorrect);
+    }
+
+    /// <summary>経理責任者も取り消せる（担当だけに絞っていないこと）。</summary>
+    [Fact]
+    public async Task 経理責任者は取り消せる()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        server.SetAccountingRole("manager");
+
+        var result = await server.Amendment.ReverseAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.Succeeded, result.Status);
+    }
+
     // --- できること ---
 
     /// <summary>

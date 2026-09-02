@@ -53,6 +53,6 @@ public class DateRangeTests
     [Fact]
     public void 文字列表現は両端を出す()
     {
-        Assert.Equal("2026-05-01〜2026-05-31", May.ToString());
+        Assert.Equal("2026/05/01〜2026/05/31", May.ToString());
     }
 }

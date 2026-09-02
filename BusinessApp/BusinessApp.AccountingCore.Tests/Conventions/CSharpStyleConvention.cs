@@ -201,6 +201,10 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     public IReadOnlyList<(string Path, string Source)> FilesToScan()
         => [.. SourceFiles(RepositoryRoot).Select(file => (file, File.ReadAllText(file)))];
 
+    /// <summary>検査対象の C# の<b>先頭 3 バイト</b>（BOM の検査に使う）。</summary>
+    public IReadOnlyList<(string Path, byte[] Head)> FileHeadsToScan()
+        => [.. SourceFiles(RepositoryRoot).Select(file => (file, ReadHead(file)))];
+
     /// <summary>
     /// リポジトリ内のすべての <c>.editorconfig</c>（浅い順）。
     /// </summary>
@@ -321,6 +325,14 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
                 CarriageReturnLiterals(root),
                 "リテラルの中の CR",
                 "利用者に見せる文言の改行は LF に統一する（ADR-0021 §2）");
+
+            // 文言に埋める日付の書式（docs/09 §2-5）。
+            ReportNodes(
+                ForeignDateFormats(root),
+                "yyyy/MM/dd 以外の日付書式",
+                "利用者に見せる日付は yyyy/MM/dd に揃える（docs/09 §2-5）。"
+                + "SQL に渡す ISO の日付は ToString(\"yyyy-MM-dd\", CultureInfo.InvariantCulture) と"
+                + "明示して書く（文字列補間に混ぜない）");
         }
 
         return [.. found.OrderBy(entry => entry.Line)];
@@ -504,6 +516,31 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
         ];
     }
 
+    /// <summary>
+    /// 先頭に BOM が付いている C#。
+    /// </summary>
+    /// <remarks>
+    /// <para><b><c>.editorconfig</c> の <c>charset = utf-8</c> は「BOM なし」の意味である</b>
+    /// （BOM 付きは <c>utf-8-bom</c>）。ところが<b>これを守らせる仕組みが 1 つも無かった</b>——
+    /// ツールがファイルを書き直したときに BOM が付き、そのままコミットまで通った
+    /// （2026-09-02。qa/03 L-24）。</para>
+    /// <para><b>文字列では見えない。</b> <c>File.ReadAllText</c> は BOM を取り除いて返すので、
+    /// <see cref="CarriageReturnProblems"/> と同じ形では書けない。<b>先頭のバイトを見る。</b></para>
+    /// </remarks>
+    public static IReadOnlyList<string> ByteOrderMarkProblems(IEnumerable<(string Path, byte[] Head)> files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+
+        return
+        [
+            .. files
+                .Where(file => file.Head.Length >= 3
+                    && file.Head[0] == 0xEF && file.Head[1] == 0xBB && file.Head[2] == 0xBF)
+                .Select(file => $"{file.Path}: 先頭に BOM が付いている（.editorconfig の charset = utf-8 は BOM なし）")
+                .Order(StringComparer.Ordinal),
+        ];
+    }
+
     /// <summary>改行が CRLF になっている C#。</summary>
     public static IReadOnlyList<string> CarriageReturnProblems(IEnumerable<(string Path, string Source)> files)
     {
@@ -623,6 +660,14 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// <c>StrykerOutput</c> と <c>TestResults</c> も、ツールが吐いた写しを検査しても意味が無いので見ない。
     /// <b>拾うのは <c>*.cs</c> だけである。</b> <c>*.razor</c> の中の C# は対象外（qa/02 R8-19）。
     /// </remarks>
+    /// <summary>ファイルの先頭 3 バイト（短いファイルはあるだけ）。</summary>
+    private static byte[] ReadHead(string path)
+    {
+        using var stream = File.OpenRead(path);
+        var head = new byte[3];
+        return head[..stream.Read(head, 0, head.Length)];
+    }
+
     public static IEnumerable<string> SourceFiles(string directory)
         => Directory.Exists(directory)
             ? Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories)
@@ -731,6 +776,51 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
             InterpolatedStringTextSyntax text => text.TextToken.ValueText.Contains('\r'),
             _ => false,
         });
+
+    /// <summary>
+    /// 文字列補間に書かれた、<c>yyyy/MM/dd</c> 以外の日付書式。
+    /// </summary>
+    /// <remarks>
+    /// <para>会計は <c>yyyy-MM-dd</c>、取引先は <c>yyyy/MM/dd</c> と<b>部品の間で割れていた</b>
+    /// （2026-08-31 の自己レビュー R26-27）。<c>yyyy/MM/dd</c> に揃えると開発者が決めた
+    /// （2026-09-02。CLB の日付欄はブラウザ標準の <c>&lt;input type="date"&gt;</c> で、
+    /// 日本語環境では <c>2026/09/02</c> と表示される——<b>欄と文言が食い違わない</b>）。</para>
+    /// <para><b>見るのは文字列補間の書式指定だけ</b>である。SQL に渡す ISO の日付は
+    /// <c>ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)</c> と明示して書く決まりにしてあり、
+    /// そちらには当たらない。<b>「利用者に見せる文言」と「機械に渡す値」を、書き方で分ける。</b></para>
+    /// <para><c>yyyy</c> を含む書式だけを見る。<c>{amount:#,0}</c> のような数値の書式や、
+    /// 時刻だけの書式は対象外である。<c>yyyy/MM/dd HH:mm</c> は通る。</para>
+    /// </remarks>
+    private static IEnumerable<SyntaxNode> ForeignDateFormats(SyntaxNode root)
+        => root.DescendantNodes()
+            .OfType<InterpolationFormatClauseSyntax>()
+            .Where(clause => IsForeignDateFormat(clause.FormatStringToken.ValueText))
+            .Cast<SyntaxNode>()
+            .Concat(CultureLessDateFormats(root));
+
+    /// <summary>
+    /// 文化を指定せずに <c>ToString("…")</c> で日付を組み立てている箇所。
+    /// </summary>
+    /// <remarks>
+    /// <b>文字列補間だけを見ていると、いちばん自然な逃げ道が空いている</b>
+    /// （2026-09-02 の自己レビュー）。<c>date.ToString("yyyy年M月d日")</c> は
+    /// 利用者に見せる文言なのに、補間ではないので当たらなかった。
+    /// <b>第 2 引数に <see cref="System.Globalization.CultureInfo"/> を渡した形は機械に渡す値</b>
+    /// （SQL・CSV）なので、そちらは対象外にする——docs/09 §2-5 が決めた書き分けそのものである。
+    /// </remarks>
+    private static IEnumerable<SyntaxNode> CultureLessDateFormats(SyntaxNode root)
+        => root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Where(invocation =>
+                invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "ToString" }
+                && invocation.ArgumentList.Arguments.Count == 1
+                && invocation.ArgumentList.Arguments[0].Expression
+                    is LiteralExpressionSyntax { Token.ValueText: var format }
+                && IsForeignDateFormat(format));
+
+    private static bool IsForeignDateFormat(string format)
+        => format.Contains("yyyy", StringComparison.Ordinal)
+           && !format.Contains("yyyy/MM/dd", StringComparison.Ordinal);
 
     private static int Line(SyntaxNode node)
         => node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
