@@ -39,7 +39,7 @@ RESERVED_FIELD_TYPES = {
     # `creator` / `updater` の INTEGER で、参照先は認証部品の利用者）。
     # `Docs/CommonMistakes.md` #42-A の表だけが `TextFieldDesign` を「推奨」と書いているが、
     # **同じファイルの本文（予約名の一覧）は `LinkFieldDesign` と書いており、食い違っている**。
-    # CLAUDE.md §3-2 が `Docs/AppPatterns/` を正典と定めているので、そちらに従う。
+    # docs/16_作業のルール.md §2 が `Docs/AppPatterns/` を正典と定めているので、そちらに従う。
     # **型を間違えると自動セットそのものが効かない**（F-09 の機序）。
     # 「文字列だと利用者表と突き合わせられない」ではない——SQLite の INTEGER 親和性は
     # `'3'` を格納時に整数へ直すので、比較も結合も当たる（2026-09-03 実測）。
@@ -1108,7 +1108,7 @@ def check_page_frame(path, doc, findings, module_tables=None):
         # そのせいで、CLB マニュアルが正規に示す `Detail`——1 行しか持たないモジュールを
         # 一覧を挟まずに開く形（自社情報）と、表を持たない表示専用モジュールを載せる形
         # （ADR-0027 の `JournalEntryBoard`）——まで叩いていた。
-        # **関門は足したときが完成ではない**（docs/15_実装の原則.md §6）。
+        # **関門は足したときが完成ではない**（docs/17_検証のルール.md §4）。
         # **白リストで受ける。** 黒リスト（List だけ禁じる）にすると、`"list"` のような
         # 綴り違いや、CLB が将来増やす値が無言で通る——JSON の enum は大小を無視して読むので、
         # `"list"` は D-05 が防いでいる「詳細が真っ白」を再現しつつ関門は緑になりうる

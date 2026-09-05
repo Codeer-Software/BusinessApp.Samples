@@ -262,7 +262,7 @@ HEADING_RE = re.compile(r"^#{2,6} +(" + SECTION_NO + r")\.", re.M)
 SECTION_REF_RE = re.compile(r"§ ?(" + SECTION_NO + r")")
 # `[ラベル](先.md)` と、その直後に続く `§4-9`。間に読点や「の」が挟まる書き方も拾う
 LINK_THEN_SECTION_RE = re.compile(r"\[([^\]]*)\]\(([^)\s]+\.md)\)([^\n]{0,8})")
-# リンクを張れないコードのコメントのための `CLAUDE.md §3-5`
+# リンクを張れないコードのコメントのための `CLAUDE.md §5`
 BARE_CLAUDE_REF_RE = re.compile(r"(?<![\w/.])CLAUDE\.md.{0,3}?§ ?(" + SECTION_NO + r")")
 
 
@@ -313,7 +313,7 @@ def check_section_references(docs: List[Doc], findings: List[Finding]) -> None:
     実際に 2 度起きた（qa/03 の L-18。2026-08-26 と 2026-09-05）。
 
     拾うのは 3 つの形——`[ラベル §4-9](先.md)`・`[ラベル](先.md) §4-9`・
-    リンクを張れないコードのコメントのための `CLAUDE.md §3-5`。
+    リンクを張れないコードのコメントのための `CLAUDE.md §5`。
     **番号つき見出しを持たない文書への参照は見ない**（その文書は番号で引く作りではない）。
     歴史として古い番号を書く行には lint-docs:ignore を書く。
     """

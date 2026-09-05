@@ -3,7 +3,7 @@ title: ddl — スキーマ定義
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-09-05
+updated: 2026-09-06
 supersedes: []
 related: [../Project.md, ../../docs/04_会計ドメイン設計.md, ../../docs/08_マスタ台帳.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---
@@ -17,7 +17,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/001_organization.sql
 ```
 
 `tools/clb/sql.ps1` がデザイナ exe のパスを `../LocalEnvironment.md`（Git 追跡外）から解決し、
-結果 JSON を標準出力に返す。**一時ファイルを作らない**（[15 §5](../../docs/15_実装の原則.md)）。
+結果 JSON を標準出力に返す。**一時ファイルを作らない**（[16 §8](../../docs/16_作業のルール.md)）。
 
 **スキーマを変えたらサーバとデザイナの再起動が要る**（列定義が static にキャッシュされるため）。
 

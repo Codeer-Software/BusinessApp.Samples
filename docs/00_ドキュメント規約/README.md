@@ -3,7 +3,7 @@ title: ドキュメント規約（総則）
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-09-05
+updated: 2026-09-06
 supersedes: []
 related: [../README.md, フロントマター.md, 本文.md]
 ---
@@ -121,7 +121,7 @@ python tools/docs/lint_docs.py --selftest # 検査そのものが空回りして
 | warn | `current` で 250 行超（`growth: append` は除く）／`docs/` **直下**の `*.md` が `README.md` の索引に載っていない（**サブディレクトリは各 `README.md` が索引に載っているかだけを見る**） |
 | warn | `current` の冒頭 20 行に `更新:` `追補:` が積まれている／`current` の本文に未処理マーカーが残っている |
 
-**検査を流したら、検査そのものも振り返る**（[15 §6](../15_実装の原則.md)）。
+**検査を流したら、検査そのものも振り返る**（[17 §4](../17_検証のルール.md)）。
 結果を使って終わりにせず、有用だったか・時間に見合ったか・どう良くできるかを毎回考える。
 
 ## 7. 運用（毎回の作法）
@@ -131,6 +131,6 @@ python tools/docs/lint_docs.py --selftest # 検査そのものが空回りして
 2. 判断をしたら **ADR** を起こし、[`decisions/README.md`](../decisions/README.md) に 1 行足す（lint が突合する）
 3. 後回しにするものは**保留リスト**へ（[§4-4](本文.md)）
 4. コミット前に `python tools/docs/lint_docs.py` と `python tools/docs/lint_secrets.py` を流す
-5. **マージ前に別の目を通す**（[CLAUDE.md](../../CLAUDE.md) §3-2-1）。
+5. **マージ前に別の目を通す**（[CLAUDE.md](../../CLAUDE.md) §4）。
    **lint が見るのは、フロントマター・リンク・日付という「形」だけである。**
    [§4-6](本文.md) の重複も、**書いてある内容の矛盾も、機械では捕まらない**
