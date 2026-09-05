@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <!-- 取引先部品への参照（ADR-0025 §2）。計上時の焼き込みと、保存の関門の合成に要る。
-       向きは会計コア → 取引先の一方通行である（ADR-0024 §4）。 -->
+       向きは会計コア → 取引先の一方通行である（ADR-0029 §2）。 -->
   <ItemGroup>
     <ProjectReference Include="..\BusinessApp.AccountingCore\BusinessApp.AccountingCore.csproj" />
     <!-- 取引先部品の**純粋層**への直接参照。自社情報の関門が法人番号の判定（CorporateNumber）を

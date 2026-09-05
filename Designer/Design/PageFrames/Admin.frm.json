@@ -2,7 +2,7 @@
   "IsApplicationRoot": false,
   "Priority": 0,
   "Name": "Admin",
-  "Description": "システム管理（ADR-0026）。利用者アカウントと権限",
+  "Description": "システム管理（ADR-0035）。利用者アカウントと権限",
   "Left": {
     "IsVisible": true,
     "Home": {

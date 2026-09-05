@@ -3,7 +3,7 @@ title: seed — 初期データ
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-08-31
+updated: 2026-09-06
 supersedes: []
 related: [../ddl/README.md, ../../docs/02_ペルソナ.md, ../../docs/08_マスタ台帳.md]
 ---
@@ -40,7 +40,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
 ### 税区分の名前に税率の数値を書かない
 
 「課税売上（標準税率）」であって「課税売上 10%」ではない。**その日に何 % かは制度ルールが決める**
-ので、名前に数値を埋めると税率が変わった日にマスタ名が嘘になる（CLAUDE.md §2-3）。
+ので、名前に数値を埋めると税率が変わった日にマスタ名が嘘になる（[15 §2](../../docs/15_実装の原則.md)）。
 画面には `rate_kind` から解決した税率を出す。
 
 ### 用途区分の既定値を入れない
@@ -54,7 +54,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
 
 経理担当・経理責任者のアカウントは `dev/` に置き、上の 001〜004 には入れない。
 **置き場所・扱い・理由は
-[ADR-0031](../../docs/decisions/0031-デモ用の利用者アカウントは開発用のseedに置く.md)。**
+[ADR-0039](../../docs/decisions/0039-開発用アカウントの資格情報はGit追跡外に置く.md)。**
 
 ## 開発機でデモ用の利用者を用意する（`dev/`）
 
@@ -70,7 +70,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
 3. **`admin` でログインし、システム管理の画面で 2 人を作る**——
    `soumu_ippan`（経理担当）と `soumu_bucho`（経理責任者＝総務部長。[docs/02](../../docs/02_ペルソナ.md)）。
    **利用者名は役職から採る**（開発者が決めた。2026-08-31。**役割そのままの名前は長くて打つのが面倒**だから）。
-   **パスワードは開発者が決める**（開発機のローカル DB だけを守る値。ADR-0031）
+   **作ったら識別名とパスワードを `Designer/LocalEnvironment.md`（Git 追跡外）の「開発用アカウント」節に書く**（雛形は `LocalEnvironment.md.sample`。[ADR-0039](../../docs/decisions/0039-開発用アカウントの資格情報はGit追跡外に置く.md)）
 4. **`dev/001_demo_user_roles.sql` を流す**（`sql` CLI）。役割が付く
 
 > **締め出してしまったときの戻し方。** 役割は画面から自分でも編集できるので、
@@ -80,7 +80,8 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
 > `UPDATE app_users SET is_sysadmin = 1, can_access_app = 1 WHERE user_name = 'admin';`
 > **保存の手前で止める関門はまだ無い**（[qa/02](../../docs/qa/02_自己レビュー記録.md) R27-10）。
 
-> **なぜ 3 を人がやるか。** アカウントの作成とパスワードの設定は Claude が行わない領域である。
+> **なぜ 3 を人がやるか。** 上に書いたとおり `hash` / `salt` を SQL で作れないので、**アカウントを作る操作は画面からしかできない。**
+> 値は追跡外に置く（[17 §3](../../docs/17_検証のルール.md)）。
 > **役割の付与（4）は機械で再現できる**ので、そこだけをファイルにしてある——
 > DB を作り直すたびに、役割の割り当てを手で思い出さずに済む。
 

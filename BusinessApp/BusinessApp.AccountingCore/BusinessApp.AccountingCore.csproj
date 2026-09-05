@@ -14,7 +14,7 @@
   <!-- **ここに増やしてよい参照は取引先部品だけである**（ADR-0025 §2）。
        仕入税額控除の帳簿記載事項①（課税仕入れの相手方の氏名又は名称。消法 30 ⑧）の写しを
        計上時にマスタから引くと決めた（ADR-0018）以上、会計コアは取引先を知る。
-       向きは会計コア → 取引先の一方通行で、逆はコンパイラが禁じる（ADR-0024 §4）。
+       向きは会計コア → 取引先の一方通行で、逆はコンパイラが禁じる（ADR-0029 §2）。
        NuGet はゼロのまま。ModuleDependencyTests が「参照はこの 1 本だけ」を検査する。 -->
   <ItemGroup>
     <ProjectReference Include="..\BusinessApp.Partners\BusinessApp.Partners.csproj" />

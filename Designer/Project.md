@@ -4,7 +4,7 @@ status: current
 scope: 会計コア
 audience: [開発]
 growth: append
-updated: 2026-09-03
+updated: 2026-09-06
 supersedes: []
 related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md]
 ---
@@ -12,6 +12,13 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/d
 
 このデザインプロジェクト固有の前提を書く。`ClaudeCodeForDesigner/` の汎用ルールはここに書かない。
 企画・仕様・進捗は `../docs/`（索引: `../docs/README.md`）、判断の経緯は `../docs/decisions/` にある。
+
+## `LocalEnvironment.md`（Git 追跡外。雛形は `LocalEnvironment.md.sample`）が持つもの
+
+- デザイナ exe のパス（`DesignerExePath:` の行。`tools/clb/_designer.ps1` が読む）
+- 実機確認に使うサーバ URL とブラウザ
+- **参照用リポジトリ**（リポジトリ外に clone）——Codeer.LowCode.Blazor.Extras（拡張の実装見本）・BusinessApp_old（前回プロジェクト）
+- **開発用アカウント**（[ADR-0039](../docs/decisions/0039-開発用アカウントの資格情報はGit追跡外に置く.md)。使い方は [17 §3](../docs/17_検証のルール.md)）
 
 ## 接続先 DB / データソース
 
@@ -112,7 +119,7 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
 - 2026-08-24: `sql` CLI は **`--out` を省くと結果 JSON が標準出力に来る**。PowerShell から呼ぶときは
   `ProcessStartInfo.ArgumentList` に 1 引数ずつ足して `RedirectStandardOutput` で受ける。
   `Start-Process -ArgumentList` だと `--query` 内の `'...'` が壊れて `incomplete input` になる。
-  この形なら SQL ファイルも結果ファイルも作らずに済む（CLAUDE.md §3-2-2）。
+  この形なら SQL ファイルも結果ファイルも作らずに済む（[16 §8](../docs/16_作業のルール.md)）。
 - 2026-08-24: デザイナ exe は WinExe なので、PowerShell の `&` で呼ぶと**待たずに戻る**。
   終了コードを見るには `Start-Process -Wait -PassThru` か `Process.WaitForExit()` を使う。
 - 2026-08-24: **デザイン enum は複数形で名づける**（`TaxationTypes` / `RateKinds`）。enum 名は

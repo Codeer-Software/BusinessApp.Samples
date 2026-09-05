@@ -3,7 +3,7 @@ namespace BusinessApp.Schema.Tests;
 using BusinessApp.TestSupport;
 
 /// <summary>
-/// 開発・デモ専用の初期データ（<c>Designer/seed/dev/</c>）の検査（ADR-0031）。
+/// 開発・デモ専用の初期データ（<c>Designer/seed/dev/</c>）の検査（ADR-0039）。
 /// </summary>
 /// <remarks>
 /// <para><b>これを実行するものが何も無かった</b>（2026-08-31 の自己レビュー R28-13）。

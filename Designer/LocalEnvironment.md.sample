@@ -1,0 +1,32 @@
+# LocalEnvironment (マシン固有・配布物に含めない / gitignore 対象)
+
+このファイルはマシンローカルの設定を記録する。CLAUDE.md には書かない (配布されるため)。
+この雛形を `LocalEnvironment.md` にコピーし、`<...>` を自分の環境の値に置き換える。
+**`DesignerExePath:` の行は `tools/clb/_designer.ps1` が正規表現で読む**——行頭にこの形のまま置く。
+
+DesignerExePath: <CLB デザイナの exe の絶対パス>
+
+## 参照用リポジトリ（リポジトリ外に置く。追跡ファイルからは参照しない）
+
+| 用途 | パス |
+|---|---|
+| CLB 拡張の実装見本（`Codeer.LowCode.Blazor.Extras`。MIT） | <clone した絶対パス> |
+| 前回プロジェクト（CLB 知見の参照元。設計は流用しない） | <clone した絶対パス> |
+
+Claude Code からの読み取り許可は `.claude/settings.local.json` の
+`permissions.additionalDirectories` に登録する（同ファイルも Git 追跡外。雛形は `.sample`）。
+
+## 開発サーバ
+
+- URL: http://localhost:5085
+- ブラウザ: <実機確認に使うブラウザ>
+
+## 開発用アカウント（ADR-0039）
+
+`admin` は CLB の既定（`admin` / `admin`）。下の 2 つは管理画面で手作りする（`seed/README.md` の手順）。
+**作ったら、ここに書く。** ここに書いた行が、Claude がログインしてよいアカウントである。
+
+| 識別名 | パスワード | 役割 |
+|---|---|---|
+| `soumu_bucho` | <作ったときのパスワード> | 経理責任者（`manager`）＋取引先の編集 |
+| `soumu_ippan` | <作ったときのパスワード> | 経理担当（`staff`）＋取引先の編集 |

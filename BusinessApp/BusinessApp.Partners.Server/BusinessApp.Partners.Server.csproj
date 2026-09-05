@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- 取引先部品のサーバ側（ADR-0025）。保存の関門と DB の読み取りを置く。
-       会計コアを参照しない——取引先は会計コアより上位の部品である（ADR-0024 §4）。 -->
+       会計コアを参照しない——取引先は会計コアより上位の部品である（ADR-0029 §2）。 -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

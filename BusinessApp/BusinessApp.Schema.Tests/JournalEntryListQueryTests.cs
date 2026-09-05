@@ -9,7 +9,7 @@ using Microsoft.Data.Sqlite;
 /// <remarks>
 /// <para><see cref="QueryModuleTests"/> は宣言と SQL の整合しか見ないので、
 /// <c>COALESCE(NULLIF(...), ...)</c> の 3 段のどこを取り違えても緑になる。
-/// <b>行を入れて読み戻さないと分からない</b>（qa/03 L-03 の型）。</para>
+/// <b>行を入れて読み戻さないと分からない</b>（qa/03 L-15 の型）。</para>
 /// <para>ここが守るのは <see href="../../../docs/decisions/0037-計上済みの伝票は画面でも計上時の姿を見せる.md">ADR-0037</see> §3——
 /// <b>同じ伝票を一覧と詳細で見て名前が違わないこと</b>である。</para>
 /// </remarks>

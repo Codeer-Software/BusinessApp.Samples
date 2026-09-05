@@ -5,7 +5,7 @@ namespace BusinessApp.AccountingCore.Shared;
 /// </summary>
 /// <remarks>
 /// <para><b>ルールの値そのものは AccountingCore に持たない。</b> 制度値をコードに書かないという規律
-/// （CLAUDE.md §2-3）の実装であり、値は制度ルールのマスタから読んで注入する。</para>
+/// （docs/15_実装の原則.md §2）の実装であり、値は制度ルールのマスタから読んで注入する。</para>
 /// <para>期間が重なる定義は構築時に弾く。重なりを許すと「どちらが当たったか」が実行順に依存し、
 /// 静かに間違った割合で計算される。</para>
 /// </remarks>

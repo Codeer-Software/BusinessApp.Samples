@@ -24,7 +24,7 @@ Finding = Tuple[str, str, str]
 ALL_CHECKS = (
     "check_front_matter", "check_links", "check_superseded_links", "check_body",
     "check_adr_ledger", "check_docs_index", "check_code_references",
-    "check_updated_freshness", "check_updated_history",
+    "check_section_references", "check_updated_freshness", "check_updated_history",
 )
 
 
@@ -255,6 +255,94 @@ def check_code_references(docs: List[Doc], findings: List[Finding]) -> None:
                     findings.append((SEV_ERROR, rel_posix,
                                      "{}行目: {} な文書を参照しています: {}（後継へ張り替えるか、"
                                      "歴史参照なら行に {} を書く）".format(i + 1, status, doc_rel, INLINE_IGNORE)))
+
+
+SECTION_NO = r"[0-9]+(?:-[0-9]+)*"
+HEADING_RE = re.compile(r"^#{2,6} +(" + SECTION_NO + r")\.", re.M)
+SECTION_REF_RE = re.compile(r"§ ?(" + SECTION_NO + r")")
+# `[ラベル](先.md)` と、その直後に続く `§4-9`。間に読点や「の」が挟まる書き方も拾う
+LINK_THEN_SECTION_RE = re.compile(r"\[([^\]]*)\]\(([^)\s]+\.md)\)([^\n]{0,8})")
+# リンクを張れないコードのコメントのための `CLAUDE.md §5`
+BARE_CLAUDE_REF_RE = re.compile(r"(?<![\w/.])CLAUDE\.md.{0,3}?§ ?(" + SECTION_NO + r")")
+
+
+def _headings_of(rel, cache):
+    """`rel` の番号つき見出しの集合。番号を振っていない文書は None（検査の対象外）。"""
+    if rel in cache:
+        return cache[rel]
+    try:
+        with open(os.path.join(REPO_ROOT, rel), "r", encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        cache[rel] = None
+        return None
+    found = set(HEADING_RE.findall(text))
+    cache[rel] = found or None
+    return cache[rel]
+
+
+def resolve_rel(src_rel, target):
+    """`src_rel` から見た相対パスを、リポジトリ相対に直す（純粋関数）。"""
+    joined = os.path.normpath(os.path.join(os.path.dirname(src_rel), target))
+    return joined.replace(os.sep, "/")
+
+
+def section_refs(rel, line):
+    """1 行から `(指し先の文書, 節番号の一覧)` の組を取り出す（純粋関数）。"""
+    out = []
+    for m in LINK_THEN_SECTION_RE.finditer(line):
+        label, target, after = m.group(1), m.group(2), m.group(3)
+        if "://" in target:
+            continue
+        secs = SECTION_REF_RE.findall(label)
+        tail = SECTION_REF_RE.match(after.lstrip(" の、"))
+        if tail:
+            secs.append(tail.group(1))
+        if secs:
+            out.append((resolve_rel(rel, target), secs))
+    for m in BARE_CLAUDE_REF_RE.finditer(line):
+        out.append(("CLAUDE.md", [m.group(1)]))
+    return out
+
+
+def check_section_references(docs: List[Doc], findings: List[Finding]) -> None:
+    """`§4-12` のような節への参照が、指し先の文書に実在するかを見る。
+
+    **`check_links` はファイルの実在しか見ない。** 節が消えた・番号が動いたときは
+    リンクが生きたまま**別の内容を指す**ので、機械が鳴かないと誰も気づかない。
+    実際に 2 度起きた（qa/03 の L-18。2026-08-26 と 2026-09-05）。
+
+    拾うのは 3 つの形——`[ラベル §4-9](先.md)`・`[ラベル](先.md) §4-9`・
+    リンクを張れないコードのコメントのための `CLAUDE.md §5`。
+    **番号つき見出しを持たない文書への参照は見ない**（その文書は番号で引く作りではない）。
+    歴史として古い番号を書く行には lint-docs:ignore を書く。
+    """
+    cache = {}
+    for rel in run_git(["ls-files"]):
+        rel_posix = rel.replace(os.sep, "/")
+        if not rel_posix.endswith(CODE_EXTENSIONS + (".md",)):
+            continue
+        if rel_posix.startswith(CODE_EXCLUDE_PREFIXES):
+            continue
+        try:
+            with open(os.path.join(REPO_ROOT, rel), "r", encoding="utf-8", errors="replace") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            continue
+        for i, line in enumerate(lines):
+            if INLINE_IGNORE in line:
+                continue
+            for target, secs in section_refs(rel_posix, line):
+                heads = _headings_of(target, cache)
+                if heads is None:
+                    continue
+                for sec in secs:
+                    if sec not in heads:
+                        findings.append((SEV_ERROR, rel_posix,
+                                         "{}行目: {} に §{} はありません"
+                                         "（番号が動いた・節が消えた。指し先を直すか、"
+                                         "歴史として要る行に {} を書く）"
+                                         .format(i + 1, target, sec, INLINE_IGNORE)))
 
 
 def updated_violation(rel: str, old_body: Optional[List[str]], new_body: List[str],
