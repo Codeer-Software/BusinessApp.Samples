@@ -40,7 +40,7 @@ from typing import Dict, List
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from doclint.checks import (Finding, check_adr_ledger, check_body, check_code_references,  # noqa: E402
-                            check_docs_index, check_front_matter, check_links,
+                            check_docs_index, check_front_matter, check_links, check_section_references,
                             check_superseded_links, check_updated_freshness,
                             check_updated_history)
 from doclint.model import REFERENCE_PREFIXES, SEV_ERROR, SEV_WARN, Doc, load_docs  # noqa: E402
@@ -100,6 +100,7 @@ def main() -> int:
     check_adr_ledger(docs, findings)
     check_docs_index(docs, findings)
     check_code_references(docs, findings)
+    check_section_references(docs, findings)
     check_updated_freshness(docs, findings)
     check_updated_history(docs, findings)
 

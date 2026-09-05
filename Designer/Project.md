@@ -4,7 +4,7 @@ status: current
 scope: 会計コア
 audience: [開発]
 growth: append
-updated: 2026-09-03
+updated: 2026-09-05
 supersedes: []
 related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md]
 ---
@@ -112,7 +112,7 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
 - 2026-08-24: `sql` CLI は **`--out` を省くと結果 JSON が標準出力に来る**。PowerShell から呼ぶときは
   `ProcessStartInfo.ArgumentList` に 1 引数ずつ足して `RedirectStandardOutput` で受ける。
   `Start-Process -ArgumentList` だと `--query` 内の `'...'` が壊れて `incomplete input` になる。
-  この形なら SQL ファイルも結果ファイルも作らずに済む（CLAUDE.md §3-2-2）。
+  この形なら SQL ファイルも結果ファイルも作らずに済む（[docs/15 §5](../docs/15_実装の原則.md)）。
 - 2026-08-24: デザイナ exe は WinExe なので、PowerShell の `&` で呼ぶと**待たずに戻る**。
   終了コードを見るには `Start-Process -Wait -PassThru` か `Process.WaitForExit()` を使う。
 - 2026-08-24: **デザイン enum は複数形で名づける**（`TaxationTypes` / `RateKinds`）。enum 名は

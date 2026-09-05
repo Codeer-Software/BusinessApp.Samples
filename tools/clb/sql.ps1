@@ -3,7 +3,7 @@
     デザイナ exe の sql サブコマンドで SQL を実行し、結果 JSON を標準出力に返す。
 
 .DESCRIPTION
-    一時ファイルを作らない（CLAUDE.md §3-2-2）。
+    一時ファイルを作らない（docs/15_実装の原則.md §5）。
       - --out を省いて結果を標準出力で受ける
       - --query は ProcessStartInfo.ArgumentList で渡す
         （Start-Process -ArgumentList だと SQL 内の '...' が壊れて incomplete input になる）

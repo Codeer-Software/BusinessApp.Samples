@@ -3,7 +3,7 @@ title: tools — 開発スクリプト
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-08-31
+updated: 2026-09-05
 supersedes: []
 related: [../docs/README.md]
 ---
@@ -43,7 +43,7 @@ related: [../docs/README.md]
 uv run --with pypdf python <スクリプト.py> <対象.pdf> <出力.txt> <開始ページ> <終了ページ>
 ```
 
-抽出スクリプト自体は使い捨てなのでスクラッチパッドに置く（[CLAUDE.md](../CLAUDE.md) §3-2-2）。
+抽出スクリプト自体は使い捨てなのでスクラッチパッドに置く（[15 §5](../docs/15_実装の原則.md)）。
 Python の依存が恒常的に増えてきたら、そのとき `pyproject.toml` ＋ uv 管理の venv へ移行を検討する。
 
 ## よく使うコマンド

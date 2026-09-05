@@ -12,7 +12,7 @@
 
 使い方
 ------
-仕様を JSON で標準入力から渡す（一時ファイルを作らないため。CLAUDE.md §3-2-2）。
+仕様を JSON で標準入力から渡す（一時ファイルを作らないため。docs/15_実装の原則.md §5）。
 
     python tools/clb/scaffold_module.py <<'JSON'
     {
