@@ -8,7 +8,7 @@ namespace BusinessApp.Partners;
 /// 計上日ではない。<b>ただし <c>tax_point</c> が空の行は伝票の取引日で引く</b>
 /// （呼ぶ側が決める。<c>LedgerSnapshotWriter.TaxPointOf</c>・docs/07 §4-1）。</para>
 /// <para><b>ここが決めているのは記録のための選択であって、制度上の判定ではない</b>
-/// （[ADR-0018](../../../docs/decisions/0018-帳簿の記載事項は計上時に写して固定する.md)。
+/// （[ADR-0018](../../docs/decisions/0018-帳簿の記載事項は計上時に写して固定する.md)。
 /// 税額計算を支配するのは利用者が選んだ税区分であり、相手の登録状況ではない）。</para>
 /// </remarks>
 public static class InvoiceRegistrationHistory

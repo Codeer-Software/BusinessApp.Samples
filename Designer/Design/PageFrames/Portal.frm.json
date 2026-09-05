@@ -2,7 +2,7 @@
   "IsApplicationRoot": true,
   "Priority": 0,
   "Name": "Portal",
-  "Description": "玄関（ADR-0026）。役割ごとのフレームへの入口だけを置く",
+  "Description": "玄関（ADR-0035）。役割ごとのフレームへの入口だけを置く",
   "Left": {
     "IsVisible": true,
     "Home": {

@@ -2,7 +2,7 @@
   "IsApplicationRoot": false,
   "Priority": 0,
   "Name": "Main",
-  "Description": "会計（ADR-0026）。日々の入力と帳簿",
+  "Description": "会計（ADR-0035）。日々の入力と帳簿",
   "Left": {
     "IsVisible": true,
     "Home": {

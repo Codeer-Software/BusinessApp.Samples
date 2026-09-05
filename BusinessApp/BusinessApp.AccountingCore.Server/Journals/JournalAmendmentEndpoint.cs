@@ -135,7 +135,7 @@ public record AmendRequest([property: JsonPropertyName("originalEntryId")] strin
 /// <param name="ReversalEntryNo">
 /// 既に取り消されているなら、その取消伝票の伝票番号。無ければ空文字。
 /// <b>数値ではなく文字列で返す</b>——<c>originalEntryId</c> を文字列で受けているのと同じ理由で、
-/// CLB のスクリプトは値を動的に扱い、<c>null</c> を読ませると型名が画面に出る（qa/01 K-01 の型）。
+/// CLB のスクリプトは値を動的に扱い、<c>null</c> を読ませると型名が画面に出る（qa/01 K-02 の型）。
 /// 空文字なら「無い」と、画面が 1 つの見方で判定できる。
 /// </param>
 /// <param name="CorrectionEntryNo">既に訂正されているなら、その再計上の伝票番号。無ければ空文字。</param>

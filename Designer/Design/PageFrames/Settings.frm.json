@@ -2,7 +2,7 @@
   "IsApplicationRoot": false,
   "Priority": 0,
   "Name": "Settings",
-  "Description": "設定とマスタ（ADR-0026）。経理責任者が決めるもの",
+  "Description": "設定とマスタ（ADR-0035）。経理責任者が決めるもの",
   "Left": {
     "IsVisible": true,
     "Home": {

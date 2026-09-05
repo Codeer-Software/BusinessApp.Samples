@@ -258,7 +258,7 @@ public class JournalSubmitRequirementsTests
 
     /// <summary>
     /// <b>伝票にも同じ網を掛ける。</b> 明細だけを塞ぐと、
-    /// 「画面は経路の 1 本でしかない」という理由が伝票には当たっていないことになる（docs/09 §1）。
+    /// 「画面は経路の 1 本でしかない」という理由が伝票には当たっていないことになる（ADR-0008）。
     /// </summary>
     [Theory]
     [InlineData("TransactionDate", JournalLineRules.TransactionDateMissing)]
