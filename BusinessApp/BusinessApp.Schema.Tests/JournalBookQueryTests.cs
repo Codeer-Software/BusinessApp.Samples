@@ -11,8 +11,8 @@ using Microsoft.Data.Sqlite;
 /// <b>条件が効いているかは、値を入れて行数を数えないと分からない。</b>
 /// `&gt;=` と `&gt;` の取り違え、`date()` の掛け忘れ、`p_blank_field` の分岐名の綴り違いは、
 /// どれも例外にならず<b>静かに 0 件や全件</b>を返す（qa/03 L-15 の型）。</para>
-/// <para>ここが守るのは制度要件そのものである——規則 5 ⑤一ハの (2) 範囲・(3) 組み合わせ、
-/// 通達 8-13 の空値検索、8-14 の記録項目、8-15 の課税期間ごとの範囲指定。</para>
+/// <para>ここが守るのは制度要件そのものである——電帳規則 5 ⑤一ハの (2) 範囲・(3) 組み合わせ、
+/// 電帳通達 8-13 の空値検索、8-14 の記録項目、8-15 の課税期間ごとの範囲指定。</para>
 /// </remarks>
 public class JournalBookQueryTests
 {
@@ -75,7 +75,7 @@ public class JournalBookQueryTests
         Assert.DoesNotContain(3L, Run(db).Select(r => r.EntryId));
     }
 
-    // --- 取引年月日の範囲（規則 5 ⑤一ハ(2)・通達 8-14）---
+    // --- 取引年月日の範囲（電帳規則 5 ⑤一ハ(2)・電帳通達 8-14）---
 
     [Theory]
     [InlineData("2026-05-10", "2026-05-20", 4)]   // 両端を含む
@@ -100,7 +100,7 @@ public class JournalBookQueryTests
         Assert.Equal([2L, 2L], Run(db, ("@p_transaction_date_from", "2026-05-16")).Select(r => r.EntryId));
     }
 
-    // --- 取引金額の範囲（通達 8-14）---
+    // --- 取引金額の範囲（電帳通達 8-14）---
 
     [Theory]
     [InlineData(1000, 5000, 4)]
@@ -115,7 +115,7 @@ public class JournalBookQueryTests
         Assert.Equal(expected, Run(db, ("@p_amount_min", min), ("@p_amount_max", max)).Count);
     }
 
-    // --- 伝票番号（通達 8-14 (注) の一連番号による検索）---
+    // --- 伝票番号（電帳通達 8-14 (注) の一連番号による検索）---
 
     [Theory]
     [InlineData(1, 2, 4)]
@@ -143,7 +143,7 @@ public class JournalBookQueryTests
 
     /// <summary>
     /// <b>伝票番号は会計年度の中の連番</b>なので、年度を指定しなければ同じ番号が複数の年度から出る。
-    /// 年度と組み合わせれば 1 本に絞れる（通達 8-15 の「課税期間ごとに」）。
+    /// 年度と組み合わせれば 1 本に絞れる（電帳通達 8-15 の「課税期間ごとに」）。
     /// </summary>
     [Fact]
     public void 伝票番号は会計年度と組み合わせて一意になる()
@@ -167,12 +167,12 @@ public class JournalBookQueryTests
             ("@p_entry_no_min", 1L), ("@p_entry_no_max", 1L), ("@p_fiscal_year_id", 2L)).Select(r => r.EntryId));
     }
 
-    // --- 組み合わせ（規則 5 ⑤一ハ(3)・通達 8-15）---
+    // --- 組み合わせ（電帳規則 5 ⑤一ハ(3)・電帳通達 8-15）---
 
     [Fact]
     public void 課税期間と日付と金額を組み合わせられる()
     {
-        // 通達 8-15「課税期間ごとに、日付又は金額の任意の範囲を指定して」。
+        // 電帳通達 8-15「課税期間ごとに、日付又は金額の任意の範囲を指定して」。
         using var db = Create();
 
         var rows = Run(db,
@@ -192,7 +192,7 @@ public class JournalBookQueryTests
         Assert.Empty(Run(db, ("@p_fiscal_year_id", 99L)));
     }
 
-    // --- 空値検索（通達 8-13）---
+    // --- 空値検索（電帳通達 8-13）---
 
     [Theory]
     [InlineData("partner", 2)]            // 取引先が無いのは 2 番の 2 行

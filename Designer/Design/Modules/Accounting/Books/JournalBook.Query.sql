@@ -1,7 +1,7 @@
 -- 仕訳帳。**明細 1 行が 1 レコード**（docs/research/2026-08-24_仕訳の取引金額での検索.md）。
 --
 -- 帳簿なので**計上済みだけ**を出す。下書きは帳簿ではない（docs/10 §5）。
--- 検索は優良な電子帳簿の要件（規則 5 ⑤一ハ・通達 8-13〜8-15）を満たす形にしてある。
+-- 検索は優良な電子帳簿の要件（電帳規則 5 ⑤一ハ・電帳通達 8-13〜8-15）を満たす形にしてある。
 --   取引年月日と取引金額を**範囲**で指定でき、会計年度（課税期間）と**組み合わせ**られ、
 --   「記録事項がない」ことでも探せる（p_blank_field）。
 --
@@ -58,7 +58,7 @@ WHERE e.status = 'posted'
        OR date(e.transaction_date) <= date(@p_transaction_date_to))
   AND (@p_amount_min IS NULL OR @p_amount_min = '' OR l.amount >= @p_amount_min)
   AND (@p_amount_max IS NULL OR @p_amount_max = '' OR l.amount <= @p_amount_max)
-  -- 伝票番号での検索。通達 8-14 (注) の「一連番号等で帳簿間の関連性を確保している場合、
+  -- 伝票番号での検索。電帳通達 8-14 (注) の「一連番号等で帳簿間の関連性を確保している場合、
   -- その一連番号等で検索できるとき」に当たる別ルートである（docs/research の電帳法 §3.5）。
   -- **伝票番号は会計年度の中の連番**（005_journals.sql の UNIQUE）なので、
   -- 年度を指定せずに範囲で引くと複数の年度の同じ番号が並ぶ。それは誤りではなく、
@@ -79,7 +79,7 @@ WHERE e.status = 'posted'
           '%' || replace(replace(replace(@p_keyword, '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\'
        OR l.item_description LIKE
           '%' || replace(replace(replace(@p_keyword, '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
-  -- 通達 8-13「検索項目について記録事項がない電磁的記録を検索できる機能」。
+  -- 電帳通達 8-13「検索項目について記録事項がない電磁的記録を検索できる機能」。
   -- **空文字も「無い」として扱う。** 本来は NULL の 1 通りに寄せる方針だが（docs/10 §4-4）、
   -- 画面から空文字が入る経路が塞ぎ切れていないうちは、両方を拾わないと取りこぼす。
   AND (@p_blank_field IS NULL OR @p_blank_field = ''

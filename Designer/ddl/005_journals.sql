@@ -3,7 +3,7 @@
 -- 日付を 1 つに潰さない（docs/10 §2）。取引日・計上日・入力年月日・課税仕入れの時点は
 -- それぞれ意味が違い、共用すると必ずどこかで壊れる。とくに入力年月日は
 -- 「通常の業務処理期間の経過後の入力の事実を確認できる」という優良な電子帳簿の要件
--- （規則 5 ⑤一イ(2)）そのものなので、取引日と絶対に共用しない。
+-- （電帳規則 5 ⑤一イ(2)）そのものなので、取引日と絶対に共用しない。
 
 CREATE TABLE journal_entries (
     id                          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -181,7 +181,7 @@ END;
 
 -- 入力年月日は「システムに記録された日時」であり、**下書きの間も含めて後から変えられない**。
 -- 「通常の業務処理期間の経過後に入力した事実を確認できる」という優良な電子帳簿の要件
--- （規則 5 ⑤一イ(2)）は、この値が動かないことで初めて成り立つ。
+-- （電帳規則 5 ⑤一イ(2)）は、この値が動かないことで初めて成り立つ。
 CREATE TRIGGER trg_journal_entries_entered_at_immutable
 BEFORE UPDATE ON journal_entries
 FOR EACH ROW WHEN NEW.entered_at IS NOT OLD.entered_at

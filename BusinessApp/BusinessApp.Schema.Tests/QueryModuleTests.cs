@@ -91,7 +91,7 @@ public class QueryModuleTests
     /// 選択肢の値が、SQL の分岐にそのまま現れること。
     /// </summary>
     /// <remarks>
-    /// 空値検索（通達 8-13）の絞り込みのように、<b>候補の値と SQL の分岐が文字列でしか結ばれていない</b>
+    /// 空値検索（電帳通達 8-13）の絞り込みのように、<b>候補の値と SQL の分岐が文字列でしか結ばれていない</b>
     /// ものがある。どちらかを直すとどの分岐にも当たらず、<b>例外にならずに 0 件が返る</b>。
     /// 画面には「該当なし」としか出ないので、機能が死んだことに誰も気づけない。
     /// </remarks>
@@ -182,7 +182,7 @@ public class QueryModuleTests
     // **窓関数の中の違反**（qa/03 L-19 の事故そのもの）。
     [InlineData("select sum(x) over (partition by a order by e.fiscal_year_id) from t", "fiscal_year_id")]
     // **注釈に括弧を書いた後ろに隠れた違反。** コメントを落とさないと、その `)` で節が切れる。
-    [InlineData("select 1 order by a.code, -- 通達 8-14 (注)\n         e.fiscal_year_id", "fiscal_year_id")]
+    [InlineData("select 1 order by a.code, -- 電帳通達 8-14 (注)\n         e.fiscal_year_id", "fiscal_year_id")]
     // **注釈に `LIMIT` の語を書いた後ろ。** 節を終わらせるキーワードと読むと切れる。
     [InlineData("select 1 order by a.code, -- LIMIT は付けない\n         e.fiscal_year_id", "fiscal_year_id")]
     public void 順序に使えない代理キーを見つける(string sql, string expected)
@@ -223,7 +223,7 @@ public class QueryModuleTests
         var clauses = new List<string>();
 
         // **コメントを落としてから走る**（2026-09-02 の自己レビュー）。このリポジトリの SQL は
-        // `-- 通達 8-14 (注)` のように注釈へ括弧を普通に書いており、落とさないと
+        // `-- 電帳通達 8-14 (注)` のように注釈へ括弧を普通に書いており、落とさないと
         // その `)` で節が切れて**2 項目め以降を永久に見なくなる**。
         sql = WithoutSqlComments(sql ?? string.Empty);
 

@@ -48,7 +48,7 @@ public sealed record JournalEntry
     /// <summary>
     /// 入力年月日。<b>利用者は変更できない</b>。
     /// 「通常の業務処理期間の経過後の入力の事実を確認できる」という優良な電子帳簿の要件
-    /// （規則 5 ⑤一イ(2)）そのものであり、取引日と共用しない（docs/10 §2）。
+    /// （電帳規則 5 ⑤一イ(2)）そのものであり、取引日と共用しない（docs/10 §2）。
     /// </summary>
     public required DateTimeOffset EnteredAt { get; init; }
 

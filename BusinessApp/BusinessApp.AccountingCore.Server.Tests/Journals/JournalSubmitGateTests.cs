@@ -87,7 +87,7 @@ public class JournalSubmitGateTests
         await server.SubmitAsync([SubmitData.Adding(entry)], server.Saving(entry, Balanced));
 
         // 「打った値」ではなく「DB に書かれて読み戻した値」を見る。
-        // 書く経路と読む経路の解釈がずれていれば、ここでずれる（優良な電子帳簿 規則 5 ⑤一イ(2)）。
+        // 書く経路と読む経路の解釈がずれていれば、ここでずれる（優良な電子帳簿 電帳規則 5 ⑤一イ(2)）。
         Assert.Equal(AccountingServer.Now, (await server.EntryStore.LoadAsync(new JournalEntryId(1))).EnteredAt);
     }
 

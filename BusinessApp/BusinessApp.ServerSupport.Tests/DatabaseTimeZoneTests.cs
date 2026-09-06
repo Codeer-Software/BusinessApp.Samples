@@ -6,7 +6,7 @@ namespace BusinessApp.ServerSupport.Tests;
 /// </summary>
 /// <remarks>
 /// <b>プロセスのタイムゾーンに依存しないこと</b>が要点である。サーバを UTC で動かしただけで
-/// 入力年月日が前日になる、という壊れ方をしてはいけない（規則 5 ⑤一イ(2)）。
+/// 入力年月日が前日になる、という壊れ方をしてはいけない（電帳規則 5 ⑤一イ(2)）。
 /// </remarks>
 public class DatabaseTimeZoneTests
 {
