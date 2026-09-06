@@ -153,36 +153,39 @@ def _check_superseded_links() -> List[str]:
 
 
 def _check_section_ref_forms() -> List[str]:
-    """`section_refs` が 4 つの形を拾い、拾ってはいけない形を拾わないか（純粋部分）。
+    """`section_refs` が節への参照の 5 形を拾い、拾ってはいけない形を拾わないか（純粋部分）。
 
-    **番号だけの短縮形（`09 §3`）は、リンクが張れない場所で最も多く使われる形**であり、
+    **番号だけの短縮形（`NN §3`）は、リンクが張れない場所で最も多く使われる形**であり、
     改番で最も静かに壊れる。`docs_entries` を注入して実ファイルなしで表明する。
+
+    **検体に実在の文書番号・題名を使わない。** 使うと改番のたびにこの検査が道連れになり、
+    しかも**検体まで一緒に書き換わって通ってしまう**——番号が動いたことを表明できない。
     """
     ng = []
-    entries = ["00_ドキュメント規約", "04_会計ドメイン設計.md", "09_画面の原則.md"]
+    entries = ["77_架空の分冊", "78_架空の設計.md", "79_架空の原則.md"]
     cases = [
-        ("番号の短縮形", "詳細は docs/04 §1 の表", [("docs/04_会計ドメイン設計.md", ["1"])]),
-        ("分冊を持つディレクトリ", "（docs/00 §4-9）", [("docs/00_ドキュメント規約", ["4-9"])]),
-        ("全角空白", "docs/04　§2 を見る", [("docs/04_会計ドメイン設計.md", ["2"])]),
-        ("相対の上り", "（../docs/09 §2）", [("docs/09_画面の原則.md", ["2"])]),
-        ("ファイル名の形", "-- docs/09_画面の原則.md §2 に反する",
-         [("docs/09_画面の原則.md", ["2"])]),
-        ("番号だけの形", "-- 09 §3 は「既定で絞らない」", [("docs/09_画面の原則.md", ["3"])]),
-        ("消えた番号は指し先なし", "詳細は docs/17 §1", [("docs/17", ["1"])]),
+        ("番号の短縮形", "詳細は docs/78 §1 の表", [("docs/78_架空の設計.md", ["1"])]),  # lint-docs:ignore 架空の番号を使う検体
+        ("分冊を持つディレクトリ", "（docs/77 §4-9）", [("docs/77_架空の分冊", ["4-9"])]),  # lint-docs:ignore 架空の番号を使う検体
+        ("全角空白", "docs/78　§2 を見る", [("docs/78_架空の設計.md", ["2"])]),  # lint-docs:ignore 架空の番号を使う検体
+        ("相対の上り", "（../docs/79 §2）", [("docs/79_架空の原則.md", ["2"])]),  # lint-docs:ignore 架空の番号を使う検体
+        ("ファイル名の形", "-- docs/79_架空の原則.md §2 に反する",  # lint-docs:ignore 架空の番号を使う検体
+         [("docs/79_架空の原則.md", ["2"])]),  # lint-docs:ignore 架空の番号を使う検体
+        ("番号だけの形", "-- 79 §3 は「既定で絞らない」", [("docs/79_架空の原則.md", ["3"])]),  # lint-docs:ignore 架空の番号を使う検体
+        ("消えた番号は指し先なし", "詳細は docs/76 §1", [("docs/76", ["1"])]),  # lint-docs:ignore 架空の番号を使う検体
         # 拾ってはいけないもの
-        ("別リポジトリのパス", "他/docs/04 §1 は対象外", []),
+        ("別リポジトリのパス", "他/docs/78 §1 は対象外", []),  # lint-docs:ignore 架空の番号を使う検体
         ("ADR 番号", "[ADR-0021 §4](x.md) は ADR", [("docs/x.md", ["4"])]),
-        ("qa の番号", "qa/04 §2 の台本", []),
+        ("qa の番号", "qa/78 §2 の台本", []),  # lint-docs:ignore 架空の番号を使う検体
         ("研究記録の日付", "docs/research/2026-08-23_x.md §1", []),
     ]
     for label, line, want in cases:
         got = checks.section_refs("docs/z.md", line, entries)
         if sorted(got) != sorted(want):
             ng.append("section_refs: {}: 期待 {} / 実際 {}".format(label, want, got))
-    if checks.docs_num_target("99", entries) is not None:
+    if checks.docs_num_target("76", entries) is not None:
         ng.append("docs_num_target: 無い番号に指し先を返した")
-    if checks.docs_num_target("04", entries) != "docs/04_会計ドメイン設計.md":
-        ng.append("docs_num_target: 04 を引けない")
+    if checks.docs_num_target("78", entries) != "docs/78_架空の設計.md":
+        ng.append("docs_num_target: 78 を引けない")
     return ng
 
 
