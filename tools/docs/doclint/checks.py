@@ -113,7 +113,7 @@ def check_superseded_links(doc: Doc, docs_by_rel: Dict[str, Doc],
       - `lint-docs:ignore` がある行（**その行の検査を全部**免除する。行単位である）
 
     `growth: append` は免除しない。実測すると、それで通っていたのは ADR 台帳の 4 件だけで、
-    他の記録文書（qa/01〜04・11_CLB改善提案）には superseded へのリンクが 1 件も無かった
+    他の記録文書（qa/01〜04・CLB改善提案）には superseded へのリンクが 1 件も無かった
     （2026-08-28）。**記録文書でも、今日足す行は現在形として読まれる。**
 
     **連鎖は見ない**（後継自身がさらに superseded になっても、その中間へのリンクは

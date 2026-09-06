@@ -3,7 +3,7 @@ title: CLB 改善提案（フィードバック集）
 status: current
 scope: CLB
 audience: [開発]
-updated: 2026-08-26
+updated: 2026-09-06
 supersedes: []
 related: [../qa/01_CLB静かな失敗.md]
 ---
