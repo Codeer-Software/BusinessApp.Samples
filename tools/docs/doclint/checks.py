@@ -378,7 +378,10 @@ def check_section_references(docs: List[Doc], findings: List[Finding]) -> None:
     リンクを張れない場所の取り残しを捕まえるのはこの経路だけである。**
     """
     cache = {}
-    docs_entries = sorted(os.listdir(os.path.join(REPO_ROOT, "docs")))
+    # **追跡下から引く。** 作業ツリーを見ると、置き忘れた未追跡の `docs/05_メモ.md` で
+    # 死んだ番号が解決してしまい、取り残しが鳴らなくなる
+    docs_entries = sorted({r.split("/")[1] for r in run_git(["ls-files", "docs"])
+                           if r.count("/") >= 1})
     for rel in run_git(["ls-files"]):
         rel_posix = rel.replace(os.sep, "/")
         if not rel_posix.endswith(CODE_EXTENSIONS + (".md",)):
