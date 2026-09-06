@@ -13,7 +13,7 @@
      （開発者の提案。2026-08-28。読者を古い決定へ連れて行かないため）
   5. 本文を変えたのに updated: を今日にしていない文書がないか
      （開発者の指示。2026-08-27。横断レビューで 7 文書のずれが見つかったため）
-  6. 条項を 80 §3 の記法で書いているか（`5 条 1 項` と書いていないか）
+  6. 条項を 80 §3 の記法で書いているか（`5 条 1 項` と書いていないか）  # lint-docs:article-ok
      （開発者の指示。2026-09-06。揃っていないと grep が効かず、実際に 4 回取りこぼした）
 
 中身は `doclint/` パッケージが持つ（model / checks / selftest）。
@@ -106,7 +106,7 @@ def main() -> int:
     check_section_references(docs, findings)
     check_updated_freshness(docs, findings)
     check_updated_history(docs, findings)
-    ignored_notation = check_article_notation(docs, findings)
+    scanned_notation, ignored_notation = check_article_notation(docs, findings)
 
     errors = [f for f in findings if f[0] == SEV_ERROR]
     warns = [f for f in findings if f[0] == SEV_WARN]
@@ -119,8 +119,9 @@ def main() -> int:
     # superseded 宛リンクの数を必ず出す。0 に落ちたら「違反が無い」ではなく
     # 「配線が死んだ・免除が広がりすぎた」を疑う（黙って素通りする関門を作らないため）
     print("検査文書数: {} / error: {} / warn: {} / superseded 宛リンク: {} 件を検査 / "
-          "条項の記法を外した行: {}"
-          .format(len(docs), len(errors), len(warns), seen_superseded_links, ignored_notation))
+          "条項の記法: {} 行を走査し {} 行を印で外した"
+          .format(len(docs), len(errors), len(warns), seen_superseded_links,
+                  scanned_notation, ignored_notation))
     return 1 if errors or others else 0
 
 

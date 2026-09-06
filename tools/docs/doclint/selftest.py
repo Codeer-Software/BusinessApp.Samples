@@ -9,7 +9,7 @@
      件数だけでなく**指摘文の中身**まで表明する（error を warn に格下げしても件数は変わらない）
   3. `section_refs` が節への参照の 5 形を拾い、**拾ってはいけない形を拾わない**か
   4. 定義した検査が全部 `ALL_CHECKS` に載り、`main` から**正しい引数で**呼ばれているか
-  5. `article_notation_violations` が `5 条 1 項` を拾い、**公布番号と「12 項目」を拾わない**か
+  5. `article_notation_violations` が `5 条 1 項` を拾い、**公布番号と「12 項目」を拾わない**か  # lint-docs:article-ok
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import re
 from typing import Dict, List
 
 from . import checks
-from .checks import (ALL_CHECKS, Finding, article_notation_violations,
+from .checks import (ALL_CHECKS, ARTICLE_IGNORE, Finding, article_notation_violations,
                      check_superseded_links, successor_of, updated_violation)
 from .model import (ADR_LEDGER, DOCS_INDEX, Doc, INLINE_IGNORE, LINE_LIMIT, SEV_ERROR,
                     SEV_WARN, body_of, load_docs, parse_front_matter)
@@ -28,7 +28,8 @@ CLI_SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 # main が検査を呼ぶときの**引数まで含めた**呼び出し。名前だけの包含だと
 # `check_superseded_links(d, {}, findings)` のような配線の壊れ方が通ってしまう
-REQUIRED_CALLS = ("check_superseded_links(d, docs_by_rel, findings)",)
+REQUIRED_CALLS = ("check_superseded_links(d, docs_by_rel, findings)",
+                  "scanned_notation, ignored_notation = check_article_notation(docs, findings)")
 
 
 def _fake(rel: str, meta: Dict[str, str], body: List[str]) -> Doc:
@@ -361,42 +362,92 @@ def _check_other_checks() -> List[str]:
 
 
 def _check_article_notation_forms() -> List[str]:
-    """条項の記法の判定が、拾うべき形を拾い、拾ってはいけない形を拾わないか（80 §3）。
+    """条項の記法の判定と、検査そのものが空回りしていないか（80 §3）。
 
-    **「拾わない」側が本体**である。錨を外すと「12 項目」「4 条件」「令和 8 年法律第 12 号」まで
-    当たり、実測で 9 割が誤検出になる（2026-09-06 に実測して決めた）。
+    **返り値を完全一致で表明する。** 真偽だけを見ると、連なりを落としても
+    公布番号の除外を壊しても緑のままになる（2026-09-06 の自己レビューで実際にそうなっていた）。
     """
     ng = []
-    should_hit = [
-        "電帳規則5条5項1号（2027-01-01 以後は5条4項1号）",   # 略称＋連なり／lint-docs:ignore
-        "電帳規則第5条第5項",                                  # 「第」つき／lint-docs:ignore
-        "法人税法施行規則 54 条を「別表二十一」と示した",       # 正式名称＋条／lint-docs:ignore
-        "番号法 20 条は、19 条各号に該当する場合を除いて",      # 一覧に無い法令／lint-docs:ignore
-        "取適法（**5 条 1 項 2 号**）が禁じるのは",             # 強調記号をまたぐ連なり／lint-docs:ignore
-        "（附則 2 条 2 項。施行前にした製造委託等は",           # 附則／lint-docs:ignore
-        "スキャナ保存の要件概要（電帳規則2条5項・6項）",        # 見出し／lint-docs:ignore
+    # (入力, 期待する返り値)
+    cases = [
+        # --- 拾うべき形 -------------------------------------------------------
+        ("電帳規則5条5項1号", ["5条", "5項", "1号"]),                       # lint-docs:article-ok
+        ("電帳規則第5条第5項", ["第5条", "第5項"]),                          # lint-docs:article-ok
+        ("法人税法施行規則 54 条を「別表二十一」と示した", ["54 条"]),        # lint-docs:article-ok
+        ("| 20 条 | 収集し、又は保管してはならない |", ["20 条"]),            # 表のセル（法令名は別の行） lint-docs:article-ok
+        ("- **入力期間（6項一号）**", ["6項"]),                              # 箇条書き（条は見出しにある） lint-docs:article-ok
+        ("**30 条 2 項の目的外利用**になり", ["30 条", "2 項"]),              # 強調の中 lint-docs:article-ok
+        ("（附則 2 条 2 項。施行前にした", ["2 条", "2 項"]),                 # 附則 lint-docs:article-ok
+        ("title: 電帳規則 5 条 5 項の要件", ["5 条", "5 項"]),                # フロントマターも見る lint-docs:article-ok
+        # --- 拾ってはいけない形（**こちらが本体**） ---------------------------
+        ("| 政令 | 同施行令 | 令和3年政令第128号 |", []),                     # 公布番号
+        ("平成10年大蔵省令第43号", []),                                       # 同上
+        ("同日前開始事業年度は9年（平27財務省令23号 附則2①）", []),           # 「第」なしの公布番号
+        ("令和 8 年法律第 12 号（令和 8 年 3 月 31 日成立・公布）", []),       # 同上
+        ("令和5年国税庁告示第26号", []),                                       # 同上
+        # **公布番号の除外を広げると鳴る**——法令名に続く「号」は条項の引用である
+        ("電帳規則 3 号の要件", ["3 号"]),  # lint-docs:article-ok
+        # **全角数字を落とすと鳴る**——貼り付けた条文は全角で来る
+        ("電帳規則５条１項", ["５条", "１項"]),  # lint-docs:article-ok
+        ("サイドバーが 12 項目の並列で見にくい", []),                          # 項目
+        ("全部の 4 条件を一度に決める", []),                                   # 条件
+        ("この方法 3 条件をすべて満たす", []),                                 # 方法＋条件
+        ("命名規則 5 項目に反する", []),                                       # 規則＋項目
+        ("この記法 3 条件", []),                                               # **この規則の主題そのもの**
+        ("IDE0045 / IDE0046（三項演算子への寄せ）", []),                       # 漢数字の演算子
+        ("### 3.1 条文（現行・電帳規則 5 ⑤一）", []),                          # 節番号＋条文
+        ("**消税法 30 ⑦・38 ②・38 の 2 ②・58**に規定する帳簿", []),          # 正しい記法
+        ("電帳規則 5 ⑤一イ", []),                                              # 同上
+        ("1 桁の検査用数字 ＋ 12 桁の基礎番号", []),                           # 法令の話ではない
     ]
-    for line in should_hit:
-        if not article_notation_violations(line):
-            ng.append("article_notation: 拾えていない: " + line)
-
-    should_not_hit = [
-        "| 政令 | **電帳令** | 同施行令 | 令和3年政令第128号 |",      # 公布番号
-        "平成10年大蔵省令第43号",                                     # 同上
-        "同日前開始事業年度は9年（平27財務省令23号 附則2①）",         # 「第」なしの公布番号
-        "令和 8 年法律第 12 号（令和 8 年 3 月 31 日成立・公布）",     # 同上
-        "サイドバーが 12 項目の並列で見にくい",                        # 項目
-        "全部の 4 条件を一度に決める",                                 # 条件
-        "IDE0045 / IDE0046（三項演算子への寄せ）",                     # 演算子
-        "### 3.1 条文（現行・電帳規則 5 ⑤一）",                        # 節番号 ＋ 条文
-        "**消税法 30 ⑦・38 ②・38 の 2 ②・58**に規定する帳簿",        # 正しい記法
-        "電帳規則 5 ⑤一イ",                                            # 同上
-        "1 桁の検査用数字 ＋ 12 桁の基礎番号",                          # そもそも法令の話ではない
-    ]
-    for line in should_not_hit:
+    for line, want in cases:
         got = article_notation_violations(line)
-        if got:
-            ng.append("article_notation: 拾ってはいけない形を拾った: {} → {}".format(line, got))
+        if got != want:
+            ng.append("article_notation_violations: 期待 {} / 実際 {}: {}".format(want, got, line))
+
+    # --- 検査そのもの（走査・除外・severity・行番号・指摘文） -------------------
+    findings: List[Finding] = []
+    doc = _fake("docs/x.md", {"title": "x", "status": "current"},
+                ["ふつうの行", "電帳規則 5 条 1 項", "電帳規則 5 条 1 項  <!-- {} -->".format(ARTICLE_IGNORE),  # lint-docs:article-ok
+                 # **フェンスの中は見ない**（中に HTML コメントの印を書くと画面に出てしまう）
+                 "```", "電帳規則 5 条 1 項", "```"])  # lint-docs:article-ok
+    scanned, ignored = checks.check_article_notation([doc], findings)
+    mine = [f for f in findings if f[1] == "docs/x.md"]
+    if len(mine) != 1:
+        ng.append("check_article_notation: 所見が 1 件でない: {}".format(mine))
+    else:
+        sev, _, msg = mine[0]
+        if sev != SEV_ERROR:
+            ng.append("check_article_notation: severity が {} になっている".format(sev))
+        if "6行目" not in msg:      # フロントマター 3 行 ＋ 本文 2 行目
+            ng.append("check_article_notation: 行番号が指摘文に出ていない: " + msg)
+        if "5 条・1 項" not in msg:  # lint-docs:article-ok
+            ng.append("check_article_notation: 違反した字面が指摘文に出ていない: " + msg)
+        if ARTICLE_IGNORE not in msg:
+            ng.append("check_article_notation: 外し方が指摘文に出ていない: " + msg)
+    # **偽の文書 1 本でも、コードは実物を歩く**（`iter_scan_targets` の設計）。
+    # だから「ちょうど 1」ではなく「印を読めているか」を見る
+    if ignored < 1:
+        ng.append("check_article_notation: 印で外した行が 0（印の判定が死んだ）")
+    if scanned < 6:
+        ng.append("check_article_notation: 走査した行が少なすぎる（コードを歩いていない）: {}".format(scanned))
+
+    # **コードを歩いているか**を型で表明する（`.md` だけ数えると行数の下限をすり抜ける）
+    kinds = {os.path.splitext(rel)[1] for rel, _ in checks.iter_scan_targets([], include_md=False)}
+    for want in (".cs", ".sql", ".py"):
+        if want not in kinds:
+            ng.append("iter_scan_targets: {} を歩いていない: {}".format(want, sorted(kinds)))
+
+    # **実データで件数のラチェットを持つ**（配線が死んだら 0 に落ちる。qa/03 L-15 と同じ作法）
+    real, _ = load_docs()
+    real_findings: List[Finding] = []
+    real_scanned, real_ignored = checks.check_article_notation(real, real_findings)
+    if real_scanned < 5000:
+        ng.append("check_article_notation: 実データの走査が {} 行しかない（対象が痩せた）".format(real_scanned))
+    if real_ignored < 10:
+        ng.append("check_article_notation: 実データで印を読めた行が {} しかない（印の判定が死んだ）".format(real_ignored))
+    if real_findings:
+        ng.append("check_article_notation: 実データに違反が {} 件ある".format(len(real_findings)))
     return ng
 
 

@@ -551,52 +551,54 @@ def check_docs_index(docs: List[Doc], findings: List[Finding]) -> None:
 
 
 # --- 条項の記法（80 §3。開発者の指示。2026-09-06） ---------------------------
-# **法令名または略称の直後に続く「N 条 / N 項 / N 号」を拒む。**
-# 記法を定めた以上それに統一する、というのが決定であり、揃っていないと grep が効かない
+# **数字に続く「条・項・号」そのものを違反とする。** 記法を定めた以上それに統一する、
+# というのが決定であり、揃っていないと grep が効かない
 # （2027-01-01 の条番号切り替えは、表記ゆれで実際に 4 回落ちた。qa/02 の R22-01・R22-02・R41-01・R41-02）。
 #
-# **法令名に錨を下ろす**のが要点である。錨なしで `[0-9]+条|項|号` を拾うと
-# 「12 項目」「4 条件」「三項演算子」「令和 8 年法律第 12 号」まで当たり、実測で 9 割が誤検出になる。
-ARTICLE_UNIT_RE = re.compile(r"第?\s*[0-9０-９]+\s*[条項号]")
-# 直前が法令名・略称・附則で終わっているか（強調記号・括弧・鉤括弧をまたぐ）
-LAW_NAME_TAIL_RE = re.compile(r"(?:[一-龥ぁ-んァ-ヴー]{1,20}(?:法|令|規則|通達)|附則)[\s*`「『（(]*$")
-# **法令番号（公布番号）は条項ではない**（80 §3-1）。「〈法令の種類〉第〈N〉号」で見分ける
-GAZETTE_TAIL_RE = re.compile(r"(?:法律|政令|省令|告示|府令)[\s*`]*$")
-# 引用の連なり（`5 条 1 項 2 号`）で、単位と単位の間に挟まってよい字
-UNIT_JOINERS = " 　*`・、又は及びの第"
+# **最初は「法令名に錨を下ろす」形で書いたが、捨てた**（2026-09-06 の自己レビュー。qa/02 のラウンド 42）。
+# 錨は**緩すぎて厳しすぎた**——「この方法 3 条件」「命名規則 5 項目」を error にする一方、
+# 法令名が別の行にある表のセル（`| 20 条 |`）と箇条書き（`（6項一号）`）を取りこぼし、 lint-docs:article-ok
+# **改めた 71 行のうち 27 行を拾えなかった**。
+#
+# いまの形は逆で、**外すものを名指しする**。実測で全リポジトリの該当は 29 行、
+# うち 25 行は既に印がある行だった（＝誤検出がほぼ無い）。
+ARTICLE_UNIT_RE = re.compile(r"第?\s*[0-9０-９]+\s*[条項号](?![目件文機室棟型線番])")
+# **法令番号（公布番号）は条項ではない**（80 §3-1 ①）。「〈法令の種類〉第〈N〉号」で見分ける
+GAZETTE_RE = re.compile(r"(?:法律|政令|省令|告示|府令)[\s*`]*第?\s*[0-9０-９]+\s*号")
+# **この検査だけを外す印**。汎用の `lint-docs:ignore` を使うと
+# `check_section_references` まで一緒に黙るので、節への参照を持つ行では**こちらを使う**
+ARTICLE_IGNORE = "lint-docs:article-ok"
+FENCE_RE = re.compile(r"^\s*(?:```|~~~)")
 
 
 def article_notation_violations(line: str) -> List[str]:
     """80 §3 の記法に反する条項号の引用を返す（純粋関数）。
 
-    返すのは違反した字面。**法令名に錨を下ろしたものだけ**を返し、
-    公布番号（`政令第128号`）と、法令名に続かない `12 項目` の類は返さない。
+    返すのは違反した字面。**「12 項目」「4 条件」「3.1 条文」のような
+    法令でない複合語**と、**公布番号**（`政令第128号`）は返さない。
     """
+    skip = [m.span() for m in GAZETTE_RE.finditer(line)]
     hits: List[str] = []
-    prev_end: Optional[int] = None
     for m in ARTICLE_UNIT_RE.finditer(line):
-        before = line[:m.start()]
-        if m.group(0).rstrip().endswith("号") and GAZETTE_TAIL_RE.search(before):
-            prev_end = None          # 公布番号。ここで引用の連なりも切る
+        if any(a <= m.start() and m.end() <= b for a, b in skip):
             continue
-        joined = prev_end is not None and not before[prev_end:].strip(UNIT_JOINERS)
-        if joined or LAW_NAME_TAIL_RE.search(before):
-            hits.append(m.group(0).strip())
-            prev_end = m.end()
-        else:
-            prev_end = None
+        hits.append(m.group(0).strip())
     return hits
 
 
-def check_article_notation(docs: List[Doc], findings: List[Finding]) -> int:
-    """`5 条 1 項` の形を error にし、`lint-docs:ignore` で外した行数を返す。
+def iter_scan_targets(docs: List[Doc], include_md: bool) -> List[Tuple[str, List[str]]]:
+    """検査が歩く `(パス, 行)` を返す。コードは常に、`.md` は `include_md` のときだけ。
 
-    走査は `.md` とコード（`CODE_EXTENSIONS`）の両方。現行の条番号はコードのコメントにもある。
-    外した行数を返すのは、**0 に落ちたとき「違反が無い」ではなく「配線が死んだ」と読める**ようにするため。
+    **凍結・生成物の除外述語を `.md` にも当てる**（`.md` を凍結対象に入れた日に、
+    1 バイトも直せないファイルを error で叩かないため）。
     """
-    ignored = 0
-    seen = {d.rel for d in docs}
-    targets = [(d.rel, d.lines) for d in docs]
+    targets: List[Tuple[str, List[str]]] = []
+    seen = set()
+    if include_md:
+        for d in docs:
+            if not excluded_from_code_check(d.rel):
+                targets.append((d.rel, d.lines))
+            seen.add(d.rel)
     for rel in run_git(["ls-files"]):
         rel_posix = rel.replace("\\", "/")
         if rel_posix in seen or not rel_posix.endswith(CODE_EXTENSIONS):
@@ -608,17 +610,40 @@ def check_article_notation(docs: List[Doc], findings: List[Finding]) -> int:
                 targets.append((rel_posix, f.read().splitlines()))
         except OSError:
             continue
+    return targets
 
-    for rel, lines in targets:
+
+def check_article_notation(docs: List[Doc], findings: List[Finding]) -> Tuple[int, int]:
+    """`5 条 1 項` の形を error にし、`(走査した行数, 外した行数)` を返す。 lint-docs:article-ok
+
+    走査は `.md` とコードの両方。現行の条番号はコードのコメントにもある。
+    **`.md` はフロントマターも見る**（隣の検査は本文だけを見るが、`title:` は索引へ写されて
+    人が読む字なので、`title: 電帳規則 5 条 5 項の要件` を通すと規則が骨抜きになる）。  # lint-docs:article-ok
+    **コードフェンスの中は見ない**（`check_body` と同じ作法。フェンスの中に HTML コメントの
+    印を書くと画面にそのまま出てしまい、逐語引用を貼れなくなる）。
+
+    **2 つ返すのは、下がったときに「違反が無い」と読み違えないため。**
+    外した行だけだと、走査が死んだのか除外が広がったのかを見分けられない。
+    """
+    scanned = 0
+    ignored = 0
+    for rel, lines in iter_scan_targets(docs, include_md=True):
+        in_fence = False
         for i, line in enumerate(lines):
+            if rel.endswith(".md") and FENCE_RE.match(line):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
+            scanned += 1
             hits = article_notation_violations(line)
             if not hits:
                 continue
-            if INLINE_IGNORE in line:
+            if INLINE_IGNORE in line or ARTICLE_IGNORE in line:
                 ignored += 1
                 continue
             findings.append((SEV_ERROR, rel,
                              "{}行目: 条項は 80 §3 の記法で書きます（条＝アラビア数字／項＝丸数字／"
                              "号＝漢数字）。直すか、80 §3-1 の 4 つに当たるなら行に {} を書く: {}"
-                             .format(i + 1, INLINE_IGNORE, "・".join(hits))))
-    return ignored
+                             .format(i + 1, ARTICLE_IGNORE, "・".join(hits))))
+    return scanned, ignored
