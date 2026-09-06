@@ -312,7 +312,7 @@ public class JournalEntryValidatorTests
     [Fact]
     public void 法定記載事項を備えた明細は計上できる()
     {
-        // 帳簿の法定記載事項（消法 30 ⑧）を明細が満たす形（docs/11 §8）。
+        // 帳簿の法定記載事項（消税法 30 ⑧）を明細が満たす形（docs/11 §8）。
         // 取引先は識別子と名前の写しを両方持つ（docs/10 §4-2）。
         var entry = AccountingFixture.Entry(
             Ordinary,

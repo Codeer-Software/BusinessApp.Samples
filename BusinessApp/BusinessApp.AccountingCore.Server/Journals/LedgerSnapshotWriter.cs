@@ -16,7 +16,7 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 /// <list type="table">
 ///   <item>
 ///     <term><c>partner_name_snapshot</c></term>
-///     <description><b>帳簿の法定記載事項</b>（消法 30 ⑧の「課税仕入れの相手方の氏名又は名称」）。
+///     <description><b>帳簿の法定記載事項</b>（消税法 30 ⑧の「課税仕入れの相手方の氏名又は名称」）。
 ///       取引先が改名しても過去の帳簿の記載が変わらないようにする。</description>
 ///   </item>
 ///   <item>
@@ -173,7 +173,7 @@ public sealed class LedgerSnapshotWriter(IDbAccessor dbAccessor, string dataSour
     /// 伝票の取引先の名前を焼く。<b>画面が計上時の姿を見せるためのもの</b>（ADR-0037）。
     /// </summary>
     /// <remarks>
-    /// <b>明細の写しとは役割が違う。</b> あちらは帳簿の法定記載事項（消法 30 ⑧）で、
+    /// <b>明細の写しとは役割が違う。</b> あちらは帳簿の法定記載事項（消税法 30 ⑧）で、
     /// こちらは伝票の詳細と入力の一覧が「計上したときに選んでいた取引先」を出すためのものである。
     /// <b>取引先の無い伝票には NULL を焼く</b>——飛ばすと、利用者が送ってきた文字列が残る。
     /// </remarks>

@@ -92,7 +92,7 @@ public class SeedDataTests
         Assert.Equal(0L, outside);
     }
 
-    /// <summary>優良な電子帳簿は課税期間の初日から要件を満たす必要がある（法 8 ④・令 2）。</summary>
+    /// <summary>優良な電子帳簿は課税期間の初日から要件を満たす必要がある（電帳法 8 ④・電帳令 2）。</summary>
     [Fact]
     public void 優良な電子帳簿の適用開始日が年度の開始日と一致している()
     {

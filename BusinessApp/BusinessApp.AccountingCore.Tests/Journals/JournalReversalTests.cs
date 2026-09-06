@@ -111,7 +111,7 @@ public class JournalReversalTests
     public void 原仕訳を特定できなければ取り消せない(JournalEntry original)
     {
         // 識別子も伝票番号も、帳簿の側から原仕訳を指す手段である。
-        // どちらかが欠けると相互関連性（規則 5 ⑤一ロ）が切れる。
+        // どちらかが欠けると相互関連性（電帳規則 5 ⑤一ロ）が切れる。
         var result = JournalReversal.Reverse(original, ReversedOn, EnteredAt, Context());
 
         Assert.False(result.Created);

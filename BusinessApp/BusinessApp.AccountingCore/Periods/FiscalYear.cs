@@ -10,7 +10,7 @@ using BusinessApp.AccountingCore.Shared;
 /// <param name="Status">締めの状態。</param>
 /// <param name="PremiumLedgerFrom">
 /// 優良な電子帳簿の適用開始日。課税期間の初日から全帳簿で要件を満たす必要があるため
-/// （法 8 ④・令 2）、年度の開始日と一致しない場合は警告する。
+/// （電帳法 8 ④・電帳令 2）、年度の開始日と一致しない場合は警告する。
 /// </param>
 public sealed record FiscalYear(
     FiscalYearId Id,

@@ -16,7 +16,7 @@ CREATE TABLE fiscal_years (
     status                      TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
 
     -- 優良な電子帳簿の適用開始日。課税期間の初日から全帳簿で要件を満たす必要があるため
-    -- （法 8 ④・令 2）、start_date と一致しない場合はアプリが警告する。
+    -- （電帳法 8 ④・電帳令 2）、start_date と一致しない場合はアプリが警告する。
     premium_ledger_from         DATE,
 
     created_at                  DATETIME,
