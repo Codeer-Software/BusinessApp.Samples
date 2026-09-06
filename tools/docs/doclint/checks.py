@@ -13,7 +13,7 @@ import os
 import re
 from typing import Dict, List, Optional, Tuple
 
-from .model import (ADR_LEDGER, APPEND_ANTIPATTERN, CODE_EXCLUDE_PREFIXES, CODE_EXTENSIONS,
+from .model import (ADR_LEDGER, APPEND_ANTIPATTERN, CODE_EXTENSIONS, excluded_from_code_check,
                     DATE_RE, DOCS_INDEX, Doc, GENERIC_DOC_NAMES, INLINE_IGNORE, LINE_LIMIT, MD_LINK,
                     REFERENCE_PREFIXES, REPO_ROOT, REQUIRED_KEYS, SEV_ERROR, SEV_WARN,
                     STALE_MARKER, VALID_AUDIENCE, VALID_STATUS, body_of, git_text,
@@ -239,7 +239,7 @@ def check_code_references(docs: List[Doc], findings: List[Finding]) -> None:
 
     for rel in run_git(["ls-files"]):
         rel_posix = rel.replace("\\", "/")
-        if not rel_posix.endswith(CODE_EXTENSIONS) or rel_posix.startswith(CODE_EXCLUDE_PREFIXES):
+        if not rel_posix.endswith(CODE_EXTENSIONS) or excluded_from_code_check(rel_posix):
             continue
         path = os.path.join(REPO_ROOT, rel)
         try:
@@ -386,7 +386,7 @@ def check_section_references(docs: List[Doc], findings: List[Finding]) -> None:
         rel_posix = rel.replace(os.sep, "/")
         if not rel_posix.endswith(CODE_EXTENSIONS + (".md",)):
             continue
-        if rel_posix.startswith(CODE_EXCLUDE_PREFIXES):
+        if excluded_from_code_check(rel_posix):
             continue
         try:
             with open(os.path.join(REPO_ROOT, rel), "r", encoding="utf-8", errors="replace") as f:

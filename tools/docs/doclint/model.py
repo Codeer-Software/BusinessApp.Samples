@@ -50,12 +50,28 @@ REFERENCE_PREFIXES = ("docs/decisions/", "docs/research/")
 # コード参照検査（check_code_references）の対象拡張子と除外。
 # Designer/migrations/ は適用済みがチェックサムで凍結される歴史文書なので、
 # 後から文書が superseded になっても直せない（直させない）。
+# **凍結の判定はここに写さず、正典から引く**（規約 §4-6。写しがずれると、
+# 「直させない場所」と「直してよい場所」の境目が道具ごとに食い違う）。
+# **引くのは述語であって前置リストではない**——`Designer/migrations/README.md` は
+# 凍結ではない（育ててよい文書）ので、前置だけで除外すると参照が検査されなくなる。
+# **先頭ではなく末尾**に足す（`lint_docs.py` が同じ理由を書いている）。
+sys.path.append(os.path.join(REPO_ROOT, "tools", "clb"))
+from check_frozen import is_frozen  # noqa: E402
+
 CODE_EXTENSIONS = (".cs", ".sql", ".ps1", ".psm1", ".py", ".js", ".css")
+# 凍結ではないが、生成物・追跡外なので参照を直す先が無い
 CODE_EXCLUDE_PREFIXES = (
     "Designer/ClaudeCodeForDesigner/",
-    "Designer/migrations/",
     "LocalData/",
 )
+
+
+def excluded_from_code_check(rel: str) -> bool:
+    """コード参照・節参照の検査から外すか。
+
+    凍結されたファイル（直せない）と、生成物・追跡外（直す先が無い）。
+    """
+    return is_frozen(rel) or rel.startswith(CODE_EXCLUDE_PREFIXES)
 
 # 単体では文書を特定できない名前。コード参照の検査で親ディレクトリ込みにする
 GENERIC_DOC_NAMES = ("README.md", "index.md")
