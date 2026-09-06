@@ -8,7 +8,7 @@
     exe の呼び出しは _designer.ps1 に共通化してある。
 
     designcheck の緑は「読み込める」までの保証でしかない。
-    計算・状態遷移・見た目は必ず実機（ブラウザ）で確認する（docs/17_検証のルール.md §2）。
+    計算・状態遷移・見た目は必ず実機（ブラウザ）で確認する（docs/31_検証のルール.md §2）。
 
 .EXAMPLE
     pwsh -NoProfile -File tools/clb/designcheck.ps1

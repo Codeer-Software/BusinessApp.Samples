@@ -18,7 +18,7 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/21_画面の原則.md, ../docs/d
 - デザイナ exe のパス（`DesignerExePath:` の行。`tools/clb/_designer.ps1` が読む）
 - 実機確認に使うサーバ URL とブラウザ
 - **参照用リポジトリ**（リポジトリ外に clone）——Codeer.LowCode.Blazor.Extras（拡張の実装見本）・BusinessApp_old（前回プロジェクト）
-- **開発用アカウント**（[ADR-0039](../docs/decisions/0039-開発用アカウントの資格情報はGit追跡外に置く.md)。使い方は [17 §3](../docs/17_検証のルール.md)）
+- **開発用アカウント**（[ADR-0039](../docs/decisions/0039-開発用アカウントの資格情報はGit追跡外に置く.md)。使い方は [31 §3](../docs/31_検証のルール.md)）
 
 ## 接続先 DB / データソース
 

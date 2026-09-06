@@ -5,7 +5,7 @@ scope: 全体
 audience: [開発]
 updated: 2026-09-06
 supersedes: []
-related: [docs/README.md, Designer/CLAUDE.md, docs/30_作業のルール.md, docs/17_検証のルール.md, docs/20_実装の原則.md, docs/22_調査の原則.md]
+related: [docs/README.md, Designer/CLAUDE.md, docs/30_作業のルール.md, docs/31_検証のルール.md, docs/20_実装の原則.md, docs/22_調査の原則.md]
 ---
 # 会計コア構築ミッション（CLAUDE.md）
 
@@ -44,7 +44,7 @@ related: [docs/README.md, Designer/CLAUDE.md, docs/30_作業のルール.md, doc
 
 ### 0-4. 検証・テストの前に
 
-- [17_検証のルール](docs/17_検証のルール.md)（検証ループ・実機確認・開発用アカウント）
+- [31_検証のルール](docs/31_検証のルール.md)（検証ループ・実機確認・開発用アカウント）
 - `self-review` スキル（`.claude/skills/self-review/SKILL.md`）
 - [qa/03_テストで漏らした実例](docs/qa/03_テストで漏らした実例.md)（漏れの型）・[qa/04_実機操作テスト](docs/qa/04_実機操作テスト.md)（台本）
 - [qa/01_CLB静かな失敗](docs/qa/01_CLB静かな失敗.md) の G 節（ブラウザ自動操作）・H 節（DB・スキーマ）
@@ -99,7 +99,7 @@ related: [docs/README.md, Designer/CLAUDE.md, docs/30_作業のルール.md, doc
   問いは判断を求めているのであって作業を求めていない。着手は明示的な GO の後。指示と問いかけが混在するなら、指示分は実装し、問いかけ分は回答で止める
 - **まとまった作業の区切りごとに自己レビューを行う**（`self-review` スキル）。**文書だけの変更でも省かない**——lint は形しか見ない
 - **最小修正ではなく、最善の修正。** 既存のものを正として最小の差分を探す癖を疑い、ゼロベースで考える（[30 §4](docs/30_作業のルール.md)）
-- **実機で操作していない機能は、できていないものとして扱う。** `designcheck` と `dotnet test` の緑は「読み込める」「C# が正しい」までしか言っていない（[17 §2](docs/17_検証のルール.md)）
+- **実機で操作していない機能は、できていないものとして扱う。** `designcheck` と `dotnet test` の緑は「読み込める」「C# が正しい」までしか言っていない（[31 §2](docs/31_検証のルール.md)）
 
 ## 5. 情報セキュリティ
 
@@ -119,4 +119,4 @@ related: [docs/README.md, Designer/CLAUDE.md, docs/30_作業のルール.md, doc
 - **SQLite**（データソース名 `BusinessAppSQLite`）
 - **Cookie 認証**（`AppUser` モジュール）
 
-接続先・追跡外ファイルの持ち物など環境の事実は `Designer/Project.md`、開発用アカウントは [17 §3](docs/17_検証のルール.md)。
+接続先・追跡外ファイルの持ち物など環境の事実は `Designer/Project.md`、開発用アカウントは [31 §3](docs/31_検証のルール.md)。
