@@ -7,7 +7,7 @@ using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 仕訳を計上できるかを検査する（docs/04 §1）。
+/// 仕訳を計上できるかを検査する（docs/10 §1）。
 /// </summary>
 /// <remarks>
 /// <para>純粋関数であり、副作用も外部依存も持たない。<b>同じ実装をクライアントの即時
@@ -157,7 +157,7 @@ public static class JournalEntryValidator
                     JournalViolationCodes.AmountNotPositive, JournalLineRules.AmountNotPositive, line.LineNo));
             }
 
-            // 既定値のまま（未設定）の税区分を通さない。NULL と「対象外」を 2 通りで表さない（docs/06 §1）。
+            // 既定値のまま（未設定）の税区分を通さない。NULL と「対象外」を 2 通りで表さない（docs/11 §1）。
             if (line.TaxCategoryId == default)
             {
                 violations.Add(new Violation(
@@ -280,7 +280,7 @@ public static class JournalEntryValidator
     /// <para><b>取消と訂正では止めない。</b> 新たな計上には使えないが、どちらも
     /// 「過去に計上したものを打ち消す・直す」操作なので、後からマスタを無効にしたせいで
     /// <b>訂正も取消もできない仕訳が帳簿に残る</b>という最悪の状態を作ってはいけない
-    /// （docs/04 §6・ADR-0004）。</para>
+    /// （docs/10 §6・ADR-0004）。</para>
     /// <para><b>訂正を含めるのは 2026-08-25 の自己レビューで直した。</b> 訂正は取消を先に計上してから
     /// 再計上の下書きを開く（ADR-0015）。ここが Error のままだと、原仕訳が無効なマスタを使っていた場合に
     /// <b>取消だけが確定して再計上は永久に計上できない</b>——利用者から見れば、訂正しようとしたら
@@ -324,7 +324,7 @@ public static class JournalEntryValidator
             return;
         }
 
-        // 消費税行は本体行から貸借・部門・税区分・用途区分を引き継ぐ（docs/06 §2）。
+        // 消費税行は本体行から貸借・部門・税区分・用途区分を引き継ぐ（docs/11 §2）。
         // 引き継がないと、税区分別集計・部門別税集計が本体行と突き合わなくなる。
         if (line.DebitCredit != parent.DebitCredit)
         {

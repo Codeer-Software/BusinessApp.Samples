@@ -7,7 +7,7 @@ using BusinessApp.Partners;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 仕訳明細（docs/04 §4-1）。金額は税抜・正の整数円で、借方貸方は <see cref="DebitCredit"/> が持つ。
+/// 仕訳明細（docs/10 §4-1）。金額は税抜・正の整数円で、借方貸方は <see cref="DebitCredit"/> が持つ。
 /// </summary>
 public sealed record JournalLine
 {
@@ -20,19 +20,19 @@ public sealed record JournalLine
 
     public SubAccountId? SubAccountId { get; init; }
 
-    /// <summary>部門。損益科目では必須（I-13）。空欄を「全社共通」で穴埋めしない（docs/04 §9-1）。</summary>
+    /// <summary>部門。損益科目では必須（I-13）。空欄を「全社共通」で穴埋めしない（docs/10 §9-1）。</summary>
     public DepartmentId? DepartmentId { get; init; }
 
     public PartnerId? PartnerId { get; init; }
 
     /// <summary>
     /// 取引先名の写し。帳簿の法定記載事項①（消法 30 ⑧）であり、
-    /// 取引先の改名で過去の帳簿の記載が変わらないように識別子と両方持つ（docs/04 §4-2）。
+    /// 取引先の改名で過去の帳簿の記載が変わらないように識別子と両方持つ（docs/10 §4-2）。
     /// </summary>
     public string? PartnerNameSnapshot { get; init; }
 
     /// <summary>
-    /// 計上時点の登録番号の写し（適格請求書発行事業者。docs/07 §4）。
+    /// 計上時点の登録番号の写し（適格請求書発行事業者。docs/13 §4）。
     /// </summary>
     /// <remarks>
     /// <b>帳簿の法定記載事項ではない</b>（消法 30 ⑧に相手方の登録番号は含まれない）。
@@ -44,19 +44,19 @@ public sealed record JournalLine
     /// <summary>金額（税抜・正）。</summary>
     public required Yen Amount { get; init; }
 
-    /// <summary>税区分。税に意味のない行にも「対象外」を明示する（docs/06 §1）。</summary>
+    /// <summary>税区分。税に意味のない行にも「対象外」を明示する（docs/11 §1）。</summary>
     public required TaxCategoryId TaxCategoryId { get; init; }
 
     /// <summary>用途区分。個別対応方式で使う。</summary>
     public TaxTreatment? TaxTreatment { get; init; }
 
-    /// <summary>課税仕入れの時点。経過措置・税率の判定基準日（docs/06 §5）。</summary>
+    /// <summary>課税仕入れの時点。経過措置・税率の判定基準日（docs/11 §5）。</summary>
     public DateOnly? TaxPoint { get; init; }
 
     /// <summary>適用した制度ルールの版。後日マスタを更新しても過去を再計算しないための固定値（I-16）。</summary>
     public RuleVersion? AppliedRuleVersion { get; init; }
 
-    /// <summary>消費税行か。システムが生成し、利用者は直接編集できない（docs/06 §2）。</summary>
+    /// <summary>消費税行か。システムが生成し、利用者は直接編集できない（docs/11 §2）。</summary>
     public bool IsTaxLine { get; init; }
 
     /// <summary>消費税行が対応する本体行の行番号。</summary>

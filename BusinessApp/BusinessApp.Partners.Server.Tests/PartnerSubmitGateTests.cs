@@ -11,7 +11,7 @@ using Codeer.LowCode.Blazor.Repository.Data;
 using Microsoft.Data.Sqlite;
 
 /// <summary>
-/// 取引先を保存するときの関門（docs/07 §1-2）。
+/// 取引先を保存するときの関門（docs/13 §1-2）。
 /// </summary>
 /// <remarks>
 /// <b>DDL の CHECK が拒むものを、利用者の言葉で先に止める。</b>
@@ -99,7 +99,7 @@ public class PartnerSubmitGateTests
         Assert.True(save.Called);
     }
 
-    /// <summary>法人番号は任意（docs/07 §2-3）。空欄で止めない。</summary>
+    /// <summary>法人番号は任意（docs/13 §2-3）。空欄で止めない。</summary>
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
@@ -140,7 +140,7 @@ public class PartnerSubmitGateTests
 
     /// <summary>
     /// <b>桁が合っていても検査用数字が違えば止める。</b>
-    /// 通すと、打ち間違えた番号がそのまま名寄せの自然キーになる（docs/07 §2-2）。
+    /// 通すと、打ち間違えた番号がそのまま名寄せの自然キーになる（docs/13 §2-2）。
     /// </summary>
     [Fact]
     public async Task 検査用数字が合わない法人番号を弾く()
@@ -178,7 +178,7 @@ public class PartnerSubmitGateTests
             Adding(Partner(corporateNumber: ValidNumber, entityType: "sole_proprietor")),
             new SaveSpy());
 
-        // 列挙子の英語名を文言に混ぜない（docs/09_画面の原則.md §2）。
+        // 列挙子の英語名を文言に混ぜない（docs/21_画面の原則.md §2）。
         Assert.Contains("個人事業者", rejected.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("sole_proprietor", rejected.Message, StringComparison.Ordinal);
     }
@@ -222,7 +222,7 @@ public class PartnerSubmitGateTests
     }
 
     /// <summary>
-    /// <b>個人事業者に直すために法人番号を消す</b>——docs/07 §1-2 が想定している正規の直し方。
+    /// <b>個人事業者に直すために法人番号を消す</b>——docs/13 §1-2 が想定している正規の直し方。
     /// ここが通らないと、矛盾した行を直す手段が無くなる。
     /// </summary>
     [Fact]
@@ -280,7 +280,7 @@ public class PartnerSubmitGateTests
     /// <b>関門が通した値を、そのまま DB が受け取れる。</b>
     /// </summary>
     /// <remarks>
-    /// 関門の役目は「DDL の CHECK の手前に置く網」（docs/07 §1-5）なので、
+    /// 関門の役目は「DDL の CHECK の手前に置く網」（docs/13 §1-5）なので、
     /// <b>関門の受理集合が DB の受理集合に収まっていなければ意味を成さない</b>。
     /// 保存が呼ばれたかどうかだけを見ていると、関門が書き換えた値が DB に拒まれることに気づけない
     /// （実際に空文字で作り込んだ。qa/03 L-14）。
@@ -356,7 +356,7 @@ public class PartnerSubmitGateTests
         Assert.True(save.Called);
     }
 
-    /// <summary>人格のない社団等も法人番号を持ちうる（docs/07 §1-2）。</summary>
+    /// <summary>人格のない社団等も法人番号を持ちうる（docs/13 §1-2）。</summary>
     [Fact]
     public async Task 人格のない社団等には法人番号を入れられる()
     {
@@ -792,7 +792,7 @@ public class PartnerSubmitGateTests
     /// <remarks>
     /// 深さは<b>親を付け替えたときにしか変わらない</b>。触っていない行まで見ると、
     /// 「誰かの親になっているから、この取引先はもう何も直せない」という画面ができる。
-    /// docs/07 §1-2 の「触っていない行に分類を強制しない」と同じ考え方である。
+    /// docs/13 §1-2 の「触っていない行に分類を強制しない」と同じ考え方である。
     /// </remarks>
     [Fact]
     public async Task 子を持つ取引先でも他の項目は直せる()
@@ -813,7 +813,7 @@ public class PartnerSubmitGateTests
     /// </summary>
     /// <remarks>
     /// <para>見ると、<b>関門より前に入った食い違いの行を、他の項目を直すだけでも保存できなくする</b>。
-    /// docs/07 §1-2 の「触っていない行に分類を強制しない」と同じ考え方である
+    /// docs/13 §1-2 の「触っていない行に分類を強制しない」と同じ考え方である
     /// （2026-08-31 の自己レビューで、早期 return を消す変異が生き残って気づいた）。</para>
     /// <para>検体は SQL で直接作る。<b>関門を迂回しているのではなく</b>、
     /// 関門も DDL のトリガも種別の組までは見ていなかった時代のデータを作っている

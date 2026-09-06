@@ -2,7 +2,7 @@ namespace BusinessApp.AccountingCore.Shared;
 
 /// <summary>
 /// 有効期間（両端を含む閉区間。終期なしを許す）。
-/// 税率・控除割合・耐用年数などの制度値は、この期間つきのルールデータとして持つ（docs/15_実装の原則.md §2）。
+/// 税率・控除割合・耐用年数などの制度値は、この期間つきのルールデータとして持つ（docs/20_実装の原則.md §2）。
 /// </summary>
 public readonly record struct EffectivePeriod
 {

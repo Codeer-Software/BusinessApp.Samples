@@ -6,7 +6,7 @@ using BusinessApp.AccountingCore.Shared;
 using BusinessApp.AccountingCore.Tests.Fixtures;
 
 /// <summary>
-/// 計上済みの仕訳を取り消す反対仕訳（docs/04 §5）。
+/// 計上済みの仕訳を取り消す反対仕訳（docs/10 §5）。
 /// </summary>
 /// <remarks>
 /// 計上済みは変更も削除もしない。取消は<b>帳簿に 1 本足す</b>ことで表す。
@@ -60,7 +60,7 @@ public class JournalReversalTests
     [Fact]
     public void 取引日は原仕訳と同じで_計上日だけが後ろにずれる()
     {
-        // 帳簿の「取引年月日」は取引そのものを説明する欄であって、訂正作業の日ではない（docs/04 §5）。
+        // 帳簿の「取引年月日」は取引そのものを説明する欄であって、訂正作業の日ではない（docs/10 §5）。
         var result = JournalReversal.Reverse(Posted(), ReversedOn, EnteredAt, Context());
 
         Assert.Equal(TransactionDate, result.Reversal!.TransactionDate);

@@ -244,7 +244,7 @@ public class JournalBookQueryTests
     [Fact]
     public void 取引先名は明細の写しを優先する()
     {
-        // 取引先の改名で過去の帳簿の記載が変わらないこと（docs/04 §4-2）。
+        // 取引先の改名で過去の帳簿の記載が変わらないこと（docs/10 §4-2）。
         using var db = Create(
             "UPDATE journal_lines SET partner_name_snapshot = '株式会社取引先（旧称）' WHERE journal_entry_id = 1 AND line_no = 1");
 
@@ -336,7 +336,7 @@ public class JournalBookQueryTests
 
     /// <summary>
     /// <b>会計年度を列に出す。</b> 伝票番号は年度ごとの連番なので、年度で絞らなければ
-    /// 同じ番号が何行も並ぶ。帳簿は既定で絞らない（docs/09 §3）ので、既定の表示がその状態である。
+    /// 同じ番号が何行も並ぶ。帳簿は既定で絞らない（docs/21 §3）ので、既定の表示がその状態である。
     /// </summary>
     [Fact]
     public void 会計年度は列に出る()

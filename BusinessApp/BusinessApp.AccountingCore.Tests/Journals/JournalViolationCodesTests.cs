@@ -9,8 +9,8 @@ using BusinessApp.AccountingCore.Tests.Conventions;
 /// </summary>
 /// <remarks>
 /// <b>定数を写経しない。</b> テストにもう一度同じ文字列を書くだけでは、
-/// 番号を付け替えたときにこのテストしか落ちず、docs/04 は黙って古いままになる。
-/// <c>docs/04 §1</c> の不変条件の表を<b>実際に読んで</b>突き合わせる。
+/// 番号を付け替えたときにこのテストしか落ちず、docs/10 は黙って古いままになる。
+/// <c>docs/10 §1</c> の不変条件の表を<b>実際に読んで</b>突き合わせる。
 /// </remarks>
 public class JournalViolationCodesTests
 {
@@ -21,7 +21,7 @@ public class JournalViolationCodesTests
 
         Assert.NotEmpty(declared);
         Assert.All(InvariantCodesInUse(), code =>
-            Assert.True(declared.Contains(code), $"{code} は docs/04 §1 の表に無い"));
+            Assert.True(declared.Contains(code), $"{code} は docs/10 §1 の表に無い"));
     }
 
     [Fact]
@@ -53,12 +53,12 @@ public class JournalViolationCodesTests
     private static IReadOnlyList<string> InvariantCodesInUse()
         => AllCodes().Where(c => c.StartsWith("I-", StringComparison.Ordinal)).ToList();
 
-    /// <summary>docs/04 §1 の表から不変条件の番号（I-01 など）を読み取る。</summary>
+    /// <summary>docs/10 §1 の表から不変条件の番号（I-01 など）を読み取る。</summary>
     private static IReadOnlySet<string> InvariantNumbersInDocument()
     {
         var path = Path.Combine(
             Path.GetDirectoryName(Path.GetDirectoryName(ProjectPaths.TestProject)!)!,
-            "docs", "04_会計ドメイン設計.md");
+            "docs", "10_会計ドメイン設計.md");
         Assert.True(File.Exists(path), $"設計文書が見つからない: {path}");
 
         return Regex.Matches(File.ReadAllText(path), @"^\| (I-\d{2}) \|", RegexOptions.Multiline)

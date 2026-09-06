@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""doclint.checks — 検査 9 本と、その純粋な判定部分.
+"""doclint.checks — 検査 10 本と、その純粋な判定部分.
 
 **足した検査は必ず `ALL_CHECKS` に載せる**（`selftest.py` が突合し、`main` から
 呼ばれているかまで見る）。所見は `(severity, ファイル, メッセージ)` の組で積む。
@@ -113,7 +113,7 @@ def check_superseded_links(doc: Doc, docs_by_rel: Dict[str, Doc],
       - `lint-docs:ignore` がある行（**その行の検査を全部**免除する。行単位である）
 
     `growth: append` は免除しない。実測すると、それで通っていたのは ADR 台帳の 4 件だけで、
-    他の記録文書（qa/01〜04・11_CLB改善提案）には superseded へのリンクが 1 件も無かった
+    他の記録文書（qa/01〜04・CLB改善提案）には superseded へのリンクが 1 件も無かった
     （2026-08-28）。**記録文書でも、今日足す行は現在形として読まれる。**
 
     **連鎖は見ない**（後継自身がさらに superseded になっても、その中間へのリンクは
@@ -215,7 +215,7 @@ def check_code_references(docs: List[Doc], findings: List[Finding]) -> None:
     """current でない文書（superseded / historical）をコードのコメントが参照していたら error。
 
     参照の形は 3 つを見る: ファイル名（basename）・ADR 番号（ADR-0007）・
-    番号つき文書の短縮形（docs/07）。コードのコメントは実装と一緒に読まれるので、
+    番号つき文書の短縮形（docs/13）。コードのコメントは実装と一緒に読まれるので、
     腐った参照は後継文書へ張り替える。歴史として意図的に参照する行には
     lint-docs:ignore を書く。
     """
@@ -264,14 +264,53 @@ SECTION_REF_RE = re.compile(r"§ ?(" + SECTION_NO + r")")
 LINK_THEN_SECTION_RE = re.compile(r"\[([^\]]*)\]\(([^)\s]+\.md)\)([^\n]{0,8})")
 # リンクを張れないコードのコメントのための `CLAUDE.md §5`
 BARE_CLAUDE_REF_RE = re.compile(r"(?<![\w/.])CLAUDE\.md.{0,3}?§ ?(" + SECTION_NO + r")")
+# 同じくリンクを張れない場所で使う `docs/10 §1` の短縮形。
+# `../docs/10 §1` は拾い、`他のリポジトリ/docs/04` は拾わない（上りだけを接頭辞に許す）。
+# `docs/10_会計ドメイン設計.md §1` は上の LINK 系が拾うので `_` の手前で切る
+BARE_DOCS_REF_RE = re.compile(
+    r"(?<![\w/])(?:\.\.?/)*docs/([0-9]{2})(?![0-9_\w])[ 　]?§ ?(" + SECTION_NO + r")")
+# リンクを張らずにファイル名で書く `docs/21_画面の原則.md §2`（コードのコメントに多い）
+BARE_DOCS_FILE_RE = re.compile(
+    r"(?<![\w/(])(?:\.\.?/)*docs/([0-9]{2}_[^\s\)\]\"'`、。]+\.md)[ 　]?§ ?(" + SECTION_NO + r")")
+# 番号だけで指す公式の短縮形 `21 §3`（規約が「節だけで指してよい」と定めている）。
+# `ADR-0021 §4`・`qa/04 §2`・`0026 §1` を拾わないよう、直前の 1 字で切る
+BARE_NUM_REF_RE = re.compile(
+    r"(?<![\w/\-§])([0-9]{2}) ?§ ?(" + SECTION_NO + r")")
+
+
+def docs_num_target(no, entries):
+    """`docs/NN` の NN から、docs 直下の実体のパスを引く（純粋関数）。
+
+    `entries` は `docs/` 直下の名前の一覧。**番号から題名を推測しない**——
+    改番で意味が変わる番号を静的な表で持つと、表の側が腐る。
+    見つからなければ None（＝そんな番号の文書は無い）。
+    """
+    for name in sorted(entries):
+        base = name[:-3] if name.endswith(".md") else name
+        if re.fullmatch(no + r"_.+", base):
+            return "docs/" + name
+    return None
 
 
 def _headings_of(rel, cache):
-    """`rel` の番号つき見出しの集合。番号を振っていない文書は None（検査の対象外）。"""
+    """`rel` の番号つき見出しの集合。番号を振っていない文書は None（検査の対象外）。
+
+    ディレクトリなら配下の `.md` の見出しの**和**を返す——`00_ドキュメント規約` は
+    3 冊で節番号を共有しており、`00 §4-9` はそのうち 1 冊にしかない。
+    """
     if rel in cache:
         return cache[rel]
+    full = os.path.join(REPO_ROOT, rel)
+    if os.path.isdir(full):
+        found = set()
+        for name in sorted(os.listdir(full)):
+            if name.endswith(".md"):
+                sub = _headings_of(rel + "/" + name, cache)
+                found |= sub or set()
+        cache[rel] = found or None
+        return cache[rel]
     try:
-        with open(os.path.join(REPO_ROOT, rel), "r", encoding="utf-8", errors="replace") as f:
+        with open(full, "r", encoding="utf-8", errors="replace") as f:
             text = f.read()
     except OSError:
         cache[rel] = None
@@ -287,8 +326,13 @@ def resolve_rel(src_rel, target):
     return joined.replace(os.sep, "/")
 
 
-def section_refs(rel, line):
-    """1 行から `(指し先の文書, 節番号の一覧)` の組を取り出す（純粋関数）。"""
+def section_refs(rel, line, docs_entries=()):
+    """1 行から `(指し先の文書, 節番号の一覧)` の組を取り出す（純粋関数）。
+
+    `docs_entries` は `docs/` 直下の名前の一覧。`docs/10 §1` の解決に要る。
+    渡さなければその形は見ない（純粋なままにするための注入口）。
+    指し先が引けない番号は `docs/NN`（実体なし）のまま返し、呼び手が error にする。
+    """
     out = []
     for m in LINK_THEN_SECTION_RE.finditer(line):
         label, target, after = m.group(1), m.group(2), m.group(3)
@@ -302,6 +346,16 @@ def section_refs(rel, line):
             out.append((resolve_rel(rel, target), secs))
     for m in BARE_CLAUDE_REF_RE.finditer(line):
         out.append(("CLAUDE.md", [m.group(1)]))
+    for m in BARE_DOCS_REF_RE.finditer(line):
+        target = docs_num_target(m.group(1), docs_entries)
+        out.append((target or "docs/" + m.group(1), [m.group(2)]))
+    for m in BARE_DOCS_FILE_RE.finditer(line):
+        name = m.group(1)
+        out.append(("docs/" + name if name in docs_entries else "docs/" + name[:2],
+                    [m.group(2)]))
+    for m in BARE_NUM_REF_RE.finditer(line):
+        target = docs_num_target(m.group(1), docs_entries)
+        out.append((target or "docs/" + m.group(1), [m.group(2)]))
     return out
 
 
@@ -312,12 +366,22 @@ def check_section_references(docs: List[Doc], findings: List[Finding]) -> None:
     リンクが生きたまま**別の内容を指す**ので、機械が鳴かないと誰も気づかない。
     実際に 2 度起きた（qa/03 の L-18。2026-08-26 と 2026-09-05）。
 
-    拾うのは 3 つの形——`[ラベル §4-9](先.md)`・`[ラベル](先.md) §4-9`・
-    リンクを張れないコードのコメントのための `CLAUDE.md §5`。
+    拾うのは 5 形。**リンクの札に節を書く形**（`[ラベル §4-9](先.md)` と
+    `[ラベル](先.md) §4-9` の 2 通りの書き方を `LINK_THEN_SECTION_RE` 1 本で見る）と、
+    **リンクを張れない場所のための 4 つ**——`CLAUDE.md §5`・`docs/10 §1`・
+    `docs/21_画面の原則.md §2`・`21 §3`。
     **番号つき見出しを持たない文書への参照は見ない**（その文書は番号で引く作りではない）。
     歴史として古い番号を書く行には lint-docs:ignore を書く。
+
+    `docs/NN` の解決は**作業ツリーの実体**を見る（番号と題名の対応を表に持たない）。
+    その番号の文書が無ければ「指し先が無い」として鳴る——**改番で番号が消えたときに、
+    リンクを張れない場所の取り残しを捕まえるのはこの経路だけである。**
     """
     cache = {}
+    # **追跡下から引く。** 作業ツリーを見ると、置き忘れた未追跡の `docs/05_メモ.md` で
+    # 死んだ番号が解決してしまい、取り残しが鳴らなくなる
+    docs_entries = sorted({r.split("/")[1] for r in run_git(["ls-files", "docs"])
+                           if r.count("/") >= 1})
     for rel in run_git(["ls-files"]):
         rel_posix = rel.replace(os.sep, "/")
         if not rel_posix.endswith(CODE_EXTENSIONS + (".md",)):
@@ -332,7 +396,14 @@ def check_section_references(docs: List[Doc], findings: List[Finding]) -> None:
         for i, line in enumerate(lines):
             if INLINE_IGNORE in line:
                 continue
-            for target, secs in section_refs(rel_posix, line):
+            for target, secs in section_refs(rel_posix, line, docs_entries):
+                if re.fullmatch(r"docs/[0-9]{2}", target):
+                    findings.append((SEV_ERROR, rel_posix,
+                                     "{}行目: {} という文書はありません"
+                                     "（番号が動いた・文書が消えた。指し先を直すか、"
+                                     "歴史として要る行に {} を書く）"
+                                     .format(i + 1, target, INLINE_IGNORE)))
+                    continue
                 heads = _headings_of(target, cache)
                 if heads is None:
                     continue

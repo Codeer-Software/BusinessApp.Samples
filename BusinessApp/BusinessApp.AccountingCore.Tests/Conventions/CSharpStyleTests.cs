@@ -297,7 +297,7 @@ public class CSharpStyleTests
     }
 
     /// <summary>
-    /// 利用者に見せる日付は <c>yyyy/MM/dd</c> に揃える（docs/09 §2-5）。
+    /// 利用者に見せる日付は <c>yyyy/MM/dd</c> に揃える（docs/21 §2-5）。
     /// </summary>
     /// <remarks>
     /// <b>見るのは文字列補間の書式指定だけ</b>である。SQL に渡す ISO の日付は
@@ -315,7 +315,7 @@ public class CSharpStyleTests
     [InlineData("var s = date.ToString(\"yyyy年M月d日\");", true)]
     [InlineData("var s = date.ToString(\"yyyy-MM-dd\");", true)]
     [InlineData("var s = date.ToString(\"yyyy/MM/dd\");", false)]
-    // **文化を明示した形は機械に渡す値**（SQL・CSV）なので対象外（docs/09 §2-5）。
+    // **文化を明示した形は機械に渡す値**（SQL・CSV）なので対象外（docs/21 §2-5）。
     [InlineData("var s = date.ToString(\"yyyy-MM-dd\", CultureInfo.InvariantCulture);", false)]
     public void 利用者向け文言の日付は_yyyy_MM_dd_に揃える(string source, bool caught)
         => Assert.Equal(caught, Find(source, ForbiddenFormSet.MessageLayer).Count > 0);

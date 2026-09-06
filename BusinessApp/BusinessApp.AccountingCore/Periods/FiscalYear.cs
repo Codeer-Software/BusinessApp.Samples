@@ -2,7 +2,7 @@ namespace BusinessApp.AccountingCore.Periods;
 
 using BusinessApp.AccountingCore.Shared;
 
-/// <summary>会計年度（docs/04 §7）。</summary>
+/// <summary>会計年度（docs/10 §7）。</summary>
 /// <param name="Id">会計年度の識別子。</param>
 /// <param name="Code">年度コード（例 "FY18"）。</param>
 /// <param name="Label">表示名（例「第 18 期（2026 年度）」）。</param>

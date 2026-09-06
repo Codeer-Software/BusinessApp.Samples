@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 """doclint.selftest — 関門そのものを検査する（`lint_docs.py --selftest`）.
 
-**中身を空にしても緑**という状態を作らないための検査である。見るのは 3 つ。
+**中身を空にしても緑**という状態を作らないための検査である。見るのは 4 つ。
 
   1. 判定の純粋部分（`updated_violation` / `body_of`）が期待どおり鳴るか
   2. **わざと壊した入力**で `check_superseded_links` が鳴り、免除の形では鳴らないか。
      件数だけでなく**指摘文の中身**まで表明する（error を warn に格下げしても件数は変わらない）
-  3. 定義した検査が全部 `ALL_CHECKS` に載り、`main` から**正しい引数で**呼ばれているか
+  3. `section_refs` が節への参照の 5 形を拾い、**拾ってはいけない形を拾わない**か
+  4. 定義した検査が全部 `ALL_CHECKS` に載り、`main` から**正しい引数で**呼ばれているか
 """
 
 from __future__ import annotations
@@ -71,33 +72,33 @@ def _check_superseded_links() -> List[str]:
                   {"status": "superseded", "related": "[0019-old.md]"}, ["中身"])
     gone = _fake("docs/decisions/0018-hist.md",
                  {"status": "historical", "related": "[0029-new.md]"}, ["中身"])
-    live = _fake("docs/09_other.md", {"status": "current"}, ["本文"])
+    live = _fake("docs/79_other.md", {"status": "current"}, ["本文"])
     new = _fake("docs/decisions/0029-new.md", {"status": "current"}, ["本文"])
-    far = _fake("docs/08_dead.md", {"status": "superseded", "related": "[09_other.md]"}, ["中身"])
+    far = _fake("docs/78_dead.md", {"status": "superseded", "related": "[79_other.md]"}, ["中身"])
     by_rel = {d.rel: d for d in (dead, older, gone, live, new, far)}
-    to_dead, to_live = "[旧](decisions/0019-old.md)", "[今](09_other.md)"
+    to_dead, to_live = "[旧](decisions/0019-old.md)", "[今](79_other.md)"
     cur = {"status": "current"}
-    to_far = "[遠](08_dead.md)"       # docs/10_x.md から見た別の superseded 文書
+    to_far = "[遠](78_dead.md)"       # docs/77_x.md から見た別の superseded 文書
     to_older = "[古](decisions/0006-older.md)"  # related に current の後継が無い文書
     cases = [
         # (rel, meta, body, 鳴るべき件数)
-        ("docs/10_x.md", cur, [to_dead], 1),                                  # わざと壊した入力
-        ("docs/10_x.md", cur, [to_live], 0),
-        ("docs/10_x.md", cur, ["0019-old.md は既に覆されている"], 0),          # 散文は咎めない
-        ("docs/10_x.md", cur, ["[外](https://example.com/0019-old.md)"], 0),
-        ("docs/10_x.md", cur, ["[未](decisions/0019-nowhere.md)"], 0),        # 実在しない
-        ("docs/10_x.md", cur, ["[印](decisions/0018-hist.md)"], 0),           # historical は対象外
-        ("docs/10_x.md", cur, ["[節](decisions/0019-old.md#2-決定)"], 1),     # アンカー付き
-        ("docs/10_x.md", cur, ["[空]( decisions/0019-old.md )"], 1),          # 前後の空白を落とす
-        ("docs/decisions/0030-y.md", cur, ["[上](../08_dead.md)"], 1),        # `../` 起点
-        ("docs/10_x.md", cur, ["```", to_dead, "```"], 0),                    # コードフェンスの中
-        ("docs/10_x.md", cur, ["```", to_dead, "```", to_dead], 1),           # フェンスを閉じたら効く
-        ("docs/10_x.md", {"status": "superseded", "related": "[09_other.md]"}, [to_dead], 0),
-        ("docs/10_x.md", {"status": "historical", "related": "[09_other.md]"}, [to_dead], 0),
+        ("docs/77_x.md", cur, [to_dead], 1),                                  # わざと壊した入力
+        ("docs/77_x.md", cur, [to_live], 0),
+        ("docs/77_x.md", cur, ["0019-old.md は既に覆されている"], 0),          # 散文は咎めない
+        ("docs/77_x.md", cur, ["[外](https://example.com/0019-old.md)"], 0),
+        ("docs/77_x.md", cur, ["[未](decisions/0019-nowhere.md)"], 0),        # 実在しない
+        ("docs/77_x.md", cur, ["[印](decisions/0018-hist.md)"], 0),           # historical は対象外
+        ("docs/77_x.md", cur, ["[節](decisions/0019-old.md#2-決定)"], 1),     # アンカー付き
+        ("docs/77_x.md", cur, ["[空]( decisions/0019-old.md )"], 1),          # 前後の空白を落とす
+        ("docs/decisions/0030-y.md", cur, ["[上](../78_dead.md)"], 1),        # `../` 起点
+        ("docs/77_x.md", cur, ["```", to_dead, "```"], 0),                    # コードフェンスの中
+        ("docs/77_x.md", cur, ["```", to_dead, "```", to_dead], 1),           # フェンスを閉じたら効く
+        ("docs/77_x.md", {"status": "superseded", "related": "[79_other.md]"}, [to_dead], 0),
+        ("docs/77_x.md", {"status": "historical", "related": "[79_other.md]"}, [to_dead], 0),
         # `growth: append` は免除しない（2026-08-28 に外した。理由は関数の docstring）
-        ("docs/10_x.md", {"status": "current", "growth": "append"}, [to_dead], 1),
+        ("docs/77_x.md", {"status": "current", "growth": "append"}, [to_dead], 1),
         # フロントマターは対象外。**リンクの形をした値**を置いて、本文だけを見ていることを表明する
-        ("docs/10_x.md", {"status": "current", "note": to_dead}, ["本文"], 0),
+        ("docs/77_x.md", {"status": "current", "note": to_dead}, ["本文"], 0),
         # --- 免除には必ず対照を置く。「免除された」と「そもそも検出できていない」は別物である ---
         # 後継は前身を語ってよい（対照: supersedes を外すと鳴る）
         ("docs/decisions/0029-new.md", {"status": "current", "supersedes": "[0019-old.md]"},
@@ -109,8 +110,8 @@ def _check_superseded_links() -> List[str]:
         ("docs/decisions/README2.md", {"status": "current", "growth": "append"},
          ["[旧](0019-old.md)"], 1),
         # `lint-docs:ignore` は**行単位**。同じ行の無関係なリンクまで免除されるのが現在の仕様
-        ("docs/10_x.md", cur, [to_dead + " " + to_far + " " + INLINE_IGNORE], 0),
-        ("docs/10_x.md", cur, [to_dead + " " + to_far], 2),                   # 対照（印を外す）
+        ("docs/77_x.md", cur, [to_dead + " " + to_far + " " + INLINE_IGNORE], 0),
+        ("docs/77_x.md", cur, [to_dead + " " + to_far], 2),                   # 対照（印を外す）
     ]
     for rel, meta, body, want in cases:
         got: List[Finding] = []
@@ -121,7 +122,7 @@ def _check_superseded_links() -> List[str]:
 
     # 行番号は**本文の先頭以外**に置いて表明する。先頭に置くと `body_start + 1` に
     # 固定する壊れ方と区別が付かない（2026-08-28 の自己レビューで実際に空振りしていた）
-    multi = _fake("docs/10_x.md", cur, ["前書き", "", to_dead, "間", to_older])
+    multi = _fake("docs/77_x.md", cur, ["前書き", "", to_dead, "間", to_older])
     got: List[Finding] = []
     seen = check_superseded_links(multi, by_rel, got)
     want_lines = [multi.body_start + 3, multi.body_start + 5]
@@ -134,7 +135,7 @@ def _check_superseded_links() -> List[str]:
     # 件数だけでなく**中身**を表明する。error を warn に格下げしても件数は変わらないため
     for label, ok in (
         ("severity が error", got and all(f[0] == SEV_ERROR for f in got)),
-        ("指摘先が違反した文書", got and got[0][1] == "docs/10_x.md"),
+        ("指摘先が違反した文書", got and got[0][1] == "docs/77_x.md"),
         ("リンク先をリポジトリ相対で出す", got and "docs/decisions/0019-old.md" in got[0][2]),
         # related[0] は superseded（0006）。**current な 0029 を案内する**こと
         ("後継は current を選ぶ", got and "docs/decisions/0029-new.md" in got[0][2]),
@@ -148,6 +149,43 @@ def _check_superseded_links() -> List[str]:
             ng.append("check_superseded_links: {}: {}".format(label, got))
     if successor_of(older, by_rel) is not None:
         ng.append("successor_of: current な後継が無いのに何かを返した")
+    return ng
+
+
+def _check_section_ref_forms() -> List[str]:
+    """`section_refs` が節への参照の 5 形を拾い、拾ってはいけない形を拾わないか（純粋部分）。
+
+    **番号だけの短縮形（`NN §3`）は、リンクが張れない場所で最も多く使われる形**であり、
+    改番で最も静かに壊れる。`docs_entries` を注入して実ファイルなしで表明する。
+
+    **検体に実在の文書番号・題名を使わない。** 使うと改番のたびにこの検査が道連れになり、
+    しかも**検体まで一緒に書き換わって通ってしまう**——番号が動いたことを表明できない。
+    """
+    ng = []
+    entries = ["77_架空の分冊", "78_架空の設計.md", "79_架空の原則.md"]
+    cases = [
+        ("番号の短縮形", "詳細は docs/78 §1 の表", [("docs/78_架空の設計.md", ["1"])]),  # lint-docs:ignore 架空の番号を使う検体
+        ("分冊を持つディレクトリ", "（docs/77 §4-9）", [("docs/77_架空の分冊", ["4-9"])]),  # lint-docs:ignore 架空の番号を使う検体
+        ("全角空白", "docs/78　§2 を見る", [("docs/78_架空の設計.md", ["2"])]),  # lint-docs:ignore 架空の番号を使う検体
+        ("相対の上り", "（../docs/79 §2）", [("docs/79_架空の原則.md", ["2"])]),  # lint-docs:ignore 架空の番号を使う検体
+        ("ファイル名の形", "-- docs/79_架空の原則.md §2 に反する",  # lint-docs:ignore 架空の番号を使う検体
+         [("docs/79_架空の原則.md", ["2"])]),  # lint-docs:ignore 架空の番号を使う検体
+        ("番号だけの形", "-- 79 §3 は「既定で絞らない」", [("docs/79_架空の原則.md", ["3"])]),  # lint-docs:ignore 架空の番号を使う検体
+        ("消えた番号は指し先なし", "詳細は docs/76 §1", [("docs/76", ["1"])]),  # lint-docs:ignore 架空の番号を使う検体
+        # 拾ってはいけないもの
+        ("別リポジトリのパス", "他/docs/78 §1 は対象外", []),  # lint-docs:ignore 架空の番号を使う検体
+        ("ADR 番号", "[ADR-0021 §4](x.md) は ADR", [("docs/x.md", ["4"])]),
+        ("qa の番号", "qa/78 §2 の台本", []),  # lint-docs:ignore 架空の番号を使う検体
+        ("研究記録の日付", "docs/research/2026-08-23_x.md §1", []),
+    ]
+    for label, line, want in cases:
+        got = checks.section_refs("docs/z.md", line, entries)
+        if sorted(got) != sorted(want):
+            ng.append("section_refs: {}: 期待 {} / 実際 {}".format(label, want, got))
+    if checks.docs_num_target("76", entries) is not None:
+        ng.append("docs_num_target: 無い番号に指し先を返した")
+    if checks.docs_num_target("78", entries) != "docs/78_架空の設計.md":
+        ng.append("docs_num_target: 78 を引けない")
     return ng
 
 
@@ -251,9 +289,9 @@ def _check_other_checks() -> List[str]:
         if got and got[0][0] != SEV_ERROR:
             ng.append("check_front_matter: {}: error であるべき: {}".format(label, got))
 
-    existing = {"docs/09_other.md"}
+    existing = {"docs/79_other.md"}
     link_cases = [
-        ("実在するリンクは鳴らない", _fake("docs/a.md", ok_meta, ["[今](09_other.md)"]), 0),
+        ("実在するリンクは鳴らない", _fake("docs/a.md", ok_meta, ["[今](79_other.md)"]), 0),
         ("本文のリンク切れ", _fake("docs/a.md", ok_meta, ["[無](09_none.md)"]), 1),
         ("related のリンク切れ",
          _fake("docs/a.md", dict(ok_meta, related="[09_none.md]"), ["本文"]), 1),
@@ -297,12 +335,12 @@ def _check_other_checks() -> List[str]:
             ng.append("check_adr_ledger: {}: {}".format(label, got))
 
     index_cases = [
-        ("索引に載っている", ["[A](01_a.md)"], 0),
+        ("索引に載っている", ["[A](76_a.md)"], 0),
         ("索引に無い", ["（空）"], 1),
     ]
     for label, lines, want in index_cases:
         index = _fake(DOCS_INDEX, ok_meta, lines)
-        got = run(checks.check_docs_index, [index, _fake("docs/01_a.md", ok_meta, ["本文"])])
+        got = run(checks.check_docs_index, [index, _fake("docs/76_a.md", ok_meta, ["本文"])])
         if len(got) != want:
             ng.append("check_docs_index: {}: 期待 {} 件 / 実際 {}".format(label, want, got))
     # サブディレクトリは 1 本ずつではなく**ディレクトリ単位**で見る（規約 §7-1）
@@ -324,7 +362,7 @@ def _check_other_checks() -> List[str]:
 def selftest() -> int:
     ng: List[str] = []
     for part in (_check_updated_violation, _check_superseded_links, _check_other_checks,
-                 _check_real_data, _check_wiring):
+                 _check_section_ref_forms, _check_real_data, _check_wiring):
         ng.extend(part())
     for msg in ng:
         print("NG  " + msg)

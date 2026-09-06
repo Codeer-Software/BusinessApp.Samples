@@ -1,6 +1,6 @@
 -- 仕訳帳。**明細 1 行が 1 レコード**（docs/research/2026-08-24_仕訳の取引金額での検索.md）。
 --
--- 帳簿なので**計上済みだけ**を出す。下書きは帳簿ではない（docs/04 §5）。
+-- 帳簿なので**計上済みだけ**を出す。下書きは帳簿ではない（docs/10 §5）。
 -- 検索は優良な電子帳簿の要件（規則 5 ⑤一ハ・通達 8-13〜8-15）を満たす形にしてある。
 --   取引年月日と取引金額を**範囲**で指定でき、会計年度（課税期間）と**組み合わせ**られ、
 --   「記録事項がない」ことでも探せる（p_blank_field）。
@@ -14,7 +14,7 @@ SELECT
     e.id                        AS entry_id,
     e.entry_no                  AS entry_no,
     -- **会計年度を列に出す。** 伝票番号は年度ごとの連番（I-17）なので、年度で絞らなければ
-    -- 同じ「1」が何行も並ぶ。帳簿は既定で絞らない（docs/09 §3）ので、既定の表示は必ずそうなる。
+    -- 同じ「1」が何行も並ぶ。帳簿は既定で絞らない（docs/21 §3）ので、既定の表示は必ずそうなる。
     -- 元帳にも同じ理由で出してある。
     fy.label                    AS fiscal_year_label,
     e.transaction_date          AS transaction_date,
@@ -30,8 +30,8 @@ SELECT
     sa.name                     AS sub_account_name,
     d.name                      AS department_name,
     -- 取引先名は**明細の写しを優先**する。取引先の改名で過去の帳簿の記載が変わらないため
-    -- （docs/04 §4-2）。写しが無い行は現在のマスタ名で補う。
-    -- 明細の取引先は伝票の既定値を**上書きする**（docs/04 §4-1）ので、明細 → 伝票の順に見る。
+    -- （docs/10 §4-2）。写しが無い行は現在のマスタ名で補う。
+    -- 明細の取引先は伝票の既定値を**上書きする**（docs/10 §4-1）ので、明細 → 伝票の順に見る。
     COALESCE(l.partner_name_snapshot, lp.name, ep.name) AS partner_name,
     e.entered_at                AS entered_at,
     l.amount                    AS amount,
@@ -80,7 +80,7 @@ WHERE e.status = 'posted'
        OR l.item_description LIKE
           '%' || replace(replace(replace(@p_keyword, '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
   -- 通達 8-13「検索項目について記録事項がない電磁的記録を検索できる機能」。
-  -- **空文字も「無い」として扱う。** 本来は NULL の 1 通りに寄せる方針だが（docs/04 §4-4）、
+  -- **空文字も「無い」として扱う。** 本来は NULL の 1 通りに寄せる方針だが（docs/10 §4-4）、
   -- 画面から空文字が入る経路が塞ぎ切れていないうちは、両方を拾わないと取りこぼす。
   AND (@p_blank_field IS NULL OR @p_blank_field = ''
        OR (@p_blank_field = 'partner'
@@ -92,7 +92,7 @@ WHERE e.status = 'posted'
            AND (e.description IS NULL OR e.description = ''))
        OR (@p_blank_field = 'item_description'
            AND (l.item_description IS NULL OR l.item_description = '')))
--- **先頭は取引日である。** 仕訳帳は「取引の発生順に」記載する（法人税法施行規則 55 ①。docs/09 §3）。
+-- **先頭は取引日である。** 仕訳帳は「取引の発生順に」記載する（法人税法施行規則 55 ①。docs/21 §3）。
 --
 -- **年度を並び順に含める。** 伝票番号は年度内の連番なので（005_journals.sql の UNIQUE）、
 -- 年度を無視すると、3 月の仕訳を 4 月に取り消したときに

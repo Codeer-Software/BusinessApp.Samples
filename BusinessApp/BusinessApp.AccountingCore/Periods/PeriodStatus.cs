@@ -1,6 +1,6 @@
 namespace BusinessApp.AccountingCore.Periods;
 
-/// <summary>締めの状態（docs/04 §7）。会計年度と月次期間で同じ値を使う。</summary>
+/// <summary>締めの状態（docs/10 §7）。会計年度と月次期間で同じ値を使う。</summary>
 public enum PeriodStatus
 {
     /// <summary>未締め。仕訳を計上できる。</summary>

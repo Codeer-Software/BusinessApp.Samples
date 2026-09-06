@@ -116,7 +116,7 @@ public class AccountingSubmitPipelineTests
 
     /// <summary>
     /// <b>取引先の関門もつながっている。</b> つながっていなければ、検査用数字の合わない法人番号が
-    /// そのまま保存され、名寄せの自然キーになる（docs/07 §2-2）。
+    /// そのまま保存され、名寄せの自然キーになる（docs/13 §2-2）。
     /// </summary>
     [Fact]
     public async Task 検査用数字の合わない法人番号は保存に届かない()

@@ -6,7 +6,7 @@ audience: [開発]
 growth: append
 updated: 2026-09-06
 supersedes: []
-related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md]
+related: [CLAUDE.md, ../docs/README.md, ../docs/21_画面の原則.md, ../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md]
 ---
 # Project.md（CLB デザインプロジェクト固有ルール）
 
@@ -18,7 +18,7 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/d
 - デザイナ exe のパス（`DesignerExePath:` の行。`tools/clb/_designer.ps1` が読む）
 - 実機確認に使うサーバ URL とブラウザ
 - **参照用リポジトリ**（リポジトリ外に clone）——Codeer.LowCode.Blazor.Extras（拡張の実装見本）・BusinessApp_old（前回プロジェクト）
-- **開発用アカウント**（[ADR-0039](../docs/decisions/0039-開発用アカウントの資格情報はGit追跡外に置く.md)。使い方は [17 §3](../docs/17_検証のルール.md)）
+- **開発用アカウント**（[ADR-0039](../docs/decisions/0039-開発用アカウントの資格情報はGit追跡外に置く.md)。使い方は [31 §3](../docs/31_検証のルール.md)）
 
 ## 接続先 DB / データソース
 
@@ -38,7 +38,7 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/d
   画面表示名（`DisplayName`）は日本語
 - CLB のシステム予約名（`Id` / `LogicalDelete` / `OptimisticLocking` / `CreatedAt` / `UpdatedAt` /
   `Creator` / `Updater`）はその綴りのまま使う
-- 主要テーブル名の正典は `../docs/04_会計ドメイン設計.md`
+- 主要テーブル名の正典は `../docs/10_会計ドメイン設計.md`
 
 > テンプレート由来の `AppUser` モジュールだけはフィールド名が日本語（`ユーザー識別名` 等）である。
 > 認証部品の資産なので**改名しない**。新規モジュールは上記の規約に従う。
@@ -60,10 +60,10 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/d
 
 ## レイアウト規約（画面の見た目）
 
-**何をどう見せるかと、その理由は [`../docs/09_画面の原則.md`](../docs/09_画面の原則.md) が持つ。**
+**何をどう見せるかと、その理由は [`../docs/21_画面の原則.md`](../docs/21_画面の原則.md) が持つ。**
 ここには **CLB での書き方**だけを置く（同じ規則を 2 か所に書かない）。
 
-| 原則（09 が持つ） | CLB での書き方 |
+| 原則（21 が持つ） | CLB での書き方 |
 |---|---|
 | 金額列は右詰め・3 桁カンマ | `Format: "#,0"`。**`text-align` では効かない**・**列見出し（`<th>`）に class が付かない**（[qa/01 D-15・D-16](../docs/qa/01_CLB静かな失敗.md)）。フォーム入力欄と列見出しは左のまま |
 | 識別子は左詰め | 何も付けない（既定） |
@@ -71,10 +71,10 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/d
 | 検索条件は既定で開く | `SearchLayouts[""].Layout.IsExpanderDefaultOpened: true`（CLB の一般則 `LayoutGuidelines.md` とは逆の選択）。**検索欄を持つレイアウトだけ**——空の検索レイアウトを開くと空箱が出る（2026-08-30 に 9 モジュールへ適用） |
 | 帳簿を並べ替えさせない | 列の `CanUserSort: false`。**PageFrame 側でも切る**（両方書く） |
 | 必須の欄に赤い `*` | 詳細レイアウトの**ラベル側**の要素に `"ClassName": "required-label"`（`app.css` の `::after` が印を出す）＋ フォームの先頭行に `RequiredLegendLabel`。**ラベルが `RelativeField` でその欄を指しているときは、CLB が自分で `*` を足すのでクラスを付けない**（付けると `*` が 2 つ並ぶ。qa/01 F-32。認証部品の `AppUser` がこの形）。**一覧・明細表の見出しには付けられない**——`ListElement.ClassName` は `<td>` にしか付かない（qa/01 D-16）ので、**見出しの文字列そのものに `*` を入れる**（「勘定科目 *」。したがって明細の印だけ黒い） |
-| ボタンの色は 3 値だけ | `Variant` に [09 §4](../docs/09_画面の原則.md) の 3 値以外を書かない |
+| ボタンの色は 3 値だけ | `Variant` に [21 §4](../docs/21_画面の原則.md) の 3 値以外を書かない |
 | 押せないボタンを灰色にしない | **まだ無い。** 押せなくする手段は `IsViewOnly` か `IsVisible: false` で、`ButtonField` に `disabled` は無い（[qa/01 D-01・F-14](../docs/qa/01_CLB静かな失敗.md)）。半透明にするなら `app.css` に `opacity: .45`（**Bootstrap 既定の `.65` より薄く**）。**`cursor` は効かない**——`IsViewOnly` は `pointer-events: none` になる |
 
-**CLB 固有の寸法・組み方**（09 には無い。ここだけが持つ）
+**CLB 固有の寸法・組み方**（21 には無い。ここだけが持つ）
 
 - **検索レイアウトの行は `IsWrap: true` を標準**にする。1 行は 3 組（ラベル＋入力）まで
 - **「ラベル列 + 入力列」の 2 カラム行では、ラベル列に `VerticalAlignment: "Middle"` を必ず設定**
@@ -85,7 +85,7 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/d
 
 ## 業務ルール（会計の不変条件）
 
-正典は `../docs/04_会計ドメイン設計.md`。ここには CLB 実装に直接効くものだけを再掲する。
+正典は `../docs/10_会計ドメイン設計.md`。ここには CLB 実装に直接効くものだけを再掲する。
 
 - **計上済み（posted）の仕訳は変更・削除しない。** 訂正・取消は反対仕訳で行う
   （`../docs/decisions/0004-優良な電子帳簿への準拠と仕訳の不変性.md`）
@@ -119,7 +119,7 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
 - 2026-08-24: `sql` CLI は **`--out` を省くと結果 JSON が標準出力に来る**。PowerShell から呼ぶときは
   `ProcessStartInfo.ArgumentList` に 1 引数ずつ足して `RedirectStandardOutput` で受ける。
   `Start-Process -ArgumentList` だと `--query` 内の `'...'` が壊れて `incomplete input` になる。
-  この形なら SQL ファイルも結果ファイルも作らずに済む（[16 §8](../docs/16_作業のルール.md)）。
+  この形なら SQL ファイルも結果ファイルも作らずに済む（[30 §8](../docs/30_作業のルール.md)）。
 - 2026-08-24: デザイナ exe は WinExe なので、PowerShell の `&` で呼ぶと**待たずに戻る**。
   終了コードを見るには `Start-Process -Wait -PassThru` か `Process.WaitForExit()` を使う。
 - 2026-08-24: **デザイン enum は複数形で名づける**（`TaxationTypes` / `RateKinds`）。enum 名は
@@ -133,7 +133,7 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
   **`Docs/CommonMistakes.md` #42-A の表だけが `TextFieldDesign` と書いており誤り**——
   同じファイルの #41 と `AppPatterns/system_fields.md` は `LinkFieldDesign` である（qa/01 F-09）。
   **実機では未確認**（qa/04 の J-16）。
-- 2026-08-24: マスタは**物理削除させない**（`CanDelete: false`。「削除ではなく無効化」——[docs/08_マスタ台帳](../docs/08_マスタ台帳.md)）。
+- 2026-08-24: マスタは**物理削除させない**（`CanDelete: false`。「削除ではなく無効化」——[docs/12_マスタ台帳](../docs/12_マスタ台帳.md)）。
   一覧の削除ボタンは PageFrame の `Link.ListPageDesign.ListFieldDesign.CanDelete` でも切る。
 - 2026-08-24: 一覧の既定の並び順は PageFrame の `Link...SearchCondition.SortConditions` で指定する。
   指定しないと**降順で出る**（マスタでは使いものにならない）。
@@ -147,7 +147,7 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
   親詳細の `LimitCount` は全件（`0` にすると明細が消える）。
 - 2026-08-24: **LinkField の候補ダイアログは、一覧画面とは別に絞り込みと並び順を持つ。**
   フィールド側の `SearchCondition` に `SortConditions` と `Condition` を設定する。
-  マスタを指す LinkField は `IsActive.Value = true` で絞る（`is_active` は「入力候補に出すか」の意味。[docs/08_マスタ台帳](../docs/08_マスタ台帳.md)）。
+  マスタを指す LinkField は `IsActive.Value = true` で絞る（`is_active` は「入力候補に出すか」の意味。[docs/12_マスタ台帳](../docs/12_マスタ台帳.md)）。
   設定しないと**無効にした科目が候補に出てしまい、降順で並ぶ**。
   `designcheck` は findings 0。DB に `temporary_files` は未作成（「接続先 DB / データソース」も参照）。
 
@@ -161,7 +161,7 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
   > | **取引先の「名寄せの親」** | 名寄せは「同一人格の表明」であって入力候補ではなく、無効にした取引先を親にする場面が正常に起こる（[ADR-0028](../docs/decisions/0028-名寄せの親は同一人格の表明であり深さ1に固定する.md)） |
   >
   > **登録番号の取引先を選ぶ欄は 2026-08-31 に消えた**——入力を取引先の詳細へ移し、
-  > 親 FK を `IdFieldDesign` にしたので、絞る対象そのものが無くなった（[docs/07 §3-4](../docs/07_取引先設計.md)）。
+  > 親 FK を `IdFieldDesign` にしたので、絞る対象そのものが無くなった（[docs/13 §3-4](../docs/13_取引先設計.md)）。
   > **「例外は名寄せの親だけ」と書いていた**（2026-08-30）が、帳簿の 8 本が抜けていた
   > （自己レビューで発見。qa/02 R25-25）——**破れている本則に但し書きを被せると、
   > 次の人が「他は守られている」と読む。**
@@ -191,4 +191,4 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
 - 2026-08-30: **`LinkField` の候補は、選んだ勘定科目で補助科目を絞れていない**（未解決）。
   明細行の中で**兄弟のフィールド**（同じ行の `Account`）を参照する条件になるので、
   `FieldVariableMatchCondition` の `Variable` に何を書けば行の中を指せるかが分かっていない。
-  **判断は [05 のフェーズ 2.5 の B](../docs/05_実装計画と現在地.md) が持つ。**
+  **判断は [04 のフェーズ 2.5 の B](../docs/04_実装計画と現在地.md) が持つ。**

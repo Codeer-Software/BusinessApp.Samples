@@ -3,13 +3,13 @@ namespace BusinessApp.AccountingCore.Shared;
 using System.Globalization;
 
 /// <summary>
-/// 整数円の金額（docs/04 §3）。
+/// 整数円の金額（docs/10 §3）。
 /// </summary>
 /// <remarks>
 /// <para>浮動小数点を使わず <see cref="decimal"/> で保持し、円未満を持てないことを型で保証する。</para>
 /// <para>残高や差額は負になりうるため符号は許す。仕訳明細の金額が正であることは検証側で担保する。</para>
 /// <para>比率の乗算は <see cref="Multiply"/> で端数処理を明示しないと書けない。
-/// 「どこかで暗黙に丸められていた」という事故を型で防ぐためである（docs/06 §4）。</para>
+/// 「どこかで暗黙に丸められていた」という事故を型で防ぐためである（docs/11 §4）。</para>
 /// </remarks>
 public readonly record struct Yen
 {

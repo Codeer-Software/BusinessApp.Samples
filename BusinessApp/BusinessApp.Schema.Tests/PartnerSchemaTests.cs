@@ -5,7 +5,7 @@ using BusinessApp.TestSupport;
 using Microsoft.Data.Sqlite;
 
 /// <summary>
-/// 取引先の素性の列と、適格請求書発行事業者の登録テーブル（docs/07）。
+/// 取引先の素性の列と、適格請求書発行事業者の登録テーブル（docs/13）。
 /// CHECK が実際に書き込みを拒むことを検査する（宣言してあるだけでは守りにならない）。
 /// </summary>
 public class PartnerSchemaTests
@@ -41,7 +41,7 @@ public class PartnerSchemaTests
             "INSERT INTO partners (code, name, entity_type) VALUES ('P100', 'X', 'company');"));
     }
 
-    /// <summary>種別は NULL 可（未分類）。既存の行を偽の値で埋めない（docs/07 §1-2）。</summary>
+    /// <summary>種別は NULL 可（未分類）。既存の行を偽の値で埋めない（docs/13 §1-2）。</summary>
     [Fact]
     public void 取引先の種別は未分類のままでもよい()
     {
@@ -57,7 +57,7 @@ public class PartnerSchemaTests
     [InlineData("123456789012")]     // 12 桁
     [InlineData("12345678901234")]   // 14 桁
     [InlineData("123456789012a")]    // 数字でない
-    [InlineData("")]                 // **空文字も拒む。** 「無い」は NULL で表す（docs/04 §4-4）
+    [InlineData("")]                 // **空文字も拒む。** 「無い」は NULL で表す（docs/10 §4-4）
     public void 法人番号は13桁の数字でなければ書けない(string invalid)
     {
         using var db = Seeded();
@@ -78,7 +78,7 @@ public class PartnerSchemaTests
             """));
     }
 
-    /// <summary>人格のない社団等は法人番号を持ちうる（docs/07 §1-2）。法人以外を一律に拒まない。</summary>
+    /// <summary>人格のない社団等は法人番号を持ちうる（docs/13 §1-2）。法人以外を一律に拒まない。</summary>
     [Fact]
     public void 人格のない社団等には法人番号を書ける()
     {
@@ -186,7 +186,7 @@ public class PartnerSchemaTests
             """);
     }
 
-    // --- 期間の重なり（docs/07 §3-5 R-I4・R-I5。トリガ。2026-09-02）---
+    // --- 期間の重なり（docs/13 §3-5 R-I4・R-I5。トリガ。2026-09-02）---
     // 本線の関門は PartnerRegistrationSubmitGate。ここは API を迂回した経路への最後の守りが
     // 実際に書き込みを拒むことを検査する。
 
@@ -214,7 +214,7 @@ public class PartnerSchemaTests
             """));
     }
 
-    /// <summary>隣接（前の行の終わりの日＝次の行の登録年月日）は書ける（docs/07 §3-5。正常形かは未確認）。</summary>
+    /// <summary>隣接（前の行の終わりの日＝次の行の登録年月日）は書ける（docs/13 §3-5。正常形かは未確認）。</summary>
     [Fact]
     public void 前の登録が終わった日に始まる再登録は書ける()
     {

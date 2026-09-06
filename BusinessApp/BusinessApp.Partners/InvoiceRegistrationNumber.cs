@@ -1,7 +1,7 @@
 namespace BusinessApp.Partners;
 
 /// <summary>
-/// 適格請求書発行事業者の登録番号の書式（docs/07 §3-2）。
+/// 適格請求書発行事業者の登録番号の書式（docs/13 §3-2）。
 /// </summary>
 /// <remarks>
 /// <para><b>「T ＋ 数字 13 桁」の計 14 桁</b>（国税庁のリソース定義書で確認済み。

@@ -113,7 +113,7 @@ public class SeedDataTests
 
     /// <summary>
     /// 税区分の名前に税率の数値を書かない。その日に何 % かは制度ルールが決めるので、
-    /// 名前に埋めると改正の日にマスタ名が嘘になる（docs/15_実装の原則.md §2）。
+    /// 名前に埋めると改正の日にマスタ名が嘘になる（docs/20_実装の原則.md §2）。
     /// </summary>
     [Fact]
     public void 税区分の名前に税率の数値を書いていない()
@@ -130,7 +130,7 @@ public class SeedDataTests
 
     /// <summary>
     /// 非課税にも売上／仕入の軸が通っていること。課税だけ分けて非課税を 1 つに潰すと、
-    /// 課税売上割合の分母（課税＋免税＋非課税の売上高）を税区分だけでは作れない（docs/06 §7）。
+    /// 課税売上割合の分母（課税＋免税＋非課税の売上高）を税区分だけでは作れない（docs/11 §7）。
     /// </summary>
     [Fact]
     public void 非課税にも売上と仕入の区別がある()
@@ -217,7 +217,7 @@ public class SeedDataTests
 
     /// <summary>
     /// 個別対応方式では用途区分を取引ごとに選ぶ。既定値で埋めると
-    /// 「値は入っているが意味がない」状態を作る（docs/04 §9-1）。
+    /// 「値は入っているが意味がない」状態を作る（docs/10 §9-1）。
     /// </summary>
     [Fact]
     public void 用途区分の既定値は入れていない()
@@ -241,7 +241,7 @@ public class SeedDataTests
         }
     }
 
-    /// <summary>コードの先頭桁と科目区分が体系どおりに対応している（docs/04 §6）。</summary>
+    /// <summary>コードの先頭桁と科目区分が体系どおりに対応している（docs/10 §6）。</summary>
     [Theory]
     [InlineData("1", "asset")]
     [InlineData("2", "liability")]
@@ -272,7 +272,7 @@ public class SeedDataTests
         Assert.Equal(0L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounts WHERE LENGTH(code) <> 4"));
     }
 
-    /// <summary>税抜経理なので、消費税行の計上先が要る（docs/06 §2）。</summary>
+    /// <summary>税抜経理なので、消費税行の計上先が要る（docs/11 §2）。</summary>
     [Fact]
     public void 仮払消費税等と仮受消費税等の科目がある()
     {
@@ -296,7 +296,7 @@ public class SeedDataTests
 
     /// <summary>
     /// 判断が分かれる科目には既定税区分を入れない。既定値があると間違ったまま通ってしまう
-    /// （docs/04 §6「値が入っていない行の穴埋めに使わない」）。
+    /// （docs/10 §6「値が入っていない行の穴埋めに使わない」）。
     /// </summary>
     [Theory]
     [InlineData("4290")]  // 雑収入

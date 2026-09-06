@@ -2,7 +2,7 @@ namespace BusinessApp.AccountingCore.Tests.Journals;
 
 using BusinessApp.AccountingCore.Journals;
 
-/// <summary>仕訳の種別（docs/04 §4-1・§5）。</summary>
+/// <summary>仕訳の種別（docs/10 §4-1・§5）。</summary>
 public class EntryTypeTests
 {
     [Theory]
@@ -40,7 +40,7 @@ public class EntryTypeTests
     [InlineData(EntryType.Carryover, "繰越")]
     public void 利用者に見せる名前を持つ(EntryType type, string expected)
     {
-        // 列挙子をそのまま文言に混ぜると、画面に `Reversal` と出る（docs/09_画面の原則.md §2）。
+        // 列挙子をそのまま文言に混ぜると、画面に `Reversal` と出る（docs/21_画面の原則.md §2）。
         // CLB のデザイン enum と一致することは EnumConsistencyTests が別に見る。
         Assert.Equal(expected, type.DisplayName());
     }

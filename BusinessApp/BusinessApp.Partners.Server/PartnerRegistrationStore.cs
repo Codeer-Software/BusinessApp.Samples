@@ -101,7 +101,7 @@ public sealed class PartnerRegistrationStore(IDbAccessor dbAccessor, string data
     /// <para><see cref="LoadRegistrationsAsync"/> と分けてあるのは用途が違うからである——
     /// あちらは計上時の写し（識別子は要らない）、こちらは保存の関門が
     /// 「保存後にできあがる履歴」を組み立てるために、<b>差分の行と保存済みの行を
-    /// 識別子で突き合わせる</b>（docs/07 §3-5 R-I4）。</para>
+    /// 識別子で突き合わせる</b>（docs/13 §3-5 R-I4）。</para>
     /// </remarks>
     public async Task<IReadOnlyList<RegistrationRow>> LoadRegistrationRowsAsync(PartnerId id)
     {

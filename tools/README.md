@@ -28,8 +28,8 @@ related: [../docs/README.md]
 | [`clb/lint_design.py`](clb/lint_design.py) | **CLB デザインの静的検査**。`designcheck` が緑でも壊れるもの（[qa/01](../docs/qa/01_CLB静かな失敗.md)）のうち JSON とスクリプトで判るものを検出する。`--selftest` で**検査そのものを検査する**（関門を殺す・error を warn に格下げする・`main()` の配線を消す・検体を空にする・**言うべき直し方を薄める**、の 5 通りで鳴ることを確かめてある） |
 | [`clb/scaffold_module.py`](clb/scaffold_module.py) | モジュール定義の足場作り。生成後は `Design/Modules/*.mod.json` が正典 |
 | [`git-hooks/pre-commit`](git-hooks/pre-commit) | コミット前の検証。`git config core.hooksPath tools/git-hooks` で有効にする |
-| [`docs/lint_docs.py`](docs/lint_docs.py) | **ドキュメント規約の検査**（[docs/00 §6](../docs/00_ドキュメント規約/README.md)）。フロントマター・リンク切れ・索引の突合・**current でない文書へのコード参照**・**`current` の本文から `superseded` へのリンク**・**`updated:` の鮮度**（作業ツリーと履歴の両方）。`--selftest` で検査そのものを検査する |
-| [`docs/doclint/`](docs/doclint/__init__.py) | 上の中身。`model.py`（設定値・`Doc`・git・読み込み）／`checks.py`（検査 9 本）／`selftest.py`（関門の検査）。**入口は `lint_docs.py` のまま** |
+| [`docs/lint_docs.py`](docs/lint_docs.py) | **ドキュメント規約の検査**（[docs/00 §6](../docs/00_ドキュメント規約/README.md)）。フロントマター・リンク切れ・索引の突合・**current でない文書へのコード参照**・**`current` の本文から `superseded` へのリンク**・**節への参照の指し先に節が実在するか**・**`updated:` の鮮度**（作業ツリーと履歴の両方）。`--selftest` で検査そのものを検査する |
+| [`docs/doclint/`](docs/doclint/__init__.py) | 上の中身。`model.py`（設定値・`Doc`・git・読み込み）／`checks.py`（検査 10 本）／`selftest.py`（関門の検査）。**入口は `lint_docs.py` のまま** |
 | [`docs/lint_secrets.py`](docs/lint_secrets.py) | **公開リポジトリ向けの混入検査**。追跡ファイルに絶対パス・ユーザー名・接続文字列・API キー・秘密鍵が無いかを検査する |
 | [`docs/lint_secrets_allow.txt`](docs/lint_secrets_allow.txt) | 上記の誤検知抑制リスト |
 
@@ -43,7 +43,7 @@ related: [../docs/README.md]
 uv run --with pypdf python <スクリプト.py> <対象.pdf> <出力.txt> <開始ページ> <終了ページ>
 ```
 
-抽出スクリプト自体は使い捨てなのでスクラッチパッドに置く（[16 §8](../docs/16_作業のルール.md)）。
+抽出スクリプト自体は使い捨てなのでスクラッチパッドに置く（[30 §8](../docs/30_作業のルール.md)）。
 Python の依存が恒常的に増えてきたら、そのとき `pyproject.toml` ＋ uv 管理の venv へ移行を検討する。
 
 ## よく使うコマンド

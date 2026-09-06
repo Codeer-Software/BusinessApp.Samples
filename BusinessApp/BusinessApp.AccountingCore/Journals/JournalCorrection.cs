@@ -3,7 +3,7 @@ namespace BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 計上済みの仕訳を訂正する（docs/04 §5・[ADR-0015]）。
+/// 計上済みの仕訳を訂正する（docs/10 §5・[ADR-0015]）。
 /// </summary>
 /// <remarks>
 /// <para>訂正は<b>取消 1 本 ＋ 正しい内容の再計上 1 本</b>で表す。計上済みは書き換えないので、
@@ -29,7 +29,7 @@ public static class JournalCorrection
     /// </remarks>
     /// <param name="original">訂正する原仕訳。計上済みでなければならない。</param>
     /// <param name="postingDate">取消と再計上の計上日。訂正すると決めた日。</param>
-    /// <param name="enteredAt">入力年月日。システムが決める（docs/04 §2）。</param>
+    /// <param name="enteredAt">入力年月日。システムが決める（docs/10 §2）。</param>
     /// <param name="context">取消の可否を決めるために伝票の外から持ってくる情報。</param>
     public static CorrectionStartResult Start(
         JournalEntry original,

@@ -12,7 +12,7 @@ using Codeer.LowCode.Blazor.DataIO;
 /// </summary>
 /// <remarks>
 /// <b>取消の明細は利用者が決めない。</b> 「原仕訳の貸借を入れ替えたもの」と決まっている
-/// （docs/04 §5）ので、画面から何が来ても関門が原仕訳から作り直して上書きする。
+/// （docs/10 §5）ので、画面から何が来ても関門が原仕訳から作り直して上書きする。
 /// </remarks>
 public class JournalReversalPostingTests
 {
@@ -31,7 +31,7 @@ public class JournalReversalPostingTests
         var posted = await server.EntryStore.LoadAsync(reversal);
         Assert.Equal(EntryStatus.Posted, posted.Status);
 
-        // 取引日は原仕訳のまま。計上日だけが後ろにずれる（docs/04 §5）。
+        // 取引日は原仕訳のまま。計上日だけが後ろにずれる（docs/10 §5）。
         Assert.Equal(new DateOnly(2026, 5, 20), posted.TransactionDate);
         Assert.Equal(new DateOnly(2026, 8, 25), posted.PostingDate);
         Assert.Equal(2, posted.EntryNo);

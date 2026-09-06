@@ -1,4 +1,4 @@
--- 006 適格請求書発行事業者の登録（docs/07 §3）
+-- 006 適格請求書発行事業者の登録（docs/13 §3）
 --
 -- 登録は取消・失効・再登録があり、partners の 1 列では「その時点でどうだったか」を表せない。
 -- 有効期間つきの行で持ち、引く日付は journal_lines.tax_point（課税仕入れを行った日）。
@@ -53,17 +53,17 @@ CREATE TABLE partner_invoice_registrations (
 -- **同じ取引先に、同じ日から始まる登録は 1 件だけ**（2026-08-31。qa/02 R26-20）。
 -- 上の UNIQUE は登録番号まで含むので、**番号が違えば同じ日の 2 件が入ってしまう**。
 -- 入ると、計上のときに写しを焼く段で「どれを写すか決められない」で止まり、
--- **入力の誤りが、関係の無い計上の場面で出る**（docs/07 §4-2）。
+-- **入力の誤りが、関係の無い計上の場面で出る**（docs/13 §4-2）。
 --
 -- **`date()` で包む。** CLB は日付の列に "2023-10-01 00:00:00" と時刻付きで書くので、
 -- 生の列で一意にすると同じ日の 2 通りの書き方が別物として通る（qa/03 L-12 と同じ理由）。
 CREATE UNIQUE INDEX ux_partner_invoice_registrations_valid_from
     ON partner_invoice_registrations (partner_id, date(valid_from));
 
--- **期間は重ならない。隣接（前の行の終わりの日＝次の行の登録年月日）は許す**（docs/07 §3-5 R-I4・R-I5。
+-- **期間は重ならない。隣接（前の行の終わりの日＝次の行の登録年月日）は許す**（docs/13 §3-5 R-I4・R-I5。
 -- 2026-09-02）。隣接を許すのは、計上時の引き当て（InvoiceRegistrationHistory.InEffectOn）が
 -- 「終わりの日を含み、同日は新しいほうを採る」と決めており、どちらの制度解釈でも
--- 決定的に引ける形だから（隣接が再登録の正常形かは未確認。docs/07 §3-5）。
+-- 決定的に引ける形だから（隣接が再登録の正常形かは未確認。docs/13 §3-5）。
 -- 本線の関門は PartnerRegistrationSubmitGate（利用者に言葉で断る）。ここは API を迂回した経路への最後の守り。
 -- date() で包むのは、CLB が日付列へ時刻付きで書くため（qa/03 L-12）。
 CREATE TRIGGER trg_partner_invoice_registrations_no_overlap_insert

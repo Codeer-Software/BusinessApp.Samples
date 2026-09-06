@@ -66,7 +66,7 @@ public class SchemaShapeTests
         Assert.Equal([expected], declared);
     }
 
-    /// <summary>金額は整数円。REAL を使うと丸め誤差が帳簿に入る（docs/04 §3）。</summary>
+    /// <summary>金額は整数円。REAL を使うと丸め誤差が帳簿に入る（docs/10 §3）。</summary>
     [Fact]
     public void 金額列はINTEGERである()
     {
@@ -78,7 +78,7 @@ public class SchemaShapeTests
     }
 
     /// <summary>
-    /// 論理削除の列を置かない（docs/08 マスタ台帳・Designer/ddl/README）。
+    /// 論理削除の列を置かない（docs/12 マスタ台帳・Designer/ddl/README）。
     /// 仕訳は消せず、マスタは無効化する。列があること自体が誤った経路になる。
     /// </summary>
     [Fact]

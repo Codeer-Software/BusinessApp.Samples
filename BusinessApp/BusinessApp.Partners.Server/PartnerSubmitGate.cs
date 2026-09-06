@@ -6,15 +6,15 @@ using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
 
 /// <summary>
-/// 取引先を保存するときの関門（docs/07 §1-2）。
+/// 取引先を保存するときの関門（docs/13 §1-2）。
 /// </summary>
 /// <remarks>
 /// <para><b>DDL の CHECK が拒むものを、利用者の言葉で先に止める。</b>
 /// 個人事業者に法人番号を入れた行と、自分自身を名寄せの親にした行は DB が拒むが、
-/// そこまで進むと利用者に見えるのは DB の失敗である（docs/09_画面の原則.md §2 の「内部表現を出さない」）。
+/// そこまで進むと利用者に見えるのは DB の失敗である（docs/21_画面の原則.md §2 の「内部表現を出さない」）。
 /// <b>DB の関門を外すのではない。</b> 最後に守るのは DB のままで、ここは手前に置く網である。</para>
 /// <para><b>検査用数字（チェックデジット）を見るのはここだけである。</b>
-/// DB は桁と字種しか見ない（docs/07 §1-2 の決定）。打ち間違えた番号を通すと、
+/// DB は桁と字種しか見ない（docs/13 §1-2 の決定）。打ち間違えた番号を通すと、
 /// それが名寄せの自然キーになる（同 §2-2）——別の法人に化けて束なるか、
 /// 束なるべきものが束ならないかのどちらかで、どちらも画面には何も出ない。</para>
 /// <para><b>画面のスクリプトでは検査しない</b>（ADR-0008）。取込（フェーズ 6）も同じ入口を通る。</para>
@@ -121,7 +121,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// <b>子を持つ取引先の種別を変えて、食い違わせていないか</b>（ADR-0028 §1 の親の側）。
     /// </summary>
     /// <remarks>
-    /// 種別を触っていない保存は見ない——触っていない行に分類を強制しない（docs/07 §1-2）。
+    /// 種別を触っていない保存は見ない——触っていない行に分類を強制しない（docs/13 §1-2）。
     /// </remarks>
     private async Task RejectMismatchedChildrenAsync(ModuleData data)
     {
@@ -216,7 +216,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         }
     }
 
-    /// <summary>法人番号の書式と検査用数字。<b>空欄は通す</b>（任意。docs/07 §2-3）。</summary>
+    /// <summary>法人番号の書式と検査用数字。<b>空欄は通す</b>（任意。docs/13 §2-3）。</summary>
     private static void RejectMalformedCorporateNumber(ModuleData data)
     {
         // CLB は変更されたフィールドしか送ってこない（qa/01 F-11）。
@@ -249,7 +249,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         }
     }
 
-    /// <summary>個人事業者に法人番号は指定されない（制度事実。docs/07 §1-2）。</summary>
+    /// <summary>個人事業者に法人番号は指定されない（制度事実。docs/13 §1-2）。</summary>
     /// <remarks>
     /// <b>差分に無いほうは、保存されている値で補う。</b> 片方だけ直した保存で検査をやめると、
     /// 「先に個人事業者にしておいて、あとから法人番号を足す」で素通りする。

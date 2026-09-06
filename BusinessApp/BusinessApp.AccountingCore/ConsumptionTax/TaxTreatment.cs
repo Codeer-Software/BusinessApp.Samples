@@ -1,7 +1,7 @@
 namespace BusinessApp.AccountingCore.ConsumptionTax;
 
 /// <summary>
-/// 用途区分（docs/06 §1）。個別対応方式で使う。
+/// 用途区分（docs/11 §1）。個別対応方式で使う。
 /// <b>勘定科目ではなく仕訳明細が持つ</b>——同じ科目でも取引ごとに変わるためである。
 /// </summary>
 /// <remarks>

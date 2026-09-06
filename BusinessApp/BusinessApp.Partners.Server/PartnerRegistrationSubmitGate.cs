@@ -6,7 +6,7 @@ using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
 
 /// <summary>
-/// 適格請求書発行事業者の登録を保存するときの関門（docs/07 §3-2）。
+/// 適格請求書発行事業者の登録を保存するときの関門（docs/13 §3-2）。
 /// </summary>
 /// <remarks>
 /// <para><b>DB は登録番号の書式を検査しない</b>と決めてある（同 §3-2）ので、ここが唯一の関門である。
@@ -15,7 +15,7 @@ using Codeer.LowCode.Blazor.Repository.Data;
 /// あとから直せない。</para>
 /// <para><b>画面のスクリプトでは検査しない</b>（ADR-0008）。取込（フェーズ 6）も同じ入口を通るので、
 /// ここに置けば経路が増えても検査が外れない。</para>
-/// <para>止めるのは docs/07 §3-5 の不変条件である——書式（R-I7）・取引先の付け替え（R-I6）・
+/// <para>止めるのは docs/13 §3-5 の不変条件である——書式（R-I7）・取引先の付け替え（R-I6）・
 /// 同じ日から始まる 2 件（R-I3）・期間の重なりと「終わりのない行のあとの行」（R-I4・R-I5）・
 /// 終わりと理由の対（R-I1）・登録より前に終わる行（R-I2）・行の削除（R-I8）・
 /// 実在しない取引先への新規（R-I9）。
@@ -74,7 +74,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
     /// <para><b>仮の識別子でも突き合わせられる。</b> 取引先の識別子を数値に直さず、
     /// 送られてきた文字列のまま鍵に使う——新規作成の取引先は仮の識別子だが、
     /// 同じ保存の中では同じ文字列になるので、それで同一性が判る。
-    /// <b>これは登録の入力を取引先の詳細に置くための下ごしらえ</b>である（docs/07 §3-4。
+    /// <b>これは登録の入力を取引先の詳細に置くための下ごしらえ</b>である（docs/13 §3-4。
     /// 移設そのものはフェーズ 2.5 の C）。独立した一覧しか無いいまでも、
     /// <b>同じ取引先に 2 件を同時に足す経路は取込（フェーズ 6）で開く</b>ので、無駄にはならない。</para>
     /// </remarks>
@@ -187,7 +187,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
                 .Concat(d.Update.Select(x => (Data: x, IsAdd: false))))
             .Where(t => t.Data.Name == ModuleName);
 
-    /// <summary>登録の行の削除を止める（docs/07 §3-5 R-I8）。</summary>
+    /// <summary>登録の行の削除を止める（docs/13 §3-5 R-I8）。</summary>
     /// <remarks>
     /// <para>取消・失効は「終わり」を記録して残すものであって、行ごと消すものではない。
     /// 画面は <c>CanDelete: false</c> で消す手を出さないが、**画面の形は守りではない**
@@ -197,7 +197,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
     /// <para>誤って確定した余分な行に消す手を作るかは保留のまま（qa/02 R29-12）。
     /// また、公表システムの差分には<b>処理区分 99（登録簿からの削除）</b>が来る
     /// （2026-08-25 リサーチ §3-3）。取込がそれをどう表すかはフェーズ 6 の論点で、
-    /// この全拒否はそのとき見直す（docs/07 §3-5）。解くときは 07 §3-5 と一緒に動かす。</para>
+    /// この全拒否はそのとき見直す（docs/13 §3-5）。解くときは 13 §3-5 と一緒に動かす。</para>
     /// </remarks>
     private static void RejectDeletions(IReadOnlyList<ModuleSubmitData> transactionData)
     {
@@ -235,7 +235,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
     /// <b>既にある登録の取引先を、別の相手へ付け替える保存を止める。</b>
     /// </summary>
     /// <remarks>
-    /// <para>付け替えると <b>A 社の履歴に穴が空き、B 社に他人の登録番号が生える</b>（docs/07 §3-4）。
+    /// <para>付け替えると <b>A 社の履歴に穴が空き、B 社に他人の登録番号が生える</b>（docs/13 §3-4）。
     /// しかも<b>計上済みの明細に焼き込んだ写しと食い違い</b>、計上済みは直せない（ADR-0004）。
     /// 二重登録の関門は「同じ取引先に同じ日から始まる 2 件」しか見ないので、付け替えは素通りする。</para>
     /// <para><b>2026-08-31 まで、これを止めていたのは画面側の <c>IsUpdateProtected: true</c> だった。</b>
@@ -300,7 +300,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
 
     /// <summary>
     /// <b>保存後にできあがる履歴</b>を取引先ごとに組み立てて、期間の不変条件
-    /// （docs/07 §3-5 の R-I1・R-I2・R-I4・R-I5）を見る。
+    /// （docs/13 §3-5 の R-I1・R-I2・R-I4・R-I5）を見る。
     /// </summary>
     /// <remarks>
     /// <para><b>差分ではなく「結果」を検査する。</b> CLB は変更されたフィールドしか送ってこない
@@ -460,7 +460,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
     /// <para><b>隣接（前の行の終わりの日＝次の行の登録年月日）は通す。</b>
     /// 計上時の引き当て（<see cref="InvoiceRegistrationHistory.InEffectOn"/>）が
     /// 「終わりの日を含み、同日は新しいほうを採る」と決めており、どちらの制度解釈でも
-    /// 決定的に引ける形だからである（隣接が再登録の正常形かは未確認——docs/07 §3-5）。</para>
+    /// 決定的に引ける形だからである（隣接が再登録の正常形かは未確認——docs/13 §3-5）。</para>
     /// <para><b>登録年月日で並べて、全ペアを比べる。</b> 隣どうしだけでは足りない——
     /// トリガ導入（2026-09-02）前の違反データが間に挟まると、「隣が良ければ離れた 2 行も良い」
     /// という帰納が破れる（レビュー指摘）。行数は 1 取引先あたり多くて数件なので全ペアでよい。

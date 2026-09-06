@@ -326,11 +326,11 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
                 "リテラルの中の CR",
                 "利用者に見せる文言の改行は LF に統一する（ADR-0021 §2）");
 
-            // 文言に埋める日付の書式（docs/09 §2-5）。
+            // 文言に埋める日付の書式（docs/21 §2-5）。
             ReportNodes(
                 ForeignDateFormats(root),
                 "yyyy/MM/dd 以外の日付書式",
-                "利用者に見せる日付は yyyy/MM/dd に揃える（docs/09 §2-5）。"
+                "利用者に見せる日付は yyyy/MM/dd に揃える（docs/21 §2-5）。"
                 + "SQL に渡す ISO の日付は ToString(\"yyyy-MM-dd\", CultureInfo.InvariantCulture) と"
                 + "明示して書く（文字列補間に混ぜない）");
         }
@@ -806,7 +806,7 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// （2026-09-02 の自己レビュー）。<c>date.ToString("yyyy年M月d日")</c> は
     /// 利用者に見せる文言なのに、補間ではないので当たらなかった。
     /// <b>第 2 引数に <see cref="System.Globalization.CultureInfo"/> を渡した形は機械に渡す値</b>
-    /// （SQL・CSV）なので、そちらは対象外にする——docs/09 §2-5 が決めた書き分けそのものである。
+    /// （SQL・CSV）なので、そちらは対象外にする——docs/21 §2-5 が決めた書き分けそのものである。
     /// </remarks>
     private static IEnumerable<SyntaxNode> CultureLessDateFormats(SyntaxNode root)
         => root.DescendantNodes()

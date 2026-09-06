@@ -8,7 +8,7 @@ using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
 /// <summary>
-/// 計上済みの伝票を「取り消す」「訂正する」（docs/04 §5・ADR-0015）。
+/// 計上済みの伝票を「取り消す」「訂正する」（docs/10 §5・ADR-0015）。
 /// </summary>
 /// <remarks>
 /// <para>画面のボタンから Web API 経由で呼ばれる（ADR-0016）。<b>会計の判断は 1 行も
@@ -151,7 +151,7 @@ public sealed class JournalAmendmentService(
     /// <para>取消・訂正の途中では、伝票の検証（<see cref="JournalReversal"/>）も
     /// 取消の計上（<see cref="JournalPoster"/>）も走り、どちらも既定の見出し「計上できません」で
     /// 投げてくる。しかし<b>利用者が押したのは「取り消す」か「訂正する」の 1 つ</b>で、
-    /// 計上を頼んだ覚えは無い（docs/09 §2・qa/02 R24-23）。</para>
+    /// 計上を頼んだ覚えは無い（docs/21 §2・qa/02 R24-23）。</para>
     /// <para><b>入口で 1 回包む形にしてある。</b> 投げる場所ごとに見出しを渡す形だと、
     /// 経路が 1 本増えるたびに書き漏らし、そこだけ別の言葉で断ることになる。</para>
     /// </remarks>

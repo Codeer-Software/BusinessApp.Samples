@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 取消（反対仕訳）と訂正（再計上）に共通する、<b>原仕訳の側</b>の規則（docs/04 §5）。
+/// 取消（反対仕訳）と訂正（再計上）に共通する、<b>原仕訳の側</b>の規則（docs/10 §5）。
 /// </summary>
 /// <remarks>
 /// <para>取消と訂正は「計上済みの伝票に、それを打ち消す／直す伝票を足す」という同じ形をしている。
@@ -22,7 +22,7 @@ internal static class AmendmentRules
     public static IEnumerable<Violation> ValidateOriginal(
         JournalEntry original, DateOnly postingDate, AmendmentKind kind)
     {
-        // 下書きは帳簿ではないので、打ち消すのではなく消せばよい（docs/04 §5）。
+        // 下書きは帳簿ではないので、打ち消すのではなく消せばよい（docs/10 §5）。
         // 下書きに反対仕訳を立てられると、帳簿に「取り消された何か」が増えるだけになる。
         if (original.Status != EntryStatus.Posted)
         {

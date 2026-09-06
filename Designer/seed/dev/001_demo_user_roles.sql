@@ -15,7 +15,7 @@
 -- `keiri_sekininsha` のような役割そのままの名前は**長くて打つのが面倒**、というのが理由である。
 
 -- 経理担当（総務部の一般。docs/02 §の役割の表）。取引先は編集できる
--- （新規取引のたびに要る。docs/08 の台帳）。
+-- （新規取引のたびに要る。docs/12 の台帳）。
 UPDATE app_users
    SET can_access_app = 1, is_sysadmin = 0, accounting_role = 'staff', partner_role = 'editor'
  WHERE user_name = 'soumu_ippan';

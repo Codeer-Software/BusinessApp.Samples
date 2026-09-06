@@ -1,6 +1,6 @@
 namespace BusinessApp.Partners;
 
-/// <summary>取引先の種別（docs/07 §1-2）。</summary>
+/// <summary>取引先の種別（docs/13 §1-2）。</summary>
 /// <remarks>
 /// <para><b>2 値では足りない。</b> 人格のない社団等は法人番号を持ちうるが、
 /// 公表は代表者の同意がある場合のみで、法人とも個人事業者とも扱いが違う。</para>
@@ -13,7 +13,7 @@ public enum PartnerEntityType
     /// <summary>法人（設立登記法人）。</summary>
     Corporation,
 
-    /// <summary>個人事業者。<b>法人番号は指定されない</b>（docs/07 §1-2）。</summary>
+    /// <summary>個人事業者。<b>法人番号は指定されない</b>（docs/13 §1-2）。</summary>
     SoleProprietor,
 
     /// <summary>人格のない社団等。法人番号を持ちうる。</summary>
@@ -26,7 +26,7 @@ public enum PartnerEntityType
 public static class PartnerEntityTypeExtensions
 {
     /// <summary>
-    /// 利用者に見せる名前。<b>列挙子をそのまま文言に混ぜない</b>（docs/09_画面の原則.md §2）。
+    /// 利用者に見せる名前。<b>列挙子をそのまま文言に混ぜない</b>（docs/21_画面の原則.md §2）。
     /// </summary>
     /// <remarks>
     /// CLB のデザイン enum（<c>Enums/PartnerEntityTypes.enum.json</c>）と一致することを

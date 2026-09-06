@@ -4,7 +4,7 @@ using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// テストで使う制度値。<b>本番の制度値は制度ルールのマスタが持つ</b>（docs/15_実装の原則.md §2）。
+/// テストで使う制度値。<b>本番の制度値は制度ルールのマスタが持つ</b>（docs/20_実装の原則.md §2）。
 /// ここに置くのは「マスタにこの値が入っていたとき、コアがどう振る舞うか」を固定するためである。
 /// </summary>
 /// <remarks>

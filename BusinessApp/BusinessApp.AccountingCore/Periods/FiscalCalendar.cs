@@ -1,7 +1,7 @@
 namespace BusinessApp.AccountingCore.Periods;
 
 /// <summary>
-/// 会計年度と月次期間の集合（docs/04 §7）。
+/// 会計年度と月次期間の集合（docs/10 §7）。
 /// </summary>
 /// <remarks>
 /// 期間の解決は「対象日の月初日で引き当てる」のではなく、<b>日付そのものの範囲比較</b>で行う。

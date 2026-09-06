@@ -4,7 +4,7 @@ using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 計上済みの仕訳を取り消す反対仕訳を作る（docs/04 §5）。
+/// 計上済みの仕訳を取り消す反対仕訳を作る（docs/10 §5）。
 /// </summary>
 /// <remarks>
 /// <para>計上済みの仕訳は変更も削除もしない。訂正・取消は<b>反対仕訳を 1 本足す</b>ことで表す
@@ -22,7 +22,7 @@ public static class JournalReversal
     /// </summary>
     /// <param name="original">取り消す原仕訳。計上済みでなければならない。</param>
     /// <param name="postingDate">反対仕訳の計上日。取り消すと決めた日。</param>
-    /// <param name="enteredAt">入力年月日。システムが決める（docs/04 §2）。</param>
+    /// <param name="enteredAt">入力年月日。システムが決める（docs/10 §2）。</param>
     /// <param name="context">
     /// 伝票 1 本だけでは決まらないこと。呼び出し側が調べて渡す。
     /// <b>省略可能にしない。</b> 既定値は「まだ取り消されていない」＝最も危険な側になる。
@@ -47,7 +47,7 @@ public static class JournalReversal
             // 3 月の仕訳を 4 月に取り消せば、反対仕訳は新しい年度に載る。
             FiscalYearId = context.FiscalYearId,
             // **取引日は原仕訳と同じにする**（訂正に気づいた日ではない）。帳簿の「取引年月日」は
-            // 取引そのものを説明する欄であって、訂正作業の日ではないからである（docs/04 §5）。
+            // 取引そのものを説明する欄であって、訂正作業の日ではないからである（docs/10 §5）。
             TransactionDate = original.TransactionDate,
             PostingDate = postingDate,
             Status = EntryStatus.Draft,

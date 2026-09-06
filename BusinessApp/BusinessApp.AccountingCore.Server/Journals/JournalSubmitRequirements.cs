@@ -24,7 +24,7 @@ using Codeer.LowCode.Blazor.Repository.Data;
 ///     それは計上の検証（<c>AccountUnknown</c> ほか）が持つ。画面の候補は実在するものしか出さない。</item>
 ///   <item><b>行番号の重複</b>（<c>UNIQUE (journal_entry_id, line_no)</c>）。
 ///     <b>差分に載っていない行と衝突しうるので、保存済みの行を読まないと判定できない。</b>
-///     いつ・どう片付けるかは docs/05 §5 の未決事項が持つ。</item>
+///     いつ・どう片付けるかは docs/04 §5 の未決事項が持つ。</item>
 /// </list>
 /// どちらも通り抜けると枠組みの言葉で失敗する（<c>SaveFailureMessage</c> が利用者の語に差し替える）。</para>
 /// </remarks>

@@ -4,7 +4,7 @@ using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Shared;
 using BusinessApp.AccountingCore.Tests.Fixtures;
 
-/// <summary>下書きから計上への遷移（docs/04 §5）。ここを通らない計上経路を作らない。</summary>
+/// <summary>下書きから計上への遷移（docs/10 §5）。ここを通らない計上経路を作らない。</summary>
 public class JournalPostingTests
 {
     private static readonly DateOnly Ordinary = new(2026, 5, 20);

@@ -1,6 +1,6 @@
 -- 005 仕訳・仕訳明細・伝票番号の採番
 --
--- 日付を 1 つに潰さない（docs/04 §2）。取引日・計上日・入力年月日・課税仕入れの時点は
+-- 日付を 1 つに潰さない（docs/10 §2）。取引日・計上日・入力年月日・課税仕入れの時点は
 -- それぞれ意味が違い、共用すると必ずどこかで壊れる。とくに入力年月日は
 -- 「通常の業務処理期間の経過後の入力の事実を確認できる」という優良な電子帳簿の要件
 -- （規則 5 ⑤一イ(2)）そのものなので、取引日と絶対に共用しない。
@@ -25,7 +25,7 @@ CREATE TABLE journal_entries (
     description                 TEXT,
     partner_id                  INTEGER REFERENCES partners(id),
 
-    -- 他部品からの投入（docs/04 §10）。手入力は NULL。
+    -- 他部品からの投入（docs/10 §10）。手入力は NULL。
     source_component            TEXT,
     source_document_id          TEXT,
     idempotency_key             TEXT UNIQUE,                -- 同一の外部伝票を二重に計上しない（I-14）
@@ -96,7 +96,7 @@ CREATE TABLE journal_lines (
     journal_entry_id            INTEGER NOT NULL REFERENCES journal_entries(id),
     line_no                     INTEGER NOT NULL CHECK (line_no > 0 AND typeof(line_no) = 'integer'),
 
-    -- 借方貸方は符号ではなく区分で持ち、金額は常に正（docs/04 §3）。
+    -- 借方貸方は符号ではなく区分で持ち、金額は常に正（docs/10 §3）。
     debit_credit                TEXT NOT NULL CHECK (debit_credit IN ('debit', 'credit')),
 
     account_id                  INTEGER NOT NULL REFERENCES accounts(id),
@@ -105,7 +105,7 @@ CREATE TABLE journal_lines (
 
     partner_id                  INTEGER REFERENCES partners(id),
     -- 取引先名の写し。帳簿の法定記載事項①（消法 30 ⑧）であり、
-    -- 取引先の改名で過去の帳簿の記載が変わらないように FK と両方持つ（docs/04 §4-2）。
+    -- 取引先の改名で過去の帳簿の記載が変わらないように FK と両方持つ（docs/10 §4-2）。
     partner_name_snapshot       TEXT,
 
     -- 税抜・正の整数円。REAL を使わない。
@@ -113,7 +113,7 @@ CREATE TABLE journal_lines (
     -- REAL のまま格納する。typeof で明示的に拒まないと、貸借一致の判定と保存値がずれる（I-01）。
     amount                      INTEGER NOT NULL CHECK (amount > 0 AND typeof(amount) = 'integer'),
 
-    -- 税に意味のない行にも「対象外」を明示する。NULL と対象外を 2 通りで表さない（docs/06 §1）。
+    -- 税に意味のない行にも「対象外」を明示する。NULL と対象外を 2 通りで表さない（docs/11 §1）。
     tax_category_id             INTEGER NOT NULL REFERENCES tax_categories(id),
     -- 用途区分は明細が持つ。同じ科目でも取引ごとに変わるため。
     tax_treatment               TEXT CHECK (tax_treatment IN ('for_taxable_sales', 'common', 'for_exempt_sales')),
@@ -127,14 +127,14 @@ CREATE TABLE journal_lines (
     book_only_deduction         TEXT,                       -- 帳簿のみ保存で控除する類型
     evidence_ref                TEXT,                       -- 証憑部品への参照キー
 
-    -- 計上時点の登録番号の写し（docs/07 §4・ADR-0018）。
+    -- 計上時点の登録番号の写し（docs/13 §4・ADR-0018）。
     -- **帳簿の法定記載事項ではない**（消法 30 ⑧に相手方の登録番号は含まれない）。
     -- 持つ理由は「判定の根拠の記録」——CSV の入出力と監査追跡が当時の値を要求するため。
     -- 現在のマスタから引くと、登録を取り消した相手で当時と違う値が出る。
     -- 帳簿には印字しない。**この行の「取引先」の番号であって、自社の番号ではない**
     -- （適格請求書に載る登録番号は売手＝自社のもの。消法 57 の 4 ①）。
     -- 引く日付は tax_point（課税仕入れを行った日）。**tax_point が空なら伝票の取引日で引く**
-    -- （docs/07 §4-1。画面が tax_point を入力させないので、無ければ写さないにすると永久に空になる）。
+    -- （docs/13 §4-1。画面が tax_point を入力させないので、無ければ写さないにすると永久に空になる）。
     registration_no_snapshot    TEXT,
 
     UNIQUE (journal_entry_id, line_no),

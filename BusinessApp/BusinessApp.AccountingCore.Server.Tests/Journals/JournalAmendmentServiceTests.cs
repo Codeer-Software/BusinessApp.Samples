@@ -152,7 +152,7 @@ public class JournalAmendmentServiceTests
         Assert.False(available.CanCorrect);
         Assert.Contains("取消", available.Reason, StringComparison.Ordinal);
 
-        // **内部表現を出さない**（docs/09_画面の原則.md §2）。
+        // **内部表現を出さない**（docs/21_画面の原則.md §2）。
         Assert.DoesNotContain("Reversal", available.Reason, StringComparison.Ordinal);
     }
 
@@ -487,7 +487,7 @@ public class JournalAmendmentServiceTests
         Assert.Contains(JournalViolationCodes.AmendmentTargetNotAmendable, error.Violations.Select(v => v.Code));
     }
 
-    // --- 差し戻しの見出し（押したボタンの言葉で断る。docs/09 §2・qa/02 R24-23）---
+    // --- 差し戻しの見出し（押したボタンの言葉で断る。docs/21 §2・qa/02 R24-23）---
 
     /// <summary>
     /// 取消の差し戻しは「取り消せません」で始まる。

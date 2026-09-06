@@ -39,7 +39,7 @@ RESERVED_FIELD_TYPES = {
     # `creator` / `updater` の INTEGER で、参照先は認証部品の利用者）。
     # `Docs/CommonMistakes.md` #42-A の表だけが `TextFieldDesign` を「推奨」と書いているが、
     # **同じファイルの本文（予約名の一覧）は `LinkFieldDesign` と書いており、食い違っている**。
-    # docs/16_作業のルール.md §2 が `Docs/AppPatterns/` を正典と定めているので、そちらに従う。
+    # docs/30_作業のルール.md §2 が `Docs/AppPatterns/` を正典と定めているので、そちらに従う。
     # **型を間違えると自動セットそのものが効かない**（F-09 の機序）。
     # 「文字列だと利用者表と突き合わせられない」ではない——SQLite の INTEGER 親和性は
     # `'3'` を格納時に整数へ直すので、比較も結合も当たる（2026-09-03 実測）。
@@ -49,19 +49,19 @@ RESERVED_FIELD_TYPES = {
 
 LEGACY_ALIGNMENTS = {"Left", "Right"}
 
-# ボタンの色は 3 値だけ（docs/09 §4・ADR-0030）。CLB は Outline* や Text も持つが使わない。
+# ボタンの色は 3 値だけ（docs/21 §4・ADR-0030）。CLB は Outline* や Text も持つが使わない。
 ALLOWED_VARIANTS = {"Primary", "Danger", "Secondary"}
 
 # 必須の印を出すクラス（app.css）。ラベル側の要素に付ける。
 REQUIRED_LABEL_CLASS = "required-label"
 
-# 利用者に見せる日時の書式（docs/09 §2-5。D-30）。
+# 利用者に見せる日時の書式（docs/21 §2-5。D-30）。
 #
 # **`Format` が空だと CLB の既定が出る**——実機では `2026/08/24 18:56:09` と**秒まで**並んだ
-# （2026-09-02 実測 1.3.20。仕訳帳の「入力年月日」）。09 §2-5 が決めたのは
+# （2026-09-02 実測 1.3.20。仕訳帳の「入力年月日」）。21 §2-5 が決めたのは
 # `yyyy/MM/dd HH:mm` なので、**画面に出す日時のフィールドには書式を書く**。
 # 日付だけの `DateFieldDesign` はブラウザ標準の `<input type="date">` で、
-# 日本語環境では `yyyy/MM/dd` に見える——**こちらは書式を書かなくてよい**（09 §2-5）。
+# 日本語環境では `yyyy/MM/dd` に見える——**こちらは書式を書かなくてよい**（21 §2-5）。
 DATETIME_DISPLAY_FORMAT = "yyyy/MM/dd HH:mm"
 
 # 洗い替え（`ListFieldDesignBase.ReplaceMode`）の既定。
@@ -180,7 +180,7 @@ REQUIRED_EXEMPTIONS = {
                                           "1.3.20 では NOT NULL のまま明細の追加も計上も通っている（実測。"
                                           "H-02 は前回プロジェクト由来の未確認）",
     ("JournalLine", "line_no"): "行番号は親の画面が自動で採る",
-    ("PartnerInvoiceRegistration", "partner_id"): "URL の ?partner で決まり、画面は表示だけ（07 §3-4）",
+    ("PartnerInvoiceRegistration", "partner_id"): "URL の ?partner で決まり、画面は表示だけ（13 §3-4）",
 }
 
 
@@ -211,7 +211,7 @@ def check_module(path, doc, findings):
             findings.append((SEV_ERROR, "F-09", relative(path),
                              "OptimisticLocking は IncrementVersion: true が要る（既定は PostgreSQL の xmin 前提）"))
 
-        # 本プロジェクトは論理削除を使わない（docs/08 マスタ台帳・Designer/ddl/README）
+        # 本プロジェクトは論理削除を使わない（docs/12 マスタ台帳・Designer/ddl/README）
         if name == "LogicalDelete":
             findings.append((SEV_ERROR, "PRJ-01", relative(path),
                              "論理削除は使わない。仕訳は消せず、マスタは is_active で無効化する"))
@@ -229,13 +229,13 @@ def check_module(path, doc, findings):
         findings.append((SEV_ERROR, "F-09", relative(path),
                          f"{module}: 更新できるモジュールには OptimisticLocking フィールドが要る"))
 
-    # D-18 ボタンの色は 3 値だけ（docs/09 §4・ADR-0030）。
+    # D-18 ボタンの色は 3 値だけ（docs/21 §4・ADR-0030）。
     # **`check_module` の中から呼ぶ。** `main()` から別に呼ぶ形にすると、
     # モジュール側の呼び出しを消してもフレーム側が残るので `WIRED_CHECKS` が緑になった
     # （2026-09-02 に壊して確かめた）。**呼ぶ人を 1 か所にすると、消えたことが検体で分かる。**
     check_variants(path, doc, findings)
 
-    # D-19 検索欄を持つレイアウトは既定で開く（docs/09 §3）。
+    # D-19 検索欄を持つレイアウトは既定で開く（docs/21 §3）。
     #
     # **名前つきの検索レイアウトも見る。** 既定（`""`）だけを見ていたので、
     # レイアウトを名前つきで足した日に素通りしていた（2026-08-31 の自己レビュー R28-17）。
@@ -288,12 +288,12 @@ def check_module(path, doc, findings):
                          "（空＝全開放。ADR-0033。開けたままにするなら "
                          "READ_CONDITION_EXEMPTIONS に理由つきで載せる）"))
 
-    # D-20 必須の欄には印が要る（docs/09 §1）。
+    # D-20 必須の欄には印が要る（docs/21 §1）。
     # **見るのは詳細レイアウトのラベルだけ**——一覧の見出し（<th>）には class が付かないので、
     # そちらは文字列に「*」を入れてある（qa/01 D-16）。
     _check_required_marks(path, doc, findings)
 
-    # D-30 画面に出す日時は書式を書く（docs/09 §2-5）。
+    # D-30 画面に出す日時は書式を書く（docs/21 §2-5）。
     _check_datetime_formats(path, doc, findings)
 
     field_names = {f.get("Name", "") for f in doc.get("Fields", [])}
@@ -338,7 +338,7 @@ def _walk(node, visit):
 
 
 def check_variants(path, doc, findings):
-    """ボタンの色は 3 値だけ（docs/09 §4・ADR-0030）。
+    """ボタンの色は 3 値だけ（docs/21 §4・ADR-0030）。
 
     **`Fields` だけを見ない。** `Variant` はレイアウトの入れ子にも `.frm.json` にも
     現れうるキーで、`Fields` の直下しか見ていなかった（2026-08-31 の自己レビュー R28-17）。
@@ -456,11 +456,11 @@ def _has_class(doc, field_name, class_name):
 
 
 def _check_datetime_formats(path, doc, findings):
-    """**画面に出す日時に書式が書いてあるか**（docs/09 §2-5）。
+    """**画面に出す日時に書式が書いてあるか**（docs/21 §2-5）。
 
     `DateTimeFieldDesign` の `Format` が空だと CLB の既定が出て、**秒まで並ぶ**
     （2026-09-02 実測 1.3.20。仕訳帳の「入力年月日」が `2026/08/24 18:56:09` だった）。
-    09 §2-5 が決めた書式は `yyyy/MM/dd HH:mm` である。
+    21 §2-5 が決めた書式は `yyyy/MM/dd HH:mm` である。
 
     **見るのはレイアウトに置いた欄だけ。** `CreatedAt` / `UpdatedAt` のように
     どの画面にも出していない監査用の列まで縛ると、**書式が要らない欄に書式が増える**——
@@ -487,11 +487,11 @@ def _check_datetime_formats(path, doc, findings):
         findings.append((SEV_ERROR, "D-30", relative(path),
                          f"{module}: {name} は画面に出す日時なので "
                          f'"Format": "{DATETIME_DISPLAY_FORMAT}" を書く'
-                         f"（空だと秒まで出る。docs/09 §2-5）"))
+                         f"（空だと秒まで出る。docs/21 §2-5）"))
 
 
 def _check_required_marks(path, doc, findings):
-    """必須のフィールドのラベルに、印が出るか（docs/09 §1）。
+    """必須のフィールドのラベルに、印が出るか（docs/21 §1）。
 
     **`IsRequired` は「利用者が埋める必須欄」の 1 意味に揃えてある**（Designer/Project.md）。
     画面が自動で入れる欄には立てないので、ここは例外なしの規則でよい。
@@ -558,14 +558,14 @@ def _check_required_marks(path, doc, findings):
         findings.append((SEV_ERROR, "D-20", relative(path),
                          f"{module}: 必須の {owner} のラベル {label} に印が出ない。"
                          f'"ClassName": "{REQUIRED_LABEL_CLASS}" を付けるか、'
-                         "ラベルの RelativeField をその欄に向ける（docs/09 §1）"))
+                         "ラベルの RelativeField をその欄に向ける（docs/21 §1）"))
 
     # **ラベル要素そのものが無い場合を見落とさない。** これがいちばん起きやすい書き忘れで、
     # 「`<Field>Label` があるときにしか見ない」実装では素通りしていた（2026-08-31 の自己レビュー）。
     for owner in sorted(placed - marked - set(unmarked)):
         findings.append((SEV_ERROR, "D-20", relative(path),
                          f"{module}: 必須の {owner} に、印を付けるラベル要素"
-                         f"（{owner}Label）が詳細レイアウトに無い（docs/09 §1）"))
+                         f"（{owner}Label）が詳細レイアウトに無い（docs/21 §1）"))
 
 
 def app_of(path):
@@ -662,7 +662,7 @@ def check_child_detail_screens(modules, frames, scripts, findings):
     保存は DB に拒まれ、**生の SQLite の文言がトーストに出る**（qa/01 F-16）。
 
     **登録そのものは禁じない。** `PartnerInvoiceRegistration` は 2026-09-02 に
-    正面の到達先へ昇格し、URL の `?partner=` から親 FK を入れている（07 §3-4）。
+    正面の到達先へ昇格し、URL の `?partner=` から親 FK を入れている（13 §3-4）。
     **要求するのは「親 FK に値が入る経路があること」**だけである。
 
     **新規作成できる子だけを見る。** 親の詳細に埋め込んだクエリモジュール
@@ -1108,7 +1108,7 @@ def check_page_frame(path, doc, findings, module_tables=None):
         # そのせいで、CLB マニュアルが正規に示す `Detail`——1 行しか持たないモジュールを
         # 一覧を挟まずに開く形（自社情報）と、表を持たない表示専用モジュールを載せる形
         # （ADR-0027 の `JournalEntryBoard`）——まで叩いていた。
-        # **関門は足したときが完成ではない**（docs/17_検証のルール.md §4）。
+        # **関門は足したときが完成ではない**（docs/31_検証のルール.md §4）。
         # **白リストで受ける。** 黒リスト（List だけ禁じる）にすると、`"list"` のような
         # 綴り違いや、CLB が将来増やす値が無言で通る——JSON の enum は大小を無視して読むので、
         # `"list"` は D-05 が防いでいる「詳細が真っ白」を再現しつつ関門は緑になりうる

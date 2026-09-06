@@ -5,7 +5,7 @@ using BusinessApp.AccountingCore.Server.Journals;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 
 /// <summary>
-/// 計上のときに帳簿の記載事項を写して固定する（ADR-0018・docs/07 §4）。
+/// 計上のときに帳簿の記載事項を写して固定する（ADR-0018・docs/13 §4）。
 /// </summary>
 /// <remarks>
 /// <b>本物の DDL・本物のトリガに当てて検査する。</b> 「計上済みにする前に焼く」という順番は、
@@ -108,7 +108,7 @@ public class LedgerSnapshotWriterTests
         Assert.Equal("株式会社ベガ商会", Snapshot(server, entry, 1, "partner_name_snapshot"));
     }
 
-    /// <summary>明細に取引先が無い行には、<b>伝票の取引先</b>を写す（ADR-0018・docs/04 §4-1）。</summary>
+    /// <summary>明細に取引先が無い行には、<b>伝票の取引先</b>を写す（ADR-0018・docs/10 §4-1）。</summary>
     [Fact]
     public async Task 明細に取引先が無い行には伝票の取引先を写す()
     {

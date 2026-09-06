@@ -4,7 +4,7 @@ using BusinessApp.AccountingCore.Accounts;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 科目区分（docs/04 §6）。<b>部門の要否と決算振替がここに依存する</b>ので、
+/// 科目区分（docs/10 §6）。<b>部門の要否と決算振替がここに依存する</b>ので、
 /// 区分の判定を取り違えると部門別損益が静かに壊れる。
 /// </summary>
 public class AccountCategoryTests
