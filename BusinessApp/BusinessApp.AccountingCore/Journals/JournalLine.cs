@@ -26,7 +26,7 @@ public sealed record JournalLine
     public PartnerId? PartnerId { get; init; }
 
     /// <summary>
-    /// 取引先名の写し。帳簿の法定記載事項①（消法 30 ⑧）であり、
+    /// 取引先名の写し。帳簿の法定記載事項①（消税法 30 ⑧）であり、
     /// 取引先の改名で過去の帳簿の記載が変わらないように識別子と両方持つ（docs/10 §4-2）。
     /// </summary>
     public string? PartnerNameSnapshot { get; init; }
@@ -35,7 +35,7 @@ public sealed record JournalLine
     /// 計上時点の登録番号の写し（適格請求書発行事業者。docs/13 §4）。
     /// </summary>
     /// <remarks>
-    /// <b>帳簿の法定記載事項ではない</b>（消法 30 ⑧に相手方の登録番号は含まれない）。
+    /// <b>帳簿の法定記載事項ではない</b>（消税法 30 ⑧に相手方の登録番号は含まれない）。
     /// 持つのは判定の根拠の記録のためで、帳簿には印字しない。
     /// <b>この行の「取引先」の番号であって、自社の番号ではない。</b>
     /// </remarks>
