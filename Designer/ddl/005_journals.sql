@@ -113,7 +113,7 @@ CREATE TABLE journal_lines (
     -- REAL のまま格納する。typeof で明示的に拒まないと、貸借一致の判定と保存値がずれる（I-01）。
     amount                      INTEGER NOT NULL CHECK (amount > 0 AND typeof(amount) = 'integer'),
 
-    -- 税に意味のない行にも「対象外」を明示する。NULL と対象外を 2 通りで表さない（docs/06 §1）。
+    -- 税に意味のない行にも「対象外」を明示する。NULL と対象外を 2 通りで表さない（docs/11 §1）。
     tax_category_id             INTEGER NOT NULL REFERENCES tax_categories(id),
     -- 用途区分は明細が持つ。同じ科目でも取引ごとに変わるため。
     tax_treatment               TEXT CHECK (tax_treatment IN ('for_taxable_sales', 'common', 'for_exempt_sales')),

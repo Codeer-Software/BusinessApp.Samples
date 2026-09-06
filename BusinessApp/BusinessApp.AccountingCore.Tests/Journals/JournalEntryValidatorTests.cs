@@ -312,7 +312,7 @@ public class JournalEntryValidatorTests
     [Fact]
     public void 法定記載事項を備えた明細は計上できる()
     {
-        // 帳簿の法定記載事項（消法 30 ⑧）を明細が満たす形（docs/06 §8）。
+        // 帳簿の法定記載事項（消法 30 ⑧）を明細が満たす形（docs/11 §8）。
         // 取引先は識別子と名前の写しを両方持つ（docs/10 §4-2）。
         var entry = AccountingFixture.Entry(
             Ordinary,
@@ -520,7 +520,7 @@ public class JournalEntryValidatorTests
     }
 
     /// <summary>
-    /// 消費税行が本体行から引き継がないと、税区分別集計・部門別税集計が本体行と突き合わない（docs/06 §2）。
+    /// 消費税行が本体行から引き継がないと、税区分別集計・部門別税集計が本体行と突き合わない（docs/11 §2）。
     /// </summary>
     [Theory]
     [InlineData("debitCredit")]

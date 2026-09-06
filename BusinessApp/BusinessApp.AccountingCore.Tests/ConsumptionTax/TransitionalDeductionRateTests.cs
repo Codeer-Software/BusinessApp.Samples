@@ -5,7 +5,7 @@ using BusinessApp.AccountingCore.Shared;
 using BusinessApp.AccountingCore.Tests.Fixtures;
 
 /// <summary>
-/// 免税事業者等からの課税仕入れに係る経過措置（docs/06 §5）。
+/// 免税事業者等からの課税仕入れに係る経過措置（docs/11 §5）。
 /// <b>会計コア最初のゴールデンテスト</b>であり、2026-10-01 の 80%→70% の切替を境界で固定する。
 /// </summary>
 /// <remarks>

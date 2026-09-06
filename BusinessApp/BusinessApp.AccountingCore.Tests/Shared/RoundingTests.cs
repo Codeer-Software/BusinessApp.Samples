@@ -2,7 +2,7 @@ namespace BusinessApp.AccountingCore.Tests.Shared;
 
 using BusinessApp.AccountingCore.Shared;
 
-/// <summary>端数処理（docs/06 §4）。用途ごとに方法が違うため、既定に流れないことを確かめる。</summary>
+/// <summary>端数処理（docs/11 §4）。用途ごとに方法が違うため、既定に流れないことを確かめる。</summary>
 public class RoundingTests
 {
     [Theory]

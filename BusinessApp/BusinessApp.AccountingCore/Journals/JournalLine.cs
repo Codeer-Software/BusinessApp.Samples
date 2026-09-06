@@ -44,19 +44,19 @@ public sealed record JournalLine
     /// <summary>金額（税抜・正）。</summary>
     public required Yen Amount { get; init; }
 
-    /// <summary>税区分。税に意味のない行にも「対象外」を明示する（docs/06 §1）。</summary>
+    /// <summary>税区分。税に意味のない行にも「対象外」を明示する（docs/11 §1）。</summary>
     public required TaxCategoryId TaxCategoryId { get; init; }
 
     /// <summary>用途区分。個別対応方式で使う。</summary>
     public TaxTreatment? TaxTreatment { get; init; }
 
-    /// <summary>課税仕入れの時点。経過措置・税率の判定基準日（docs/06 §5）。</summary>
+    /// <summary>課税仕入れの時点。経過措置・税率の判定基準日（docs/11 §5）。</summary>
     public DateOnly? TaxPoint { get; init; }
 
     /// <summary>適用した制度ルールの版。後日マスタを更新しても過去を再計算しないための固定値（I-16）。</summary>
     public RuleVersion? AppliedRuleVersion { get; init; }
 
-    /// <summary>消費税行か。システムが生成し、利用者は直接編集できない（docs/06 §2）。</summary>
+    /// <summary>消費税行か。システムが生成し、利用者は直接編集できない（docs/11 §2）。</summary>
     public bool IsTaxLine { get; init; }
 
     /// <summary>消費税行が対応する本体行の行番号。</summary>

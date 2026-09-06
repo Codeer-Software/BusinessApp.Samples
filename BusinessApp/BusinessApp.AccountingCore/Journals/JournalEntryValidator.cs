@@ -157,7 +157,7 @@ public static class JournalEntryValidator
                     JournalViolationCodes.AmountNotPositive, JournalLineRules.AmountNotPositive, line.LineNo));
             }
 
-            // 既定値のまま（未設定）の税区分を通さない。NULL と「対象外」を 2 通りで表さない（docs/06 §1）。
+            // 既定値のまま（未設定）の税区分を通さない。NULL と「対象外」を 2 通りで表さない（docs/11 §1）。
             if (line.TaxCategoryId == default)
             {
                 violations.Add(new Violation(
@@ -324,7 +324,7 @@ public static class JournalEntryValidator
             return;
         }
 
-        // 消費税行は本体行から貸借・部門・税区分・用途区分を引き継ぐ（docs/06 §2）。
+        // 消費税行は本体行から貸借・部門・税区分・用途区分を引き継ぐ（docs/11 §2）。
         // 引き継がないと、税区分別集計・部門別税集計が本体行と突き合わなくなる。
         if (line.DebitCredit != parent.DebitCredit)
         {

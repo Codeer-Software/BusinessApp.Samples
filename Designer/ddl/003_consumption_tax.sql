@@ -1,6 +1,6 @@
 -- 003 税区分（docs/08_マスタ台帳）
 --
--- 1 つの「税区分」に複数の軸を押し込まない（docs/06 §1）。ここが持つのは課税区分だけで、
+-- 1 つの「税区分」に複数の軸を押し込まない（docs/11 §1）。ここが持つのは課税区分だけで、
 --   税率        → 制度ルール（有効期間つき）。フェーズ 3 で別テーブルにする
 --   用途区分    → 仕訳明細（journal_lines.tax_treatment）。同じ科目でも取引ごとに変わる
 --   登録状況    → 取引先（有効期間つき）。フェーズ 3
@@ -15,7 +15,7 @@ CREATE TABLE tax_categories (
     code                        TEXT NOT NULL UNIQUE,
     name                        TEXT NOT NULL,
 
-    -- 課税区分（docs/06 §1）。
+    -- 課税区分（docs/11 §1）。
     --   taxable_sales        課税売上
     --   taxable_purchase     課税仕入
     --   non_taxable_sales    非課税売上
@@ -26,7 +26,7 @@ CREATE TABLE tax_categories (
     --
     -- **非課税にも売上／仕入の軸を通してある。** 課税だけ分けて非課税を 1 つに潰すと、
     -- 課税売上割合の分母（課税＋免税＋非課税の売上高）を税区分だけでは作れず、
-    -- 勘定科目の科目区分に頼ることになる（docs/06 §7）。税の軸は税区分で完結させる。
+    -- 勘定科目の科目区分に頼ることになる（docs/11 §7）。税の軸は税区分で完結させる。
     taxation_type               TEXT NOT NULL CHECK (taxation_type IN (
                                     'taxable_sales', 'taxable_purchase',
                                     'non_taxable_sales', 'non_taxable_purchase',
@@ -42,7 +42,7 @@ CREATE TABLE tax_categories (
     rate_kind                   TEXT CHECK (rate_kind IN ('standard', 'reduced', 'legacy_8')),
 
     -- 入力時の初期値としての用途区分。明細の値が正であり、
-    -- 「値が入っていない行の穴埋め」には使わない（docs/06 §1）。
+    -- 「値が入っていない行の穴埋め」には使わない（docs/11 §1）。
     -- 値を for_... にしてあるのは、課税区分の taxable_sales と**同じ値が別の意味で 2 か所に現れる**のを
     -- 避けるためである。取り違えても値が同じだと実行時にも通ってしまう。
     default_tax_treatment       TEXT CHECK (default_tax_treatment IN (

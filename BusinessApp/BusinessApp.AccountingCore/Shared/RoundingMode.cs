@@ -1,7 +1,7 @@
 namespace BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 端数処理の方法（docs/06 §4）。
+/// 端数処理の方法（docs/11 §4）。
 /// <b>既定値を置かない。</b> 同じ「端数処理」でも場面ごとに認められる方法が違い、
 /// 既定に流されると法令上許されない方法が黙って使われる。
 /// </summary>

@@ -130,7 +130,7 @@ public class SeedDataTests
 
     /// <summary>
     /// 非課税にも売上／仕入の軸が通っていること。課税だけ分けて非課税を 1 つに潰すと、
-    /// 課税売上割合の分母（課税＋免税＋非課税の売上高）を税区分だけでは作れない（docs/06 §7）。
+    /// 課税売上割合の分母（課税＋免税＋非課税の売上高）を税区分だけでは作れない（docs/11 §7）。
     /// </summary>
     [Fact]
     public void 非課税にも売上と仕入の区別がある()
@@ -272,7 +272,7 @@ public class SeedDataTests
         Assert.Equal(0L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounts WHERE LENGTH(code) <> 4"));
     }
 
-    /// <summary>税抜経理なので、消費税行の計上先が要る（docs/06 §2）。</summary>
+    /// <summary>税抜経理なので、消費税行の計上先が要る（docs/11 §2）。</summary>
     [Fact]
     public void 仮払消費税等と仮受消費税等の科目がある()
     {

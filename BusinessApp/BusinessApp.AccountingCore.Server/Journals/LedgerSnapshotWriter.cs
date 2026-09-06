@@ -96,7 +96,7 @@ public sealed class LedgerSnapshotWriter(IDbAccessor dbAccessor, string dataSour
     /// あとから埋め直せない。</para>
     /// <para><b>恒久の解は画面に <c>tax_point</c> を持たせること。</b>
     /// 支払日で起票する未払金の決済や締め日基準の一括計上では、取引日と課税仕入れの日がずれる
-    /// （docs/06 §5）。[docs/07 の保留リスト](../../../docs/07_取引先設計.md)に積んである。</para>
+    /// （docs/11 §5）。[docs/07 の保留リスト](../../../docs/07_取引先設計.md)に積んである。</para>
     /// </remarks>
     private static DateOnly TaxPointOf(JournalEntry entry, JournalLine line)
         => line.TaxPoint ?? entry.TransactionDate;
