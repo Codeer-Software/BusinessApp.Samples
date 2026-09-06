@@ -50,10 +50,15 @@ REFERENCE_PREFIXES = ("docs/decisions/", "docs/research/")
 # コード参照検査（check_code_references）の対象拡張子と除外。
 # Designer/migrations/ は適用済みがチェックサムで凍結される歴史文書なので、
 # 後から文書が superseded になっても直せない（直させない）。
+# **凍結の一覧はここに写さず、正典から引く**（規約 §4-6。写しがずれると、
+# 「直させない場所」と「直してよい場所」の境目が道具ごとに食い違う）。
+sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "clb"))
+from check_frozen import FROZEN_PREFIXES  # noqa: E402
+
 CODE_EXTENSIONS = (".cs", ".sql", ".ps1", ".psm1", ".py", ".js", ".css")
-CODE_EXCLUDE_PREFIXES = (
+CODE_EXCLUDE_PREFIXES = FROZEN_PREFIXES + (
+    # 凍結ではないが、生成物・追跡外なので参照を直す先が無い
     "Designer/ClaudeCodeForDesigner/",
-    "Designer/migrations/",
     "LocalData/",
 )
 

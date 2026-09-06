@@ -13,22 +13,29 @@ set -e
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
-echo "[pre-commit] 1/7 秘密の検査"
+# 凍結されたファイル（適用済みマイグレーション・baseline）の変更を拒む。
+# **壊れたことに気づくのは次に migrate.ps1 を流したとき**で、そのときはもう main に入っている。
+# 1 秒で終わるので最初に置く（ADR-0020。実際に踏んだ記録は qa/02 のラウンド 40）。
+echo "[pre-commit] 1/8 凍結ファイルの検査"
+python tools/clb/check_frozen.py --selftest
+python tools/clb/check_frozen.py
+
+echo "[pre-commit] 2/8 秘密の検査"
 python tools/docs/lint_secrets.py
 
-echo "[pre-commit] 2/7 ドキュメント規約の検査"
-# 検査そのものが空回りしていないかを先に確かめる（守る道具にはテストを付ける。7/7 と同じ作法）
+echo "[pre-commit] 3/8 ドキュメント規約の検査"
+# 検査そのものが空回りしていないかを先に確かめる（守る道具にはテストを付ける。1/8・8/8 と同じ作法）
 python tools/docs/lint_docs.py --selftest
 python tools/docs/lint_docs.py
 
-echo "[pre-commit] 3/7 CLB デザインの検査"
-# 検査そのものが空回りしていないかを先に確かめる（2/7 と 7/7 と同じ作法）。
+echo "[pre-commit] 4/8 CLB デザインの検査"
+# 検査そのものが空回りしていないかを先に確かめる（3/8 と 8/8 と同じ作法）。
 # **緩めた変更を守るものが無かった**——D-05 と D-10 を絞ったとき、鳴らなくなることを
 # 確かめる手が目視しか無かった（qa/02 R26-21）。
 python tools/clb/lint_design.py --selftest
 python tools/clb/lint_design.py
 
-echo "[pre-commit] 4/7 テスト・カバレッジ・スキーマ"
+echo "[pre-commit] 5/8 テスト・カバレッジ・スキーマ"
 dotnet test BusinessApp.slnx --nologo -v q
 
 # 稼働 DB とスキーマ正典の同値検査（ADR-0020）。同値テストは「マイグレーションの書き忘れ」を
@@ -36,14 +43,14 @@ dotnet test BusinessApp.slnx --nologo -v q
 # ここでしか捕まらない。ddl/ を変えたら、コミット前に migrate.ps1 -Apply で稼働 DB に当てておくこと。
 # この段はデザイナ exe（LocalEnvironment.md）と稼働 DB がある前提（1 人 1 台の開発機運用）。
 # 無い環境でコミットする事情ができたら、黙ってスキップさせず、この段の扱いを決め直すこと。
-echo "[pre-commit] 5/7 稼働 DB とスキーマ正典の同値検査"
+echo "[pre-commit] 6/8 稼働 DB とスキーマ正典の同値検査"
 pwsh -NoProfile -File tools/clb/migrate.ps1 -Verify
 
 # ミューテーションテスト（ADR-0012 §8）。カバレッジ 100% でも「壊したら気づくか」は
 # 別問題で、実際にここから実漏れが 3 件出た。スコアの下限は「現状の生き残り（許容ノイズ）」の
 # すぐ下に置くラチェットで、割れたら (a) テストを足して戻すか (b) 生き残りを読んで
 # 許容と判断した理由とともに下限を下げる。黙って下げない。
-echo "[pre-commit] 6/7 ミューテーションテスト"
+echo "[pre-commit] 7/8 ミューテーションテスト"
 (cd BusinessApp/BusinessApp.AccountingCore.Tests \
     && dotnet stryker --project BusinessApp.AccountingCore.csproj --break-at 76 --threshold-low 76 --reporter progress)
 (cd BusinessApp/BusinessApp.AccountingCore.Server.Tests \
@@ -73,7 +80,7 @@ echo "[pre-commit] 6/7 ミューテーションテスト"
 # 削除を絞るフック（.claude/settings.json の PreToolUse）の自己検査。
 # **守る道具にテストが無いと、書き換えたときに「止めているつもりで素通り」になる。**
 # 1 秒で終わるので毎回流す。
-echo "[pre-commit] 7/7 削除ガードの自己検査"
+echo "[pre-commit] 8/8 削除ガードの自己検査"
 python tools/claude/guard_delete.py --selftest
 
 echo "[pre-commit] すべて緑"

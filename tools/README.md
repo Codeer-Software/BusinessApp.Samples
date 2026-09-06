@@ -71,19 +71,20 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -Query "SELECT COUNT(*) FROM accounts;"
 pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 ```
 
-**コミット前フックが 7 段を自動で流す**（`tools/git-hooks/pre-commit`。段の正典はこの表）。
+**コミット前フックが 8 段を自動で流す**（`tools/git-hooks/pre-commit`。段の正典はこの表）。
 
 | 段 | 中身 |
 |---|---|
-| 1 | `lint_secrets.py`（秘密・絶対パスの混入） |
-| 2 | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
-| 3 | `lint_design.py`（CLB デザインの静的検査） |
-| 4 | `dotnet test`（テスト・カバレッジ・スキーマ） |
-| 5 | `migrate.ps1 -Verify`（稼働 DB とスキーマ正典の同値。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
-| 6 | `dotnet stryker`（ミューテーション。**5 プロジェクト**——会計コアの純粋層とサーバ層、取引先部品の純粋層とサーバ層、共有インフラ。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)・[ADR-0025 §6](../docs/decisions/0025-取引先を部品として分ける.md)） |
-| 7 | `guard_delete.py` の自己検査 |
+| 1 | `check_frozen.py`（**凍結されたファイルの変更・削除・改名**。適用済みマイグレーションと `baseline/`。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
+| 2 | `lint_secrets.py`（秘密・絶対パスの混入） |
+| 3 | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
+| 4 | `lint_design.py`（CLB デザインの静的検査） |
+| 5 | `dotnet test`（テスト・カバレッジ・スキーマ） |
+| 6 | `migrate.ps1 -Verify`（稼働 DB とスキーマ正典の同値。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
+| 7 | `dotnet stryker`（ミューテーション。**5 プロジェクト**——会計コアの純粋層とサーバ層、取引先部品の純粋層とサーバ層、共有インフラ。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)・[ADR-0025 §6](../docs/decisions/0025-取引先を部品として分ける.md)） |
+| 8 | `guard_delete.py` の自己検査 |
 
-**マージが自動でコミットするときは `pre-merge-commit` から同じ 7 段へ委譲する**——
+**マージが自動でコミットするときは `pre-merge-commit` から同じ 8 段へ委譲する**——
 git はマージで `pre-commit` を呼ばないので、置かないと **`main` に入る瞬間だけ誰も見ていない**。
 
 有効にするのは clone 後の 1 回だけ。

@@ -112,7 +112,7 @@ related: [00_ドキュメント規約/README.md, 21_画面の原則.md, 32_調�
 | [`../Designer/ddl/README.md`](../Designer/ddl/README.md) | DB スキーマの正典（現在形の DDL） |
 | [`../Designer/seed/README.md`](../Designer/seed/README.md) | 初期データ |
 | [`../Designer/migrations/README.md`](../Designer/migrations/README.md) | スキーマ変更の配り方（差分） |
-| [`../tools/README.md`](../tools/README.md) | 開発スクリプト（コミット前フックの 7 段もここ） |
+| [`../tools/README.md`](../tools/README.md) | 開発スクリプト（コミット前フックの 8 段もここ） |
 | `../LocalData/README.md` | 実行環境データ（DB・デプロイ zip）の構成。**Git 追跡外**なので各自の環境にのみある |
 
 ## 保留リスト
