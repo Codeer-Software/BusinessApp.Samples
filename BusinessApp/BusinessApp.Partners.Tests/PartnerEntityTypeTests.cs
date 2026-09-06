@@ -2,7 +2,7 @@ namespace BusinessApp.Partners.Tests;
 
 using BusinessApp.Partners;
 
-/// <summary>取引先の種別（docs/07 §1-2）。</summary>
+/// <summary>取引先の種別（docs/13 §1-2）。</summary>
 public class PartnerEntityTypeTests
 {
     [Theory]

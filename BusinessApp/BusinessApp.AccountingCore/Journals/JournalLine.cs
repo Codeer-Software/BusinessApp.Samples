@@ -32,7 +32,7 @@ public sealed record JournalLine
     public string? PartnerNameSnapshot { get; init; }
 
     /// <summary>
-    /// 計上時点の登録番号の写し（適格請求書発行事業者。docs/07 §4）。
+    /// 計上時点の登録番号の写し（適格請求書発行事業者。docs/13 §4）。
     /// </summary>
     /// <remarks>
     /// <b>帳簿の法定記載事項ではない</b>（消法 30 ⑧に相手方の登録番号は含まれない）。

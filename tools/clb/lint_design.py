@@ -180,7 +180,7 @@ REQUIRED_EXEMPTIONS = {
                                           "1.3.20 では NOT NULL のまま明細の追加も計上も通っている（実測。"
                                           "H-02 は前回プロジェクト由来の未確認）",
     ("JournalLine", "line_no"): "行番号は親の画面が自動で採る",
-    ("PartnerInvoiceRegistration", "partner_id"): "URL の ?partner で決まり、画面は表示だけ（07 §3-4）",
+    ("PartnerInvoiceRegistration", "partner_id"): "URL の ?partner で決まり、画面は表示だけ（13 §3-4）",
 }
 
 
@@ -662,7 +662,7 @@ def check_child_detail_screens(modules, frames, scripts, findings):
     保存は DB に拒まれ、**生の SQLite の文言がトーストに出る**（qa/01 F-16）。
 
     **登録そのものは禁じない。** `PartnerInvoiceRegistration` は 2026-09-02 に
-    正面の到達先へ昇格し、URL の `?partner=` から親 FK を入れている（07 §3-4）。
+    正面の到達先へ昇格し、URL の `?partner=` から親 FK を入れている（13 §3-4）。
     **要求するのは「親 FK に値が入る経路があること」**だけである。
 
     **新規作成できる子だけを見る。** 親の詳細に埋め込んだクエリモジュール

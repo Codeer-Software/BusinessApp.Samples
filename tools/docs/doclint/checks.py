@@ -215,7 +215,7 @@ def check_code_references(docs: List[Doc], findings: List[Finding]) -> None:
     """current でない文書（superseded / historical）をコードのコメントが参照していたら error。
 
     参照の形は 3 つを見る: ファイル名（basename）・ADR 番号（ADR-0007）・
-    番号つき文書の短縮形（docs/07）。コードのコメントは実装と一緒に読まれるので、
+    番号つき文書の短縮形（docs/13）。コードのコメントは実装と一緒に読まれるので、
     腐った参照は後継文書へ張り替える。歴史として意図的に参照する行には
     lint-docs:ignore を書く。
     """

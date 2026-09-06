@@ -7,7 +7,7 @@ using BusinessApp.Partners.Server;
 using BusinessApp.Partners.Server.Tests.Fixtures;
 
 /// <summary>
-/// 取引先の素性を読む口（docs/07 §1-2）。
+/// 取引先の素性を読む口（docs/13 §1-2）。
 /// </summary>
 /// <remarks>
 /// 保存の関門は、差分に無い項目をここから補う。<b>読み違えると関門が静かに素通りする。</b>
@@ -29,7 +29,7 @@ public class PartnerStoreTests
         Assert.Equal(new PartnerProfile(PartnerEntityType.Corporation, "8700110005901"), profile);
     }
 
-    /// <summary>未分類（NULL）を偽の種別で埋めない（docs/07 §1-2）。</summary>
+    /// <summary>未分類（NULL）を偽の種別で埋めない（docs/13 §1-2）。</summary>
     [Fact]
     public async Task 未分類と未入力は_null_で返る()
     {

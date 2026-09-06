@@ -5,7 +5,7 @@ using BusinessApp.AccountingCore.Server.Journals;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 
 /// <summary>
-/// 計上のときに帳簿の記載事項を写して固定する（ADR-0018・docs/07 §4）。
+/// 計上のときに帳簿の記載事項を写して固定する（ADR-0018・docs/13 §4）。
 /// </summary>
 /// <remarks>
 /// <b>本物の DDL・本物のトリガに当てて検査する。</b> 「計上済みにする前に焼く」という順番は、

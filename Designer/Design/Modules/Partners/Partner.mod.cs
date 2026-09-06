@@ -18,7 +18,7 @@ void Detail_OnAfterInitialization()
     IsActive.Value = true;
 }
 
-// 登録番号の編集は別画面で行う（docs/07 §3-4。2026-09-02 の作り直し）。
+// 登録番号の編集は別画面で行う（docs/13 §3-4。2026-09-02 の作り直し）。
 // 新規作成の画面へ、この取引先の識別子をクエリパラメータで渡す。
 void AddRegistrationButton_OnClick()
 {

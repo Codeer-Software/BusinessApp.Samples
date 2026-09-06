@@ -5,7 +5,7 @@ using BusinessApp.ServerSupport;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
 /// <summary>
-/// 取引先の素性（docs/07 §1-2）のうち、保存の関門が突き合わせるものを読む。
+/// 取引先の素性（docs/13 §1-2）のうち、保存の関門が突き合わせるものを読む。
 /// </summary>
 /// <remarks>
 /// <para><b>保存されている値が要るのは、CLB が変更されたフィールドしか送ってこないからである</b>
@@ -94,7 +94,7 @@ public sealed class PartnerStore(IDbAccessor dbAccessor, string dataSourceName)
 /// 取引先の素性のうち、種別と法人番号の組。
 /// </summary>
 /// <remarks>
-/// <b>この 2 つは互いを縛る</b>（個人事業者に法人番号は指定されない。docs/07 §1-2）ので、
+/// <b>この 2 つは互いを縛る</b>（個人事業者に法人番号は指定されない。docs/13 §1-2）ので、
 /// 片方だけ読んでも判定できない。組で返す。
 /// </remarks>
 /// <param name="EntityType">種別。<c>null</c> は未分類。</param>

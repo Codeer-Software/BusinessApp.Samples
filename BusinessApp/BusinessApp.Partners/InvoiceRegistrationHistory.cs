@@ -1,12 +1,12 @@
 namespace BusinessApp.Partners;
 
 /// <summary>
-/// 登録の履歴から「その日の登録」を引く（docs/07 §3-1）。
+/// 登録の履歴から「その日の登録」を引く（docs/13 §3-1）。
 /// </summary>
 /// <remarks>
 /// <para>引く日付は<b><c>journal_lines.tax_point</c>（課税仕入れを行った日）</b>であって、
 /// 計上日ではない。<b>ただし <c>tax_point</c> が空の行は伝票の取引日で引く</b>
-/// （呼ぶ側が決める。<c>LedgerSnapshotWriter.TaxPointOf</c>・docs/07 §4-1）。</para>
+/// （呼ぶ側が決める。<c>LedgerSnapshotWriter.TaxPointOf</c>・docs/13 §4-1）。</para>
 /// <para><b>ここが決めているのは記録のための選択であって、制度上の判定ではない</b>
 /// （[ADR-0018](../../docs/decisions/0018-帳簿の記載事項は計上時に写して固定する.md)。
 /// 税額計算を支配するのは利用者が選んだ税区分であり、相手の登録状況ではない）。</para>
@@ -19,7 +19,7 @@ public static class InvoiceRegistrationHistory
     /// <remarks>
     /// <para><b>終わりの日を含める</b>（<c>EndedOn == date</c> の行も引く）。
     /// 公表システムの取消年月日・失効年月日が<b>効力の最終日なのか、効力を失った初日なのか</b>は
-    /// 一次情報で確認できていない（docs/07 §3-2 が<b>フェーズ 3 送り</b>と決めた論点）。
+    /// 一次情報で確認できていない（docs/13 §3-2 が<b>フェーズ 3 送り</b>と決めた論点）。
     /// 含める側に倒したのは、ここが<b>根拠の記録</b>だからである——
     /// 境界の 1 日で番号を落とすと、計上済みは不変なので後から補えない。
     /// 番号が残っていれば、後で解釈が決まったときに読み替えられる。</para>
