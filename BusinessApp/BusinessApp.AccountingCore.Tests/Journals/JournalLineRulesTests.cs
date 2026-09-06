@@ -93,7 +93,7 @@ public class JournalLineRulesTests
         // トースト内の文字列は改行できない（qa/01 D-12）。
         Assert.All(messages, m => Assert.DoesNotContain("\n", m, StringComparison.Ordinal));
 
-        // です・ます調（docs/09 §2-1）。
+        // です・ます調（docs/21 §2-1）。
         Assert.All(messages, m => Assert.EndsWith("。", m, StringComparison.Ordinal));
     }
 }

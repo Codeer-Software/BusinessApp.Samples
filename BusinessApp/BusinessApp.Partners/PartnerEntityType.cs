@@ -26,7 +26,7 @@ public enum PartnerEntityType
 public static class PartnerEntityTypeExtensions
 {
     /// <summary>
-    /// 利用者に見せる名前。<b>列挙子をそのまま文言に混ぜない</b>（docs/09_画面の原則.md §2）。
+    /// 利用者に見せる名前。<b>列挙子をそのまま文言に混ぜない</b>（docs/21_画面の原則.md §2）。
     /// </summary>
     /// <remarks>
     /// CLB のデザイン enum（<c>Enums/PartnerEntityTypes.enum.json</c>）と一致することを

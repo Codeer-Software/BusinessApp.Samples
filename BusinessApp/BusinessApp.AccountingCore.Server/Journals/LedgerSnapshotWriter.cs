@@ -105,7 +105,7 @@ public sealed class LedgerSnapshotWriter(IDbAccessor dbAccessor, string dataSour
     /// <remarks>
     /// <b>どれを写すか決められないときは、利用者のことばにして止める。</b>
     /// 純粋関数（<see cref="InvoiceRegistrationHistory"/>）が投げるのは開発者向けの文言なので、
-    /// ここで計上の差し戻しに載せ替える（docs/09_画面の原則.md §2）。
+    /// ここで計上の差し戻しに載せ替える（docs/21_画面の原則.md §2）。
     /// </remarks>
     private static string? RegistrationNoAt(PartnerSnapshot snapshot, DateOnly taxPoint)
     {

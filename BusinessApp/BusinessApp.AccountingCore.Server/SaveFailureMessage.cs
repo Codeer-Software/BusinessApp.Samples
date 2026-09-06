@@ -3,7 +3,7 @@ namespace BusinessApp.AccountingCore.Server;
 using Codeer.LowCode.Blazor.DataIO;
 
 /// <summary>
-/// 保存が失敗したことを、<b>利用者の語</b>で知らせる（docs/09 §2-2「内部表現を出さない」）。
+/// 保存が失敗したことを、<b>利用者の語</b>で知らせる（docs/21 §2-2「内部表現を出さない」）。
 /// </summary>
 /// <remarks>
 /// <para><b>CLB は保存の失敗を例外ではなく <c>ModuleSubmitResult.ExceptionMessage</c> に詰めて返し、
@@ -27,7 +27,7 @@ internal static class SaveFailureMessage
 {
     /// <summary>差し替え後の文言。</summary>
     /// <remarks>
-    /// <para><b>qa/01 F-16 が並べている失敗の「次にすべきこと」を、全部包む言い方にする</b>（docs/09 §2-3）——
+    /// <para><b>qa/01 F-16 が並べている失敗の「次にすべきこと」を、全部包む言い方にする</b>（docs/21 §2-3）——
     /// 直せば通るもの・開き直せば通るもの・<b>何度やっても通らないもの</b>が混ざるので、
     /// 「入力内容を確かめてください」だけでも「もう一度お試しください」だけでも嘘になる。</para>
     /// <para><b>改行を入れない</b>（トーストは改行できない。qa/01 D-12）。</para>

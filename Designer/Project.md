@@ -6,7 +6,7 @@ audience: [開発]
 growth: append
 updated: 2026-09-06
 supersedes: []
-related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md]
+related: [CLAUDE.md, ../docs/README.md, ../docs/21_画面の原則.md, ../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md]
 ---
 # Project.md（CLB デザインプロジェクト固有ルール）
 
@@ -60,10 +60,10 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/d
 
 ## レイアウト規約（画面の見た目）
 
-**何をどう見せるかと、その理由は [`../docs/09_画面の原則.md`](../docs/09_画面の原則.md) が持つ。**
+**何をどう見せるかと、その理由は [`../docs/21_画面の原則.md`](../docs/21_画面の原則.md) が持つ。**
 ここには **CLB での書き方**だけを置く（同じ規則を 2 か所に書かない）。
 
-| 原則（09 が持つ） | CLB での書き方 |
+| 原則（21 が持つ） | CLB での書き方 |
 |---|---|
 | 金額列は右詰め・3 桁カンマ | `Format: "#,0"`。**`text-align` では効かない**・**列見出し（`<th>`）に class が付かない**（[qa/01 D-15・D-16](../docs/qa/01_CLB静かな失敗.md)）。フォーム入力欄と列見出しは左のまま |
 | 識別子は左詰め | 何も付けない（既定） |
@@ -71,10 +71,10 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/09_画面の原則.md, ../docs/d
 | 検索条件は既定で開く | `SearchLayouts[""].Layout.IsExpanderDefaultOpened: true`（CLB の一般則 `LayoutGuidelines.md` とは逆の選択）。**検索欄を持つレイアウトだけ**——空の検索レイアウトを開くと空箱が出る（2026-08-30 に 9 モジュールへ適用） |
 | 帳簿を並べ替えさせない | 列の `CanUserSort: false`。**PageFrame 側でも切る**（両方書く） |
 | 必須の欄に赤い `*` | 詳細レイアウトの**ラベル側**の要素に `"ClassName": "required-label"`（`app.css` の `::after` が印を出す）＋ フォームの先頭行に `RequiredLegendLabel`。**ラベルが `RelativeField` でその欄を指しているときは、CLB が自分で `*` を足すのでクラスを付けない**（付けると `*` が 2 つ並ぶ。qa/01 F-32。認証部品の `AppUser` がこの形）。**一覧・明細表の見出しには付けられない**——`ListElement.ClassName` は `<td>` にしか付かない（qa/01 D-16）ので、**見出しの文字列そのものに `*` を入れる**（「勘定科目 *」。したがって明細の印だけ黒い） |
-| ボタンの色は 3 値だけ | `Variant` に [09 §4](../docs/09_画面の原則.md) の 3 値以外を書かない |
+| ボタンの色は 3 値だけ | `Variant` に [21 §4](../docs/21_画面の原則.md) の 3 値以外を書かない |
 | 押せないボタンを灰色にしない | **まだ無い。** 押せなくする手段は `IsViewOnly` か `IsVisible: false` で、`ButtonField` に `disabled` は無い（[qa/01 D-01・F-14](../docs/qa/01_CLB静かな失敗.md)）。半透明にするなら `app.css` に `opacity: .45`（**Bootstrap 既定の `.65` より薄く**）。**`cursor` は効かない**——`IsViewOnly` は `pointer-events: none` になる |
 
-**CLB 固有の寸法・組み方**（09 には無い。ここだけが持つ）
+**CLB 固有の寸法・組み方**（21 には無い。ここだけが持つ）
 
 - **検索レイアウトの行は `IsWrap: true` を標準**にする。1 行は 3 組（ラベル＋入力）まで
 - **「ラベル列 + 入力列」の 2 カラム行では、ラベル列に `VerticalAlignment: "Middle"` を必ず設定**

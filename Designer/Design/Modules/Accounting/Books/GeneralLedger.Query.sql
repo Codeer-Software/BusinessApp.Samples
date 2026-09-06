@@ -23,7 +23,7 @@ SELECT
     sa.name                     AS sub_account_name,
     -- **会計年度を列に出す。** 累計を年度で切る以上（下の OVER 句）、
     -- 出さないと利用者には「累計が突然戻る」「取引日が遡る」理由が見えない。
-    -- 帳簿は既定で絞らない（docs/09 §3）ので、既定の表示は必ず年度が混ざる。
+    -- 帳簿は既定で絞らない（docs/21 §3）ので、既定の表示は必ず年度が混ざる。
     fy.label                    AS fiscal_year_label,
     e.transaction_date          AS transaction_date,
     -- **区分値は生のまま返す。** 日本語の見出しは CLB のデザイン enum が持っている

@@ -24,7 +24,7 @@ void Detail_OnAfterInitialization()
 }
 
 // 再登録の規則（取消・失効の記録がない登録があるうちは次を始められない。docs/07 §3-5 R-I5）を
-// **入力の前に**知らせる（09 §1。全部入力させてから関門で捨てさせない）。関門の代わりではない。
+// **入力の前に**知らせる（21 §1。全部入力させてから関門で捨てさせない）。関門の代わりではない。
 void ShowOpenRegistrationNotice()
 {
     var searcher = new ModuleSearcher<PartnerInvoiceRegistration>();

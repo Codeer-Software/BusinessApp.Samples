@@ -27,7 +27,7 @@ public sealed class JournalAmendmentEndpoint(
 {
     /// <summary>会計の役割を持たない利用者に返す文言。</summary>
     /// <remarks>
-    /// <b>何が足りないかを言う</b>（docs/09 §2-3）。ただし<b>誰に頼めばよいかまでは書かない</b>——
+    /// <b>何が足りないかを言う</b>（docs/21 §2-3）。ただし<b>誰に頼めばよいかまでは書かない</b>——
     /// 役割を与える人は会社によって違う。
     /// </remarks>
     public const string NotAuthorized = "この操作を行う権限がありません。会計の権限を持つ利用者で操作してください。";

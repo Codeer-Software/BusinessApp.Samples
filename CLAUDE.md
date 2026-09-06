@@ -37,7 +37,7 @@ related: [docs/README.md, Designer/CLAUDE.md, docs/16_作業のルール.md, doc
 ### 0-3. 詳細設計・実装の前に
 
 - [20_実装の原則](docs/20_実装の原則.md)
-- [09_画面の原則](docs/09_画面の原則.md)（画面・利用者に見せる文言に触れるなら）
+- [21_画面の原則](docs/21_画面の原則.md)（画面・利用者に見せる文言に触れるなら）
 - **CLB のデザイン（モジュール・フィールド・レイアウト・`*.mod.cs`）に触れるなら**:
   `Designer/Project.md`（このプロジェクトでの書き方）→ `Designer/ClaudeCodeForDesigner/CLAUDE.md`
   （CLB 仕様リファレンス。デザイナが再生成する生成物——Git 追跡外・手で編集しない）→ [qa/01_CLB静かな失敗](docs/qa/01_CLB静かな失敗.md)

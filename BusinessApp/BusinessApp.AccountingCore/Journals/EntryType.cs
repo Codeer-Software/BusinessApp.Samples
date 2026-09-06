@@ -28,7 +28,7 @@ public static class EntryTypeExtensions
     /// 利用者に見せる名前。
     /// </summary>
     /// <remarks>
-    /// <para><b>列挙子をそのまま文言に混ぜない</b>（docs/09_画面の原則.md §2）。
+    /// <para><b>列挙子をそのまま文言に混ぜない</b>（docs/21_画面の原則.md §2）。
     /// <c>$"種別が「{entry.EntryType}」の…"</c> と書くと画面に <c>Reversal</c> と出る。
     /// 実際に出した（2026-08-25 の指摘）。</para>
     /// <para>同じ名前を CLB のデザイン enum（<c>Enums/EntryTypes.enum.json</c>）も持っている。

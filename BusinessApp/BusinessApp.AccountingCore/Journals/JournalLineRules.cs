@@ -49,7 +49,7 @@ public static class JournalLineRules
 
     // 行番号は画面が自動で振る（利用者は編集できない。開発者の決定。2026-08-30）。
     // だから下の 2 つは、画面を通らない経路（取込・API）でしか出ない。
-    // **利用者に「番号を直せ」と言わない**——直す欄が画面に無い（docs/09 §2-3）。
+    // **利用者に「番号を直せ」と言わない**——直す欄が画面に無い（docs/21 §2-3）。
 
     /// <summary>行番号が 1 以上の整数でない（<see cref="JournalViolationCodes.LineNoInvalid"/>）。</summary>
     public const string LineNoNotStorable = "明細の行番号が正しくありません。行番号は画面が自動で振るので、明細を入力し直してください。";
@@ -64,7 +64,7 @@ public static class JournalLineRules
     //
     // **画面からは起こらない。** 借貸・状態・種別はどれも選択欄で、候補は画面が出す。
     // 起こるのは画面を通らない経路（取込・API）だけなので、
-    // **「選び直してください」ではなく「入力し直してください」と言う**（docs/09 §2-3。
+    // **「選び直してください」ではなく「入力し直してください」と言う**（docs/21 §2-3。
     // 直す欄が画面に無い状態で「選べ」と言わない——行番号の 2 つと同じ扱い）。
 
     /// <summary>借方貸方が `debit` / `credit` のどちらでもない。</summary>
@@ -81,7 +81,7 @@ public static class JournalLineRules
 
     // --- 入っていない項目（すべて JournalViolationCodes.RequiredValueMissing）---
     //
-    // **画面に出ている見出しの語をそのまま使う**（docs/09 §2-2「内部表現を出さない」）。
+    // **画面に出ている見出しの語をそのまま使う**（docs/21 §2-2「内部表現を出さない」）。
     // 見出しの現在形はデザイン JSON が持つので、ここに一覧を写さない——変えたときに嘘になる。
 
     public const string LineNoMissing = "「行」が入っていません。明細の行を入れ直してください。";
