@@ -17,7 +17,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/001_organization.sql
 ```
 
 `tools/clb/sql.ps1` がデザイナ exe のパスを `../LocalEnvironment.md`（Git 追跡外）から解決し、
-結果 JSON を標準出力に返す。**一時ファイルを作らない**（[16 §8](../../docs/16_作業のルール.md)）。
+結果 JSON を標準出力に返す。**一時ファイルを作らない**（[30 §8](../../docs/30_作業のルール.md)）。
 
 **スキーマを変えたらサーバとデザイナの再起動が要る**（列定義が static にキャッシュされるため）。
 

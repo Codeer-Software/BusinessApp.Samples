@@ -39,7 +39,7 @@ RESERVED_FIELD_TYPES = {
     # `creator` / `updater` の INTEGER で、参照先は認証部品の利用者）。
     # `Docs/CommonMistakes.md` #42-A の表だけが `TextFieldDesign` を「推奨」と書いているが、
     # **同じファイルの本文（予約名の一覧）は `LinkFieldDesign` と書いており、食い違っている**。
-    # docs/16_作業のルール.md §2 が `Docs/AppPatterns/` を正典と定めているので、そちらに従う。
+    # docs/30_作業のルール.md §2 が `Docs/AppPatterns/` を正典と定めているので、そちらに従う。
     # **型を間違えると自動セットそのものが効かない**（F-09 の機序）。
     # 「文字列だと利用者表と突き合わせられない」ではない——SQLite の INTEGER 親和性は
     # `'3'` を格納時に整数へ直すので、比較も結合も当たる（2026-09-03 実測）。
