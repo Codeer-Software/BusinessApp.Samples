@@ -14,7 +14,7 @@ CREATE TABLE accounts (
     category                    TEXT NOT NULL CHECK (category IN (
                                     'asset', 'liability', 'equity', 'revenue', 'expense')),
 
-    -- 決算書表示区分。科目区分とは別物で、「財務諸表のどこに並べるか」だけを表す（docs/04 §6）。
+    -- 決算書表示区分。科目区分とは別物で、「財務諸表のどこに並べるか」だけを表す（docs/10 §6）。
     statement_section           TEXT,
 
     -- 入力時の初期値。**値が入っていない行の穴埋めに使わない**（前回プロジェクトの実測で事故った）。
@@ -71,7 +71,7 @@ CREATE TABLE departments (
     name                        TEXT NOT NULL,
 
     -- 「全社共通」。利用者が意図して選ぶときだけ使う枠であり、
-    -- 空欄の穴埋めには使わない（docs/04 §9-1）。
+    -- 空欄の穴埋めには使わない（docs/10 §9-1）。
     is_company_wide             INTEGER NOT NULL DEFAULT 0 CHECK (is_company_wide IN (0, 1)),
 
     is_active                   INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),

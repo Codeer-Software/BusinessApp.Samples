@@ -52,7 +52,7 @@ public class AccountCatalogTests
     [Fact]
     public void 無効な科目も引ける()
     {
-        // 入力候補から外れても、過去データの表示・検索は妨げない（docs/04 §6）。
+        // 入力候補から外れても、過去データの表示・検索は妨げない（docs/10 §6）。
         var retired = Cash with { Id = new AccountId(9), Name = "廃止した科目", IsActive = false };
         var catalog = new AccountCatalog([retired]);
 
@@ -62,7 +62,7 @@ public class AccountCatalogTests
     [Fact]
     public void 既定税区分は任意である()
     {
-        // 「値が入っていない行の穴埋め」に使わないので、持たない科目があってよい（docs/04 §6）。
+        // 「値が入っていない行の穴埋め」に使わないので、持たない科目があってよい（docs/10 §6）。
         var withDefault = Cash with { DefaultTaxCategoryId = new TaxCategoryId(3) };
 
         Assert.Null(Cash.DefaultTaxCategoryId);

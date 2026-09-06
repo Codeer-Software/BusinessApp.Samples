@@ -30,7 +30,7 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 /// 法定記載事項の信頼性が落ちる（ADR-0018）。サーバがマスタから引いて書く。
 /// <b>取引先の無い行には NULL を焼く</b>——飛ばすと、利用者が送ってきた文字列が残る。</para>
 /// <para><b>明細に取引先が無い行には伝票の取引先を使う。</b> 帳簿は「明細 → 伝票」の順に
-/// 取引先を見る（docs/04 §4-1）ので、写しも同じ順で決める。</para>
+/// 取引先を見る（docs/10 §4-1）ので、写しも同じ順で決める。</para>
 /// <para><b>取消（反対仕訳）には焼き直さない。</b> 反対仕訳は過去の反転であって新しい記帳ではないので、
 /// 原仕訳から写した値をそのまま残す（ADR-0018）。焼き直すと、原仕訳の計上後に改名された相手で
 /// <b>同じ取引の表と裏が違う名前になる</b>（実機操作テストで発見。qa/03 L-13）。</para>
@@ -78,7 +78,7 @@ public sealed class LedgerSnapshotWriter(IDbAccessor dbAccessor, string dataSour
     }
 
     /// <summary>
-    /// この行の取引先。<b>明細が持っていなければ伝票のものを使う</b>（docs/04 §4-1）。
+    /// この行の取引先。<b>明細が持っていなければ伝票のものを使う</b>（docs/10 §4-1）。
     /// </summary>
     private static PartnerId? PartnerOf(JournalEntry entry, JournalLine line) => line.PartnerId ?? entry.PartnerId;
 

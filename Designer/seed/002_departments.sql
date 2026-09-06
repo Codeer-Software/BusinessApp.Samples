@@ -2,7 +2,7 @@
 --
 -- ペルソナ（docs/02 §4）の 5 部門 ＋ 全社共通。
 -- 「全社共通」は**利用者が意図して選ぶときだけ使う枠**であり、
--- 空欄の穴埋めには使わない（docs/04 §9-1）。DB 側でも 1 件しか作れない。
+-- 空欄の穴埋めには使わない（docs/10 §9-1）。DB 側でも 1 件しか作れない。
 
 INSERT INTO departments (code, name, is_company_wide, display_order) VALUES
     ('00', '全社共通',           1, 10),

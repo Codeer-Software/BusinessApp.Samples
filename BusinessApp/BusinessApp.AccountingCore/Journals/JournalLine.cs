@@ -7,7 +7,7 @@ using BusinessApp.Partners;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 仕訳明細（docs/04 §4-1）。金額は税抜・正の整数円で、借方貸方は <see cref="DebitCredit"/> が持つ。
+/// 仕訳明細（docs/10 §4-1）。金額は税抜・正の整数円で、借方貸方は <see cref="DebitCredit"/> が持つ。
 /// </summary>
 public sealed record JournalLine
 {
@@ -20,14 +20,14 @@ public sealed record JournalLine
 
     public SubAccountId? SubAccountId { get; init; }
 
-    /// <summary>部門。損益科目では必須（I-13）。空欄を「全社共通」で穴埋めしない（docs/04 §9-1）。</summary>
+    /// <summary>部門。損益科目では必須（I-13）。空欄を「全社共通」で穴埋めしない（docs/10 §9-1）。</summary>
     public DepartmentId? DepartmentId { get; init; }
 
     public PartnerId? PartnerId { get; init; }
 
     /// <summary>
     /// 取引先名の写し。帳簿の法定記載事項①（消法 30 ⑧）であり、
-    /// 取引先の改名で過去の帳簿の記載が変わらないように識別子と両方持つ（docs/04 §4-2）。
+    /// 取引先の改名で過去の帳簿の記載が変わらないように識別子と両方持つ（docs/10 §4-2）。
     /// </summary>
     public string? PartnerNameSnapshot { get; init; }
 

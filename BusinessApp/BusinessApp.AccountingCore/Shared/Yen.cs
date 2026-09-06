@@ -3,7 +3,7 @@ namespace BusinessApp.AccountingCore.Shared;
 using System.Globalization;
 
 /// <summary>
-/// 整数円の金額（docs/04 §3）。
+/// 整数円の金額（docs/10 §3）。
 /// </summary>
 /// <remarks>
 /// <para>浮動小数点を使わず <see cref="decimal"/> で保持し、円未満を持てないことを型で保証する。</para>

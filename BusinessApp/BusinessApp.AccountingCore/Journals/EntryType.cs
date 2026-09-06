@@ -1,6 +1,6 @@
 namespace BusinessApp.AccountingCore.Journals;
 
-/// <summary>仕訳の種別（docs/04 §4-1）。</summary>
+/// <summary>仕訳の種別（docs/10 §4-1）。</summary>
 public enum EntryType
 {
     /// <summary>通常の仕訳。</summary>

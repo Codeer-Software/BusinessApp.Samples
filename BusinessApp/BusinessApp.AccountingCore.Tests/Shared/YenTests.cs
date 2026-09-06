@@ -2,7 +2,7 @@ namespace BusinessApp.AccountingCore.Tests.Shared;
 
 using BusinessApp.AccountingCore.Shared;
 
-/// <summary>金額の型（docs/04 §3）。円未満を持てないことと、端数処理が明示的であることを固定する。</summary>
+/// <summary>金額の型（docs/10 §3）。円未満を持てないことと、端数処理が明示的であることを固定する。</summary>
 public class YenTests
 {
     [Theory]

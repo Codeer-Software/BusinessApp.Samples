@@ -214,7 +214,7 @@ public class JournalImmutabilityTests
     }
 
     /// <summary>
-    /// 金額は整数円でなければならない（docs/04 §3）。
+    /// 金額は整数円でなければならない（docs/10 §3）。
     /// </summary>
     /// <remarks>
     /// <b>INTEGER と書くだけでは整数にならない。</b> SQLite の型親和性は 100.5 を整数に落とせず、

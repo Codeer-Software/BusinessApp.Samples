@@ -38,7 +38,7 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/21_画面の原則.md, ../docs/d
   画面表示名（`DisplayName`）は日本語
 - CLB のシステム予約名（`Id` / `LogicalDelete` / `OptimisticLocking` / `CreatedAt` / `UpdatedAt` /
   `Creator` / `Updater`）はその綴りのまま使う
-- 主要テーブル名の正典は `../docs/04_会計ドメイン設計.md`
+- 主要テーブル名の正典は `../docs/10_会計ドメイン設計.md`
 
 > テンプレート由来の `AppUser` モジュールだけはフィールド名が日本語（`ユーザー識別名` 等）である。
 > 認証部品の資産なので**改名しない**。新規モジュールは上記の規約に従う。
@@ -85,7 +85,7 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/21_画面の原則.md, ../docs/d
 
 ## 業務ルール（会計の不変条件）
 
-正典は `../docs/04_会計ドメイン設計.md`。ここには CLB 実装に直接効くものだけを再掲する。
+正典は `../docs/10_会計ドメイン設計.md`。ここには CLB 実装に直接効くものだけを再掲する。
 
 - **計上済み（posted）の仕訳は変更・削除しない。** 訂正・取消は反対仕訳で行う
   （`../docs/decisions/0004-優良な電子帳簿への準拠と仕訳の不変性.md`）

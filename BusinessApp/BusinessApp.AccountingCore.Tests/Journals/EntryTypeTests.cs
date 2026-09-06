@@ -2,7 +2,7 @@ namespace BusinessApp.AccountingCore.Tests.Journals;
 
 using BusinessApp.AccountingCore.Journals;
 
-/// <summary>仕訳の種別（docs/04 §4-1・§5）。</summary>
+/// <summary>仕訳の種別（docs/10 §4-1・§5）。</summary>
 public class EntryTypeTests
 {
     [Theory]

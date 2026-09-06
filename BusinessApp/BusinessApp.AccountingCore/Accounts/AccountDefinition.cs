@@ -4,7 +4,7 @@ using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 検証・集計に必要な範囲の勘定科目（docs/04 §6）。
+/// 検証・集計に必要な範囲の勘定科目（docs/10 §6）。
 /// 画面表示のための属性（決算書表示区分・並び順など）はここに持ち込まない。
 /// </summary>
 /// <param name="Id">科目の識別子（DB の主キー）。</param>
@@ -12,7 +12,7 @@ using BusinessApp.AccountingCore.Shared;
 /// <param name="Name">科目名。</param>
 /// <param name="Category">科目区分。部門の要否と決算振替がこれに依存する。</param>
 /// <param name="DefaultTaxCategoryId">
-/// 入力時の初期値としての税区分。<b>値が入っていない行の穴埋めに使わない</b>（docs/04 §6）。
+/// 入力時の初期値としての税区分。<b>値が入っていない行の穴埋めに使わない</b>（docs/10 §6）。
 /// </param>
 /// <param name="RequiresSubAccount">補助科目を使う科目か。使う科目では補助科目の指定を必須にする。</param>
 /// <param name="IsContra">

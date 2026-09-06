@@ -3,7 +3,7 @@ namespace BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 下書きを計上する（docs/04 §5）。検証 → 採番 → 状態遷移を 1 か所に集める。
+/// 下書きを計上する（docs/10 §5）。検証 → 採番 → 状態遷移を 1 か所に集める。
 /// </summary>
 /// <remarks>
 /// <para>純粋関数である。DB も時計も知らず、採番の状態と現在時刻は呼び出し側が渡す

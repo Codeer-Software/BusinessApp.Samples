@@ -4,7 +4,7 @@ namespace BusinessApp.AccountingCore.Journals;
 /// 仕訳モジュールが出す違反の識別子。
 /// </summary>
 /// <remarks>
-/// docs/04 §1 の不変条件と 1 対 1 に対応するものは番号（<c>I-xx</c>）をそのまま使い、
+/// docs/10 §1 の不変条件と 1 対 1 に対応するものは番号（<c>I-xx</c>）をそのまま使い、
 /// それ以外は <c>E-</c> で始める。画面はこのコードで分岐し、文言は表示にだけ使う。
 /// **同じコードを別の原因に使い回さない**（対処が違うものを画面が区別できなくなる）。
 /// </remarks>
@@ -132,7 +132,7 @@ public static class JournalViolationCodes
     /// <summary>消費税行が本体行から引き継ぐべき値を引き継いでいない。</summary>
     public const string TaxLineNotInherited = "E-TAX-INHERIT";
 
-    // --- 取消・訂正に共通（原仕訳の側の規則。docs/04 §5・AmendmentRules）---
+    // --- 取消・訂正に共通（原仕訳の側の規則。docs/10 §5・AmendmentRules）---
 
     /// <summary>取り消す／訂正しようとした仕訳が存在しない。</summary>
     public const string AmendmentTargetNotFound = "E-AMEND-NOT-FOUND";

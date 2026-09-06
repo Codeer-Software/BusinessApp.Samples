@@ -9,7 +9,7 @@
 --
 -- 用途区分（default_tax_treatment）は**あえて空にしてある**。個別対応方式では
 -- 課税売上対応／共通対応／非課税売上対応を取引ごとに選ぶ必要があり、
--- 既定値で埋めると「値は入っているが意味がない」状態を作る（docs/04 §9-1）。
+-- 既定値で埋めると「値は入っているが意味がない」状態を作る（docs/10 §9-1）。
 
 INSERT INTO tax_categories (code, name, taxation_type, rate_kind, display_order) VALUES
     ('OUT',  '対象外',                     'out_of_scope',         NULL,   10),

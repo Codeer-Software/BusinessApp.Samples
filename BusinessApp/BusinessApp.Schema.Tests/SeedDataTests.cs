@@ -217,7 +217,7 @@ public class SeedDataTests
 
     /// <summary>
     /// 個別対応方式では用途区分を取引ごとに選ぶ。既定値で埋めると
-    /// 「値は入っているが意味がない」状態を作る（docs/04 §9-1）。
+    /// 「値は入っているが意味がない」状態を作る（docs/10 §9-1）。
     /// </summary>
     [Fact]
     public void 用途区分の既定値は入れていない()
@@ -241,7 +241,7 @@ public class SeedDataTests
         }
     }
 
-    /// <summary>コードの先頭桁と科目区分が体系どおりに対応している（docs/04 §6）。</summary>
+    /// <summary>コードの先頭桁と科目区分が体系どおりに対応している（docs/10 §6）。</summary>
     [Theory]
     [InlineData("1", "asset")]
     [InlineData("2", "liability")]
@@ -296,7 +296,7 @@ public class SeedDataTests
 
     /// <summary>
     /// 判断が分かれる科目には既定税区分を入れない。既定値があると間違ったまま通ってしまう
-    /// （docs/04 §6「値が入っていない行の穴埋めに使わない」）。
+    /// （docs/10 §6「値が入っていない行の穴埋めに使わない」）。
     /// </summary>
     [Theory]
     [InlineData("4290")]  // 雑収入

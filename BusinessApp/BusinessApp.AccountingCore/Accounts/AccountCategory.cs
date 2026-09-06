@@ -3,7 +3,7 @@ namespace BusinessApp.AccountingCore.Accounts;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 科目区分（docs/04 §6）。決算書表示区分とは別物であり、
+/// 科目区分（docs/10 §6）。決算書表示区分とは別物であり、
 /// <b>部門の要否判定と決算振替はこちらに依存する</b>。
 /// </summary>
 public enum AccountCategory

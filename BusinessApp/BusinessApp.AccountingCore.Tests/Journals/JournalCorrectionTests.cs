@@ -6,7 +6,7 @@ using BusinessApp.AccountingCore.Shared;
 using BusinessApp.AccountingCore.Tests.Fixtures;
 
 /// <summary>
-/// 訂正（取消 ＋ 正しい内容の再計上）。docs/04 §5・ADR-0015。
+/// 訂正（取消 ＋ 正しい内容の再計上）。docs/10 §5・ADR-0015。
 /// </summary>
 /// <remarks>
 /// <b>ここで守っているのは「取引が帳簿に二重に載らない」ことである。</b>

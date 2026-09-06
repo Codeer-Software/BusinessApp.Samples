@@ -2,7 +2,7 @@ namespace BusinessApp.AccountingCore.Periods;
 
 using BusinessApp.AccountingCore.Shared;
 
-/// <summary>月次の会計期間（docs/04 §7）。</summary>
+/// <summary>月次の会計期間（docs/10 §7）。</summary>
 /// <param name="Id">会計期間の識別子。</param>
 /// <param name="FiscalYearId">属する会計年度。</param>
 /// <param name="Period">期間（月初日〜月末日。両端を含む）。</param>

@@ -8,7 +8,7 @@ using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
 /// <summary>
-/// 計上済みの伝票を「取り消す」「訂正する」（docs/04 §5・ADR-0015）。
+/// 計上済みの伝票を「取り消す」「訂正する」（docs/10 §5・ADR-0015）。
 /// </summary>
 /// <remarks>
 /// <para>画面のボタンから Web API 経由で呼ばれる（ADR-0016）。<b>会計の判断は 1 行も

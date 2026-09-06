@@ -2,7 +2,7 @@ namespace BusinessApp.AccountingCore.Tests.Shared;
 
 using BusinessApp.AccountingCore.Shared;
 
-/// <summary>借方貸方（docs/04 §3）。反対仕訳の生成が反転に依存する。</summary>
+/// <summary>借方貸方（docs/10 §3）。反対仕訳の生成が反転に依存する。</summary>
 public class DebitCreditTests
 {
     [Theory]

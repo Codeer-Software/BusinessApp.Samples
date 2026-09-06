@@ -22,7 +22,7 @@ public class DepartmentCatalogTests
     [Fact]
     public void 全社共通は既定では立っていない()
     {
-        // 「全社共通」は利用者が意図して選ぶときだけ使う枠であり、既定にしない（docs/04 §9-1）。
+        // 「全社共通」は利用者が意図して選ぶときだけ使う枠であり、既定にしない（docs/10 §9-1）。
         Assert.False(Sales.IsCompanyWide);
         Assert.True(new DepartmentDefinition(new DepartmentId(2), "00", "全社共通", IsCompanyWide: true).IsCompanyWide);
     }

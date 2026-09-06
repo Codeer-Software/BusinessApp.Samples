@@ -5,7 +5,7 @@ using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 取消の中身をシステムが決める（docs/04 §5）。
+/// 取消の中身をシステムが決める（docs/10 §5）。
 /// </summary>
 /// <remarks>
 /// <para><b>送られてきた明細は使わない。</b> 取消は「原仕訳の貸借を入れ替えたもの」と決まっていて、

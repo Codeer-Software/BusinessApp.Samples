@@ -2,7 +2,7 @@ namespace BusinessApp.AccountingCore.Tests.Journals;
 
 using BusinessApp.AccountingCore.Journals;
 
-/// <summary>仕訳の状態（docs/04 §5）。</summary>
+/// <summary>仕訳の状態（docs/10 §5）。</summary>
 public class EntryStatusTests
 {
     [Theory]

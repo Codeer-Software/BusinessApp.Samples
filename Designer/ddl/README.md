@@ -5,7 +5,7 @@ scope: 会計コア
 audience: [開発]
 updated: 2026-09-06
 supersedes: []
-related: [../Project.md, ../../docs/04_会計ドメイン設計.md, ../../docs/08_マスタ台帳.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
+related: [../Project.md, ../../docs/10_会計ドメイン設計.md, ../../docs/08_マスタ台帳.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---
 # ddl — スキーマ定義
 

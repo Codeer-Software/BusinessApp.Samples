@@ -5,7 +5,7 @@ using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 仕訳伝票（docs/04 §4-1）。日付は用途ごとに別の項目で持ち、1 つに潰さない（docs/04 §2）。
+/// 仕訳伝票（docs/10 §4-1）。日付は用途ごとに別の項目で持ち、1 つに潰さない（docs/10 §2）。
 /// </summary>
 public sealed record JournalEntry
 {
@@ -37,7 +37,7 @@ public sealed record JournalEntry
 
     public PartnerId? PartnerId { get; init; }
 
-    /// <summary>投入元の部品名。手入力は null（docs/04 §10）。</summary>
+    /// <summary>投入元の部品名。手入力は null（docs/10 §10）。</summary>
     public string? SourceComponent { get; init; }
 
     public string? SourceDocumentId { get; init; }
@@ -48,7 +48,7 @@ public sealed record JournalEntry
     /// <summary>
     /// 入力年月日。<b>利用者は変更できない</b>。
     /// 「通常の業務処理期間の経過後の入力の事実を確認できる」という優良な電子帳簿の要件
-    /// （規則 5 ⑤一イ(2)）そのものであり、取引日と共用しない（docs/04 §2）。
+    /// （規則 5 ⑤一イ(2)）そのものであり、取引日と共用しない（docs/10 §2）。
     /// </summary>
     public required DateTimeOffset EnteredAt { get; init; }
 

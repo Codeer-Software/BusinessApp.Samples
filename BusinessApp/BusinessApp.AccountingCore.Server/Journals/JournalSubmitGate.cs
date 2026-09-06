@@ -317,7 +317,7 @@ public sealed class JournalSubmitGate(
         var added = EntriesIn(transactionData, d => d.Add);
         var updated = EntriesIn(transactionData, d => d.Update);
 
-        // 入力年月日はシステムが決める。利用者からの値は採らない（docs/04 §2）。
+        // 入力年月日はシステムが決める。利用者からの値は採らない（docs/10 §2）。
         foreach (var data in added)
         {
             SetDateTime(data, "EnteredAt", DatabaseTimeZone.ToWallClock(timeProvider.GetUtcNow()));

@@ -1,6 +1,6 @@
 namespace BusinessApp.AccountingCore.Journals;
 
-/// <summary>仕訳の状態（docs/04 §5）。</summary>
+/// <summary>仕訳の状態（docs/10 §5）。</summary>
 public enum EntryStatus
 {
     /// <summary>下書き。まだ帳簿ではないので自由に編集・削除できる。</summary>

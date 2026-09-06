@@ -66,7 +66,7 @@ public class SchemaShapeTests
         Assert.Equal([expected], declared);
     }
 
-    /// <summary>金額は整数円。REAL を使うと丸め誤差が帳簿に入る（docs/04 §3）。</summary>
+    /// <summary>金額は整数円。REAL を使うと丸め誤差が帳簿に入る（docs/10 §3）。</summary>
     [Fact]
     public void 金額列はINTEGERである()
     {

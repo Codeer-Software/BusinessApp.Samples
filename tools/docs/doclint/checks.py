@@ -264,9 +264,9 @@ SECTION_REF_RE = re.compile(r"§ ?(" + SECTION_NO + r")")
 LINK_THEN_SECTION_RE = re.compile(r"\[([^\]]*)\]\(([^)\s]+\.md)\)([^\n]{0,8})")
 # リンクを張れないコードのコメントのための `CLAUDE.md §5`
 BARE_CLAUDE_REF_RE = re.compile(r"(?<![\w/.])CLAUDE\.md.{0,3}?§ ?(" + SECTION_NO + r")")
-# 同じくリンクを張れない場所で使う `docs/04 §1` の短縮形。
-# `../docs/04 §1` は拾い、`他のリポジトリ/docs/04` は拾わない（上りだけを接頭辞に許す）。
-# `docs/04_会計ドメイン設計.md §1` は上の LINK 系が拾うので `_` の手前で切る
+# 同じくリンクを張れない場所で使う `docs/10 §1` の短縮形。
+# `../docs/10 §1` は拾い、`他のリポジトリ/docs/04` は拾わない（上りだけを接頭辞に許す）。
+# `docs/10_会計ドメイン設計.md §1` は上の LINK 系が拾うので `_` の手前で切る
 BARE_DOCS_REF_RE = re.compile(
     r"(?<![\w/])(?:\.\.?/)*docs/([0-9]{2})(?![0-9_\w])[ 　]?§ ?(" + SECTION_NO + r")")
 # リンクを張らずにファイル名で書く `docs/21_画面の原則.md §2`（コードのコメントに多い）
@@ -329,7 +329,7 @@ def resolve_rel(src_rel, target):
 def section_refs(rel, line, docs_entries=()):
     """1 行から `(指し先の文書, 節番号の一覧)` の組を取り出す（純粋関数）。
 
-    `docs_entries` は `docs/` 直下の名前の一覧。`docs/04 §1` の解決に要る。
+    `docs_entries` は `docs/` 直下の名前の一覧。`docs/10 §1` の解決に要る。
     渡さなければその形は見ない（純粋なままにするための注入口）。
     指し先が引けない番号は `docs/NN`（実体なし）のまま返し、呼び手が error にする。
     """
@@ -367,7 +367,7 @@ def check_section_references(docs: List[Doc], findings: List[Finding]) -> None:
     実際に 2 度起きた（qa/03 の L-18。2026-08-26 と 2026-09-05）。
 
     拾うのは 4 つの形——`[ラベル §4-9](先.md)`・`[ラベル](先.md) §4-9`・
-    リンクを張れないコードのコメントのための `CLAUDE.md §5` と `docs/04 §1`。
+    リンクを張れないコードのコメントのための `CLAUDE.md §5` と `docs/10 §1`。
     **番号つき見出しを持たない文書への参照は見ない**（その文書は番号で引く作りではない）。
     歴史として古い番号を書く行には lint-docs:ignore を書く。
 

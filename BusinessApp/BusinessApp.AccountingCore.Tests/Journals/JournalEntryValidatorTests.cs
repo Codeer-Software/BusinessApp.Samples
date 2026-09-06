@@ -8,7 +8,7 @@ using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 using BusinessApp.AccountingCore.Tests.Fixtures;
 
-/// <summary>計上の関門（docs/04 §1 の不変条件）。</summary>
+/// <summary>計上の関門（docs/10 §1 の不変条件）。</summary>
 public class JournalEntryValidatorTests
 {
     private static readonly DateOnly Ordinary = new(2026, 5, 20);
@@ -313,7 +313,7 @@ public class JournalEntryValidatorTests
     public void 法定記載事項を備えた明細は計上できる()
     {
         // 帳簿の法定記載事項（消法 30 ⑧）を明細が満たす形（docs/06 §8）。
-        // 取引先は識別子と名前の写しを両方持つ（docs/04 §4-2）。
+        // 取引先は識別子と名前の写しを両方持つ（docs/10 §4-2）。
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 10_000,
@@ -373,7 +373,7 @@ public class JournalEntryValidatorTests
     public void 取消と訂正では無効なマスタでも止めない(EntryType entryType)
     {
         // **後からマスタを無効にしたせいで、訂正も取消もできない仕訳が帳簿に残ってはいけない**
-        // （docs/04 §6・ADR-0004）。新たな計上には使えないが、どちらも過去を打ち消す・直す操作である。
+        // （docs/10 §6・ADR-0004）。新たな計上には使えないが、どちらも過去を打ち消す・直す操作である。
         //
         // **訂正を含めるのは 2026-08-25 の自己レビューで直した。** 訂正は取消を先に計上してから
         // 再計上の下書きを開くので（ADR-0015）、ここが Error だと

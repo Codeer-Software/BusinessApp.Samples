@@ -5,7 +5,7 @@ using BusinessApp.AccountingCore.Shared;
 using BusinessApp.AccountingCore.Tests.Fixtures;
 
 /// <summary>
-/// 会計期間の解決（docs/04 §7）。
+/// 会計期間の解決（docs/10 §7）。
 /// 前回プロジェクトは「対象日の月初日で引き当てる」方式で時刻成分の問題を回避していたが、
 /// 日付を <see cref="DateOnly"/> で持てば範囲比較で素直に解ける（qa/01 A-04）。
 /// </summary>
