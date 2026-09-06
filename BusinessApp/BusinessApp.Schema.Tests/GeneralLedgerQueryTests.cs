@@ -335,6 +335,41 @@ public class GeneralLedgerQueryTests
         Assert.All(rows, r => Assert.Equal(1, r.EntryNo));
     }
 
+    // --- 取引先別の帳簿（ADR-0042。総勘定元帳を取引先で絞って売掛帳・買掛帳にする前提）---
+
+    /// <summary>
+    /// <b>取引先で絞ると、累計もその取引先の行だけで積み上がる。</b>
+    /// 別表二十四（四）（五）の「相手方別に」を、総勘定元帳を取引先で絞ることで満たす前提
+    /// （ADR-0042・docs/40 §4-1）は、これが成り立って初めて言える。
+    /// </summary>
+    /// <remarks>
+    /// <para>窓関数は <c>WHERE</c> の後に評価されるので、絞れば取引先ごとの累計になる——
+    /// <b>読みで「済」と書かず、数えて固定する</b>（qa/02 ラウンド 43）。</para>
+    /// <para>検体は 3 つの形を通す——<b>取引先が明細側にだけ付いた伝票</b>（伝票側は空。
+    /// <c>COALESCE(l.partner_id, e.partner_id)</c> の明細側）、<b>取引先が伝票側に付いた伝票</b>、
+    /// <b>その取消</b>（反対仕訳は原仕訳と同じ取引日・同じ取引先。docs/10 §5）。</para>
+    /// </remarks>
+    [Fact]
+    public void 取引先で絞ると累計はその取引先の行だけで積み上がる()
+    {
+        using var db = CreateWithPartnerLedger();
+
+        // 取引先 1 の現金: 1 番 借 1,000 → 6 番 借 600 → 7 番（6 番の取消）貸 600。
+        var first = Run(db, ("@p_account_id", 1L), ("@p_partner_id", 1L));
+        Assert.Equal([1, 6, 7], first.Select(r => r.EntryNo));
+        Assert.Equal([1000, 1600, 1000], first.Select(r => r.RunningTotal));
+
+        // 取引先 2 の現金: 5 番 借 400 だけ。取引先 1 の 1,000 を引きずらない。
+        var second = Run(db, ("@p_account_id", 1L), ("@p_partner_id", 2L));
+        Assert.Equal([5], second.Select(r => r.EntryNo));
+        Assert.Equal([400], second.Select(r => r.RunningTotal));
+
+        // 絞らなければ、同じ現金の累計は全取引先が混ざった 1 本の系列になる。
+        Assert.Equal(
+            [1000, 4000, 3700, 4100, 4700, 4100],
+            Run(db, ("@p_account_id", 1L)).Select(r => r.RunningTotal));
+    }
+
     [Fact]
     public void 部門で絞れる()
     {
@@ -463,6 +498,51 @@ public class GeneralLedgerQueryTests
         UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2027-04-10 10:00:00' WHERE id = 6;
         UPDATE journal_entries SET status = 'posted', entry_no = 2, posted_at = '2027-04-20 10:00:00' WHERE id = 7;
         UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2025-05-10 10:00:00' WHERE id = 8;
+        """;
+
+    /// <summary>
+    /// 取引先別の累計を数える検体。<b>取引先の付け方を 2 通り（明細側・伝票側）と、取消を 1 本</b>入れる。
+    /// </summary>
+    private static SqliteConnection CreateWithPartnerLedger()
+    {
+        var db = Create();
+        TestDatabase.Execute(db, PartnerLedger);
+        return db;
+    }
+
+    /// <remarks>
+    /// 伝票の識別子は基本の検体の続き（6〜8）。伝票番号は第 18 期の連番の続き（5〜7）。
+    /// </remarks>
+    private const string PartnerLedger = """
+        INSERT INTO partners (code, name) VALUES ('P002', '乙商事');
+
+        -- 6) 05-30 借 現金 400 / 貸 売上高 400。**取引先 2 は明細側にだけ付ける**（伝票側は空）。
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            VALUES (1, '2026-05-30', '2026-05-30', 'draft', 'normal', '2026-05-30 10:00:00');
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, partner_id, amount, tax_category_id)
+            VALUES (6, 1, 'debit', 1, 2, 400, 1);
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (6, 2, 'credit', 2, 400, 1);
+
+        -- 7) 05-31 借 現金 600 / 貸 売上高 600。**取引先 1 は伝票側**。
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, partner_id, entered_at)
+            VALUES (1, '2026-05-31', '2026-05-31', 'draft', 'normal', 1, '2026-05-31 10:00:00');
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (7, 1, 'debit', 1, 600, 1);
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (7, 2, 'credit', 2, 600, 1);
+
+        -- 8) 7 番の取消。反対仕訳は原仕訳と同じ取引日・同じ取引先で、貸借を入れ替える（docs/10 §5）。
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, partner_id, entered_at)
+            VALUES (1, '2026-05-31', '2026-06-01', 'draft', 'reversal', 7, 1, '2026-06-01 10:00:00');
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (8, 1, 'debit', 2, 600, 1);
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (8, 2, 'credit', 1, 600, 1);
+
+        UPDATE journal_entries SET status = 'posted', entry_no = 5, posted_at = '2026-05-30 10:00:00' WHERE id = 6;
+        UPDATE journal_entries SET status = 'posted', entry_no = 6, posted_at = '2026-05-31 10:00:00' WHERE id = 7;
+        UPDATE journal_entries SET status = 'posted', entry_no = 7, posted_at = '2026-06-01 10:00:00' WHERE id = 8;
         """;
 
     private sealed record Row(
