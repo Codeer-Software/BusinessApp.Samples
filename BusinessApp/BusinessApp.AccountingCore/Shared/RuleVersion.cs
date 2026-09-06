@@ -1,7 +1,7 @@
 namespace BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 制度ルールの版（docs/15_実装の原則.md §2）。
+/// 制度ルールの版（docs/20_実装の原則.md §2）。
 /// 仕訳明細に適用した版を固定して保存し、後日マスタを更新しても過去を再計算しない（I-16）。
 /// </summary>
 public readonly record struct RuleVersion
