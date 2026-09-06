@@ -9,6 +9,7 @@
      件数だけでなく**指摘文の中身**まで表明する（error を warn に格下げしても件数は変わらない）
   3. `section_refs` が節への参照の 5 形を拾い、**拾ってはいけない形を拾わない**か
   4. 定義した検査が全部 `ALL_CHECKS` に載り、`main` から**正しい引数で**呼ばれているか
+  5. `article_notation_violations` が `5 条 1 項` を拾い、**公布番号と「12 項目」を拾わない**か
 """
 
 from __future__ import annotations
@@ -18,8 +19,8 @@ import re
 from typing import Dict, List
 
 from . import checks
-from .checks import (ALL_CHECKS, Finding, check_superseded_links, successor_of,
-                     updated_violation)
+from .checks import (ALL_CHECKS, Finding, article_notation_violations,
+                     check_superseded_links, successor_of, updated_violation)
 from .model import (ADR_LEDGER, DOCS_INDEX, Doc, INLINE_IGNORE, LINE_LIMIT, SEV_ERROR,
                     SEV_WARN, body_of, load_docs, parse_front_matter)
 
@@ -359,10 +360,51 @@ def _check_other_checks() -> List[str]:
     return ng
 
 
+def _check_article_notation_forms() -> List[str]:
+    """条項の記法の判定が、拾うべき形を拾い、拾ってはいけない形を拾わないか（80 §3）。
+
+    **「拾わない」側が本体**である。錨を外すと「12 項目」「4 条件」「令和 8 年法律第 12 号」まで
+    当たり、実測で 9 割が誤検出になる（2026-09-06 に実測して決めた）。
+    """
+    ng = []
+    should_hit = [
+        "電帳規則5条5項1号（2027-01-01 以後は5条4項1号）",   # 略称＋連なり／lint-docs:ignore
+        "電帳規則第5条第5項",                                  # 「第」つき／lint-docs:ignore
+        "法人税法施行規則 54 条を「別表二十一」と示した",       # 正式名称＋条／lint-docs:ignore
+        "番号法 20 条は、19 条各号に該当する場合を除いて",      # 一覧に無い法令／lint-docs:ignore
+        "取適法（**5 条 1 項 2 号**）が禁じるのは",             # 強調記号をまたぐ連なり／lint-docs:ignore
+        "（附則 2 条 2 項。施行前にした製造委託等は",           # 附則／lint-docs:ignore
+        "スキャナ保存の要件概要（電帳規則2条5項・6項）",        # 見出し／lint-docs:ignore
+    ]
+    for line in should_hit:
+        if not article_notation_violations(line):
+            ng.append("article_notation: 拾えていない: " + line)
+
+    should_not_hit = [
+        "| 政令 | **電帳令** | 同施行令 | 令和3年政令第128号 |",      # 公布番号
+        "平成10年大蔵省令第43号",                                     # 同上
+        "同日前開始事業年度は9年（平27財務省令23号 附則2①）",         # 「第」なしの公布番号
+        "令和 8 年法律第 12 号（令和 8 年 3 月 31 日成立・公布）",     # 同上
+        "サイドバーが 12 項目の並列で見にくい",                        # 項目
+        "全部の 4 条件を一度に決める",                                 # 条件
+        "IDE0045 / IDE0046（三項演算子への寄せ）",                     # 演算子
+        "### 3.1 条文（現行・電帳規則 5 ⑤一）",                        # 節番号 ＋ 条文
+        "**消税法 30 ⑦・38 ②・38 の 2 ②・58**に規定する帳簿",        # 正しい記法
+        "電帳規則 5 ⑤一イ",                                            # 同上
+        "1 桁の検査用数字 ＋ 12 桁の基礎番号",                          # そもそも法令の話ではない
+    ]
+    for line in should_not_hit:
+        got = article_notation_violations(line)
+        if got:
+            ng.append("article_notation: 拾ってはいけない形を拾った: {} → {}".format(line, got))
+    return ng
+
+
 def selftest() -> int:
     ng: List[str] = []
     for part in (_check_updated_violation, _check_superseded_links, _check_other_checks,
-                 _check_section_ref_forms, _check_real_data, _check_wiring):
+                 _check_section_ref_forms, _check_article_notation_forms,
+                 _check_real_data, _check_wiring):
         ng.extend(part())
     for msg in ng:
         print("NG  " + msg)

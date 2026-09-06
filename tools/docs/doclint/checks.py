@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""doclint.checks — 検査 10 本と、その純粋な判定部分.
+"""doclint.checks — 検査 11 本と、その純粋な判定部分.
 
 **足した検査は必ず `ALL_CHECKS` に載せる**（`selftest.py` が突合し、`main` から
 呼ばれているかまで見る）。所見は `(severity, ファイル, メッセージ)` の組で積む。
@@ -25,6 +25,7 @@ ALL_CHECKS = (
     "check_front_matter", "check_links", "check_superseded_links", "check_body",
     "check_adr_ledger", "check_docs_index", "check_code_references",
     "check_section_references", "check_updated_freshness", "check_updated_history",
+    "check_article_notation",
 )
 
 
@@ -547,3 +548,77 @@ def check_docs_index(docs: List[Doc], findings: List[Finding]) -> None:
         if sub not in listed and not any(l.startswith(sub + "/") for l in listed):
             findings.append((SEV_WARN, DOCS_INDEX,
                              "索引に載っていないディレクトリがあります: {}/".format(sub)))
+
+
+# --- 条項の記法（80 §3。開発者の指示。2026-09-06） ---------------------------
+# **法令名または略称の直後に続く「N 条 / N 項 / N 号」を拒む。**
+# 記法を定めた以上それに統一する、というのが決定であり、揃っていないと grep が効かない
+# （2027-01-01 の条番号切り替えは、表記ゆれで実際に 4 回落ちた。qa/02 の R22-01・R22-02・R41-01・R41-02）。
+#
+# **法令名に錨を下ろす**のが要点である。錨なしで `[0-9]+条|項|号` を拾うと
+# 「12 項目」「4 条件」「三項演算子」「令和 8 年法律第 12 号」まで当たり、実測で 9 割が誤検出になる。
+ARTICLE_UNIT_RE = re.compile(r"第?\s*[0-9０-９]+\s*[条項号]")
+# 直前が法令名・略称・附則で終わっているか（強調記号・括弧・鉤括弧をまたぐ）
+LAW_NAME_TAIL_RE = re.compile(r"(?:[一-龥ぁ-んァ-ヴー]{1,20}(?:法|令|規則|通達)|附則)[\s*`「『（(]*$")
+# **法令番号（公布番号）は条項ではない**（80 §3-1）。「〈法令の種類〉第〈N〉号」で見分ける
+GAZETTE_TAIL_RE = re.compile(r"(?:法律|政令|省令|告示|府令)[\s*`]*$")
+# 引用の連なり（`5 条 1 項 2 号`）で、単位と単位の間に挟まってよい字
+UNIT_JOINERS = " 　*`・、又は及びの第"
+
+
+def article_notation_violations(line: str) -> List[str]:
+    """80 §3 の記法に反する条項号の引用を返す（純粋関数）。
+
+    返すのは違反した字面。**法令名に錨を下ろしたものだけ**を返し、
+    公布番号（`政令第128号`）と、法令名に続かない `12 項目` の類は返さない。
+    """
+    hits: List[str] = []
+    prev_end: Optional[int] = None
+    for m in ARTICLE_UNIT_RE.finditer(line):
+        before = line[:m.start()]
+        if m.group(0).rstrip().endswith("号") and GAZETTE_TAIL_RE.search(before):
+            prev_end = None          # 公布番号。ここで引用の連なりも切る
+            continue
+        joined = prev_end is not None and not before[prev_end:].strip(UNIT_JOINERS)
+        if joined or LAW_NAME_TAIL_RE.search(before):
+            hits.append(m.group(0).strip())
+            prev_end = m.end()
+        else:
+            prev_end = None
+    return hits
+
+
+def check_article_notation(docs: List[Doc], findings: List[Finding]) -> int:
+    """`5 条 1 項` の形を error にし、`lint-docs:ignore` で外した行数を返す。
+
+    走査は `.md` とコード（`CODE_EXTENSIONS`）の両方。現行の条番号はコードのコメントにもある。
+    外した行数を返すのは、**0 に落ちたとき「違反が無い」ではなく「配線が死んだ」と読める**ようにするため。
+    """
+    ignored = 0
+    seen = {d.rel for d in docs}
+    targets = [(d.rel, d.lines) for d in docs]
+    for rel in run_git(["ls-files"]):
+        rel_posix = rel.replace("\\", "/")
+        if rel_posix in seen or not rel_posix.endswith(CODE_EXTENSIONS):
+            continue
+        if excluded_from_code_check(rel_posix):
+            continue
+        try:
+            with open(os.path.join(REPO_ROOT, rel), "r", encoding="utf-8", errors="replace") as f:
+                targets.append((rel_posix, f.read().splitlines()))
+        except OSError:
+            continue
+
+    for rel, lines in targets:
+        for i, line in enumerate(lines):
+            hits = article_notation_violations(line)
+            if not hits:
+                continue
+            if INLINE_IGNORE in line:
+                ignored += 1
+                continue
+            findings.append((SEV_ERROR, rel,
+                             "{}行目: 条項は 80 §3 の記法で書きます（条＝アラビア数字／項＝丸数字／"
+                             "号＝漢数字）。直すか、80 §3-1 の 4 つに当たるなら行に {} を書く: {}"
+                             .format(i + 1, INLINE_IGNORE, "・".join(hits))))
+    return ignored
