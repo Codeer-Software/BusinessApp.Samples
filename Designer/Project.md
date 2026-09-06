@@ -133,7 +133,7 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
   **`Docs/CommonMistakes.md` #42-A の表だけが `TextFieldDesign` と書いており誤り**——
   同じファイルの #41 と `AppPatterns/system_fields.md` は `LinkFieldDesign` である（qa/01 F-09）。
   **実機では未確認**（qa/04 の J-16）。
-- 2026-08-24: マスタは**物理削除させない**（`CanDelete: false`。「削除ではなく無効化」——[docs/08_マスタ台帳](../docs/08_マスタ台帳.md)）。
+- 2026-08-24: マスタは**物理削除させない**（`CanDelete: false`。「削除ではなく無効化」——[docs/12_マスタ台帳](../docs/12_マスタ台帳.md)）。
   一覧の削除ボタンは PageFrame の `Link.ListPageDesign.ListFieldDesign.CanDelete` でも切る。
 - 2026-08-24: 一覧の既定の並び順は PageFrame の `Link...SearchCondition.SortConditions` で指定する。
   指定しないと**降順で出る**（マスタでは使いものにならない）。
@@ -147,7 +147,7 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
   親詳細の `LimitCount` は全件（`0` にすると明細が消える）。
 - 2026-08-24: **LinkField の候補ダイアログは、一覧画面とは別に絞り込みと並び順を持つ。**
   フィールド側の `SearchCondition` に `SortConditions` と `Condition` を設定する。
-  マスタを指す LinkField は `IsActive.Value = true` で絞る（`is_active` は「入力候補に出すか」の意味。[docs/08_マスタ台帳](../docs/08_マスタ台帳.md)）。
+  マスタを指す LinkField は `IsActive.Value = true` で絞る（`is_active` は「入力候補に出すか」の意味。[docs/12_マスタ台帳](../docs/12_マスタ台帳.md)）。
   設定しないと**無効にした科目が候補に出てしまい、降順で並ぶ**。
   `designcheck` は findings 0。DB に `temporary_files` は未作成（「接続先 DB / データソース」も参照）。
 

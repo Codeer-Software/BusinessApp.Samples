@@ -5,7 +5,7 @@ scope: 会計コア
 audience: [開発]
 updated: 2026-09-06
 supersedes: []
-related: [../ddl/README.md, ../../docs/02_ペルソナ.md, ../../docs/08_マスタ台帳.md]
+related: [../ddl/README.md, ../../docs/02_ペルソナ.md, ../../docs/12_マスタ台帳.md]
 ---
 # seed — 初期データ
 
@@ -31,7 +31,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
 | 003 | [`003_tax_categories.sql`](003_tax_categories.sql) | 税区分 10 件 |
 | 004 | [`004_accounts.sql`](004_accounts.sql) | 勘定科目 105 件・既定税区分 |
 
-各マスタの扱い（所有・誰が編集するか・版と削除）は [docs/08_マスタ台帳](../../docs/08_マスタ台帳.md) が持つ。
+各マスタの扱い（所有・誰が編集するか・版と削除）は [docs/12_マスタ台帳](../../docs/12_マスタ台帳.md) が持つ。
 
 税区分（003）を勘定科目（004）より先に流す。勘定科目が既定税区分を参照するためである。
 

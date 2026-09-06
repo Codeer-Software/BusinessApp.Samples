@@ -78,7 +78,7 @@ public class SchemaShapeTests
     }
 
     /// <summary>
-    /// 論理削除の列を置かない（docs/08 マスタ台帳・Designer/ddl/README）。
+    /// 論理削除の列を置かない（docs/12 マスタ台帳・Designer/ddl/README）。
     /// 仕訳は消せず、マスタは無効化する。列があること自体が誤った経路になる。
     /// </summary>
     [Fact]

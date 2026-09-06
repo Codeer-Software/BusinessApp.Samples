@@ -211,7 +211,7 @@ def check_module(path, doc, findings):
             findings.append((SEV_ERROR, "F-09", relative(path),
                              "OptimisticLocking は IncrementVersion: true が要る（既定は PostgreSQL の xmin 前提）"))
 
-        # 本プロジェクトは論理削除を使わない（docs/08 マスタ台帳・Designer/ddl/README）
+        # 本プロジェクトは論理削除を使わない（docs/12 マスタ台帳・Designer/ddl/README）
         if name == "LogicalDelete":
             findings.append((SEV_ERROR, "PRJ-01", relative(path),
                              "論理削除は使わない。仕訳は消せず、マスタは is_active で無効化する"))

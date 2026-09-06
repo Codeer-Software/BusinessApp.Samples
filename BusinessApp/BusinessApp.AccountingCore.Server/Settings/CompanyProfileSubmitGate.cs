@@ -6,7 +6,7 @@ using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
 
 /// <summary>
-/// 自社情報を保存するときの関門（docs/08 の自社情報）。
+/// 自社情報を保存するときの関門（docs/12 の自社情報）。
 /// </summary>
 /// <remarks>
 /// <para><b>自社の法人番号を、取引先の法人番号と同じ検査に通す</b>のがこの関門の役目である
