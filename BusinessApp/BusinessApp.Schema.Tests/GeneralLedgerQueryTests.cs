@@ -104,7 +104,7 @@ public class GeneralLedgerQueryTests
             Run(db).Select(r => r.AccountCode));
     }
 
-    // --- 相手勘定科目（法人税法施行規則 55 ②）---
+    // --- 相手勘定科目（法税規則 55 ②）---
 
     [Fact]
     public void 相手が一科目ならその名前が出る()

@@ -4,7 +4,7 @@
 
 仕様書: docs/00_ドキュメント規約/
 
-長期開発でドキュメントが腐り、肥大化するのを防ぐ。検査するのは次の 5 点である。
+長期開発でドキュメントが腐り、肥大化するのを防ぐ。検査するのは次の 6 点である。
   1. 読まなくていい文書を判別できるか（フロントマターと status）
   2. 索引・ADR 台帳と実ファイルが食い違っていないか
   3. current でない文書をコード（コメント）が参照していないか
@@ -13,6 +13,9 @@
      （開発者の提案。2026-08-28。読者を古い決定へ連れて行かないため）
   5. 本文を変えたのに updated: を今日にしていない文書がないか
      （開発者の指示。2026-08-27。横断レビューで 7 文書のずれが見つかったため）
+  6. 条項を 80 §3 の記法で書いているか（`5 条 1 項` と書いていないか）  # lint-docs:article-ok
+     （開発者の指示。2026-09-06。揃っていないと grep が効かない。
+     **防げるのは表記ゆれ側だけ**で、「置換してはいけない箇所まで置換する」型は防げない）
 
 中身は `doclint/` パッケージが持つ（model / checks / selftest）。
 本ファイルは CLI と、検査の呼び出し順だけを持つ。
@@ -39,7 +42,8 @@ from typing import Dict, List
 # 同名のファイルを置いた瞬間にプロセス全体が壊れる）
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from doclint.checks import (Finding, check_adr_ledger, check_body, check_code_references,  # noqa: E402
+from doclint.checks import (Finding, check_adr_ledger, check_article_notation,  # noqa: E402
+                            check_body, check_code_references,
                             check_docs_index, check_front_matter, check_links, check_section_references,
                             check_superseded_links, check_updated_freshness,
                             check_updated_history)
@@ -103,6 +107,7 @@ def main() -> int:
     check_section_references(docs, findings)
     check_updated_freshness(docs, findings)
     check_updated_history(docs, findings)
+    scanned_notation, ignored_notation = check_article_notation(docs, findings)
 
     errors = [f for f in findings if f[0] == SEV_ERROR]
     warns = [f for f in findings if f[0] == SEV_WARN]
@@ -114,8 +119,10 @@ def main() -> int:
     print("")
     # superseded 宛リンクの数を必ず出す。0 に落ちたら「違反が無い」ではなく
     # 「配線が死んだ・免除が広がりすぎた」を疑う（黙って素通りする関門を作らないため）
-    print("検査文書数: {} / error: {} / warn: {} / superseded 宛リンク: {} 件を検査"
-          .format(len(docs), len(errors), len(warns), seen_superseded_links))
+    print("検査文書数: {} / error: {} / warn: {} / superseded 宛リンク: {} 件を検査 / "
+          "条項の記法: {} 行を走査し {} 行を印で外した"
+          .format(len(docs), len(errors), len(warns), seen_superseded_links,
+                  scanned_notation, ignored_notation))
     return 1 if errors or others else 0
 
 

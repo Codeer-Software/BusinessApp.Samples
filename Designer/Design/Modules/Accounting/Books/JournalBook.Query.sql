@@ -92,7 +92,7 @@ WHERE e.status = 'posted'
            AND (e.description IS NULL OR e.description = ''))
        OR (@p_blank_field = 'item_description'
            AND (l.item_description IS NULL OR l.item_description = '')))
--- **先頭は取引日である。** 仕訳帳は「取引の発生順に」記載する（法人税法施行規則 55 ①。docs/21 §3）。
+-- **先頭は取引日である。** 仕訳帳は「取引の発生順に」記載する（法税規則 55 ①。docs/21 §3）。
 --
 -- **年度を並び順に含める。** 伝票番号は年度内の連番なので（005_journals.sql の UNIQUE）、
 -- 年度を無視すると、3 月の仕訳を 4 月に取り消したときに
