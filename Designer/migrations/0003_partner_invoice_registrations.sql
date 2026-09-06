@@ -1,4 +1,4 @@
--- 適格請求書発行事業者の登録テーブルを足す（docs/13 §3）。
+-- 適格請求書発行事業者の登録テーブルを足す（docs/07 §3）。
 -- 正典は ddl/006_partner_registrations.sql（CREATE 文はそこからの逐語の写し）。
 CREATE TABLE partner_invoice_registrations (
     id                          INTEGER PRIMARY KEY AUTOINCREMENT,

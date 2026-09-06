@@ -33,17 +33,17 @@ CREATE TABLE partners (
     updater                     INTEGER,
     optimistic_locking          INTEGER NOT NULL DEFAULT 0,
 
-    -- 取引先の素性（docs/13 §1-2）。新しい列は末尾に置く（migrations/README の規約）。
+    -- 取引先の素性（docs/07 §1-2）。新しい列は末尾に置く（migrations/README の規約）。
     -- 所在地は 1 列で持つ。都道府県・市区町村に分割しない。
     address                     TEXT,
     -- 種別。法人（設立登記法人）／個人事業者／人格のない社団等／その他。
     -- **画面では必須、DB は NULL 可。** 既存の行と「まだ分類していない」を
     -- 偽の値で埋めないため（posted_by と同じ規律）。NULL は「未分類」を表す。
     entity_type                 TEXT CHECK (entity_type IN ('corporation', 'sole_proprietor', 'unincorporated_association', 'other')),
-    -- 法人番号（13 桁）。任意（docs/13 §2-3。必須にすると迂回のダミー値が入る）。
+    -- 法人番号（13 桁）。任意（docs/07 §2-3。必須にすると迂回のダミー値が入る）。
     -- 検査数字の検証はアプリ側。DB は桁と数字だけを見る。
     corporate_number            TEXT CHECK (corporate_number IS NULL OR corporate_number GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'),
-    -- 名寄せの手動キー（docs/13 §2-2）。自分自身は束ねられない。
+    -- 名寄せの手動キー（docs/07 §2-2）。自分自身は束ねられない。
     -- 2 段より深い連鎖（A→B→C）や循環（A→B→A）は行をまたぐので DB では見ない。
     -- 解決の順序（法人番号 → 親 → 自分）はアプリ側が持つ。
     parent_partner_id           INTEGER REFERENCES partners(id) CHECK (parent_partner_id IS NULL OR parent_partner_id <> id),

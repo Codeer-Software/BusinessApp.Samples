@@ -5,7 +5,7 @@
 仕様書: docs/00_ドキュメント規約/
 
   model.py     設定値・`Doc`・git 呼び出し・文書の読み込み・パス解決
-  checks.py    検査 9 本と、その純粋な判定部分
+  checks.py    検査 10 本と、その純粋な判定部分
   selftest.py  関門そのものの検査（`--selftest`）
 
 入口は `tools/docs/lint_docs.py`（CLI と `main`）。**呼び出し方は変えていない。**
