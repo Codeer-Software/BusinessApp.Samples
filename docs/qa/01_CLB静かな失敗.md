@@ -4,7 +4,7 @@ status: current
 scope: 全体
 audience: [開発]
 growth: append
-updated: 2026-09-06
+updated: 2026-09-08
 supersedes: []
 related: [../CLB改善提案/README.md, ../decisions/0033-読み取りはそのアプリの役割を持つ人だけに開く.md, ../decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md, ../decisions/0036-権限は到達と書き込みに書き分け守りは保存の関門に置く.md]
 ---
@@ -210,6 +210,7 @@ F-09（予約名のデザイン型）・**F-15（`Submit()` の前の `ValidateI
 | H-04 | `DbTable` にビューを指定するなら `INSTEAD OF INSERT` / `INSTEAD OF UPDATE` トリガーが要る |
 | H-05 | スキーマ変更後は**サーバ再起動が必須**（列定義が static にキャッシュされる） |
 | H-06 | `ExecuteSqlField` の `@プレースホルダ` は**フィールド名ではなく DB 列名**で解決される |
+| H-07 | `BEFORE INSERT` トリガの `NEW.<INTEGER PRIMARY KEY>` は、**id を指定しない `INSERT` でも NULL にならない**（SQLite 3.53.1 で実測すると `-1`。**仕様上は未定義**）。**`NEW.id IS NULL` で「id 未指定」を見分けようとすると、条件が常に偽になって静かに外れる。** 見分けるなら「実在の id と一致しないこと」を使う（2026-09-08 実測。ADR-0038 の `trg_*_no_replace_used_insert` は結果として正しく効いていたが、**DDL のコメントは NULL だと書いていた**） |
 
 ## J. デザイン enum
 

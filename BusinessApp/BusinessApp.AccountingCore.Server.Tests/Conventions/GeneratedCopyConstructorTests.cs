@@ -24,7 +24,7 @@ public class GeneratedCopyConstructorTests
         _ = new AmendRequest("1") with { };
         _ = AmendResult.Ok(1, 2) with { };
         _ = new AmendViolation("E-01", "理由", null) with { };
-        // 関門の定数表（ADR-0038 §2 の写し）。組み替える場面は無い
+        // 関門の定数表（守る列の現在形は docs/12 §2）。組み替える場面は無い
         _ = new BusinessApp.AccountingCore.Server.Masters.MasterMeaningGate.GuardedColumn("Code", "code", "コード") with { };
         _ = new BusinessApp.AccountingCore.Server.Masters.MasterMeaningGate.GuardedMaster("Account", "勘定科目", "accounts", "account_id", []) with { };
     }

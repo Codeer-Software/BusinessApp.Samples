@@ -13,7 +13,8 @@ using Codeer.LowCode.Blazor.Repository.Data;
 /// <para><b>計上済みの仕訳明細が 1 行でも参照しているマスタの行は、意味を決める列を変えられない</b>（ADR-0038）。
 /// 関門がここにある理由は同 §4——画面から踏める経路なので、利用者の言葉で断る関門が本体で、
 /// DDL のトリガ（<c>trg_*_meaning_frozen_when_posted</c>・<c>trg_*_no_replace_used_*</c>）は取込・CLI・SQL の直打ちへの最後の守り。</para>
-/// <para><b>どの列が「意味を決める列」かは <see cref="Guarded"/> が持つ</b>（現在形の正典は docs/12 §2 の表。それ以外の列は変えてよい）。
+/// <para><b>どの列が「意味を決める列」かは <see cref="Guarded"/> が持つ</b>——そこに無い列はこの関門を通る
+/// （<b>変えてよいと決まった列</b>は docs/12 §2。まだどちらとも決めていない列もある）。
 /// 関門とトリガとデザイン JSON が同じ列を指していることは <c>MasterMeaningGateTests</c> が突き合わせる（docs/20 §4）。
 /// 文言の作法は docs/21 §2-6。</para>
 /// <para><b>触った列だけを見て、保存されている値と比べる。</b> CLB は変更されたフィールドしか送らない（qa/01 F-12）が、
@@ -25,7 +26,7 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
     /// <summary>仮の識別子の印（新規作成の行。qa/01 C-08）。</summary>
     private const string TemporaryIdPrefix = "@temporary:";
 
-    /// <summary>守るマスタと、意味を決める列（ADR-0038 §2。<b>列の選定は Claude の当てはめで開発者未承認</b>——docs/04 §5）。</summary>
+    /// <summary>守るマスタと、意味を決める列（<b>現在形の正典は docs/12 §2 の表</b>。なぜその列かは ADR-0038 §2）。</summary>
     /// <remarks>
     /// <b>ラベルは CLB の <c>DisplayName</c>、列名は <c>DbColumn</c> の写しである</b>（docs/20 §4 の「已むを得ない重複」）。
     /// 差し戻しの文言に画面と同じ語を出すためで、設計 JSON を実行時に読む依存を持ち込まない。
