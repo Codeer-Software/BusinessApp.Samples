@@ -137,6 +137,16 @@ public class SchemaShapeTests
         Assert.Contains("trg_journal_entries_no_replace_posted_update", triggers);
         Assert.Contains("trg_journal_lines_no_replace_posted_insert", triggers);
         Assert.Contains("trg_journal_lines_no_replace_posted_update", triggers);
+        // 使用中のマスタの意味を守る 4 本（ADR-0038）
+        Assert.Contains("trg_accounts_meaning_frozen_when_posted", triggers);
+        Assert.Contains("trg_sub_accounts_meaning_frozen_when_posted", triggers);
+        Assert.Contains("trg_departments_meaning_frozen_when_posted", triggers);
+        Assert.Contains("trg_tax_categories_meaning_frozen_when_posted", triggers);
+        foreach (var table in new[] { "accounts", "sub_accounts", "departments", "tax_categories" })
+        {
+            Assert.Contains($"trg_{table}_no_replace_used_insert", triggers);
+            Assert.Contains($"trg_{table}_no_replace_used_update", triggers);
+        }
     }
 
     /// <summary>

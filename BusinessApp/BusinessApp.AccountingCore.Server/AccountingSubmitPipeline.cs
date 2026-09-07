@@ -1,6 +1,7 @@
 namespace BusinessApp.AccountingCore.Server;
 
 using BusinessApp.AccountingCore.Server.Journals;
+using BusinessApp.AccountingCore.Server.Masters;
 using BusinessApp.AccountingCore.Server.Settings;
 using BusinessApp.Partners.Server;
 
@@ -27,10 +28,13 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 /// <para><b>取引先の関門は 1 つずつ数えず、部品の入口（<see cref="PartnerSubmitPipeline"/>）を
 /// 1 本呼ぶ。</b> ここで数えると、取引先部品に関門が増えたときに会計側を直さないと
 /// 1 つ足りないまま通る——しかもテストは緑のままである（ADR-0025 §6 の「持ち出し忘れ」の型）。</para>
+/// <para><b>マスタの関門（<see cref="MasterMeaningGate"/>。ADR-0038）も保存の前に検査するだけ</b>なので内側でよい。
+/// 2026-09-07 に足した（docs/04 §1 の A-1）。</para>
 /// </remarks>
 public sealed class AccountingSubmitPipeline(
     JournalSubmitGate journals,
     CompanyProfileSubmitGate companyProfile,
+    MasterMeaningGate masters,
     PartnerSubmitPipeline partners,
     Action<string>? onSaveFailure = null)
 {
@@ -45,6 +49,7 @@ public sealed class AccountingSubmitPipeline(
         IAuthenticationContext authenticationContext, Action<string>? onSaveFailure = null)
         => new(JournalSubmitGate.Create(dbAccessor, dataSourceName, timeProvider, authenticationContext),
                new CompanyProfileSubmitGate(),
+               MasterMeaningGate.Create(dbAccessor, dataSourceName),
                PartnerSubmitPipeline.Create(dbAccessor, dataSourceName),
                onSaveFailure);
 
@@ -64,7 +69,9 @@ public sealed class AccountingSubmitPipeline(
             transactionData,
             () => companyProfile.SubmitAsync(
                 transactionData,
-                () => partners.SubmitAsync(transactionData, save)));
+                () => masters.SubmitAsync(
+                    transactionData,
+                    () => partners.SubmitAsync(transactionData, save))));
 
         return SaveFailureMessage.ToUserLanguage(results, onSaveFailure);
     }

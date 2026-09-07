@@ -1,0 +1,197 @@
+namespace BusinessApp.AccountingCore.Server.Masters;
+
+using System.Globalization;
+
+using Codeer.LowCode.Blazor.DataIO;
+using Codeer.LowCode.Blazor.DataIO.Db;
+using Codeer.LowCode.Blazor.Repository.Data;
+
+/// <summary>
+/// 使用中のマスタは、意味を変えられない（ADR-0038。docs/04 §1 の A-1）。
+/// </summary>
+/// <remarks>
+/// <para><b>計上済みの仕訳明細が 1 行でも参照しているマスタの行は、意味を決める列を変えられない</b>（ADR-0038）。
+/// 関門がここにある理由は同 §4——画面から踏める経路なので、利用者の言葉で断る関門が本体で、
+/// DDL のトリガ（<c>trg_*_meaning_frozen_when_posted</c>・<c>trg_*_no_replace_used_*</c>）は取込・CLI・SQL の直打ちへの最後の守り。</para>
+/// <para><b>どの列が「意味を決める列」かは <see cref="Guarded"/> が持つ</b>（現在形の正典は docs/12 §2 の表。それ以外の列は変えてよい）。
+/// 関門とトリガとデザイン JSON が同じ列を指していることは <c>MasterMeaningGateTests</c> が突き合わせる（docs/20 §4）。
+/// 文言の作法は docs/21 §2-6。</para>
+/// <para><b>触った列だけを見て、保存されている値と比べる。</b> CLB は変更されたフィールドしか送らない（qa/01 F-12）が、
+/// 同じ値に戻した保存まで拒むと、他の欄を直したいだけの利用者を止めることになる。</para>
+/// <para><b>新規の行は見ない。</b> 生まれたばかりの行を計上済みの明細が参照していることはない。</para>
+/// </remarks>
+public sealed class MasterMeaningGate(MasterUsageStore store)
+{
+    /// <summary>仮の識別子の印（新規作成の行。qa/01 C-08）。</summary>
+    private const string TemporaryIdPrefix = "@temporary:";
+
+    /// <summary>守るマスタと、意味を決める列（ADR-0038 §2。<b>列の選定は Claude の当てはめで開発者未承認</b>——docs/04 §5）。</summary>
+    /// <remarks>
+    /// <b>ラベルは CLB の <c>DisplayName</c>、列名は <c>DbColumn</c> の写しである</b>（docs/20 §4 の「已むを得ない重複」）。
+    /// 差し戻しの文言に画面と同じ語を出すためで、設計 JSON を実行時に読む依存を持ち込まない。
+    /// <b>列の並びは詳細画面の並び</b>——利用者が画面を上から見直す順に名指しする。
+    /// 写しと並びがずれていないことは <c>MasterMeaningGateTests</c> がデザイン JSON と DDL のトリガに突き合わせる。
+    /// </remarks>
+    public static readonly IReadOnlyList<GuardedMaster> Guarded =
+    [
+        new("Account", "勘定科目", "accounts", "account_id",
+            [new("Code", "code", "科目コード"),
+             new("Category", "category", "科目区分"),
+             new("RequiresSubAccount", "requires_sub_account", "補助科目を使う"),
+             new("IsContra", "is_contra", "評価勘定")]),
+        new("SubAccount", "補助科目", "sub_accounts", "sub_account_id",
+            [new("Account", "account_id", "勘定科目"),
+             new("Code", "code", "補助科目コード")]),
+        new("Department", "部門", "departments", "department_id",
+            [new("Code", "code", "部門コード"),
+             new("IsCompanyWide", "is_company_wide", "全社共通")]),
+        new("TaxCategory", "税区分", "tax_categories", "tax_category_id",
+            [new("Code", "code", "税区分コード"),
+             new("TaxationType", "taxation_type", "課税区分"),
+             new("RateKind", "rate_kind", "税率区分")]),
+    ];
+
+    /// <summary>部品の組み立て。</summary>
+    public static MasterMeaningGate Create(IDbAccessor dbAccessor, string dataSourceName)
+        => new(new MasterUsageStore(dbAccessor, dataSourceName));
+
+    /// <summary>保存を包む。<paramref name="save"/> は CLB 本来の保存処理。</summary>
+    public async Task<List<ModuleSubmitResult>> SubmitAsync(
+        IReadOnlyList<ModuleSubmitData> transactionData,
+        Func<Task<List<ModuleSubmitResult>>> save)
+    {
+        ArgumentNullException.ThrowIfNull(transactionData);
+        ArgumentNullException.ThrowIfNull(save);
+
+        // **入れ物の名前ではなく、中身の名前で担当を決める**（qa/02 R16-16 の型。
+        // 親子の保存は 1 つの ModuleSubmitData に混ざって届く——qa/01 F-11）。
+        // 更新だけを見る——新規の行は計上済みの明細から参照されえない。
+        foreach (var data in transactionData.SelectMany(d => d.Update))
+        {
+            if (Guarded.FirstOrDefault(g => g.ModuleName == data.Name) is GuardedMaster master)
+            {
+                await RejectChangedMeaningAsync(master, data);
+            }
+        }
+
+        return await save();
+    }
+
+    private async Task RejectChangedMeaningAsync(GuardedMaster master, ModuleData data)
+    {
+        var touched = master.Columns.Where(c => data.Fields.ContainsKey(c.FieldName)).ToList();
+        if (touched.Count == 0)
+        {
+            return;
+        }
+
+        // **識別子が読めない更新は止める**（値の側と同じく fail-closed）。更新には必ず数値の識別子が載る。
+        // 仮の識別子（新規作成の行が更新の側に混ざった形）だけは通す——計上済みの明細から参照されえない。
+        // 画面からは作れない壊れた要求なので、開き直して直る保証は無い——SaveFailureMessage と同じ逃げ道を付ける。
+        var id = Id(data);
+        if (id is null)
+        {
+            if (IsTemporary(data))
+            {
+                return;
+            }
+
+            throw new MasterRejectedException(
+                "登録する行を特定できませんでした。画面を開き直してもう一度お試しください。"
+                + "同じことが続くときは、管理者にお知らせください。");
+        }
+
+        var stored = await store.FindStoredAsync(master, id.Value, touched);
+        if (stored is null)
+        {
+            return;
+        }
+
+        // ラベルは鉤括弧で括る——「補助科目を使う」のような動詞句のラベルは、裸だと文に溶ける。
+        var changed = touched
+            .Where(c => !string.Equals(Normalize(stored[c.Column]), Submitted(data.Fields[c.FieldName]), StringComparison.Ordinal))
+            .Select(c => $"「{c.Label}」")
+            .ToList();
+        if (changed.Count == 0)
+        {
+            return;
+        }
+
+        var used = await store.CountPostedLinesAsync(master, id.Value);
+        if (used == 0)
+        {
+            return;
+        }
+
+        // 文言の形は ADR-0038 §4——**何件あるか**と**次に何をすればよいか**を入れる。
+        // 理由と結果は「〜ので」で 1 文にする（取引先・仕訳の関門と同じ形）。
+        // 数える単位は「仕訳明細」（伝票ではない。ADR-0017）。**「仕訳」を単独で画面に出さない**（同 ADR）ので、
+        // 締めは「以後の振替伝票ではそちらを選ぶ」と言う——部門・税区分は「記帳する先」ではなく明細で選ぶものなので、
+        // 4 マスタで成り立つ動詞にする。
+        throw new MasterRejectedException(
+            $"この{master.Label}は計上済みの仕訳明細 {used.ToString("N0", CultureInfo.InvariantCulture)} 行で使われているので、"
+            + $"{string.Join("・", changed)}は変えられません。"
+            + $"新しい{master.Label}を作って、以後の振替伝票ではそちらを選んでください。");
+    }
+
+    /// <summary>
+    /// 差分に載った値を、保存されている値と比べられる字面にする。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>読めない型・空の真偽は「変えた」と見なす</b>（<c>null</c> を返し、どの保存値とも一致しない）。
+    /// 差分に載っている以上その欄は触られており、読めないからと素通しにすると、
+    /// フィールドの型が変わった日に関門ごと消える（取引先の関門で実際に起きた型。qa/02 R26-03）。</para>
+    /// <para><b>文字列は前後の空白を落として、差分に書き戻す。</b> 画面は空白をそのまま送る
+    /// （<c>ShouldTrimAfterEdit: false</c>）ので、比べるときだけ落とすと「同じ」と通した値を
+    /// DDL のトリガが「違う」と拒む（関門の受理集合が DB より広い。qa/03 L-14 の型）。
+    /// 取引先の法人番号と同じ作法である。</para>
+    /// </remarks>
+    private static string? Submitted(FieldDataBase field)
+        => field switch
+        {
+            TextFieldData text => text.Value = Text(text.Value),
+            SelectFieldData select => Text(select.Value),
+            LinkFieldData link => Text(link.Value),
+            // 真偽は DB では 0/1 で持つ（CHECK (x IN (0, 1))）
+            BooleanFieldData boolean => boolean.Value is bool value ? (value ? "1" : "0") : null,
+            _ => null,
+        };
+
+    /// <summary>空欄と前後の空白を落とした字面。NULL と空文字を同じ「無い」に倒す。</summary>
+    private static string Text(string? value) => value?.Trim() ?? string.Empty;
+
+    /// <summary>
+    /// 保存されている値の字面。整数・文字列・NULL を同じ物差しに乗せる
+    /// （<c>string.Format</c> は <c>null</c> も <c>DBNull</c>（<c>ToString()</c> が空文字）も空文字にし、
+    /// 整数を不変カルチャで書く。<c>SqliteDbAccessor</c> が返すのは <c>DBNull</c> のほうである）。
+    /// </summary>
+    private static string Normalize(object? stored)
+        => string.Format(CultureInfo.InvariantCulture, "{0}", stored).Trim();
+
+    /// <summary>保存しようとしている行の識別子。数値でなければ <c>null</c>。</summary>
+    private static long? Id(ModuleData data)
+        => data.Fields.TryGetValue("Id", out var field) && field is IdFieldData id
+           && long.TryParse(id.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
+
+    /// <summary>新規作成の行か（仮の識別子を持つ）。</summary>
+    private static bool IsTemporary(ModuleData data)
+        => data.Fields.TryGetValue("Id", out var field) && field is IdFieldData id
+           && id.Value is string value && value.StartsWith(TemporaryIdPrefix, StringComparison.Ordinal);
+
+    /// <summary>守るマスタ 1 つ。</summary>
+    /// <param name="ModuleName">CLB のモジュール名。</param>
+    /// <param name="Label">利用者に見せる呼び名。</param>
+    /// <param name="Table">DB の表（CLB の <c>DbTable</c> の写し）。</param>
+    /// <param name="LineColumn"><c>journal_lines</c> でこのマスタを指す列。</param>
+    /// <param name="Columns">意味を決める列。</param>
+    public sealed record GuardedMaster(
+        string ModuleName, string Label, string Table, string LineColumn, IReadOnlyList<GuardedColumn> Columns);
+
+    /// <summary>意味を決める列 1 つ。</summary>
+    /// <param name="FieldName">CLB のフィールド名。</param>
+    /// <param name="Column">DB の列（CLB の <c>DbColumn</c> の写し）。</param>
+    /// <param name="Label">利用者に見せる呼び名（CLB の <c>DisplayName</c> の写し）。</param>
+    public sealed record GuardedColumn(string FieldName, string Column, string Label);
+}
