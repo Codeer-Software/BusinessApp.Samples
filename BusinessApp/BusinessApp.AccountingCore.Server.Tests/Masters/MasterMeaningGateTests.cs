@@ -1,0 +1,531 @@
+namespace BusinessApp.AccountingCore.Server.Tests.Masters;
+
+using System.Globalization;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+
+using BusinessApp.AccountingCore.Server.Masters;
+using BusinessApp.AccountingCore.Server.Tests.Fixtures;
+
+using Codeer.LowCode.Blazor.DataIO;
+using Codeer.LowCode.Blazor.Repository.Data;
+
+/// <summary>
+/// 使用中のマスタは意味を変えられない（ADR-0038）。<b>関門の側。</b>
+/// </summary>
+/// <remarks>
+/// <para><b>差分は実機の形で組む</b>（qa/01 F-11・F-12）——更新は識別子と触った欄だけが届く。
+/// 全フィールドが揃った都合のよい形で書くと、実機で通らない経路を検査したことになる。</para>
+/// <para>保存の本体（<c>save</c>）が呼ばれたかどうかで「通した／止めた」を見る。</para>
+/// </remarks>
+public class MasterMeaningGateTests
+{
+    private static ModuleSubmitData Updating(string module, ModuleData data)
+        => new() { ModuleName = module, Update = [data] };
+
+    private static ModuleSubmitData Adding(string module, ModuleData data)
+        => new() { ModuleName = module, Add = [data] };
+
+    private static ModuleData Row(string module, string id, string field, FieldDataBase value)
+    {
+        var data = new ModuleData { Name = module };
+        data.Fields["Id"] = new IdFieldData { Value = id };
+        data.Fields[field] = value;
+        return data;
+    }
+
+    private static string Id(long value) => value.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>保存を通したか。止めたときは例外が飛ぶ。</summary>
+    private static async Task<bool> Submit(AccountingServer server, params ModuleSubmitData[] data)
+    {
+        var called = false;
+        await server.Pipeline.SubmitAsync(data, () =>
+        {
+            called = true;
+            return Task.FromResult(new List<ModuleSubmitResult>());
+        });
+        return called;
+    }
+
+    private static async Task<MasterRejectedException> Rejected(AccountingServer server, params ModuleSubmitData[] data)
+    {
+        var called = false;
+        var thrown = await Assert.ThrowsAsync<MasterRejectedException>(
+            () => server.Pipeline.SubmitAsync(data, () =>
+            {
+                called = true;
+                return Task.FromResult(new List<ModuleSubmitResult>());
+            }));
+        Assert.False(called);
+        return thrown;
+    }
+
+    /// <summary>買掛金 1,000 ／ 現金 1,000（買掛金を現金で払う）を計上する。<b>現金・買掛金・対象外の税区分が「使用中」になる。</b></summary>
+    private static void PostPayment(AccountingServer server, int entryNo = 1)
+        => server.InsertPosted(entryNo, "支払", "2026-08-24", ("debit", "2100", 1000), ("credit", "1100", 1000));
+
+    // --- 止める -------------------------------------------------------------------
+
+    /// <summary>
+    /// <b>qa/03 L-29 そのもの。</b> 計上済みの明細が使う科目の科目区分は変えられない。
+    /// 文言は「何件あるか」と「次に何をすればよいか」を持つ（ADR-0038 §4）。
+    /// </summary>
+    [Fact]
+    public async Task 使用中の科目の科目区分を変えると差し戻される()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var cash = Id(server.AccountOf("1100").Value);
+
+        var thrown = await Rejected(server,
+            Updating("Account", Row("Account", cash, "Category", new SelectFieldData { Value = "expense" })));
+
+        Assert.Equal(
+            "登録できません。この勘定科目は計上済みの仕訳明細 1 行で使われているので、「科目区分」は変えられません。"
+            + "新しい勘定科目を作って、以後の振替伝票ではそちらを選んでください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// 明細の数は伝票ではなく<b>明細</b>で数える（ADR-0017）。
+    /// <b>1 伝票に現金の明細が 2 行</b>——伝票で数えると 1、明細で数えると 2 になる形で撃ち分ける。
+    /// </summary>
+    [Fact]
+    public async Task 件数は伝票ではなく仕訳明細で数える()
+    {
+        using var server = new AccountingServer();
+        server.InsertPosted(1, "分けて払う", "2026-08-24",
+            ("debit", "2100", 1000), ("credit", "1100", 600), ("credit", "1100", 400));
+        var cash = Id(server.AccountOf("1100").Value);
+
+        var thrown = await Rejected(server,
+            Updating("Account", Row("Account", cash, "Code", new TextFieldData { Value = "1101" })));
+
+        Assert.Contains("仕訳明細 2 行で使われているので、「科目コード」は変えられません", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>件数は 3 桁区切りで書く（金額と同じ読み方。年間数千伝票のペルソナでは 4 桁になる）。</summary>
+    [Fact]
+    public async Task 件数は3桁区切りで書く()
+    {
+        using var server = new AccountingServer();
+        var entry = server.InsertDraft();
+        server.Execute($"""
+            with recursive n(i) as (select 1 union all select i + 1 from n where i < 1000)
+            insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            select {entry.Value}, i, case when i % 2 = 0 then 'debit' else 'credit' end,
+                   (select id from accounts where code = '1100'), 100, (select id from tax_categories where code = 'OUT')
+              from n;
+            update journal_entries set status = 'posted', entry_no = 1, posted_at = '2026-08-24 13:00:00' where id = {entry.Value};
+            """);
+
+        var thrown = await Rejected(server,
+            Updating("Account", Row("Account", Id(server.AccountOf("1100").Value), "Code", new TextFieldData { Value = "1101" })));
+
+        Assert.Contains("仕訳明細 1,000 行で使われているので", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>触った列が複数なら、全部を並べて 1 回で断る（直しては弾かれを繰り返させない）。<b>並びは画面の並び。</b></summary>
+    [Fact]
+    public async Task 変えた列を全部並べて断る()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var cash = Row("Account", Id(server.AccountOf("1100").Value), "Category", new SelectFieldData { Value = "expense" });
+        cash.Fields["IsContra"] = new BooleanFieldData { Value = true };
+        cash.Fields["RequiresSubAccount"] = new BooleanFieldData { Value = true };
+
+        var thrown = await Rejected(server, Updating("Account", cash));
+
+        Assert.Contains("「科目区分」・「補助科目を使う」・「評価勘定」は変えられません", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>税区分の課税区分（qa/03 L-29 で実測したもう 1 つ）。<b>締めまで全文</b>を見る——4 マスタで成り立つ文か。</summary>
+    [Fact]
+    public async Task 使用中の税区分の課税区分を変えると差し戻される()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var tax = Id(server.TaxCategoryOf("OUT").Value);
+
+        var thrown = await Rejected(server,
+            Updating("TaxCategory", Row("TaxCategory", tax, "TaxationType", new SelectFieldData { Value = "taxable_sales" })));
+
+        Assert.Equal(
+            "登録できません。この税区分は計上済みの仕訳明細 2 行で使われているので、「課税区分」は変えられません。"
+            + "新しい税区分を作って、以後の振替伝票ではそちらを選んでください。",
+            thrown.Message);
+    }
+
+    /// <summary>部門の「全社共通」と、補助科目の親の付け替え。締めまで全文を見る。</summary>
+    [Fact]
+    public async Task 使用中の部門と補助科目も意味を変えられない()
+    {
+        using var server = new AccountingServer();
+        var sub = server.InsertSubAccount("1100");
+        var dept = server.DepartmentOf("20").Value;
+        // 補助科目と部門つきの明細は、フィクスチャの InsertPosted が作れないので SQL で計上する
+        // （下書きで書いてから状態を進める。DDL のトリガが唯一許す順序）。
+        server.Execute($"""
+            insert into journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            values (1, '2026-08-24', '2026-08-24', 'draft', 'normal', '2026-08-24 10:00:00');
+            insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, sub_account_id, department_id, amount, tax_category_id)
+            values ((select max(id) from journal_entries), 1, 'debit', (select id from accounts where code = '1100'), {sub}, {dept}, 500, 1);
+            insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
+            values ((select max(id) from journal_entries), 2, 'credit', (select id from accounts where code = '2100'), {dept}, 500, 1);
+            update journal_entries set status = 'posted', entry_no = 1, posted_at = '2026-08-24 11:00:00'
+             where id = (select max(id) from journal_entries);
+            """);
+
+        var department = await Rejected(server,
+            Updating("Department", Row("Department", Id(dept), "IsCompanyWide", new BooleanFieldData { Value = true })));
+        Assert.Equal(
+            "登録できません。この部門は計上済みの仕訳明細 2 行で使われているので、「全社共通」は変えられません。"
+            + "新しい部門を作って、以後の振替伝票ではそちらを選んでください。",
+            department.Message);
+
+        var subAccount = await Rejected(server,
+            Updating("SubAccount", Row("SubAccount", Id(sub), "Account", new LinkFieldData { Value = Id(server.AccountOf("2100").Value) })));
+        Assert.Equal(
+            "登録できません。この補助科目は計上済みの仕訳明細 1 行で使われているので、「勘定科目」は変えられません。"
+            + "新しい補助科目を作って、以後の振替伝票ではそちらを選んでください。",
+            subAccount.Message);
+    }
+
+    /// <summary>
+    /// <b>入れ物の名前ではなく、中身の名前で担当を決める</b>（qa/02 R16-16 の型。親子の保存は
+    /// 1 つの <c>ModuleSubmitData</c> に混ざって届く——qa/01 F-11）。
+    /// <c>ModuleSubmitData.ModuleName</c> で絞る誤実装だと、ここが素通りする。
+    /// </summary>
+    [Fact]
+    public async Task 入れ物の名前が違っても中身の科目は守る()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var cash = Row("Account", Id(server.AccountOf("1100").Value), "Category", new SelectFieldData { Value = "expense" });
+
+        await Rejected(server, Updating("SubAccount", cash));
+    }
+
+    /// <summary>
+    /// <b>読めない型で届いた欄は「変えた」と見なす</b>——フィールドの型が変わった日に関門ごと消えないため。
+    /// 真偽の欄が空で届いた形も同じ（保存されている 0/1 のどちらとも一致しない）。
+    /// </summary>
+    [Theory]
+    [InlineData("Category", "number")]
+    [InlineData("IsContra", "empty-boolean")]
+    public async Task 読めない値の欄は変えたと見なして止める(string field, string shape)
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        FieldDataBase value = shape == "number"
+            ? new NumberFieldData { Value = 1 }
+            : new BooleanFieldData { Value = null };
+
+        var thrown = await Rejected(server,
+            Updating("Account", Row("Account", Id(server.AccountOf("1100").Value), field, value)));
+
+        Assert.Contains("は変えられません", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>識別子が読めない更新は止める</b>（値の側と同じく fail-closed）——無い・型が違う。
+    /// 更新には必ず数値の識別子が載るので、読めない形は CLB の外から来た壊れた保存である。
+    /// 「見ない」で通すと、識別子の型が変わった日に関門ごと消える。
+    /// </summary>
+    [Theory]
+    [InlineData("none")]
+    [InlineData("text")]
+    public async Task 識別子が読めない更新は止める(string shape)
+    {
+        using var server = new AccountingServer();
+        var data = new ModuleData { Name = "Account" };
+        data.Fields["Category"] = new SelectFieldData { Value = "expense" };
+        if (shape == "text")
+        {
+            data.Fields["Id"] = new TextFieldData { Value = Id(server.AccountOf("1100").Value) };
+        }
+
+        var thrown = await Rejected(server, Updating("Account", data));
+
+        Assert.Equal(
+            "登録できません。登録する行を特定できませんでした。画面を開き直してもう一度お試しください。"
+            + "同じことが続くときは、管理者にお知らせください。",
+            thrown.Message);
+    }
+
+    // --- 通す ---------------------------------------------------------------------
+
+    /// <summary>
+    /// <b>同じ値に戻した保存は通る</b>（触っただけで変えていない）。
+    /// 真偽はオン（1）とオフ（0）の両方を踏む——片方の写像が壊れると、触っていない欄で差し戻される。
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task 同じ値を送り直す保存は通る(bool contra)
+    {
+        using var server = new AccountingServer();
+        server.Execute($"update accounts set is_contra = {(contra ? 1 : 0)} where code = '1100'");
+        PostPayment(server);
+        var cash = Row("Account", Id(server.AccountOf("1100").Value), "Category", new SelectFieldData { Value = "asset" });
+        cash.Fields["IsContra"] = new BooleanFieldData { Value = contra };
+
+        Assert.True(await Submit(server, Updating("Account", cash)));
+    }
+
+    /// <summary>
+    /// <b>前後の空白は落として、差分に書き戻す。</b> 画面は空白をそのまま送る（<c>ShouldTrimAfterEdit: false</c>）。
+    /// 比べるときだけ落として素通しにすると、関門が「同じ」と通した値を DDL のトリガが「違う」と拒む
+    /// （関門の受理集合が DB より広い。qa/03 L-14 の型）。<b>実際に書いて確かめる</b>——書き戻しが無ければ
+    /// ここで <c>SqliteException</c> が飛ぶ。
+    /// </summary>
+    [Fact]
+    public async Task 前後の空白は落として差分に書き戻す()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var id = server.AccountOf("1100").Value;
+        var code = new TextFieldData { Value = " 1100 " };
+        var cash = Row("Account", Id(id), "Code", code);
+
+        await server.Pipeline.SubmitAsync([Updating("Account", cash)], () =>
+        {
+            server.Execute($"update accounts set code = '{code.Value}' where id = {id}");
+            return Task.FromResult(new List<ModuleSubmitResult>());
+        });
+
+        Assert.Equal("1100", code.Value);
+        Assert.Equal("1100", server.Scalar<string>($"select code from accounts where id = {id}"));
+    }
+
+    /// <summary>名前・有効・表示順は意味を決めない（ADR-0038 §2）。</summary>
+    [Fact]
+    public async Task 名前や有効の変更は使用中でも通る()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var cash = Row("Account", Id(server.AccountOf("1100").Value), "Name", new TextFieldData { Value = "現金及び預金" });
+        cash.Fields["IsActive"] = new BooleanFieldData { Value = false };
+        cash.Fields["DisplayOrder"] = new NumberFieldData { Value = 9 };
+
+        Assert.True(await Submit(server, Updating("Account", cash)));
+    }
+
+    /// <summary>使われていない科目は意味を変えられる。</summary>
+    [Fact]
+    public async Task 使われていない科目は科目区分を変えられる()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var unused = Id(server.AccountOf("6070").Value);
+
+        Assert.True(await Submit(server,
+            Updating("Account", Row("Account", unused, "Category", new SelectFieldData { Value = "asset" }))));
+    }
+
+    /// <summary><b>下書きだけが使う科目は変えられる</b>（ADR-0038 §1。違反は計上の関門が拾う）。</summary>
+    [Fact]
+    public async Task 下書きだけが使う科目は科目区分を変えられる()
+    {
+        using var server = new AccountingServer();
+        server.Execute("""
+            insert into journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            values (1, '2026-08-24', '2026-08-24', 'draft', 'normal', '2026-08-24 10:00:00');
+            insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            values (1, 1, 'debit', (select id from accounts where code = '6070'), 500, 1);
+            """);
+
+        Assert.True(await Submit(server,
+            Updating("Account", Row("Account", Id(server.AccountOf("6070").Value), "Category", new SelectFieldData { Value = "asset" }))));
+    }
+
+    /// <summary>新規の行は見ない（仮の識別子。計上済みの明細から参照されえない）。</summary>
+    [Fact]
+    public async Task 新規の科目は見ない()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+
+        Assert.True(await Submit(server,
+            Adding("Account", Row("Account", "@temporary:1", "Category", new SelectFieldData { Value = "asset" }))));
+    }
+
+    /// <summary>更新の側に仮の識別子の行が混ざった形も、新規の行として通す（識別子が読めない更新の唯一の例外）。</summary>
+    [Fact]
+    public async Task 更新の側に混ざった仮の識別子の行は通す()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+
+        Assert.True(await Submit(server,
+            Updating("Account", Row("Account", "@temporary:1", "Category", new SelectFieldData { Value = "expense" }))));
+    }
+
+    /// <summary>意味を決める列を触っていない更新は、DB を読まずに通す。</summary>
+    [Fact]
+    public async Task 意味を決める列を触っていなければ通る()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+
+        Assert.True(await Submit(server,
+            Updating("Account", Row("Account", Id(server.AccountOf("1100").Value), "NameKana", new TextFieldData { Value = "げんきん" }))));
+    }
+
+    /// <summary>実在しない行の更新は、ここでは見ない（外部キーと楽観ロックが拒む）。</summary>
+    [Fact]
+    public async Task 実在しない行は見ない()
+    {
+        using var server = new AccountingServer();
+
+        Assert.True(await Submit(server,
+            Updating("Account", Row("Account", "999999", "Category", new SelectFieldData { Value = "asset" }))));
+    }
+
+    /// <summary>
+    /// <b>空欄で届いた値は、保存されている NULL と同じ「無い」として読む。</b>
+    /// 対象外の税区分は税率区分が NULL なので、空のまま送り直しても止めない。逆に、NULL から値を入れる変更は止める。
+    /// </summary>
+    [Fact]
+    public async Task 空欄と保存されている空は同じ値として読む()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var tax = Id(server.TaxCategoryOf("OUT").Value);
+        Assert.Null(server.Scalar<object>($"select rate_kind from tax_categories where id = {tax}"));
+
+        Assert.True(await Submit(server,
+            Updating("TaxCategory", Row("TaxCategory", tax, "RateKind", new SelectFieldData { Value = null }))));
+
+        var thrown = await Rejected(server,
+            Updating("TaxCategory", Row("TaxCategory", tax, "RateKind", new SelectFieldData { Value = "standard" })));
+        Assert.Contains("「税率区分」は変えられません", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>関係ないモジュールの更新は素通しする。</summary>
+    [Fact]
+    public async Task 守っていないモジュールは見ない()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+
+        Assert.True(await Submit(server,
+            Updating("CompanyProfile", Row("CompanyProfile", "1", "Name", new TextFieldData { Value = "株式会社れい" }))));
+    }
+
+    // --- 写しの突き合わせ（docs/20 §4） -----------------------------------------------
+
+    /// <summary>
+    /// 関門が名指しする表・フィールド名・列名・ラベルが、デザイン JSON の
+    /// <c>DbTable</c>・<c>Name</c>・<c>DbColumn</c>・<c>DisplayName</c> に一致し、
+    /// <b>列の並びが詳細画面の並びと同じ</b>である。
+    /// </summary>
+    /// <remarks>
+    /// ラベルは画面の語の写しなので、片方だけ直ると差し戻しの文言が画面と食い違う。
+    /// フィールド名がずれると、その列は<b>黙って守られなくなる</b>（差分に無い名前を探すため）。
+    /// 表・列の名前がずれると、比べる相手の値を別の列から読む。
+    /// 並びがずれると、差し戻しの文言が画面を上から見直す利用者の目の動きと逆になる。
+    /// </remarks>
+    [Fact]
+    public void 守る表と列の名前とラベルと並びはデザインと一致する()
+    {
+        foreach (var master in MasterMeaningGate.Guarded)
+        {
+            using var design = Design(master.ModuleName);
+            Assert.Equal(master.Table, design.RootElement.GetProperty("DbTable").GetString());
+
+            var fields = design.RootElement.GetProperty("Fields").EnumerateArray()
+                .ToDictionary(f => f.GetProperty("Name").GetString()!);
+            foreach (var column in master.Columns)
+            {
+                Assert.True(fields.TryGetValue(column.FieldName, out var field),
+                    $"{master.ModuleName}.{column.FieldName} がデザインに無い");
+                Assert.Equal(column.Column, field.GetProperty("DbColumn").GetString());
+                Assert.Equal(column.Label, field.GetProperty("DisplayName").GetString());
+            }
+
+            var guarded = master.Columns.Select(c => c.FieldName).ToHashSet();
+            Assert.Equal(
+                master.Columns.Select(c => c.FieldName),
+                LayoutFieldNames(design.RootElement.GetProperty("DetailLayouts")).Where(guarded.Contains));
+        }
+    }
+
+    /// <summary>詳細レイアウトに置かれたフィールド名を、置かれている順に列挙する（<c>FieldName</c> を文書順に拾う）。</summary>
+    private static IEnumerable<string> LayoutFieldNames(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (property.Name == "FieldName" && property.Value.ValueKind == JsonValueKind.String)
+                    {
+                        yield return property.Value.GetString()!;
+                    }
+
+                    foreach (var name in LayoutFieldNames(property.Value))
+                    {
+                        yield return name;
+                    }
+                }
+
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    foreach (var name in LayoutFieldNames(item))
+                    {
+                        yield return name;
+                    }
+                }
+
+                break;
+        }
+    }
+
+    /// <summary>
+    /// <b>関門と DDL のトリガが同じ列を守っている</b>（ADR-0038 §4 の 2 層）。
+    /// トリガの <c>UPDATE OF</c> の列と、明細から表を指す列（<c>l.account_id = OLD.id</c>）を定義文から読んで突き合わせる。
+    /// </summary>
+    /// <remarks>
+    /// 片方に列を足して片方に足し忘れると、画面は通すのに DB が拒む（利用者には SQL のエラーが出る）か、
+    /// 画面は断るのに取込は通る（守りが 1 層になる）。どちらもテストが緑のままになる型である。
+    /// </remarks>
+    [Fact]
+    public void 関門とトリガは同じ列を守る()
+    {
+        using var server = new AccountingServer();
+
+        foreach (var master in MasterMeaningGate.Guarded)
+        {
+            var frozen = TriggerSql(server, $"trg_{master.Table}_meaning_frozen_when_posted");
+            var guarded = Regex.Match(frozen, @"UPDATE OF\s+(?<columns>[^\n]+?)\s+ON\s+(?<table>\w+)");
+            Assert.True(guarded.Success, $"{master.Table} のトリガに UPDATE OF が無い");
+            Assert.Equal(master.Table, guarded.Groups["table"].Value);
+            Assert.Equal(
+                master.Columns.Select(c => c.Column).Order(),
+                guarded.Groups["columns"].Value.Split(',').Select(c => c.Trim()).Order());
+            Assert.Contains($"l.{master.LineColumn} = OLD.id", frozen, StringComparison.Ordinal);
+
+            Assert.Contains($"l.{master.LineColumn} = NEW.id",
+                TriggerSql(server, $"trg_{master.Table}_no_replace_used_insert"), StringComparison.Ordinal);
+            Assert.Contains($"l.{master.LineColumn} IN (OLD.id, NEW.id)",
+                TriggerSql(server, $"trg_{master.Table}_no_replace_used_update"), StringComparison.Ordinal);
+        }
+    }
+
+    private static string TriggerSql(AccountingServer server, string name)
+        => server.Scalar<string>($"select sql from sqlite_master where type = 'trigger' and name = '{name}'");
+
+    private static JsonDocument Design(string module)
+    {
+        // フォルダを直書きしない（TestDatabase.QuerySqlOf と同じ理由。部品が増えるたびに動く）
+        var path = Directory
+            .EnumerateFiles(TestSupport.TestDatabase.ModulesDirectory, $"{module}.mod.json", SearchOption.AllDirectories)
+            .Single();
+        return JsonDocument.Parse(File.ReadAllText(path));
+    }
+}

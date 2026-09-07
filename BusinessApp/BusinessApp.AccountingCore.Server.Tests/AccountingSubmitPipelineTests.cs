@@ -82,6 +82,33 @@ public class AccountingSubmitPipelineTests
     }
 
     /// <summary>
+    /// <b>マスタの関門もつながっている</b>（ADR-0038）。つながっていなければ、使用中の科目の科目区分が
+    /// 「更新しました」で変わる（qa/03 L-29）。
+    /// </summary>
+    [Fact]
+    public async Task 使用中の科目の科目区分は保存に届かない()
+    {
+        using var server = new AccountingServer();
+        // 買掛金 1,000 ／ 現金 1,000（買掛金を現金で払う）。現金が「使用中」になる
+        server.InsertPosted(1, "支払", "2026-08-24", ("debit", "2100", 1000), ("credit", "1100", 1000));
+        var cash = new ModuleData { Name = "Account" };
+        cash.Fields["Id"] = new IdFieldData { Value = server.Text(server.AccountOf("1100").Value) };
+        cash.Fields["Category"] = new SelectFieldData { Value = "expense" };
+        var called = false;
+
+        await Assert.ThrowsAsync<BusinessApp.AccountingCore.Server.Masters.MasterRejectedException>(
+            () => server.Pipeline.SubmitAsync(
+                [new ModuleSubmitData { ModuleName = "Account", Update = [cash] }],
+                () =>
+                {
+                    called = true;
+                    return Task.FromResult(new List<ModuleSubmitResult>());
+                }));
+
+        Assert.False(called);
+    }
+
+    /// <summary>
     /// <b>同じ保存に仕訳と登録が混ざっても、どちらの関門も効く。</b>
     /// 片方だけ通す配線になっていたら、ここが落ちる。
     /// </summary>

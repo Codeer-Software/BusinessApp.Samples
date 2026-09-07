@@ -3,7 +3,7 @@ title: ddl — スキーマ定義
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-09-06
+updated: 2026-09-07
 supersedes: []
 related: [../Project.md, ../../docs/10_会計ドメイン設計.md, ../../docs/12_マスタ台帳.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---
@@ -86,7 +86,9 @@ dotnet test BusinessApp.slnx
 
 **二重防御は「片方を緩めても、もう片方が残る」ことに意味がある。** 逆に**片方だけ厳しくすると気づけない**
 （C# だけ厳しくすると CSV 取込が抜け、DB だけ厳しくすると画面で通って保存で落ちる）ので、
-両側を 1 つの表で並べる。機械的な突き合わせは正規表現頼みで壊れやすく、壊れても気づけないため採らない。
+両側を 1 つの表で並べる。**この表そのものを機械で突き合わせることは採らない**——表は文書であって定義ではなく、読む形を作っても壊れたときに気づけない。
+**行ごとの列集合の一致は、定義（トリガの定義文・デザイン JSON・C# の定数）どうしをテストで突き合わせられるものだけ守る**
+（[20 §4](../../docs/20_実装の原則.md) の表。読めなかったら落ちる表明を必ず持つ）。
 
 | 不変条件 | DB 側の担保 | C# 側の担保 |
 |---|---|---|
@@ -106,6 +108,7 @@ dotnet test BusinessApp.slnx
 | 行番号は正の整数で伝票内に一意 | `CHECK (line_no > 0)` ＋ `UNIQUE` | `E-LINE-NO` |
 | 消費税行だけが親行を持つ | `CHECK` | `E-TAX-PARENT` ＋ `E-TAX-INHERIT` |
 | 部門「全社共通」は 1 件だけ | 部分 UNIQUE インデックス | — |
+| 使用中のマスタは意味を変えられない（[ADR-0038](../../docs/decisions/0038-使用中のマスタは意味を変えられない.md)） | 4 マスタの `BEFORE UPDATE OF <意味を決める列>` トリガ ＋ REPLACE で id を乗っ取る経路を止める `BEFORE INSERT` / `BEFORE UPDATE OF id` トリガ | `MasterMeaningGate` |
 | 単一法人（[ADR-0005](../../docs/decisions/0005-単一法人に徹する.md)） | `CHECK (id = 1)` | — |
 
 行をまたぐ判定・マスタを引く判定は DB の `CHECK` では書けないので、`JournalEntryValidator` だけが担保する。

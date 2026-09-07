@@ -331,3 +331,142 @@ BEGIN
                      JOIN journal_entries e ON e.id = l.journal_entry_id
                     WHERE l.id = NEW.id AND l.id <> OLD.id AND e.status = 'posted');
 END;
+
+-- ---------------------------------------------------------------------------
+-- 使用中のマスタは意味を変えられない（ADR-0038。トリガが要る理由は同 §4——関門 MasterMeaningGate が本体で、
+-- ここは取込・CLI・SQL の直打ちへの最後の守り）。
+-- 意味を決める列の現在形は docs/12 §2。関門と同じ列を守っていることは MasterMeaningGateTests が突き合わせる。
+-- **意味の凍結は INSERT には張らない**——seed と標本の投入を止めない（ADR-0038 の帰結）。
+-- 下の REPLACE 対策の BEFORE INSERT は、計上済みの明細が使っている id を指定した INSERT だけに当たる。
+-- **下書きだけが参照している行は変えてよい**——下書きは直せる。違反は計上の関門が拾う（同 §1）。
+-- これらを journals の後ろに置くのは、本体が journal_lines / journal_entries を参照するから。
+CREATE TRIGGER trg_accounts_meaning_frozen_when_posted
+BEFORE UPDATE OF code, category, is_contra, requires_sub_account ON accounts
+FOR EACH ROW WHEN NEW.code IS NOT OLD.code
+              OR NEW.category IS NOT OLD.category
+              OR NEW.is_contra IS NOT OLD.is_contra
+              OR NEW.requires_sub_account IS NOT OLD.requires_sub_account
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている勘定科目の意味（科目コード・科目区分・評価勘定・補助科目を使う）は変更できない。新しい科目を作る。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.account_id = OLD.id AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_sub_accounts_meaning_frozen_when_posted
+BEFORE UPDATE OF code, account_id ON sub_accounts
+FOR EACH ROW WHEN NEW.code IS NOT OLD.code
+              OR NEW.account_id IS NOT OLD.account_id
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている補助科目の意味（補助科目コード・勘定科目）は変更できない。新しい補助科目を作る。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.sub_account_id = OLD.id AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_departments_meaning_frozen_when_posted
+BEFORE UPDATE OF code, is_company_wide ON departments
+FOR EACH ROW WHEN NEW.code IS NOT OLD.code
+              OR NEW.is_company_wide IS NOT OLD.is_company_wide
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている部門の意味（部門コード・全社共通）は変更できない。新しい部門を作る。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.department_id = OLD.id AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_tax_categories_meaning_frozen_when_posted
+BEFORE UPDATE OF code, taxation_type, rate_kind ON tax_categories
+FOR EACH ROW WHEN NEW.code IS NOT OLD.code
+              OR NEW.taxation_type IS NOT OLD.taxation_type
+              OR NEW.rate_kind IS NOT OLD.rate_kind
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている税区分の意味（税区分コード・課税区分・税率区分）は変更できない。新しい税区分を作る。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.tax_category_id = OLD.id AND e.status = 'posted');
+END;
+
+-- REPLACE の経路を塞ぐ（ADR-0038）。仕訳側の no_replace_posted と同じ穴（qa/03 L-26。仕組みはあちらの注記）。
+-- 上の 4 本は UPDATE にしか張っていないので、id を指定した INSERT OR REPLACE と UPDATE OR REPLACE ... SET id で
+-- 計上済みの明細が参照している id を別の中身の行が乗っ取れた。
+-- **id を指定しない INSERT（seed・画面）には当たらない**（NEW.id が NULL で EXISTS が偽になる）。
+CREATE TRIGGER trg_accounts_no_replace_used_insert
+BEFORE INSERT ON accounts
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている勘定科目を上書きできない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.account_id = NEW.id AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_accounts_no_replace_used_update
+BEFORE UPDATE OF id ON accounts
+FOR EACH ROW WHEN NEW.id IS NOT OLD.id
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている勘定科目を上書きできない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.account_id IN (OLD.id, NEW.id) AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_sub_accounts_no_replace_used_insert
+BEFORE INSERT ON sub_accounts
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている補助科目を上書きできない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.sub_account_id = NEW.id AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_sub_accounts_no_replace_used_update
+BEFORE UPDATE OF id ON sub_accounts
+FOR EACH ROW WHEN NEW.id IS NOT OLD.id
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている補助科目を上書きできない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.sub_account_id IN (OLD.id, NEW.id) AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_departments_no_replace_used_insert
+BEFORE INSERT ON departments
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている部門を上書きできない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.department_id = NEW.id AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_departments_no_replace_used_update
+BEFORE UPDATE OF id ON departments
+FOR EACH ROW WHEN NEW.id IS NOT OLD.id
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている部門を上書きできない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.department_id IN (OLD.id, NEW.id) AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_tax_categories_no_replace_used_insert
+BEFORE INSERT ON tax_categories
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている税区分を上書きできない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.tax_category_id = NEW.id AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_tax_categories_no_replace_used_update
+BEFORE UPDATE OF id ON tax_categories
+FOR EACH ROW WHEN NEW.id IS NOT OLD.id
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている税区分を上書きできない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.tax_category_id IN (OLD.id, NEW.id) AND e.status = 'posted');
+END;
