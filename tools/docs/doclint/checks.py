@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime
 import os
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 from .model import (ADR_LEDGER, APPEND_ANTIPATTERN, CODE_EXTENSIONS, excluded_from_code_check,
                     DATE_RE, DOCS_INDEX, Doc, GENERIC_DOC_NAMES, INLINE_IGNORE, LINE_LIMIT, MD_LINK,
@@ -25,7 +25,7 @@ ALL_CHECKS = (
     "check_front_matter", "check_links", "check_superseded_links", "check_body",
     "check_adr_ledger", "check_docs_index", "check_code_references",
     "check_section_references", "check_updated_freshness", "check_updated_history",
-    "check_article_notation",
+    "check_article_notation", "check_dated_switches",
 )
 
 
@@ -620,7 +620,7 @@ def check_article_notation(docs: List[Doc], findings: List[Finding]) -> Tuple[in
 
     走査は `.md` とコードの両方。現行の条番号はコードのコメントにもある。
     **`.md` はフロントマターも見る**（隣の検査は本文だけを見るが、`title:` は索引へ写されて
-    人が読む字なので、`title: 電帳規則 5 条 5 項の要件` を通すと規則が骨抜きになる）。  # lint-docs:article-ok
+    人が読む字なので、`title: 電帳規則 5 条 5 項の要件` を通すと規則が骨抜きになる）。  # lint-docs:article-ok lint-docs:switch-ok 検体
     **コードフェンスの中は見ない**（`check_body` と同じ作法。フェンスの中に HTML コメントの
     印を書くと画面にそのまま出てしまい、逐語引用を貼れなくなる）。
 
@@ -649,3 +649,116 @@ def check_article_notation(docs: List[Doc], findings: List[Finding]) -> Tuple[in
                              "号＝漢数字）。直すか、80 §3-1 の 4 つに当たるなら行に {} を書く: {}"
                              .format(i + 1, ARTICLE_IGNORE, "・".join(hits))))
     return scanned, ignored
+
+
+# --- 日付で発効する条番号の切替（電帳法リサーチ §0-1。開発者の指示。2026-09-06） ----------
+# 2027-01-01 に優良な電子帳簿の要件が電帳規則 5 ⑤ から 5 ④ へ移る。**手順を文章で持ったまま 4 回落ちた**  lint-docs:switch-ok 改番の事実
+# （qa/02 の R22-01・R22-02・R41-01・R41-02）ので、**発効日・旧の字面・新の表記をデータ 1 行で持ち**、
+# 発効日前は件数を印字、発効日以後は error にする（30 §9 の「機械の関門（成果物）」。ADR-0043）。
+#
+# **除外は行の印で表す**（`lint-docs:switch-ok 理由`。**理由が無い印は効かない**）。除外の型は 3 つ（電帳法リサーチ §0-1）——
+# ①改正後の 5 ⑤（デジタルシームレス保存）を指す記述 ②改番の**事実**だけを述べていて発効日以後も真である記述
+# ③税特措規則 9 の 6 ③ が引いている番号。**同じ字面なので型を機械では判別できない**。
+# だから型ごとの一覧を持たず、行の印に理由を書かせる。
+# **「現行は 5 ⑤」「いま書くもの」のように発効日に偽になる行には印を付けない**——
+# 印は発効日以後にしか効かないので、そこに付けると当日に直すべき行が関門から消える（qa/02 の R44-01）。
+#
+# **この関門の限界**（過大に表明しない。qa/02 の R22-05）:
+# - 印を付けた行は発効日以後も見ない。**印の理由が正しいかは人が見る**（機械は理由の有無しか見ない）
+# - 発効日以後に「新しい 5 ⑤」の意味で旧の字面が正しく増えるときも印が要る（印を書く手間は置換の事故より軽い）
+# - 印は切替ごとではなく共通なので、1 件目のために付けた印は 2 件目からも外れる
+# - 発効日前は数えるだけで、**件数が減ったこと**を鳴らさない（早まった置換は selftest のラチェットが見る）
+# **この 4 つは ADR-0043 の帰結と同じ列挙である**（片方だけ増やさない）
+class DatedSwitch(NamedTuple):
+    """日付で発効する字面の切替 1 件。`old` に当たる行は `effective` 以後 error になる。"""
+    effective: datetime.date
+    old: "re.Pattern[str]"
+    label: str          # 人に見せる旧の字面の札（指摘文用。正規表現を見せない）
+    new: str
+    why: str
+    exempt_hint: str    # 印を付けてよい行の型（指摘文用）
+
+
+DATED_SWITCHES: Tuple[DatedSwitch, ...] = (
+    DatedSwitch(
+        effective=datetime.date(2027, 1, 1),
+        # 半角空白の有無・強調記号・「第」の有無・全角数字・記法違反の形（5条5項）をすべて拾う  lint-docs:article-ok 検索する字面の説明
+        # （R41-01 で「第」なしを、R22-02 で空白ゆれを、それぞれ取りこぼした）
+        old=re.compile(r"電帳規則\s*(?:第\s*)?[5５]\s*\**(?:⑤|条\s*(?:第\s*)?[5５]\s*項)"),
+        label="電帳規則 5 ⑤",  # lint-docs:switch-ok 旧の字面の札
+        new="電帳規則 5 ④",
+        why="令和 7 年財務省令第 28 号（2027-01-01 施行）で優良な電子帳簿の要件が電帳規則 5 ④ に移る"
+            "（電帳法リサーチ §0-1）",
+        exempt_hint="改正後の番号・改番の事実（発効日以後も真である行）・税特措規則が引く番号",
+    ),
+)
+SWITCH_IGNORE = "lint-docs:switch-ok"
+# **理由を要求する**（印の後ろに空白と 1 字以上）。発効日に人が印を見直す前提だから。
+# HTML コメントの閉じ `-->` を理由と読まない（selftest がこれで 1 度落ちた。qa/02 の R44-07）
+SWITCH_IGNORE_RE = re.compile(re.escape(SWITCH_IGNORE) + r"[ \t]+(?!--)\S")
+# 発効日のこの日数前から、残っている件数を warn で知らせる（発効日に一斉に赤くなるのを避ける）
+SWITCH_NOTICE_DAYS = 30
+
+ScanTargets = List[Tuple[str, List[str]]]
+
+
+def dated_switch_hits(line: str, switch: DatedSwitch) -> List[str]:
+    """`switch.old` に当たる字面を返す（純粋関数）。"""
+    return [m.group(0).strip() for m in switch.old.finditer(line)]
+
+
+def check_dated_switches(docs: List[Doc], findings: List[Finding],
+                         today: Optional[datetime.date] = None,
+                         targets: Optional[ScanTargets] = None) -> Tuple[int, int]:
+    """発効日を過ぎた旧の字面を error にし、`(旧の字面が残る行数, 印で外した行数)` を返す。
+
+    走査は `check_article_notation` と同じ——`.md` とコードの両方、`.md` のコードフェンスの中は見ない。
+    **1 行 1 所見**（同じ行に旧の字面が 2 つあっても所見は 1 つ、印も 1 つで全部外れる）。
+    **発効日前は数えるだけ**で所見を積まない（発効日の 30 日前からは warn でファイル別の件数を知らせる）。
+    **2 つ返すのは、0 に落ちたとき「切り替え済み」と読み違えないため**——配線が死んだか、
+    印が広がったかを見分けられるように、印で外した行も数える。
+    `today` と `targets` はテストと `--today` のための注入口。
+    """
+    today = today or datetime.date.today()
+    if targets is None:
+        targets = iter_scan_targets(docs, include_md=True)
+    remaining = 0
+    ignored = 0
+    for switch in DATED_SWITCHES:
+        effective = today >= switch.effective
+        notice = not effective and (switch.effective - today).days <= SWITCH_NOTICE_DAYS
+        per_file: Dict[str, int] = {}
+        for rel, lines in targets:
+            in_fence = False
+            for i, line in enumerate(lines):
+                if rel.endswith(".md") and FENCE_RE.match(line):
+                    in_fence = not in_fence
+                    continue
+                if in_fence:
+                    continue
+                hits = dated_switch_hits(line, switch)
+                if not hits:
+                    continue
+                if SWITCH_IGNORE_RE.search(line):
+                    ignored += 1
+                    continue
+                per_file[rel] = per_file.get(rel, 0) + 1
+                if effective:
+                    findings.append((SEV_ERROR, rel,
+                                     "{}行目: {} に発効した条番号の切替が残っています（{} → {}）。"
+                                     "書き換えるか、{} なら行末に「{} 理由」を書く"
+                                     "（理由の無い印は効かない。{} では外れない）: {}"
+                                     .format(i + 1, switch.effective.isoformat(), switch.label, switch.new,
+                                             switch.exempt_hint, SWITCH_IGNORE, INLINE_IGNORE,
+                                             "・".join(hits))))
+        count_here = sum(per_file.values())
+        remaining += count_here
+        if notice and count_here:
+            findings.append((SEV_WARN, "（全体）",
+                             "{} に条番号の切替が発効します（{}）。旧の字面が {} 行残っています——{}。"
+                             "当日に一斉に error になるので、`lint_docs.py --today {}` で先に洗い、"
+                             "印を付けるか当日の差分を用意しておく（発効日前に新の番号は書けない）"
+                             .format(switch.effective.isoformat(), switch.why, count_here,
+                                     "・".join("{} {} 行".format(r, n) for r, n in sorted(per_file.items())),
+                                     switch.effective.isoformat())))
+    return remaining, ignored
