@@ -71,8 +71,8 @@
             "Edit(Designer/Design/designer.settings.Development.json)",
             "Edit(.git/**)"
         ],
-        "_README_ask": "**正典（tools/claude/protected_paths.json）に載っているものの Edit は確認する。** Edit は old_string の照合があるので取り違えでは壊れないが、**照合を通す字は Read すれば手に入るので、意図すれば空にできる**（自己レビューで判明。2026-09-07）。拒まずに確認にとどめるのは、追跡外の環境設定を直すのが正当な作業で、塞ぐと自律作業が止まるからである。接続文字列を含む 2 つの開発用設定は Read も確認する（2026-08-23 から）。**Edit の行はここ 1 か所で列挙せず、正典から生成した形に揃えてある**——guard_delete.py --selftest が Edit(<正典の path>) / Edit(<正典の path>/**) の有無を突き合わせる。",
-        "_README_deny_delete": "削除するコマンドを deny する。**rm を deny にするのは開発者の指示**（2026-09-07）で、**それ以外の語（rmdir・del・erase・unlink・shred・truncate・Remove-Item ほかと git clean）は Claude が「同じ危険の語」として広げた**（同日に開発者が承認）。truncate は削除ではなく中身の切り詰めだが、失うものは同じなので入れてある。**消す必要があるときは tools/claude/trash.ps1（ごみ箱送り）を使う。** **ここは控えであって本体ではない**——本体は PreToolUse フックの guard_delete.py で、拒むときに代わりのコマンドまで示す。deny が止められるのはフックが止めるものの一部だけで（前方一致の文字列規則なので find … -delete のような形は書けない）、**ここに並ぶ動詞の一覧を正典と思わないこと**。**Write の行は、正典（protected_paths.json）の各行から生成した形で並べる**（本体は同じくフック。Write は前の中身を残さないので、削除より強く扱う）。**glob を勝手に広げない**——guard_delete.py --selftest が Write(<正典の path>) / Write(<正典の path>/**) の有無を突き合わせるので、広げると赤くなる。序列の理由は ADR-0044、規則は docs/30_作業のルール.md（**節番号は書かない**——lint_docs.py が節の実在を検査するのは .md とコードだけで、この .json は対象外だから、節が動いても鳴らない）。",
+        "_README_ask": "**正典（tools/claude/protected_paths.json）に載っているものの Edit は確認する。** Edit は old_string の照合があるので取り違えでは壊れないが、**照合を通す字は Read すれば手に入るので、意図すれば空にできる**（自己レビューで判明。2026-09-07）。拒まずに確認にとどめるのは、追跡外の環境設定を直すのが正当な作業で、塞ぐと自律作業が止まるからである。接続文字列を含む 2 つの開発用設定は Read も確認する（2026-08-23 から）。**この Edit の行は Write・NotebookEdit にも当たる**（ファイルの権限判定が参照するのは Edit(パス) と Read(パス) だけである。理由と出典は ADR-0044）。**規則は deny → ask → allow の順に評価され、先に当たった 1 つが結論を決める**ので、allow の裸の Write より先にここが当たる——**上書きを拒むフックが落ちたときに確認へ落とすのは、この行である。** **Edit の行はここ 1 か所で列挙せず、正典から生成した形に揃えてある**——guard_delete.py --selftest が、フォルダには Edit(<正典の path>/**)、ファイルには Edit(<正典の path>) を要求する（**逆の形は何も覆わないので赤にする**）。**glob を勝手に広げない。**",
+        "_README_deny_delete": "削除するコマンドを deny する。**rm を deny にするのは開発者の指示**（2026-09-07）で、**それ以外の語（rmdir・del・erase・unlink・shred・truncate・Remove-Item ほかと git clean）は Claude が「同じ危険の語」として広げた**（同日に開発者が承認）。truncate は削除ではなく中身の切り詰めだが、失うものは同じなので入れてある。**消す必要があるときは tools/claude/trash.ps1（ごみ箱送り）を使う。** **ここは控えであって本体ではない**——本体は PreToolUse フックの guard_delete.py で、拒むときに代わりのコマンドまで示す。deny が止められるのはフックが止めるものの一部だけで（前方一致の文字列規則なので find … -delete のような形は書けない）、**ここに並ぶ動詞の一覧を正典と思わないこと**。**上書き（Write）の行はここに置けない**——ファイルの権限判定が参照しない形だからである（理由と出典は ADR-0044。控えは ask 側が兼ねる）。参照されない形（Write( / NotebookEdit( / MultiEdit( / Glob( で始まる規則）を置くと guard_delete.py --selftest が赤にする。序列の理由は ADR-0044、規則は docs/30_作業のルール.md（**節番号は書かない**——lint_docs.py が節の実在を検査するのは .md とコードだけで、この .json は対象外だから、節が動いても鳴らない）。",
         "deny": [
             "Bash(git push:*)",
             "PowerShell(git push:*)",
@@ -94,13 +94,6 @@
             "PowerShell(erase:*)",
             "PowerShell(Clear-Content:*)",
             "PowerShell(Clear-Item:*)",
-            "Write(LocalData/**)",
-            "Write(Designer/LocalEnvironment.md)",
-            "Write(.claude/settings.local.json)",
-            "Write(Designer/.claude/settings.local.json)",
-            "Write(BusinessApp/BusinessApp.Server/appsettings.Development.json)",
-            "Write(Designer/Design/designer.settings.Development.json)",
-            "Write(.git/**)",
             "Read(**/secrets.json)",
             "Read(**/*.pfx)",
             "Read(**/*.snk)"

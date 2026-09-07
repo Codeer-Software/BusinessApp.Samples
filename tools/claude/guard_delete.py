@@ -42,8 +42,10 @@ Claude Code の Bash 権限は**コマンド文字列の前方一致**で判定�
 
 `allow` を返すときの制約
 ------------------------
-**`allow` は権限判定そのものを飛ばす。** `settings.json` の deny も効かなくなるので、
-**コマンド全体がこの repo の `trash.ps1` を 1 本呼ぶだけ**のときに限る。
+**`allow` は確認のプロンプトを飛ばす。** ただし**フックの判定は権限規則を迂回しない**——
+`deny` と `ask` はフックが何を返しても評価される（Claude Code 公式ドキュメント
+「Configure permissions」。2026-09-08 に Claude が確認）。それでも**返すのは、
+コマンド全体がこの repo の `trash.ps1` を 1 本呼ぶだけ**のときに限る。
 連結（`;` `&` `|` 改行 `` ` `` `$(`）が 1 つでもあれば `allow` にせず、通常の権限判定へ降りる。
 
 限界（承知のうえで残す）
@@ -54,6 +56,10 @@ Claude Code の Bash 権限は**コマンド文字列の前方一致**で判定�
   **そちらへ倒してある**——見逃した削除は戻せないが、過剰な拒否は語の表記を変えれば済む。
 - **閉じた上書きの経路は限られる。** `Write` ツールと、保護対象の名前が出るシェルのコマンドだけである。
   **名前を出さずに上書きする形**（変数・相対パスの組み立て）は通る。
+- **上書きは `settings.json` の `deny` では拒めない**（理由と出典は ADR-0044）。
+  **このフックが起動しなければ、上書きは拒否ではなく確認（`ask`）に落ちる。**
+  `ask` が覆うのは `Edit`・`Write`・`NotebookEdit` で、**`MultiEdit` はどちらも覆わない**
+  （このフックの `matcher` にも無い。いまのセッションには配られていない道具である）。
 - **パスの突き合わせは `realpath` までで、`\\?\` 前置きは追わない。**
 - **フックが実際に起動するか**（`python` が PATH にあるか等）は、このファイルの自己検査では保証できない。
 
@@ -152,6 +158,8 @@ def load_entries():
     for entry in entries:
         if not entry.get("path") or not entry.get("why"):
             raise ValueError(f"path または why が無い行がある: {entry}")
+        if entry.get("kind") not in ("dir", "file"):
+            raise ValueError(f"kind が dir でも file でもない行がある: {entry}")
     return entries
 
 
@@ -195,10 +203,51 @@ def normalized(path_value: str) -> str:
     return os.path.normcase(os.path.realpath(from_msys(path_value))).rstrip("\\/")
 
 
-def decide_write(file_path: str, cwd: str):
+def within(target: str, root) -> bool:
+    """`target`（正規化済み）が `root` の配下か、`root` そのものか。"""
+    root_path = normalized(str(root))
+    return target == root_path or target.startswith(root_path + os.sep)
+
+
+def main_repo_root(script_repo_root):
+    """**worktree から実行されたときの、本体のリポジトリの根。** それ以外は `None`。
+
+    `.claude/worktrees/` はこの repo が実際に使う作業形態である（[30 §6](../../docs/30_作業のルール.md)）。
+    そこからは `../../../LocalData` のように**本体を相対で指せてしまい**、
+    しかも**コマンド文字列に保護対象の名前が出ない**ので、文字列側の判定では止まらない。
+    `trash.ps1` の `Get-ProtectedRoots` が先に塞いだ穴で、**同じ穴が Write 側に残っていた**
+    （自己レビューで実証。2026-09-08）。
+
+    **`.git` がファイルのときだけ git を呼ぶ**——linked worktree（と submodule）の印である。
+    ふだんの Write に子プロセスの費用をかけないため。git が無ければ守る範囲が狭まるだけで、本体は動く。
+    """
+    marker = Path(script_repo_root) / ".git"
+    if not marker.is_file():
+        return None
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(script_repo_root), "rev-parse",
+             "--path-format=absolute", "--git-common-dir"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except Exception:
+        return None
+    if proc.returncode != 0 or not (proc.stdout or "").strip():
+        return None
+    common = Path(proc.stdout.strip().splitlines()[0]).parent  # <本体>/.git → <本体>
+    if within(normalized(str(common)), script_repo_root):
+        return None
+    return common
+
+
+def decide_write(file_path: str, cwd: str, roots=None):
     """`Write`（全上書き）の当たり先を見る。(decision, reason) を返す。
 
     **コマンド文字列と違い、当たり先が 1 つに決まる**ので、名前ではなく解決した絶対パスで見る。
+
+    **起点は 1 つとは限らない。** worktree から実行されたときは本体のリポジトリも守る
+    （`roots` は検査のために外から渡せる形にしてある。既定は「このファイルの repo」だけで、
+    **根の外を指されたときにだけ**本体を解決する）。
     """
     if not file_path:
         return None, None
@@ -214,14 +263,23 @@ def decide_write(file_path: str, cwd: str):
     base = from_msys(cwd) if cwd else str(REPO_ROOT)
     resolved = from_msys(file_path)
     target = normalized(resolved if os.path.isabs(resolved) else os.path.join(base, resolved))
-    for entry in entries:
-        protected_path = normalized(str(REPO_ROOT / entry["path"]))
-        if target == protected_path or target.startswith(protected_path + os.sep):
-            return "deny", (
-                f"{entry['why']}。**Write は前の中身を残さない**ので通さない"
-                "（tools/claude/guard_delete.py）。**直すなら Edit を使う**（確認が入る）。"
-                "**新しく作るなら雛形から複製する**（`cp` / `Copy-Item`。docs/30_作業のルール.md §10）。"
-            )
+
+    if roots is None:
+        roots = [REPO_ROOT]
+        if not within(target, REPO_ROOT):
+            main_root = main_repo_root(REPO_ROOT)
+            if main_root is not None:
+                roots.append(main_root)
+
+    for root in roots:
+        for entry in entries:
+            protected_path = normalized(str(Path(root) / entry["path"]))
+            if target == protected_path or target.startswith(protected_path + os.sep):
+                return "deny", (
+                    f"{entry['why']}。**Write は前の中身を残さない**ので通さない"
+                    "（tools/claude/guard_delete.py）。**直すなら Edit を使う**（確認が入る）。"
+                    "**新しく作るなら雛形から複製する**（`cp` / `Copy-Item`。docs/30_作業のルール.md §10）。"
+                )
     return None, None
 
 
@@ -406,6 +464,15 @@ def _check_canon(failed: int) -> int:
         if decision != "deny" or entry["why"] not in (reason or ""):
             failed += 1
             print(f"NG  正典に載っているのに保護されない（Write）: {entry['path']}（{decision}）")
+
+        # **worktree から本体を指す形。** 根が 1 つだと素通りする（`trash.ps1` が先に塞いだ穴）。
+        # `roots` を渡して純粋に判定させる——実際の worktree を作らずに検体を置けるようにしてある。
+        worktree = REPO_ROOT / ".claude" / "worktrees" / "probe"
+        relative = os.path.join("..", "..", "..", entry["path"])
+        decision, reason = decide_write(relative, str(worktree), roots=[worktree, REPO_ROOT])
+        if decision != "deny" or entry["why"] not in (reason or ""):
+            failed += 1
+            print(f"NG  worktree から本体を指す Write が止まらない: {entry['path']}（{decision}）")
     return failed
 
 
@@ -414,9 +481,9 @@ def _check_wiring(failed: int) -> int:
 
     フックの登録や deny を消しても検査が緑のままなら、関門は配線ごと外せてしまう。
 
-    **保証していないもの**: フックが実際に起動すること（`python` が PATH にあるか・
-    `$CLAUDE_PROJECT_DIR` が解決されるか）、`Write` 以外の書き換え道具（`NotebookEdit` 等）、
-    `defaultMode` の設定。
+    **保証していないもの**: フックが**本番の形で**起動すること（`shell: "bash"` から
+    `python "$CLAUDE_PROJECT_DIR/..."` が解決されるか。`_check_entrypoint` は
+    `sys.executable` と絶対パスで起こしており、本番とは別物である）、`defaultMode` の設定。
     """
     try:
         settings = json.loads(SETTINGS.read_text(encoding="utf-8"))
@@ -425,34 +492,57 @@ def _check_wiring(failed: int) -> int:
         return failed + 1
 
     pre = settings.get("hooks", {}).get("PreToolUse", [])
-    if "guard_delete.py" not in json.dumps(pre, ensure_ascii=False):
-        failed += 1
-        print("NG  settings.json の PreToolUse に guard_delete.py が登録されていない")
 
-    # **Write を見る配線が要る。** matcher から漏れると、上書きの判定は一度も呼ばれない。
-    if not [entry for entry in pre
-            if "Write" in str(entry.get("matcher", ""))
-            and "guard_delete.py" in json.dumps(entry, ensure_ascii=False)]:
-        failed += 1
-        print("NG  settings.json の PreToolUse に、Write を guard_delete.py へ回す配線が無い")
+    # **道具ごとに配線を表明する。** まとめて「どこかに guard_delete.py がある」で見ると、
+    # **削除側（`Bash|PowerShell`）の枝を丸ごと外しても緑になる**（自己レビューで実証。2026-09-08）。
+    for tool in ("Write", "Bash", "PowerShell"):
+        wired = False
+        for entry in pre:
+            if tool not in str(entry.get("matcher", "")):
+                continue
+            for hook in entry.get("hooks", []):
+                if hook.get("type") == "command" and "guard_delete.py" in str(hook.get("command", "")):
+                    wired = True
+        if not wired:
+            failed += 1
+            print(f"NG  settings.json の PreToolUse に、{tool} を guard_delete.py へ回す配線が無い")
 
     permissions = settings.get("permissions", {})
     deny = set(permissions.get("deny", []))
     ask = set(permissions.get("ask", []))
+
+    # **削除の控え。** ここは代表の 3 語しか見ていない——`deny` の語の並びは `DELETION` の正規表現と
+    # 対称ではなく（`Bash` と `PowerShell` で語が違う）、生成規則で突き合わせられないため。
+    # **語を消しても鳴らない**のは承知の穴で、docs/README.md の保留リストに置いてある。
     for required in ("Bash(rm:*)", "PowerShell(Remove-Item:*)", "Bash(git clean:*)"):
         if required not in deny:
             failed += 1
             print(f"NG  settings.json の deny に {required} が無い（フックが落ちたときの控え）")
 
-    # **控えは生成規則で突き合わせる。** 部分文字列で見ると `Write(LocalDataX/**)` でも緑になる。
+    # **控えは生成規則で突き合わせる。** 部分文字列で見ると `Edit(LocalDataX/**)` でも緑になる。
+    # **`Write` の行は控えにならない**——権限判定はファイルを書く道具を `Edit(パス)` の形だけで見て、
+    # その 1 行が `Write` にも当たる。だから上書きを拒むのはこのフックだけで、
+    # フックが落ちたときに残るのは、この `ask` の行による確認である。
+    # **形まで見る。** フォルダに `Edit(<path>)`、ファイルに `Edit(<path>/**)` は**何も覆わない**のに、
+    # どちらかがあればよい形で見ると緑になる（同じく自己レビューで実証。2026-09-08）。
     for entry in load_entries():
         path = entry["path"]
-        if not ({f"Write({path})", f"Write({path}/**)"} & deny):
+        required = f"Edit({path}/**)" if entry["kind"] == "dir" else f"Edit({path})"
+        if required not in ask:
             failed += 1
-            print(f"NG  settings.json の deny に Write({path}) も Write({path}/**) も無い")
-        if not ({f"Edit({path})", f"Edit({path}/**)"} & ask):
-            failed += 1
-            print(f"NG  settings.json の ask に Edit({path}) も Edit({path}/**) も無い")
+            print(f"NG  settings.json の ask に {required} が無い（{entry['kind']} に要る形）")
+
+    # **当たらない形の規則を置かない。** ファイルの権限判定は `Edit(パス)` と `Read(パス)` しか見ず、
+    # `Write(パス)` などは受け付けられたうえで参照されない（起動時に警告が出るだけで、
+    # 検査は緑のままだった。2026-09-07 に実際に置いてしまった。経緯は ADR-0044）。
+    for bucket, rules in (("allow", permissions.get("allow", [])),
+                          ("deny", deny), ("ask", ask)):
+        for rule in rules:
+            if any(str(rule).startswith(f"{tool}(")
+                   for tool in ("Write", "NotebookEdit", "MultiEdit", "Glob")):
+                failed += 1
+                print(f"NG  settings.json の {bucket} に、権限判定が参照しない形の規則がある: {rule}"
+                      "（ファイルの規則は Edit(パス) / Read(パス) で書く）")
     return failed
 
 
@@ -536,6 +626,11 @@ def selftest() -> int:
         if actual != expected:
             failed += 1
             print(f"NG  cwd: 期待 {expected} / 実際 {actual}: cwd={cwd!r} path={relative!r}")
+
+    # **根の足し方。** 本体のリポジトリで別の根を足すと、判定が本体の外へ広がる。
+    if (REPO_ROOT / ".git").is_dir() and main_repo_root(REPO_ROOT) is not None:
+        failed += 1
+        print("NG  worktree ではないのに、別の根を足している")
 
     failed = _check_canon(failed)
     failed = _check_wiring(failed)
