@@ -1,0 +1,35 @@
+{
+  "_README": "削除から守るものの正典。tools/claude/guard_delete.py（PreToolUse フック）と tools/claude/trash.ps1（削除コマンド）の両方がこの 1 ファイルを読む。**同じ表を 2 つの言語に書き写さない**——片方だけ直したときに、守っているつもりで素通りになるため。経緯は docs/decisions/0044-削除はごみ箱送りに一本化しrmを機械で止める.md。",
+  "_README_criteria": "載せる基準は 2 つで、どちらかに当たれば載せる。① **消したとき Git で戻せず、かつ失うと困る**——追跡外のものと .git そのもの。**追跡外でも作り直せるもの（obj/・bin/ のような生成物）は載せない**。追跡ファイルは**コミット済みであれば**git が復元手段になるので載せない（コミットしていない変更は戻せないが、それはパスでは表せないので guard_delete.py が git reset --hard 等を拒む側で守る）。② **ごみ箱に入りきらないほど大きい**——Windows はごみ箱の容量を超えるものを完全削除するとされ（**未確認。2026-09-07 時点で実測も一次情報も取っていない**）、そこでは「戻せる」という前提が崩れる。**追跡外の大きなデータを新しく置いたら、ここに足す**——②に当たる行はまだ 1 つも無く、足し忘れを機械は拾えない（ADR-0044 の未解決の残課題）。",
+  "_README_how": "path はリポジトリルートからの相対パス。trash.ps1 は絶対パスへ解決して「その配下か・それを含むか」を見る。guard_delete.py は path の末尾の名前をコマンド文字列に探す（シェルを解釈しないので、これ以上は見られない）。したがって末尾の名前は、リポジトリ内で紛れない字にするのが望ましい。**末尾の名前が同じ行を置いてもよい**が、その場合 guard_delete.py はどちらの行かを区別できず、先に載っているほうの why を返す（拒む結論は同じで、正確な行は trash.ps1 が絶対パスで判定する）。",
+  "protected": [
+    {
+      "path": "LocalData",
+      "why": "LocalData/（稼働 DB・デプロイ zip・添付ファイル）は Git 追跡外で、消すと戻せない"
+    },
+    {
+      "path": "Designer/LocalEnvironment.md",
+      "why": "Designer/LocalEnvironment.md（デザイナ exe のパス等）は Git 追跡外で、消すと戻せない"
+    },
+    {
+      "path": ".claude/settings.local.json",
+      "why": ".claude/settings.local.json（マシン固有の許可とフック）は Git 追跡外で、消すと戻せない"
+    },
+    {
+      "path": "Designer/.claude/settings.local.json",
+      "why": "Designer/.claude/settings.local.json（デザインワークスペース側のマシン固有設定）は Git 追跡外で、消すと戻せない"
+    },
+    {
+      "path": "BusinessApp/BusinessApp.Server/appsettings.Development.json",
+      "why": "appsettings.Development.json（接続文字列・デザイン zip の配置先）は Git 追跡外で、消すと戻せない"
+    },
+    {
+      "path": "Designer/Design/designer.settings.Development.json",
+      "why": "designer.settings.Development.json（デザイナ CLI の接続先）は Git 追跡外で、消すと戻せない"
+    },
+    {
+      "path": ".git",
+      "why": ".git/ は履歴そのもので、消すと戻せない"
+    }
+  ]
+}

@@ -20,7 +20,9 @@ related: [../docs/README.md]
 | スクリプト | 用途 |
 |---|---|
 | [`clb/deploy.ps1`](clb/deploy.ps1) | `Designer/Design` を zip 化して `LocalData/designs/App.zip` に配置する（デザイナ GUI「送信」の代替。FileWatcher が hot-reload） |
-| [`claude/guard_delete.py`](claude/guard_delete.py) | 削除の当たり先を絞る PreToolUse フック。**Git 追跡外（＝戻せないもの）は拒み**、スクラッチパッド配下だけの削除は通す。`--selftest` で仕様表を検査する（コミット前フックが毎回流す） |
+| [`claude/trash.ps1`](claude/trash.ps1) | **ファイル・フォルダをごみ箱へ送る。`rm` の代わりに使う唯一の削除コマンド**（[ADR-0044](../docs/decisions/0044-削除はごみ箱送りに一本化しrmを機械で止める.md)・[30 §10](../docs/30_作業のルール.md)）。複数指定・ワイルドカード・`-DryRun` に対応する。**絶対パスへ解決してから保護対象を拒む**。`-SelfTest` で保護判定を検査する（コミット前フックが毎回流す） |
+| [`claude/guard_delete.py`](claude/guard_delete.py) | 削除を絞る PreToolUse フック。**完全削除するコマンドは当たり先によらず拒み、代わりに `trash.ps1` を使えと理由文で示す**。Git 追跡外（＝戻せないもの）は `trash` 経由でも拒む。`--selftest` で仕様表を検査する（コミット前フックが毎回流す） |
+| [`claude/protected_paths.json`](claude/protected_paths.json) | **削除から守るものの正典。** 上の 2 つが同じこの 1 ファイルを読む（**載せる基準と読み方はファイル冒頭の `_README`** が持つ） |
 | [`server/wait-server.ps1`](server/wait-server.ps1) | 開発サーバ（`http://localhost:5085`）の起動を待つ |
 | [`clb/sql.ps1`](clb/sql.ps1) | `sql` CLI のラッパ。結果 JSON を標準出力に返し、**一時ファイルを作らない** |
 | [`clb/migrate.ps1`](clb/migrate.ps1) | **DB マイグレーションのランナー**（ADR-0020）。`-Adopt` / `-Apply` / `-Status` / `-Verify`。書き方は [`Designer/migrations/README`](../Designer/migrations/README.md) |
@@ -49,6 +51,10 @@ Python の依存が恒常的に増えてきたら、そのとき `pyproject.toml
 ## よく使うコマンド
 
 ```powershell
+# 消す（ごみ箱へ送る。rm は使わない。docs/30 §10）
+pwsh -NoProfile -File tools/claude/trash.ps1 <パス> [<パス> ...]
+pwsh -NoProfile -File tools/claude/trash.ps1 -DryRun <パス>
+
 # デザインを稼働サーバへ反映（designcheck を通してから実行する）
 pwsh -NoProfile -File tools/clb/deploy.ps1
 
@@ -76,13 +82,13 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 | 段 | 中身 |
 |---|---|
 | 1 | `check_frozen.py`（**凍結されたファイルの変更・削除・改名**。適用済みマイグレーションと `baseline/`。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
-| 2 | `lint_secrets.py`（秘密・絶対パスの混入） |
-| 3 | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
-| 4 | `lint_design.py`（CLB デザインの静的検査） |
-| 5 | `dotnet test`（テスト・カバレッジ・スキーマ） |
-| 6 | `migrate.ps1 -Verify`（稼働 DB とスキーマ正典の同値。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
-| 7 | `dotnet stryker`（ミューテーション。**5 プロジェクト**——会計コアの純粋層とサーバ層、取引先部品の純粋層とサーバ層、共有インフラ。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)・[ADR-0025 §6](../docs/decisions/0025-取引先を部品として分ける.md)） |
-| 8 | `guard_delete.py` の自己検査 |
+| 2 | 削除の関門 2 つの自己検査（`guard_delete.py --selftest` と `trash.ps1 -SelfTest`。**正典は 1 つ**なので、両方がそれを読めているかもここで確かめる） |
+| 3 | `lint_secrets.py`（秘密・絶対パスの混入） |
+| 4 | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
+| 5 | `lint_design.py`（CLB デザインの静的検査） |
+| 6 | `dotnet test`（テスト・カバレッジ・スキーマ） |
+| 7 | `migrate.ps1 -Verify`（稼働 DB とスキーマ正典の同値。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
+| 8 | `dotnet stryker`（ミューテーション。**5 プロジェクト**——会計コアの純粋層とサーバ層、取引先部品の純粋層とサーバ層、共有インフラ。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)・[ADR-0025 §6](../docs/decisions/0025-取引先を部品として分ける.md)） |
 
 **マージが自動でコミットするときは `pre-merge-commit` から同じ 8 段へ委譲する**——
 git はマージで `pre-commit` を呼ばないので、置かないと **`main` に入る瞬間だけ誰も見ていない**。

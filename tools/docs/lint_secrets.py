@@ -71,8 +71,14 @@ RULES: Dict[str, Tuple[str, str, "re.Pattern[str]"]] = {
     ),
     "SEC-002": (
         SEV_ERROR,
-        "Unix のホームディレクトリ絶対パス（ローカル構成の漏洩）",
-        re.compile(r"(?<![\w.:])/(?:home|Users)/[A-Za-z0-9._-]+/"),
+        "Unix・Git Bash・WSL のホームディレクトリ絶対パス（ローカル構成の漏洩）",
+        # **Git Bash（MSYS）の `/c/Users/<名前>/` と WSL の `/mnt/c/Users/<名前>/` も拾う。**
+        # この repo は Bash ツールを常用しており、貼り付く絶対パスの多くがこの形になる。
+        # 素の `/Users/…` だけを見ていると、`/c/` が前に付いた瞬間に素通りしていた（2026-09-07 に発見）。
+        re.compile(
+            r"(?<![\w.:])/(?:home|Users)/[A-Za-z0-9._-]+/"
+            r"|(?<![\w.:])(?:/mnt)?/[A-Za-z]/[Uu]sers/[A-Za-z0-9._-]+/"
+        ),
     ),
     "SEC-003": (
         SEV_ERROR,
