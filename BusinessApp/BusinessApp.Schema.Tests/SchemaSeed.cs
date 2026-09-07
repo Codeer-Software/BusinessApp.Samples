@@ -26,9 +26,13 @@ internal static class SchemaSeed
     /// 下書きを作り、明細を入れ、計上する。<b>これが唯一の正しい経路</b>であり、
     /// 計上済みに明細を足す経路はトリガが塞いでいる。
     /// </summary>
+    /// <remarks>
+    /// <b>摘要を入れてある。</b> 空だと計上のトリガが止める（docs/10 §4-2-1）——
+    /// そちらは <see cref="JournalDescriptionGuardTests"/> が専門に見る。
+    /// </remarks>
     public const string PostedEntry = """
-        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-            VALUES (1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+            VALUES (1, '2026-05-20', '2026-05-20', 'draft', 'normal', '5 月分の現金売上', '2026-05-20 10:00:00');
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (1, 1, 'debit', 1, 100000, 1);
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)

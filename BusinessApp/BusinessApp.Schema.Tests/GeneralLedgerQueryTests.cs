@@ -50,16 +50,16 @@ public class GeneralLedgerQueryTests
             VALUES (2, 3, 'credit', 4, 1000, 1);
 
         -- 3) 05-25 借 減価償却費 500 / 貸 減価償却累計額 500（評価勘定・貸方が通常残高）
-        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-            VALUES (1, '2026-05-25', '2026-05-25', 'draft', 'normal', '2026-05-25 11:00:00');
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+            VALUES (1, '2026-05-25', '2026-05-25', 'draft', 'normal', '5 月の減価償却', '2026-05-25 11:00:00');
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (3, 1, 'debit', 6, 500, 1);
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (3, 2, 'credit', 3, 500, 1);
 
         -- 4) 05-28 借 売上値引高 300 / 貸 現金 300（評価勘定・借方が通常残高）
-        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-            VALUES (1, '2026-05-28', '2026-05-28', 'draft', 'normal', '2026-05-28 10:00:00');
+        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+            VALUES (1, '2026-05-28', '2026-05-28', 'draft', 'normal', '値引の計上', '2026-05-28 10:00:00');
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (4, 1, 'debit', 5, 300, 1);
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
@@ -74,10 +74,13 @@ public class GeneralLedgerQueryTests
 
     private const string Post = """
         UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-05-12 10:00:00' WHERE id = 1;
-        UPDATE journal_entries SET status = 'posted', entry_no = 2, posted_at = '2026-05-25 10:00:00' WHERE id = 2;
         UPDATE journal_entries SET status = 'posted', entry_no = 3, posted_at = '2026-05-25 11:00:00' WHERE id = 3;
         UPDATE journal_entries SET status = 'posted', entry_no = 4, posted_at = '2026-05-28 10:00:00' WHERE id = 4;
         """;
+
+    /// <summary>**摘要のない**伝票 2 の計上。<b>いまの製品では作れない形</b>なので、トリガを外して作る。</summary>
+    private const string PostBlankDescription =
+        "UPDATE journal_entries SET status = 'posted', entry_no = 2, posted_at = '2026-05-25 10:00:00' WHERE id = 2";
 
     // --- 出す行の範囲と並び ---
 
@@ -400,7 +403,7 @@ public class GeneralLedgerQueryTests
     [InlineData("partner", 7)]           // 取引先が付いているのは 1 番の 2 行だけ
     [InlineData("department", 8)]        // 部門が付いているのは 1 行だけ
     [InlineData("sub_account", 9)]       // 補助科目はどこにも無い
-    [InlineData("description", 7)]       // 摘要があるのは 1 番だけ
+    [InlineData("description", 3)]       // 摘要が無いのは 2 番の 3 行だけ（本番では作れない形の再現）
     [InlineData("item_description", 8)]  // 内容があるのは 1 行だけ
     public void 記録事項がない行を探せる(string field, int expected)
     {
@@ -433,7 +436,21 @@ public class GeneralLedgerQueryTests
         TestDatabase.Execute(db, SchemaSeed.Masters);
         TestDatabase.Execute(db, Accounts);
         TestDatabase.Execute(db, Book);
+        // **摘要のない計上済みは、いまは作れない**（docs/10 §4-2-1）。
+        // だが**規則より前に計上された行が稼働 DB に 2 件あり、計上済みは直せない**（I-05）。
+        // 帳簿はその行も探せなければならない（電帳通達 8-13。「記録事項がない行を探せる」）ので、
+        // **その 1 本だけ**トリガを外して作る。**外した定義は sqlite_master から読んで貼り直す。**
+        const string PostingGuard = "trg_journal_entries_description_required_when_posted";
         TestDatabase.Execute(db, Post);
+        TestDatabase.WithoutTrigger(db, PostingGuard, PostBlankDescription);
+
+        // **摘要が空の計上済みは 2 番だけ**。検体に伝票を足した人が摘要を書き忘れたら、ここで鳴る。
+        Assert.Equal(0L, TestDatabase.ScalarOf<long>(
+            db,
+            """
+            SELECT COUNT(*) FROM journal_entries
+             WHERE status = 'posted' AND id <> 2 AND (description IS NULL OR trim(description) = '')
+            """));
         return db;
     }
 
@@ -468,8 +485,8 @@ public class GeneralLedgerQueryTests
             VALUES ('FY17', '第 17 期', '2025-04-01', '2026-03-31', 'open');
 
         -- 6) 第 19 期 2027-04-10 借 現金 700 / 貸 売上高 700
-        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-            VALUES ((SELECT id FROM fiscal_years WHERE code = 'FY19'),
+        INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            VALUES ('第 19 期の売上', (SELECT id FROM fiscal_years WHERE code = 'FY19'),
                     '2027-04-10', '2027-04-10', 'draft', 'normal', '2027-04-10 10:00:00');
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (6, 1, 'debit', 1, 700, 1);
@@ -477,8 +494,8 @@ public class GeneralLedgerQueryTests
             VALUES (6, 2, 'credit', 2, 700, 1);
 
         -- 7) **取引日は第 18 期（2026-05-15）・計上日は第 19 期。** 決算後に見つかった取引。
-        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-            VALUES ((SELECT id FROM fiscal_years WHERE code = 'FY19'),
+        INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            VALUES ('決算後に見つかった取引', (SELECT id FROM fiscal_years WHERE code = 'FY19'),
                     '2026-05-15', '2027-04-20', 'draft', 'normal', '2027-04-20 10:00:00');
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (7, 1, 'debit', 1, 100, 1);
@@ -486,8 +503,8 @@ public class GeneralLedgerQueryTests
             VALUES (7, 2, 'credit', 2, 100, 1);
 
         -- 8) 第 17 期 2025-05-10 借 現金 50 / 貸 売上高 50。**いちばん古いのに id はいちばん大きい。**
-        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-            VALUES ((SELECT id FROM fiscal_years WHERE code = 'FY17'),
+        INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            VALUES ('第 17 期の売上', (SELECT id FROM fiscal_years WHERE code = 'FY17'),
                     '2025-05-10', '2025-05-10', 'draft', 'normal', '2025-05-10 10:00:00');
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (8, 1, 'debit', 1, 50, 1);
@@ -517,24 +534,24 @@ public class GeneralLedgerQueryTests
         INSERT INTO partners (code, name) VALUES ('P002', '乙商事');
 
         -- 6) 05-30 借 現金 400 / 貸 売上高 400。**取引先 2 は明細側にだけ付ける**（伝票側は空）。
-        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-            VALUES (1, '2026-05-30', '2026-05-30', 'draft', 'normal', '2026-05-30 10:00:00');
+        INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            VALUES ('乙商事への売上', 1, '2026-05-30', '2026-05-30', 'draft', 'normal', '2026-05-30 10:00:00');
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, partner_id, amount, tax_category_id)
             VALUES (6, 1, 'debit', 1, 2, 400, 1);
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (6, 2, 'credit', 2, 400, 1);
 
         -- 7) 05-31 借 現金 600 / 貸 売上高 600。**取引先 1 は伝票側**。
-        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, partner_id, entered_at)
-            VALUES (1, '2026-05-31', '2026-05-31', 'draft', 'normal', 1, '2026-05-31 10:00:00');
+        INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, partner_id, entered_at)
+            VALUES ('株式会社取引先への売上', 1, '2026-05-31', '2026-05-31', 'draft', 'normal', 1, '2026-05-31 10:00:00');
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (7, 1, 'debit', 1, 600, 1);
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (7, 2, 'credit', 2, 600, 1);
 
         -- 8) 7 番の取消。反対仕訳は原仕訳と同じ取引日・同じ取引先で、貸借を入れ替える（docs/10 §5）。
-        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, partner_id, entered_at)
-            VALUES (1, '2026-05-31', '2026-06-01', 'draft', 'reversal', 7, 1, '2026-06-01 10:00:00');
+        INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, partner_id, entered_at)
+            VALUES ('伝票番号 6 の取消: 株式会社取引先への売上', 1, '2026-05-31', '2026-06-01', 'draft', 'reversal', 7, 1, '2026-06-01 10:00:00');
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (8, 1, 'debit', 2, 600, 1);
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)

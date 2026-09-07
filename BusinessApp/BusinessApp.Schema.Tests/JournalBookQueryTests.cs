@@ -51,10 +51,12 @@ public class JournalBookQueryTests
     /// 下書きを計上する。<b>計上したあとは何も直せない</b>ので（I-05・DDL のトリガ）、
     /// テストごとの差異は計上より前に入れる。
     /// </summary>
-    private const string Post = """
-        UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-05-12 10:00:00' WHERE id = 1;
-        UPDATE journal_entries SET status = 'posted', entry_no = 2, posted_at = '2026-05-25 10:00:00' WHERE id = 2;
-        """;
+    private const string Post =
+        "UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-05-12 10:00:00' WHERE id = 1";
+
+    /// <summary>**摘要のない**伝票 2 の計上。<b>いまの製品では作れない形</b>なので、トリガを外して作る。</summary>
+    private const string PostBlankDescription =
+        "UPDATE journal_entries SET status = 'posted', entry_no = 2, posted_at = '2026-05-25 10:00:00' WHERE id = 2";
 
     // --- 出す行の範囲 ---
 
@@ -152,8 +154,8 @@ public class JournalBookQueryTests
         TestDatabase.Execute(db, """
             INSERT INTO fiscal_years (code, label, start_date, end_date, status)
                 VALUES ('FY19', '第 19 期', '2027-04-01', '2028-03-31', 'open');
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, entered_at)
-                VALUES (2, '2027-04-02', '2027-04-02', 'draft', 'reversal', 1, '2027-04-02 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, entered_at)
+                VALUES ('伝票番号 1 の取消: 5 月の売上', 2, '2027-04-02', '2027-04-02', 'draft', 'reversal', 1, '2027-04-02 10:00:00');
             INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
                 VALUES (4, 1, 'credit', 1, 1000, 1);
             UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2027-04-02 10:00:00' WHERE id = 4;
@@ -297,22 +299,22 @@ public class JournalBookQueryTests
                 VALUES ('FY17', '第 17 期', '2025-04-01', '2026-03-31', 'open');
 
             -- 4) 第 19 期の取消。取引日は原仕訳と同じ 05-10、計上は翌々年度。
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, entered_at)
-                VALUES ((SELECT id FROM fiscal_years WHERE code = 'FY19'),
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, entered_at)
+                VALUES ('伝票番号 1 の取消: 5 月の売上', (SELECT id FROM fiscal_years WHERE code = 'FY19'),
                         '2026-05-10', '2027-04-02', 'draft', 'reversal', 1, '2027-04-02 10:00:00');
             INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
                 VALUES (4, 1, 'credit', 1, 1000, 1);
 
             -- 5) 第 17 期の期末（03-30）に取引し、その期のうちに計上した。**id はいちばん大きい。**
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES ((SELECT id FROM fiscal_years WHERE code = 'FY17'),
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('第 17 期のうちに計上した取引', (SELECT id FROM fiscal_years WHERE code = 'FY17'),
                         '2026-03-30', '2026-03-30', 'draft', 'normal', '2026-03-30 10:00:00');
             INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
                 VALUES (5, 1, 'debit', 1, 700, 1);
 
             -- 6) 同じ 03-30 の取引を、決算後に見つけて第 18 期で計上した。
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, '2026-03-30', '2026-04-05', 'draft', 'normal', '2026-04-05 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('決算後に見つけて第 18 期で計上した取引', 1, '2026-03-30', '2026-04-05', 'draft', 'normal', '2026-04-05 10:00:00');
             INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
                 VALUES (6, 1, 'debit', 1, 800, 1);
 
@@ -361,7 +363,23 @@ public class JournalBookQueryTests
             TestDatabase.Execute(db, beforePosting);
         }
 
+        // **摘要のない計上済みは、いまは作れない**（docs/10 §4-2-1）。
+        // だが**規則より前に計上された行が稼働 DB に 2 件あり、計上済みは直せない**（I-05）。
+        // 帳簿はその行も探せなければならない（電帳通達 8-13。「記録事項がない行を探せる」）ので、
+        // **その 1 本だけ**トリガを外して作る。**外した定義は sqlite_master から読んで貼り直す。**
+        const string PostingGuard = "trg_journal_entries_description_required_when_posted";
         TestDatabase.Execute(db, Post);
+        TestDatabase.WithoutTrigger(db, PostingGuard, PostBlankDescription);
+
+        // **摘要が空の計上済みは 2 番だけ**。検体に伝票を足した人が摘要を書き忘れたら、ここで鳴る。
+        // **2 番を除いて数える**——テストによっては 2 番の摘要を計上の前に埋めるので、
+        // 「空が 1 本ある」ではなく「2 番のほかに空が無い」を表明する。
+        Assert.Equal(0L, TestDatabase.ScalarOf<long>(
+            db,
+            """
+            SELECT COUNT(*) FROM journal_entries
+             WHERE status = 'posted' AND id <> 2 AND (description IS NULL OR trim(description) = '')
+            """));
         return db;
     }
 

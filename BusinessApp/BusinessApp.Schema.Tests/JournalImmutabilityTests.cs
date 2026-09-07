@@ -30,8 +30,8 @@ public class JournalImmutabilityTests
         using var db = TestDatabase.Create();
         TestDatabase.Execute(db, SchemaSeed.Masters);
         TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');
             INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
                 VALUES (1, 1, 'debit', 1, 100, 1);
             UPDATE journal_lines SET amount = 200 WHERE id = 1;
@@ -150,8 +150,8 @@ public class JournalImmutabilityTests
     {
         var db = SchemaSeed.CreateWithPostedEntry();
         TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');
             INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
                 VALUES (2, 9, 'credit', 1, 999, 1);
             """);
@@ -179,8 +179,8 @@ public class JournalImmutabilityTests
         using var db = SchemaSeed.CreateWithPostedEntry();
 
         TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, entered_at)
-                VALUES (1, '2026-05-21', '2026-05-21', 'draft', 'reversal', 1, '2026-05-21 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-21', '2026-05-21', 'draft', 'reversal', 1, '2026-05-21 10:00:00');
             INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
                 VALUES (2, 1, 'credit', 1, 100000, 1);
             INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
@@ -206,8 +206,8 @@ public class JournalImmutabilityTests
         using var db = SchemaSeed.Create();
 
         Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, entry_no, transaction_date, posting_date, status, entry_type, entered_at, posted_at)
-                VALUES (1, 99, '2026-05-20', '2026-05-20', 'posted', 'normal', '2026-05-20 10:00:00', '2026-05-20 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, entry_no, transaction_date, posting_date, status, entry_type, entered_at, posted_at)
+                VALUES ('5 月分の現金売上', 1, 99, '2026-05-20', '2026-05-20', 'posted', 'normal', '2026-05-20 10:00:00', '2026-05-20 10:00:00');
             """));
 
         Assert.Equal(0L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM journal_entries"));
@@ -226,8 +226,8 @@ public class JournalImmutabilityTests
         using var db = SchemaSeed.Create();
 
         TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');
             """);
 
         Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
@@ -320,8 +320,8 @@ public class JournalImmutabilityTests
 
         // 2 本目の原仕訳を作って計上する。
         TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (10, 1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');
+            INSERT INTO journal_entries (description, id, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 10, 1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');
             INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
                 VALUES (10, 1, 'debit', 1, 500, 1);
             UPDATE journal_entries SET status = 'posted', entry_no = 9, posted_at = '2026-05-20 10:00:00' WHERE id = 10;
@@ -339,8 +339,8 @@ public class JournalImmutabilityTests
     private static string Reversal(int id, int entryNo) => Amendment(id, entryNo, "reversal");
 
     private static string AmendmentDraft(int id, string entryType, int originalEntryId = 1) => $"""
-        INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, entered_at)
-            VALUES ({id}, 1, '2026-05-20', '2026-05-21', 'draft', '{entryType}', {originalEntryId}, '2026-05-21 10:00:00');
+        INSERT INTO journal_entries (description, id, fiscal_year_id, transaction_date, posting_date, status, entry_type, original_entry_id, entered_at)
+            VALUES ('5 月分の現金売上', {id}, 1, '2026-05-20', '2026-05-21', 'draft', '{entryType}', {originalEntryId}, '2026-05-21 10:00:00');
         """;
 
     private static string Amendment(int id, int entryNo, string entryType, int originalEntryId = 1)

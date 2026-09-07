@@ -184,6 +184,17 @@ REQUIRED_EXEMPTIONS = {
 }
 
 
+# **印を出すが `IsRequired` は立てない欄**（保存では要らず、計上でだけ要る）。
+# **キーは (モジュール名, フィールド名)**——`REQUIRED_EXEMPTIONS` は DB の列名なので取り違えないこと。
+# `IsRequired` を立てると CLB の入力検査が**下書き保存まで止める**ので立てられないが、
+# **印は最初から出す**（docs/10 §4-2-1・docs/21 §1）。
+# **理由を書かないと載せられない**（空の理由は `check_exemptions` が赤くする）。
+MARK_WITHOUT_REQUIRED = {
+    ("JournalEntry", "Description"):
+        "摘要は計上でだけ必須。IsRequired を立てると下書き保存も止まる（docs/10 §4-2-1）",
+}
+
+
 def design_files(pattern):
     return sorted(glob.glob(os.path.join(DESIGN_DIR, "**", pattern), recursive=True))
 
@@ -292,6 +303,7 @@ def check_module(path, doc, findings):
     # **見るのは詳細レイアウトのラベルだけ**——一覧の見出し（<th>）には class が付かないので、
     # そちらは文字列に「*」を入れてある（qa/01 D-16）。
     _check_required_marks(path, doc, findings)
+    _check_marks_without_required(path, doc, findings)
 
     # D-30 画面に出す日時は書式を書く（docs/21 §2-5）。
     _check_datetime_formats(path, doc, findings)
@@ -566,6 +578,50 @@ def _check_required_marks(path, doc, findings):
         findings.append((SEV_ERROR, "D-20", relative(path),
                          f"{module}: 必須の {owner} に、印を付けるラベル要素"
                          f"（{owner}Label）が詳細レイアウトに無い（docs/21 §1）"))
+
+
+def _check_marks_without_required(path, doc, findings):
+    """**逆向き**——印が出ているのに `IsRequired` でない欄（docs/21 §1）。
+
+    `IsRequired` を「利用者が埋める必須欄」の 1 意味に揃えてある以上、
+    **印だけが独り歩きすると `*` の意味が画面の中で 2 通りになる**。
+    計上でだけ必須にしたい欄は実在するので（摘要）、**理由つきの許可表**で受ける。
+    表に無い印は、`IsRequired` の付け忘れか、印の付け間違いのどちらかである。
+    """
+    module = doc.get("Name", "")
+    required = {f.get("Name", "") for f in doc.get("Fields", []) if f.get("IsRequired")}
+    field_names = {f.get("Name", "") for f in doc.get("Fields", [])}
+    # **持ち主の求め方は順方向（`_check_required_marks`）と同じにする。**
+    # `RelativeField` を優先し、無ければ `<Field>Label` の形だけを認める——
+    # ラベル名そのものを持ち主にすると、`CodeCaption` のような命名で
+    # **存在しない欄の名前を名指しして鳴る**（直す手立てが無い。2026-09-08 の自己レビュー）。
+    owner_of = {f.get("Name", ""): f.get("RelativeField") or ""
+                for f in doc.get("Fields", [])
+                if f.get("TypeFullName", "").endswith("LabelFieldDesign")}
+
+    def walk(node):
+        if isinstance(node, dict):
+            name = node.get("FieldName", "")
+            if (node.get("TypeFullName", "").endswith("FieldLayoutDesign")
+                    and REQUIRED_LABEL_CLASS in (node.get("ClassName") or "").split()):
+                owner = owner_of.get(name) or (
+                    name[:-len("Label")] if name.endswith("Label") else "")
+                if (owner in field_names
+                        and owner not in required
+                        and (module, owner) not in MARK_WITHOUT_REQUIRED):
+                    findings.append((SEV_ERROR, "D-20", relative(path),
+                                     f"{module}: {owner} は IsRequired でないのにラベル {name} に印が出る。"
+                                     f"IsRequired を立てるか、理由つきで MARK_WITHOUT_REQUIRED に載せる"
+                                     "（docs/21 §1）"))
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    # **詳細だけでなく、一覧・検索も歩く。** 行ごと複製したときに印が付いて回る。
+    for layouts in ("DetailLayouts", "ListLayouts", "SearchLayouts"):
+        walk(doc.get(layouts, {}))
 
 
 def app_of(path):
@@ -976,6 +1032,24 @@ def check_exemptions(modules, findings):
         elif (doc.get("UserReadCondition") or {}).get("ModuleName"):
             findings.append((SEV_ERROR, "D-29", where,
                              f"{name} は読み取り条件を持っているので、免除の行は要らない（消す）"))
+
+    for (module, field), why in sorted(MARK_WITHOUT_REQUIRED.items()):
+        doc = by_name.get(module)
+        if not (why or "").strip():
+            findings.append((SEV_ERROR, "D-20", where,
+                             f"MARK_WITHOUT_REQUIRED の {module}.{field} に理由が無い"
+                             "（**理由を書かないと載せられない**）"))
+        if doc is None:
+            findings.append((SEV_ERROR, "D-20", where,
+                             f"MARK_WITHOUT_REQUIRED の {module} がデザインに無い（行を消す）"))
+            continue
+        fields = {f.get("Name", ""): f for f in doc.get("Fields", [])}
+        if field not in fields:
+            findings.append((SEV_ERROR, "D-20", where,
+                             f"MARK_WITHOUT_REQUIRED の {module}.{field} がデザインに無い（行を消す）"))
+        elif fields[field].get("IsRequired"):
+            findings.append((SEV_ERROR, "D-20", where,
+                             f"{module}.{field} は IsRequired になったので、免除の行は要らない（消す）"))
 
     for module, column in sorted(REQUIRED_EXEMPTIONS):
         doc = by_name.get(module)

@@ -186,9 +186,9 @@
       "DbColumn": "description",
       "IsMultiline": false,
       "IsAutoFitRows": false,
-      "Placeholder": "",
-      "TextEditEmptyType": "StringEmpty",
-      "ShouldTrimAfterEdit": false,
+      "Placeholder": "取引の内容",
+      "TextEditEmptyType": "Null",
+      "ShouldTrimAfterEdit": true,
       "AutoTab": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
@@ -866,7 +866,7 @@
       "IsBlock": false
     },
     {
-      "Text": "「*」は必須項目です。",
+      "Text": "「*」は必須項目です。「摘要」は下書き保存では空のままでも保存でき、「計上する」ときに必要です。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -1607,7 +1607,7 @@
                 "Layout": {
                   "FieldName": "DescriptionLabel",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "required-label",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",

@@ -254,9 +254,16 @@ BEGIN
     SELECT RAISE(ABORT, '計上済みの仕訳明細は削除できない。');
 END;
 
+CREATE TRIGGER trg_journal_lines_posted_no_insert
+BEFORE INSERT ON journal_lines
+FOR EACH ROW WHEN (SELECT status FROM journal_entries WHERE id = NEW.journal_entry_id) = 'posted'
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳に明細を追加できない。');
+END;
+
 -- **明細を計上済みの伝票へ「付け替える」道を塞ぐ。**
 --
--- 上の 2 本は OLD の伝票（＝いま所属している伝票）の状態しか見ないので、
+-- 上の update / delete の 2 本は OLD の伝票（＝いま所属している伝票）の状態しか見ないので、
 -- **下書きの明細の journal_entry_id を計上済みの伝票の id へ UPDATE する**経路は
 -- どれにも当たらず通っていた（2026-09-03 の自己レビューで発見。qa/03 L-25）。
 -- 通ると、計上済みの伝票に身に覚えのない行が増える——貸借一致（I-01）も
@@ -266,13 +273,6 @@ BEFORE UPDATE ON journal_lines
 FOR EACH ROW WHEN (SELECT status FROM journal_entries WHERE id = NEW.journal_entry_id) = 'posted'
 BEGIN
     SELECT RAISE(ABORT, '計上済みの仕訳へ明細を移動できない。');
-END;
-
-CREATE TRIGGER trg_journal_lines_posted_no_insert
-BEFORE INSERT ON journal_lines
-FOR EACH ROW WHEN (SELECT status FROM journal_entries WHERE id = NEW.journal_entry_id) = 'posted'
-BEGIN
-    SELECT RAISE(ABORT, '計上済みの仕訳に明細を追加できない。');
 END;
 
 --------------------------------------------------------------------------------
@@ -471,4 +471,27 @@ BEGIN
      WHERE EXISTS (SELECT 1 FROM journal_lines l
                      JOIN journal_entries e ON e.id = l.journal_entry_id
                     WHERE l.tax_category_id IN (OLD.id, NEW.id) AND e.status = 'posted');
+END;
+
+-- 摘要のない仕訳を計上させない（docs/10 §4-2-1。法税規則 55 ① の仕訳帳の記載事項「内容」）。
+-- **下書き → 計上の UPDATE だけを見る。** OLD.status を見ないと、
+-- **規則より前に計上された摘要のない行**を触ったときにもこれが鳴り、
+-- 本来出るべき trg_journal_entries_posted_no_update の「計上済みの仕訳は変更できない」を隠す
+-- （2026-09-08 の自己レビューで指摘され、インメモリ SQLite で再現した）。
+-- status = 'posted' の INSERT は trg_journal_entries_no_posted_insert が拒む。
+--
+-- **空白だけも空とみなす。** trim の第 2 引数は C# の char.IsWhiteSpace と同じ符号位置で、
+-- **関門と同じ広さにしてある**（理由は docs/10 §4-2-1。両方向の同値は JournalDescriptionGuardTests が見る）。
+--
+-- **新しいトリガはこのファイルの末尾に足す**（理由は Designer/migrations/README.md）。
+-- **位置で指す参照を作らない**——足すたびに末尾が変わるので、名前で指すこと。
+CREATE TRIGGER trg_journal_entries_description_required_when_posted
+BEFORE UPDATE ON journal_entries
+FOR EACH ROW WHEN NEW.status = 'posted' AND OLD.status <> 'posted'
+             AND trim(coalesce(NEW.description, ''),
+                      char(9, 10, 11, 12, 13, 32, 133, 160, 5760,
+                       8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202,
+                       8232, 8233, 8239, 8287, 12288)) = ''
+BEGIN
+    SELECT RAISE(ABORT, '摘要のない仕訳は計上できない。帳簿の記載事項「内容」を欠くため。');
 END;

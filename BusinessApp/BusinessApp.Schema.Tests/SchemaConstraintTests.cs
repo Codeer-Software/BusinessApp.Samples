@@ -56,8 +56,8 @@ public class SchemaConstraintTests
         using var db = Seeded();
 
         Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, $"""
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, '2026-05-21', '2026-05-21', 'draft', '{entryType}', '2026-05-21 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-21', '2026-05-21', 'draft', '{entryType}', '2026-05-21 10:00:00');
             """));
     }
 
@@ -68,8 +68,8 @@ public class SchemaConstraintTests
         using var db = SchemaSeed.CreateWithPostedEntry();
 
         Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, entry_no, transaction_date, posting_date, status, entry_type, entered_at, posted_at)
-                VALUES (1, 1, '2026-05-21', '2026-05-21', 'posted', 'normal', '2026-05-21 10:00:00', '2026-05-21 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, entry_no, transaction_date, posting_date, status, entry_type, entered_at, posted_at)
+                VALUES ('5 月分の現金売上', 1, 1, '2026-05-21', '2026-05-21', 'posted', 'normal', '2026-05-21 10:00:00', '2026-05-21 10:00:00');
             """));
     }
 
@@ -79,8 +79,8 @@ public class SchemaConstraintTests
         using var db = Seeded();
 
         Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, entry_no, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, 99, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, entry_no, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, 99, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
             """));
     }
 
@@ -90,8 +90,8 @@ public class SchemaConstraintTests
         using var db = Seeded();
 
         Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, '2026-05-21', '2026-05-21', 'posted', 'normal', '2026-05-21 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-21', '2026-05-21', 'posted', 'normal', '2026-05-21 10:00:00');
             """));
     }
 
@@ -101,10 +101,10 @@ public class SchemaConstraintTests
         using var db = Seeded();
 
         TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, '2026-05-22', '2026-05-22', 'draft', 'normal', '2026-05-22 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-22', '2026-05-22', 'draft', 'normal', '2026-05-22 10:00:00');
             """);
 
         Assert.Equal(2L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM journal_entries WHERE entry_no IS NULL"));
@@ -117,13 +117,13 @@ public class SchemaConstraintTests
         using var db = Seeded();
 
         TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at, idempotency_key)
-                VALUES (1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00', 'EXPENSE-001');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at, idempotency_key)
+                VALUES ('5 月分の現金売上', 1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00', 'EXPENSE-001');
             """);
 
         Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at, idempotency_key)
-                VALUES (1, '2026-05-22', '2026-05-22', 'draft', 'normal', '2026-05-22 10:00:00', 'EXPENSE-001');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at, idempotency_key)
+                VALUES ('5 月分の現金売上', 1, '2026-05-22', '2026-05-22', 'draft', 'normal', '2026-05-22 10:00:00', 'EXPENSE-001');
             """));
     }
 
@@ -134,8 +134,8 @@ public class SchemaConstraintTests
     {
         using var db = Seeded();
         TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
             """);
 
         Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, $"""
@@ -149,8 +149,8 @@ public class SchemaConstraintTests
     {
         using var db = Seeded();
         TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
             """);
 
         Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
@@ -164,8 +164,8 @@ public class SchemaConstraintTests
     {
         using var db = Seeded();
         TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
             """);
 
         Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
@@ -179,8 +179,8 @@ public class SchemaConstraintTests
     {
         using var db = Seeded();
         TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
             """);
 
         Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
@@ -214,8 +214,8 @@ public class SchemaConstraintTests
     {
         using var db = Seeded();
         TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-                VALUES (1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
             INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
                 VALUES (1, 1, 'debit', 1, 100, 1);
             """);

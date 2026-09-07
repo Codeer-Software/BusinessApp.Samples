@@ -30,7 +30,7 @@ public sealed class JournalReversalPosting(JournalEntryStore entryStore)
         {
             throw new JournalPostingRejectedException(
             [
-                new Violation(JournalViolationCodes.AlreadyPosted, "計上済みの伝票は、もう一度計上できません。"),
+                new Violation(JournalViolationCodes.AlreadyPosted, "この伝票は計上済みです。画面を開き直してください。"),
             ]);
         }
 

@@ -139,8 +139,9 @@ CREATE TABLE partners (
 -- **この 2 つで循環は構造的に消える。** 深さ 2 以上が作れなければ、A→B→A も作れない。
 -- 自己参照（A→A）は列の CHECK が拒む。
 --
--- **INSERT では「自分が既に親になっている」を見ない。** BEFORE INSERT の時点で NEW.id は
--- まだ採番されておらず、そもそも生まれたばかりの行を親にしている行は無い。
+-- **INSERT では「自分が既に親になっている」を見ない。** BEFORE INSERT の時点の NEW.id は
+-- 実在の id ではなく（005_journals.sql の trg_accounts_no_replace_used_insert の注記。実測すると -1 で、仕様上は未定義）、
+-- そもそも生まれたばかりの行を親にしている行は無い。
 CREATE TRIGGER trg_partners_parent_must_be_root_insert
 BEFORE INSERT ON partners
 WHEN NEW.parent_partner_id IS NOT NULL

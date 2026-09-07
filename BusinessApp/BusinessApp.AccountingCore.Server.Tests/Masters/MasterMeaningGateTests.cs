@@ -168,8 +168,8 @@ public class MasterMeaningGateTests
         // 補助科目と部門つきの明細は、フィクスチャの InsertPosted が作れないので SQL で計上する
         // （下書きで書いてから状態を進める。DDL のトリガが唯一許す順序）。
         server.Execute($"""
-            insert into journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-            values (1, '2026-08-24', '2026-08-24', 'draft', 'normal', '2026-08-24 10:00:00');
+            insert into journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+            values (1, '2026-08-24', '2026-08-24', 'draft', 'normal', '支払', '2026-08-24 10:00:00');
             insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, sub_account_id, department_id, amount, tax_category_id)
             values ((select max(id) from journal_entries), 1, 'debit', (select id from accounts where code = '1100'), {sub}, {dept}, 500, 1);
             insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
@@ -331,8 +331,8 @@ public class MasterMeaningGateTests
     {
         using var server = new AccountingServer();
         server.Execute("""
-            insert into journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-            values (1, '2026-08-24', '2026-08-24', 'draft', 'normal', '2026-08-24 10:00:00');
+            insert into journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+            values (1, '2026-08-24', '2026-08-24', 'draft', 'normal', '支払', '2026-08-24 10:00:00');
             insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             values (1, 1, 'debit', (select id from accounts where code = '6070'), 500, 1);
             """);
