@@ -10,17 +10,20 @@
   3. `section_refs` が節への参照の 5 形を拾い、**拾ってはいけない形を拾わない**か
   4. 定義した検査が全部 `ALL_CHECKS` に載り、`main` から**正しい引数で**呼ばれているか
   5. `article_notation_violations` が `5 条 1 項` を拾い、**公布番号と「12 項目」を拾わない**か  # lint-docs:article-ok
+  6. `check_dated_switches` が発効日前は数えるだけで、発効日以後は error にし、印で外れるか
 """
 
 from __future__ import annotations
 
+import datetime
 import os
 import re
 from typing import Dict, List
 
 from . import checks
-from .checks import (ALL_CHECKS, ARTICLE_IGNORE, Finding, article_notation_violations,
-                     check_superseded_links, successor_of, updated_violation)
+from .checks import (ALL_CHECKS, ARTICLE_IGNORE, DATED_SWITCHES, SWITCH_IGNORE, Finding,
+                     article_notation_violations, check_superseded_links, dated_switch_hits,
+                     successor_of, updated_violation)
 from .model import (ADR_LEDGER, DOCS_INDEX, Doc, INLINE_IGNORE, LINE_LIMIT, SEV_ERROR,
                     SEV_WARN, body_of, load_docs, parse_front_matter)
 
@@ -29,7 +32,11 @@ CLI_SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # main が検査を呼ぶときの**引数まで含めた**呼び出し。名前だけの包含だと
 # `check_superseded_links(d, {}, findings)` のような配線の壊れ方が通ってしまう
 REQUIRED_CALLS = ("check_superseded_links(d, docs_by_rel, findings)",
-                  "scanned_notation, ignored_notation = check_article_notation(docs, findings)")
+                  "scanned_notation, ignored_notation = check_article_notation(docs, findings)",
+                  "remaining_switch, ignored_switch = check_dated_switches(docs, findings, today=today)",
+                  # 要約行の印字。消すと「0 に落ちたら疑う」の設計が黙って死ぬ
+                  "条番号の切替: 旧の字面が {} 行（印で外した {} 行）",
+                  "remaining_switch, ignored_switch))")
 
 
 def _fake(rel: str, meta: Dict[str, str], body: List[str]) -> Doc:
@@ -238,7 +245,8 @@ def _check_wiring() -> List[str]:
     main_at = re.search(r"^def main\(\)", cli_src, re.M)
     if main_at is None:
         return ng + ["lint_docs.py に def main() が見つからない"]
-    main_src = cli_src[main_at.start():]
+    # コメントを落としてから照合する。呼び出しをコメントアウトした壊れ方が部分文字列の照合を通るため（R44-03）
+    main_src = re.sub(r"#[^\n]*", "", cli_src[main_at.start():])
 
     # 引数まで含めて照合する。名前だけの包含だと `check_superseded_links(d, {}, findings)` が通る。
     # 照合する文字列は**別ファイル**（lint_docs.py）を探すので、この表明が自分で自分を満たすことはない
@@ -371,14 +379,14 @@ def _check_article_notation_forms() -> List[str]:
     # (入力, 期待する返り値)
     cases = [
         # --- 拾うべき形 -------------------------------------------------------
-        ("電帳規則5条5項1号", ["5条", "5項", "1号"]),                       # lint-docs:article-ok
-        ("電帳規則第5条第5項", ["第5条", "第5項"]),                          # lint-docs:article-ok
+        ("電帳規則5条5項1号", ["5条", "5項", "1号"]),                       # lint-docs:article-ok lint-docs:switch-ok 検体
+        ("電帳規則第5条第5項", ["第5条", "第5項"]),                          # lint-docs:article-ok lint-docs:switch-ok 検体
         ("法人税法施行規則 54 条を「別表二十一」と示した", ["54 条"]),        # lint-docs:article-ok
         ("| 20 条 | 収集し、又は保管してはならない |", ["20 条"]),            # 表のセル（法令名は別の行） lint-docs:article-ok
         ("- **入力期間（6項一号）**", ["6項"]),                              # 箇条書き（条は見出しにある） lint-docs:article-ok
         ("**30 条 2 項の目的外利用**になり", ["30 条", "2 項"]),              # 強調の中 lint-docs:article-ok
         ("（附則 2 条 2 項。施行前にした", ["2 条", "2 項"]),                 # 附則 lint-docs:article-ok
-        ("title: 電帳規則 5 条 5 項の要件", ["5 条", "5 項"]),                # フロントマターも見る lint-docs:article-ok
+        ("title: 電帳規則 5 条 5 項の要件", ["5 条", "5 項"]),                # フロントマターも見る lint-docs:article-ok lint-docs:switch-ok 検体
         # --- 拾ってはいけない形（**こちらが本体**） ---------------------------
         ("| 政令 | 同施行令 | 令和3年政令第128号 |", []),                     # 公布番号
         ("平成10年大蔵省令第43号", []),                                       # 同上
@@ -395,9 +403,9 @@ def _check_article_notation_forms() -> List[str]:
         ("命名規則 5 項目に反する", []),                                       # 規則＋項目
         ("この記法 3 条件", []),                                               # **この規則の主題そのもの**
         ("IDE0045 / IDE0046（三項演算子への寄せ）", []),                       # 漢数字の演算子
-        ("### 3.1 条文（現行・電帳規則 5 ⑤一）", []),                          # 節番号＋条文
+        ("### 3.1 条文（現行・電帳規則 5 ⑤一）", []),                          # 節番号＋条文 lint-docs:switch-ok 検体
         ("**消税法 30 ⑦・38 ②・38 の 2 ②・58**に規定する帳簿", []),          # 正しい記法
-        ("電帳規則 5 ⑤一イ", []),                                              # 同上
+        ("電帳規則 5 ⑤一イ", []),                                              # 同上 lint-docs:switch-ok 検体
         ("1 桁の検査用数字 ＋ 12 桁の基礎番号", []),                           # 法令の話ではない
     ]
     for line, want in cases:
@@ -451,10 +459,145 @@ def _check_article_notation_forms() -> List[str]:
     return ng
 
 
+# 切替ごとの検体（入力, 拾うべき字面）。**`DATED_SWITCHES` に行を足したらここにも足す**（無いと赤）。
+# 拾ってはいけない形がこちらの本体——電帳規則の別の項、別の法令の同じ項、新の表記
+SWITCH_CASES = {
+    "電帳規則 5 ⑤": [  # lint-docs:switch-ok 検体
+        ("電帳規則 5 ⑤一イ(1)", ["電帳規則 5 ⑤"]),                          # lint-docs:switch-ok 検体
+        ("電帳規則5⑤二", ["電帳規則5⑤"]),                                    # 空白なし lint-docs:switch-ok 検体
+        ("**現行が電帳規則 5 **⑤**、", ["電帳規則 5 **⑤"]),                   # 強調記号 lint-docs:switch-ok 検体
+        ("電帳規則５⑤", ["電帳規則５⑤"]),                                    # 全角数字（貼り付けた条文） lint-docs:switch-ok 検体
+        ("電帳規則5条5項・電帳規則第5条第5項", ["電帳規則5条5項", "電帳規則第5条第5項"]),  # 記法違反の形も拾う lint-docs:article-ok lint-docs:switch-ok 検体
+        ("電帳規則 5 ④一", []),                                               # 新の表記
+        ("電帳規則 2 ⑤・電帳規則 5 ①三", []),                                # 別の条・項
+        ("電帳法 8 ⑤・消税法 5 ⑤", []),                                       # 別の法令
+        ("電帳規則 5 ⑤一（2027-01-01 以後は 5 ④一）", ["電帳規則 5 ⑤"]),     # 併記も旧の字面として数える lint-docs:switch-ok 検体
+    ],
+}
+
+
+def _check_dated_switch_forms() -> List[str]:
+    """日付で発効する条番号の切替（電帳法リサーチ §0-1・ADR-0043）。
+
+    **発効日を注入して 4 つの時点を通す**——発効日の 1 年前（数えるだけ）・31 日前（まだ warn しない）・
+    30 日前（warn 1 件）・発効日（行ごとに error）。走査対象も注入し、**コードを歩くこと**と
+    **理由の無い印・汎用の印では外れないこと**を対照つきで表明する。
+    データ 1 行を空にしても、印の判定を落としても、発効日の比較を逆にしても赤になることを、ここで確かめる。
+    """
+    ng = []
+    if not DATED_SWITCHES:
+        return ["DATED_SWITCHES が空（**0 件は緑ではない**。2027-01-01 の切替が消えている）"]
+    if DATED_SWITCHES[0].effective != datetime.date(2027, 1, 1) or DATED_SWITCHES[0].new != "電帳規則 5 ④":
+        ng.append("DATED_SWITCHES の 1 行目が 2027-01-01 の電帳規則 5 ④ への切替でない: {}".format(DATED_SWITCHES[0]))
+
+    for switch in DATED_SWITCHES:
+        cases = SWITCH_CASES.get(switch.label)
+        if cases is None:
+            ng.append("SWITCH_CASES に {} の検体が無い（切替を足したら検体も足す）".format(switch.label))
+            continue
+        for line, want in cases:
+            got = dated_switch_hits(line, switch)
+            if got != want:
+                ng.append("dated_switch_hits: 期待 {} / 実際 {}: {}".format(want, got, line))
+
+        # 走査対象を注入する（文書 1 本＋コード 2 本）。**コードを歩かない壊れ方**をここで捕まえる
+        md = _fake("docs/x.md", {"title": "x", "status": "current"}, [
+            "ふつうの行",                                                              # 5 行目
+            "優良の要件は電帳規則 5 ⑤一イ",                                            # 6 行目: 旧の字面 lint-docs:switch-ok 検体
+            "改正後の電帳規則 5 ⑤二 <!-- {} 改正後の番号 -->".format(SWITCH_IGNORE),  # 7 行目: 理由つきの印で外れる lint-docs:switch-ok 検体
+            "```", "電帳規則 5 ⑤（フェンスの中）", "```",                             # 8〜10 行目: フェンスは見ない lint-docs:switch-ok 検体
+            "電帳規則5⑤ <!-- {} -->".format(SWITCH_IGNORE),                          # 11 行目: **理由の無い印は効かない** lint-docs:switch-ok 検体
+            "電帳規則 5 ⑤ <!-- {} -->".format(INLINE_IGNORE),                        # 12 行目: **汎用の印では外れない** lint-docs:switch-ok 検体
+            "電帳規則 5 ⑤一ロ と 電帳規則 5 ⑤一ハ",                                    # 13 行目: 同じ行に 2 つ ＝ 1 所見 lint-docs:switch-ok 検体
+        ])
+        targets = [(md.rel, md.lines),
+                   ("BusinessApp/X/Y.cs", ["// 入力年月日（電帳規則 5 ⑤一イ(2)）", "// ふつうの行"]),  # lint-docs:switch-ok 検体
+                   ("Designer/ddl/z.sql", ["-- 電帳規則5⑤一ロ  lint-docs:switch-ok 一連番号の説明"])]     # 印つき lint-docs:switch-ok 検体
+        want_remaining, want_ignored = 5, 2   # md の 6・11・12・13 行目 ＋ .cs の 1 行／md の 7 行目 ＋ .sql
+
+        # 1 年前: 数えるだけ
+        fs: List[Finding] = []
+        remaining, ignored = checks.check_dated_switches([], fs, today=switch.effective - datetime.timedelta(days=365),
+                                                          targets=targets)
+        if fs:
+            ng.append("check_dated_switches: 発効日前に所見を積んだ: {}".format(fs))
+        if (remaining, ignored) != (want_remaining, want_ignored):
+            ng.append("check_dated_switches: 件数が違う。期待 {} / 実際 {}".format((want_remaining, want_ignored), (remaining, ignored)))
+
+        # 31 日前: まだ warn しない／30 日前: warn 1 件（全体）で、ファイル別の件数と --today の案内を出す
+        fs = []
+        checks.check_dated_switches([], fs, today=switch.effective - datetime.timedelta(days=checks.SWITCH_NOTICE_DAYS + 1),
+                                    targets=targets)
+        if fs:
+            ng.append("check_dated_switches: 31 日前に所見を出した: {}".format(fs))
+        fs = []
+        checks.check_dated_switches([], fs, today=switch.effective - datetime.timedelta(days=checks.SWITCH_NOTICE_DAYS),
+                                    targets=targets)
+        notices = [f for f in fs if f[1] == "（全体）"]
+        others = [f for f in fs if f[1] != "（全体）"]
+        if len(notices) != 1 or notices[0][0] != SEV_WARN:
+            ng.append("check_dated_switches: 30 日前の warn が 1 件でない: {}".format(fs))
+        else:
+            for want in (switch.effective.isoformat(), "docs/x.md 4 行", "BusinessApp/X/Y.cs 1 行", "--today"):
+                if want not in notices[0][2]:
+                    ng.append("check_dated_switches: 30 日前の warn に {} が無い: {}".format(want, notices[0][2]))
+        if others:
+            ng.append("check_dated_switches: 30 日前に行ごとの所見を出した: {}".format(others))
+
+        # 発効日: 印の無い行ごとに error。コードも鳴る。行番号・旧新・印の書き方が指摘文にある
+        fs = []
+        checks.check_dated_switches([], fs, today=switch.effective, targets=targets)
+        errs = [f for f in fs if f[0] == SEV_ERROR]
+        if len(errs) != want_remaining or len(fs) != len(errs):
+            ng.append("check_dated_switches: 発効日の所見が error {} 件でない: {}".format(want_remaining, fs))
+        else:
+            got_lines = sorted(int(re.match(r"(\d+)行目", m).group(1)) for _, r, m in errs if r == "docs/x.md")
+            if got_lines != [6, 11, 12, 13]:
+                ng.append("check_dated_switches: 文書の行番号が違う。期待 [6, 11, 12, 13] / 実際 {}".format(got_lines))
+            if not any(r.endswith(".cs") for _, r, _ in errs):
+                ng.append("check_dated_switches: コード（.cs）の旧の字面が error になっていない")
+            if any(r.endswith(".sql") for _, r, _ in errs):
+                ng.append("check_dated_switches: 印つきの .sql が error になっている")
+            for want in (switch.effective.isoformat(), switch.label, switch.new, SWITCH_IGNORE, INLINE_IGNORE):
+                if not all(want in m for _, _, m in errs):
+                    ng.append("check_dated_switches: 指摘文に {} が無い行がある".format(want))
+            if switch.old.pattern in errs[0][2]:
+                ng.append("check_dated_switches: 指摘文に正規表現の生文字列が出ている")
+
+    # 実データ。**発効日前は「まだ残っている」のが正しい**——0 に落ちたら配線が死んだか、早まって置換した
+    # （2027-01-01 より前に 5 ④ と書くと現行の条文を指せない）。**印は上限も持つ**（ばら撒いて残を減らす壊れ方）。
+    # **発効日を過ぎたら逆**——残っていれば本体の検査が error にするので、ここは印の側だけを見る
+    real, _ = load_docs()
+    real_targets = checks.iter_scan_targets(real, include_md=True)
+    outside_tools = [t for t in real_targets if not t[0].startswith("tools/")]   # この検査自身の検体を除く
+    real_fs: List[Finding] = []
+    real_remaining, real_ignored = checks.check_dated_switches(real, real_fs, targets=outside_tools)
+    first = DATED_SWITCHES[0]
+    if datetime.date.today() < first.effective:
+        # 実測 41 行（2026-09-07）。半分以下に落ちたら気づけるようにする。下げるときは理由をここに書く
+        if real_remaining < 20:
+            ng.append("check_dated_switches: 実データで旧の字面が {} 行しかない（配線が死んだか、発効日前に置換した）"
+                      .format(real_remaining))
+        if [f for f in real_fs if f[0] == SEV_ERROR]:
+            ng.append("check_dated_switches: 発効日前に error を出した: {}".format(real_fs[:3]))
+        # 発効日を先取りして、**コードの旧の字面も error になる**ことを実物で表明する（.cs・.sql が 13 行ある）
+        ahead: List[Finding] = []
+        checks.check_dated_switches(real, ahead, today=first.effective, targets=outside_tools)
+        kinds = {os.path.splitext(r)[1] for sev, r, _ in ahead if sev == SEV_ERROR}
+        for want in (".md", ".cs", ".sql"):
+            if want not in kinds:
+                ng.append("check_dated_switches: 発効日の先取りで {} が error に出ない（コードを歩いていない）: {}".format(want, sorted(kinds)))
+    # 実測 19 行（2026-09-07。tools/ を除く）。半分以下に落ちたら印の判定が死んだ、倍以上なら印をばら撒いた
+    if not 10 <= real_ignored <= 40:
+        ng.append("check_dated_switches: 実データ（tools/ を除く）で印を読めた行が {}（10〜40 の外。判定が死んだか、ばら撒いた）"
+                  .format(real_ignored))
+    return ng
+
+
 def selftest() -> int:
     ng: List[str] = []
     for part in (_check_updated_violation, _check_superseded_links, _check_other_checks,
-                 _check_section_ref_forms, _check_article_notation_forms,
+                 _check_section_ref_forms, _check_article_notation_forms, _check_dated_switch_forms,
                  _check_real_data, _check_wiring):
         ng.extend(part())
     for msg in ng:

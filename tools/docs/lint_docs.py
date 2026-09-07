@@ -4,7 +4,7 @@
 
 仕様書: docs/00_ドキュメント規約/
 
-長期開発でドキュメントが腐り、肥大化するのを防ぐ。検査するのは次の 6 点である。
+長期開発でドキュメントが腐り、肥大化するのを防ぐ。検査するのは次の 7 点である。
   1. 読まなくていい文書を判別できるか（フロントマターと status）
   2. 索引・ADR 台帳と実ファイルが食い違っていないか
   3. current でない文書をコード（コメント）が参照していないか
@@ -16,6 +16,8 @@
   6. 条項を 80 §3 の記法で書いているか（`5 条 1 項` と書いていないか）  # lint-docs:article-ok
      （開発者の指示。2026-09-06。揃っていないと grep が効かない。
      **防げるのは表記ゆれ側だけ**で、「置換してはいけない箇所まで置換する」型は防げない）
+  7. 日付で発効する条番号の切替が残っていないか（2027-01-01 の電帳規則 5 ⑤ → 5 ④）  # lint-docs:switch-ok 改番の事実
+     （開発者の指示。2026-09-06。手順を文章で持ったまま 4 回落ちた。30 日前までは件数を印字するだけ）
 
 中身は `doclint/` パッケージが持つ（model / checks / selftest）。
 本ファイルは CLI と、検査の呼び出し順だけを持つ。
@@ -24,6 +26,7 @@
     python tools/docs/lint_docs.py            # 規約違反の検査（error / warn）
     python tools/docs/lint_docs.py --stats    # current の行数など指標
     python tools/docs/lint_docs.py --selftest # 検査そのものが空回りしていないか
+    python tools/docs/lint_docs.py --today 2027-01-01  # 日付で発効する切替を先取りして洗う
 
 終了コード: 0 = error なし / 1 = error あり / 2 = 実行失敗
 
@@ -33,6 +36,7 @@ Python 3.8+ / 標準ライブラリのみ（YAML パーサは使わず、必要�
 from __future__ import annotations
 
 import argparse
+import datetime
 import os
 import sys
 from typing import Dict, List
@@ -43,7 +47,7 @@ from typing import Dict, List
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from doclint.checks import (Finding, check_adr_ledger, check_article_notation,  # noqa: E402
-                            check_body, check_code_references,
+                            check_body, check_code_references, check_dated_switches,
                             check_docs_index, check_front_matter, check_links, check_section_references,
                             check_superseded_links, check_updated_freshness,
                             check_updated_history)
@@ -80,7 +84,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="ドキュメント規約の検査")
     ap.add_argument("--stats", action="store_true", help="指標を表示する")
     ap.add_argument("--selftest", action="store_true", help="関門そのものを検査する")
+    ap.add_argument("--today", metavar="YYYY-MM-DD",
+                    help="日付で発効する切替を、この日を今日として検査する（発効日の先取り）")
     args = ap.parse_args()
+    today = datetime.date.fromisoformat(args.today) if args.today else None
 
     if args.selftest:
         return selftest()
@@ -108,6 +115,7 @@ def main() -> int:
     check_updated_freshness(docs, findings)
     check_updated_history(docs, findings)
     scanned_notation, ignored_notation = check_article_notation(docs, findings)
+    remaining_switch, ignored_switch = check_dated_switches(docs, findings, today=today)
 
     errors = [f for f in findings if f[0] == SEV_ERROR]
     warns = [f for f in findings if f[0] == SEV_WARN]
@@ -119,10 +127,13 @@ def main() -> int:
     print("")
     # superseded 宛リンクの数を必ず出す。0 に落ちたら「違反が無い」ではなく
     # 「配線が死んだ・免除が広がりすぎた」を疑う（黙って素通りする関門を作らないため）
+    # 条番号の切替も件数を必ず出す。発効日前に 0 に落ちたら「切り替え済み」ではなく
+    # 「配線が死んだ・印が広がった」を疑う（印で外した行も並べて出す理由）
     print("検査文書数: {} / error: {} / warn: {} / superseded 宛リンク: {} 件を検査 / "
-          "条項の記法: {} 行を走査し {} 行を印で外した"
+          "条項の記法: {} 行を走査し {} 行を印で外した / "
+          "条番号の切替: 旧の字面が {} 行（印で外した {} 行）"
           .format(len(docs), len(errors), len(warns), seen_superseded_links,
-                  scanned_notation, ignored_notation))
+                  scanned_notation, ignored_notation, remaining_switch, ignored_switch))
     return 1 if errors or others else 0
 
 

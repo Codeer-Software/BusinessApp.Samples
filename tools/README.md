@@ -3,7 +3,7 @@ title: tools — 開発スクリプト
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-09-06
+updated: 2026-09-07
 supersedes: []
 related: [../docs/README.md]
 ---
@@ -28,7 +28,7 @@ related: [../docs/README.md]
 | [`clb/lint_design.py`](clb/lint_design.py) | **CLB デザインの静的検査**。`designcheck` が緑でも壊れるもの（[qa/01](../docs/qa/01_CLB静かな失敗.md)）のうち JSON とスクリプトで判るものを検出する。`--selftest` で**検査そのものを検査する**（関門を殺す・error を warn に格下げする・`main()` の配線を消す・検体を空にする・**言うべき直し方を薄める**、の 5 通りで鳴ることを確かめてある） |
 | [`clb/scaffold_module.py`](clb/scaffold_module.py) | モジュール定義の足場作り。生成後は `Design/Modules/*.mod.json` が正典 |
 | [`git-hooks/pre-commit`](git-hooks/pre-commit) | コミット前の検証。`git config core.hooksPath tools/git-hooks` で有効にする |
-| [`docs/lint_docs.py`](docs/lint_docs.py) | **ドキュメント規約の検査**（[docs/00 §6](../docs/00_ドキュメント規約/README.md)）。フロントマター・リンク切れ・索引の突合・**current でない文書へのコード参照**・**`current` の本文から `superseded` へのリンク**・**節への参照の指し先に節が実在するか**・**`updated:` の鮮度**（作業ツリーと履歴の両方）・**条項を [80 §3](../docs/80_参照法令一覧.md) の記法で書いているか**。`--selftest` で検査そのものを検査する |
+| [`docs/lint_docs.py`](docs/lint_docs.py) | **ドキュメント規約の検査**（[docs/00 §6](../docs/00_ドキュメント規約/README.md)）。フロントマター・リンク切れ・索引の突合・**current でない文書へのコード参照**・**`current` の本文から `superseded` へのリンク**・**節への参照の指し先に節が実在するか**・**`updated:` の鮮度**（作業ツリーと履歴の両方）・**条項を [80 §3](../docs/80_参照法令一覧.md) の記法で書いているか**・**日付で発効する条番号の切替が残っていないか**（30 日前までは件数を印字するだけ、30 日前から warn、発効日以後は error。[ADR-0043](../docs/decisions/0043-日付で発効する条番号の切替を機械の関門に置き除外は行の印で表す.md)）。`--selftest` で検査そのものを検査する |
 | [`docs/doclint/`](docs/doclint/__init__.py) | 上の中身。`model.py`（設定値・`Doc`・git・読み込み）／`checks.py`（検査の本数は数えない。**正典は `ALL_CHECKS`** で、`selftest.py` が突合する）／`selftest.py`（関門の検査）。**入口は `lint_docs.py` のまま** |
 | [`docs/lint_secrets.py`](docs/lint_secrets.py) | **公開リポジトリ向けの混入検査**。追跡ファイルに絶対パス・ユーザー名・接続文字列・API キー・秘密鍵が無いかを検査する |
 | [`docs/lint_secrets_allow.txt`](docs/lint_secrets_allow.txt) | 上記の誤検知抑制リスト |
