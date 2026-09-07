@@ -62,14 +62,17 @@
         ],
         "ask": [
             "Read(**/designer.settings.Development.json)",
-            "Edit(**/designer.settings.Development.json)",
-            "Write(**/designer.settings.Development.json)",
             "Read(**/appsettings.Development.json)",
-            "Edit(**/appsettings.Development.json)",
-            "Write(**/appsettings.Development.json)"
+            "Edit(LocalData/**)",
+            "Edit(Designer/LocalEnvironment.md)",
+            "Edit(.claude/settings.local.json)",
+            "Edit(Designer/.claude/settings.local.json)",
+            "Edit(BusinessApp/BusinessApp.Server/appsettings.Development.json)",
+            "Edit(Designer/Design/designer.settings.Development.json)",
+            "Edit(.git/**)"
         ],
-        "_README_ask": "接続文字列を含む 2 つの開発用設定（appsettings.Development.json / designer.settings.Development.json）は、Read / Edit / Write の 3 つとも確認する。**Write を足したのは Claude の判断**（2026-09-07。承認待ち。**確認が 2 件増えるので、確認を減らすという今回の目的とは逆向きである**）。**Write を落とすと、道具を替えるだけで確認が外れる**（Write は全上書きなので、失うものは削除と同じである）。**追跡外の設定はほかにもある**（LocalEnvironment.md・settings.local.json）が、こちらは読み書きの頻度が高いので確認を掛けていない——削除からは protected_paths.json が守る。",
-        "_README_deny_delete": "削除するコマンドを deny する。**rm を deny にするのは開発者の指示**（2026-09-07）で、**それ以外の語（rmdir・del・erase・unlink・shred・truncate・Remove-Item ほかと git clean）は Claude が「同じ危険の語」として広げたもの**（承認待ち。docs/README.md の保留リスト）。truncate は削除ではなく中身の切り詰めだが、失うものは同じなので入れてある。**消す必要があるときは tools/claude/trash.ps1（ごみ箱送り）を使う。** **ここは控えであって本体ではない**——本体は PreToolUse フックの guard_delete.py で、拒むときに代わりのコマンドまで示す。deny が止められるのはフックが止めるものの一部だけで（前方一致の文字列規則なので find … -delete のような形は書けない）、**ここに並ぶ動詞の一覧を正典と思わないこと**。序列の理由は ADR-0044、規則は docs/30_作業のルール.md（**節番号は書かない**——lint_docs.py が節の実在を検査するのは .md とコードだけで、この .json は対象外だから、節が動いても鳴らない）。",
+        "_README_ask": "**正典（tools/claude/protected_paths.json）に載っているものの Edit は確認する。** Edit は old_string の照合があるので取り違えでは壊れないが、**照合を通す字は Read すれば手に入るので、意図すれば空にできる**（自己レビューで判明。2026-09-07）。拒まずに確認にとどめるのは、追跡外の環境設定を直すのが正当な作業で、塞ぐと自律作業が止まるからである。接続文字列を含む 2 つの開発用設定は Read も確認する（2026-08-23 から）。**Edit の行はここ 1 か所で列挙せず、正典から生成した形に揃えてある**——guard_delete.py --selftest が Edit(<正典の path>) / Edit(<正典の path>/**) の有無を突き合わせる。",
+        "_README_deny_delete": "削除するコマンドを deny する。**rm を deny にするのは開発者の指示**（2026-09-07）で、**それ以外の語（rmdir・del・erase・unlink・shred・truncate・Remove-Item ほかと git clean）は Claude が「同じ危険の語」として広げた**（同日に開発者が承認）。truncate は削除ではなく中身の切り詰めだが、失うものは同じなので入れてある。**消す必要があるときは tools/claude/trash.ps1（ごみ箱送り）を使う。** **ここは控えであって本体ではない**——本体は PreToolUse フックの guard_delete.py で、拒むときに代わりのコマンドまで示す。deny が止められるのはフックが止めるものの一部だけで（前方一致の文字列規則なので find … -delete のような形は書けない）、**ここに並ぶ動詞の一覧を正典と思わないこと**。**Write の行は、正典（protected_paths.json）の各行から生成した形で並べる**（本体は同じくフック。Write は前の中身を残さないので、削除より強く扱う）。**glob を勝手に広げない**——guard_delete.py --selftest が Write(<正典の path>) / Write(<正典の path>/**) の有無を突き合わせるので、広げると赤くなる。序列の理由は ADR-0044、規則は docs/30_作業のルール.md（**節番号は書かない**——lint_docs.py が節の実在を検査するのは .md とコードだけで、この .json は対象外だから、節が動いても鳴らない）。",
         "deny": [
             "Bash(git push:*)",
             "PowerShell(git push:*)",
@@ -91,14 +94,32 @@
             "PowerShell(erase:*)",
             "PowerShell(Clear-Content:*)",
             "PowerShell(Clear-Item:*)",
+            "Write(LocalData/**)",
+            "Write(Designer/LocalEnvironment.md)",
+            "Write(.claude/settings.local.json)",
+            "Write(Designer/.claude/settings.local.json)",
+            "Write(BusinessApp/BusinessApp.Server/appsettings.Development.json)",
+            "Write(Designer/Design/designer.settings.Development.json)",
+            "Write(.git/**)",
             "Read(**/secrets.json)",
             "Read(**/*.pfx)",
             "Read(**/*.snk)"
         ]
     },
-    "_README_hooks": "PreToolUse フックで 2 つを機械的に守る。① コミット前フックの迂回（--no-verify / git commit -n / -c core.hooksPath）を拒む（開発者の指示。2026-08-25。**「以後やらない」という約束は機械にしか守れないから**。判定は tools/claude/block_no_verify.py）。② 削除を絞る（判定は tools/claude/guard_delete.py、守る対象の正典は tools/claude/protected_paths.json）。②は 2 段階で育っている——2026-08-26 に開発者の指示で「Git 追跡外＝戻せないものは拒み、スクラッチパッド配下だけは通す」を置き（**消えたら復旧できないから**）、2026-09-07 に開発者の指示で rm 自体を deny にしたのを機に、**削除は当たり先によらず拒み、ごみ箱送りの tools/claude/trash.ps1 を使えと示す**形へ変えた（**戻せる削除にすれば、確認で作業を止めずに済むから**。経緯は ADR-0044）。**スクラッチパッドの例外を廃止したのは Claude の判断であって、rm を deny にせよという指示の帰結ではない**（例外があると「どちらを使うか」の判断が毎回入るから。承認待ち。docs/README.md の保留リスト）。**許可リストではなくフックにしてある**——Bash の権限はコマンド文字列の前方一致なので、cd を挟む・変数展開する、といった書き方を絞れない。",
+    "_README_hooks": "PreToolUse フックで 3 つを機械的に守る。① コミット前フックの迂回（--no-verify / git commit -n / -c core.hooksPath）を拒む（開発者の指示。2026-08-25。**「以後やらない」という約束は機械にしか守れないから**。判定は tools/claude/block_no_verify.py）。② 削除を絞る（判定は tools/claude/guard_delete.py、守る対象の正典は tools/claude/protected_paths.json）。②は 2 段階で育っている——2026-08-26 に開発者の指示で「Git 追跡外＝戻せないものは拒み、スクラッチパッド配下だけは通す」を置き（**消えたら復旧できないから**）、2026-09-07 に開発者の指示で rm 自体を deny にしたのを機に、**削除は当たり先によらず拒み、ごみ箱送りの tools/claude/trash.ps1 を使えと示す**形へ変えた（**戻せる削除にすれば、確認で作業を止めずに済むから**。経緯は ADR-0044）。**スクラッチパッドの例外は廃止した**（開発者が判断を委ねた。例外は allow でしか書けず、**allow は権限判定そのものを飛ばす**ので、形を増やすほど抜け道の隠れる面積が広がるから）。③ 保護対象への Write（全上書き）を拒む（開発者の指示。2026-09-07。**上書きは前の中身を残さず、しかも中身を照合しないので、削除より強いから**。判定は当たり先の絶対パスで行う。Edit はフックでは見ず、ask で確認にとどめる）。**許可リストではなくフックにしてある**——Bash の権限はコマンド文字列の前方一致なので、cd を挟む・変数展開する、といった書き方を絞れない。",
     "hooks": {
         "PreToolUse": [
+            {
+                "matcher": "Write",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python \"$CLAUDE_PROJECT_DIR/tools/claude/guard_delete.py\"",
+                        "shell": "bash",
+                        "timeout": 15
+                    }
+                ]
+            },
             {
                 "matcher": "Bash|PowerShell",
                 "hooks": [

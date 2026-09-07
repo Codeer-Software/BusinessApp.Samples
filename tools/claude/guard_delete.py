@@ -1,42 +1,44 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""guard_delete.py — Claude Code の PreToolUse フック。完全削除を拒み、ごみ箱送りへ寄せる。
+r"""guard_delete.py — Claude Code の PreToolUse フック。**失うことを止める。**
 
-開発者の指示（2026-09-07。逐語）:
-  「rm は開発者への確認プロンプトが出て自律作業が止まってしまうため使わないでください、と
-    繰り返し言ってきたが、学習情報において rm が無数に使われているためか、どうしても
-    rm を使ってしまうようだ。しかし、無制限に rm を許可することはしたくない。
-    そこで、rm の代わりに使える削除コマンドを作ろうと考えた」
-  併せて「settings.json において、rm は ask ではなく deny としてください」。
-
-  **ここから先は Claude の設計である**——約束では守れないものは機械に守らせる。
-  完全削除をやめてごみ箱送りにすれば取り違えても戻せるので、
-  **削除のたびに確認で止める必要が無くなる**（無確認で通してよい、という判断は
-  上の「自律作業が止まる」という目的から導いたもので、逐語の指示ではない。ADR-0044）。
+開発者の指示（2026-09-07）: `rm` の代わりに使える削除コマンドを作り、`rm` は deny にする。
+**ごみ箱送り（`trash.ps1`）は確認なしで実行してよい**（同日。**戻せるから**）。
+**`Write`（全上書き）も止める**（同日。**「どっちかというと Write が怖い。trash よりずっと怖い」**）。
 
 やること
 --------
-1. **完全削除にあたるコマンドは、当たり先によらず拒む。**
+1. **削除にあたるコマンドは、当たり先によらず拒む。**
    代わりに `tools/claude/trash.ps1`（ごみ箱送り）を使えと理由文で案内する。
-   **語彙の正典はこのファイルの `DELETION` ほかの正規表現である**（散文で列挙しない）。
+   **語彙の正典はこのファイルの正規表現である**（散文で列挙しない）。
 2. **この repo の `trash.ps1` を 1 本だけ呼ぶコマンドは通す。**
-3. **どちらであっても、保護対象に触れるものは拒む。**
+3. **保護対象への `Write` を拒む**（当たり先の絶対パスで判定する）。
+4. **保護対象の名前に触れる上書きのコマンドも拒む**（`sed -i`・`Copy-Item`・`> ファイル` など）。
+5. **どの経路であっても、保護対象に触れるものは拒む。**
 
-守りたいもの（**Git で戻せないもの**）
---------------------------------------
-追跡ファイルは**コミット済みであれば** git が復元手段になるので、消えても戻せる。
-戻せないのは追跡外のものと、**コミットしていない変更**である
+`Write` と `Edit` の線引き
+--------------------------
+**`Write` は削除より強い。** ごみ箱は前の中身を残すが、上書きは残さない。
+しかも `Write` は中身を照合しないので、**想定と違うファイルでも黙って通る**。
+
+**`Edit` はこのフックでは見ない。** `old_string` の照合があるので**取り違えでは壊れない**からである。
+ただし**照合を通す字は Read すれば手に入るので、意図すれば `Edit` でも空にできる**——
+だから保護対象の `Edit` は `settings.json` の `ask` に載せてある（拒みはしない。
+追跡外の環境設定を直すのは正当な作業で、塞ぐと自律作業が止まる）。
+
+守りたいもの
+------------
+追跡ファイルは**コミット済みであれば** git が復元手段になる。
+戻せない・戻すのが現実的でないのは追跡外のものと、**コミットしていない変更**である
 （後者を消す `git reset --hard` などをこのフックが拒むのは、そのためである）。
 **一覧と載せる基準は `protected_paths.json` が持つ**——`trash.ps1` と同じ 1 ファイルを読む。
 
 なぜ許可リストではなくフックか
 ------------------------------
 Claude Code の Bash 権限は**コマンド文字列の前方一致**で判定する。
-`Bash(rm -rf <スクラッチパッド>/*)` のような許可を書いても、`cd` を挟む・変数展開する・
-`find -exec` を使う、といった書き方は同じ規則で捕まらない。
+`cd` を挟む・変数展開する・`find -exec` を使う、といった書き方は同じ規則で絞れない。
 **パスで許可を絞るのは事故防止にはなっても、境界の保証にはならない。**
-フックならコマンド文字列全体を見られるので、少なくとも「保護対象の名前に触れる削除」を
-書き方によらず止められる。**序列と役割分担は ADR-0044 が持つ。**
+**序列と役割分担は ADR-0044 が持つ。**
 
 `allow` を返すときの制約
 ------------------------
@@ -46,25 +48,27 @@ Claude Code の Bash 権限は**コマンド文字列の前方一致**で判定�
 
 限界（承知のうえで残す）
 ------------------------
-判定はコマンド文字列への正規表現であり、シェルを解釈しない。
-変数に入れてから消す・パスを分割して組み立てる、といった書き方はすり抜ける。
-**これは「うっかり」を止める装置であって、悪意を止める装置ではない。**
-**パスを解決したうえでの本当の境界は `trash.ps1` が見る**——こちらは実際の削除の直前に、
-絶対パスへ直してから「保護対象の配下か・保護対象を内側に含むか」を判定する。
+- **コマンドの判定はシェルを解釈しない。** 変数に入れてから消す・パスを組み立てる形はすり抜ける。
+  **「うっかり」を止める装置であって、悪意を止める装置ではない。**
+- **引用の中も区別しないので過剰検出する**（`git grep "Remove-Item"` のような検索も拒む）。
+  **そちらへ倒してある**——見逃した削除は戻せないが、過剰な拒否は語の表記を変えれば済む。
+- **閉じた上書きの経路は限られる。** `Write` ツールと、保護対象の名前が出るシェルのコマンドだけである。
+  **名前を出さずに上書きする形**（変数・相対パスの組み立て）は通る。
+- **パスの突き合わせは `realpath` までで、`\\?\` 前置きは追わない。**
+- **フックが実際に起動するか**（`python` が PATH にあるか等）は、このファイルの自己検査では保証できない。
 
-**引用の中も区別しないので、過剰検出する**（`git grep "Remove-Item"` のような検索も拒む）。
-**そちらへ倒してある**——見逃した削除は戻せないが、過剰な拒否は語の表記を変えれば済む。
-理由文にその直し方を書いてある。
-
-標準入力: Claude Code のフック入力 JSON（tool_input.command を見る）。
+標準入力: Claude Code のフック入力 JSON。`Bash`・`PowerShell` は `tool_input.command`、
+          `Write` は `tool_input.file_path` を見る（相対パスは `cwd` で解決する）。
 標準出力: 拒否するとき deny、ごみ箱送りの削除のとき allow。それ以外は何も出さない
           （＝通常の権限判定に落ちる）。**そこは「開発者への確認」とは限らない**——
           `settings.json` の許可には `Bash(python:*)` のような白紙の行があり、
-          取りこぼした削除はそのまま実行になる（`docs/README.md` の保留リスト）。
+          取りこぼしはそのまま実行になる（`docs/README.md` の保留リスト）。
 """
 
 import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -74,12 +78,13 @@ except Exception:
     pass
 
 CANON = Path(__file__).with_name("protected_paths.json")
-SETTINGS = Path(__file__).resolve().parents[2] / ".claude" / "settings.json"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 
 TRASH_SCRIPT = "tools/claude/trash.ps1"
 TRASH_COMMAND = f"pwsh -NoProfile -File {TRASH_SCRIPT} <パス>"
 
-# コマンド名の前に来てよい字。`/bin/rm`・`\rm`・`"rm"` のような書き方も当てる。
+# コマンド名の前後に来てよい字。`/bin/rm`・`\rm`・`"rm"` のような書き方も当てる。
 _BEFORE = r"(^|[\s;&|(/\\\"'])"
 _AFTER = r"([\s;&|)\"']|$)"
 
@@ -112,6 +117,15 @@ GIT_DESTRUCTIVE = re.compile(
     re.IGNORECASE,
 )
 
+# **中身を置き換える形。** これ単体では拒まない——**保護対象の名前が出たときだけ**拒む
+# （`Write` ツール以外にも上書きの道はいくらでもあり、全部を止めると作業が成り立たない）。
+OVERWRITE = re.compile(
+    _BEFORE + r"(cp|copy|Copy-Item|mv|move|Move-Item|tee|Set-Content|Out-File|New-Item"
+    r"|Expand-Archive|unzip|dd)" + _AFTER
+    + r"|\bsed\s+-i|-OutFile\b|>\s*\S|\bopen\([^)]*['\"][wa]",
+    re.IGNORECASE,
+)
+
 # ごみ箱送りの削除コマンドへの言及（保護対象の検査にかけるため、ゆるく拾う）。
 TRASH_MENTION = re.compile(r"(^|[\s;&|(])(pwsh|powershell)\b[^;&|]*trash\.ps1", re.IGNORECASE)
 
@@ -127,33 +141,93 @@ TRASH_ONLY = re.compile(
 # 改行を数え落とすと、2 行目以降の任意コマンドが allow に乗る。
 CHAINED = re.compile(r"[;&|\n\r`]|\$\(")
 
+MSYS_ABSOLUTE = re.compile(r"^/([A-Za-z])/(.*)$")
 
-def load_protected():
-    """[(コマンド文字列に探す正規表現, 理由), ...] を返す。読めなければ例外。"""
-    canon = json.loads(CANON.read_text(encoding="utf-8"))
-    entries = canon["protected"]
+
+def load_entries():
+    """正典の行をそのまま返す。読めない・形が違うなら例外（fail-closed の入口）。"""
+    entries = json.loads(CANON.read_text(encoding="utf-8"))["protected"]
     if not entries:
         raise ValueError("protected が空である")
-
-    patterns = []
     for entry in entries:
         if not entry.get("path") or not entry.get("why"):
             raise ValueError(f"path または why が無い行がある: {entry}")
+    return entries
+
+
+def basename_of(path_value: str) -> str:
+    return path_value.replace("\\", "/").rstrip("/").split("/")[-1]
+
+
+def load_protected():
+    """[(コマンド文字列に探す正規表現, 理由), ...] を返す。読めなければ例外。"""
+    patterns = []
+    for entry in load_entries():
         # コマンド文字列にはリポジトリからの相対でも絶対でも書かれうるので、
         # **末尾の名前**を探す。前後に名前が続くもの（LocalDataX・.gitignore）は外す。
-        name = entry["path"].replace("\\", "/").rstrip("/").split("/")[-1]
         patterns.append((
-            re.compile(r"(?<![A-Za-z0-9_.\-])" + re.escape(name) + r"(?![A-Za-z0-9_.\-])",
+            re.compile(r"(?<![A-Za-z0-9_.\-])" + re.escape(basename_of(entry["path"])) + r"(?![A-Za-z0-9_.\-])",
                        re.IGNORECASE),
             entry["why"],
         ))
     return patterns
 
 
+def from_msys(path_value: str) -> str:
+    """Git Bash 形の絶対パス（`/c/Users/…`）を Windows 形へ直す。
+
+    **この形で来ることがある**（Bash ツール経由の `cwd` など）。直さずに `abspath` へ渡すと
+    `C:\\c\\Users\\…` という別の場所へ着地し、**保護判定が黙って外れる**（fail-open）。
+    Windows でだけ変換する——他の OS では `/c/…` が本物の絶対パスでありうるため。
+    """
+    matched = MSYS_ABSOLUTE.match(path_value)
+    if matched and os.name == "nt":
+        return matched.group(1) + ":\\" + matched.group(2).replace("/", "\\")
+    return path_value
+
+
+def normalized(path_value: str) -> str:
+    r"""比較用の絶対パス。**区切りまで含めて比べる**ため、末尾の区切りは落とす。
+
+    `realpath` まで通すので、**8.3 の短縮名とリンクは実体へ寄る**（実在するものに限る）。
+    `\\?\` 前置きは追わない（限界）。
+    """
+    return os.path.normcase(os.path.realpath(from_msys(path_value))).rstrip("\\/")
+
+
+def decide_write(file_path: str, cwd: str):
+    """`Write`（全上書き）の当たり先を見る。(decision, reason) を返す。
+
+    **コマンド文字列と違い、当たり先が 1 つに決まる**ので、名前ではなく解決した絶対パスで見る。
+    """
+    if not file_path:
+        return None, None
+
+    try:
+        entries = load_entries()
+    except Exception as exc:  # 正典が読めないなら、読めないまま上書きさせない
+        return "deny", (
+            f"守るものの正典（{CANON.name}）を読めなかった: {exc}。"
+            "読めないまま上書きは通さない（tools/claude/guard_delete.py）。"
+        )
+
+    base = from_msys(cwd) if cwd else str(REPO_ROOT)
+    resolved = from_msys(file_path)
+    target = normalized(resolved if os.path.isabs(resolved) else os.path.join(base, resolved))
+    for entry in entries:
+        protected_path = normalized(str(REPO_ROOT / entry["path"]))
+        if target == protected_path or target.startswith(protected_path + os.sep):
+            return "deny", (
+                f"{entry['why']}。**Write は前の中身を残さない**ので通さない"
+                "（tools/claude/guard_delete.py）。**直すなら Edit を使う**（確認が入る）。"
+                "**新しく作るなら雛形から複製する**（`cp` / `Copy-Item`。docs/30_作業のルール.md §10）。"
+            )
+    return None, None
+
+
 USE_TRASH = (
     f"ごみ箱へ送る削除コマンドを使う: {TRASH_COMMAND}"
-    "（ごみ箱からは戻せるので、開発者の確認を待たずに実行してよい。"
-    "規則は docs/30_作業のルール.md §10）。"
+    "（ごみ箱からは戻せるので、確認を待たずに実行してよい。規則は docs/30_作業のルール.md §10）。"
     "**削除ではなく検索などでこの語に触れただけなら、語の表記を変えて書き直す**"
     "（判定はコマンド文字列への正規表現で、引用の中を区別しない。過剰検出側に倒してある）。"
 )
@@ -168,8 +242,9 @@ def decide(command: str):
         or PYTHON_DELETE.search(command)
     )
     git_destructive = bool(GIT_DESTRUCTIVE.search(command))
+    overwrite = bool(OVERWRITE.search(command))
     mentions_trash = bool(TRASH_MENTION.search(command))
-    if not (raw_deletion or git_destructive or mentions_trash):
+    if not (raw_deletion or git_destructive or overwrite or mentions_trash):
         return None, None
 
     try:
@@ -177,13 +252,13 @@ def decide(command: str):
     except Exception as exc:  # 正典が読めないなら、読めないまま消させない
         return "deny", (
             f"守るものの正典（{CANON.name}）を読めなかった: {exc}。"
-            "読めないまま削除は通さない（tools/claude/guard_delete.py）。"
+            "読めないまま削除・上書きは通さない（tools/claude/guard_delete.py）。"
         )
 
     for pattern, why in protected:
         if pattern.search(command):
             reason = (
-                f"{why}。この削除は許可しない（tools/claude/guard_delete.py）。"
+                f"{why}。この操作は許可しない（tools/claude/guard_delete.py）。"
                 "作業用の複製が要るなら、サブエージェントの worktree かスクラッチパッドを使う。"
             )
             # **保護対象でも、次の一手を示す**——ここが一番踏みやすい経路である。
@@ -204,6 +279,9 @@ def decide(command: str):
             "要るなら開発者に相談する。ファイルを消したいだけなら " + USE_TRASH
         )
 
+    if not mentions_trash:
+        return None, None  # 保護対象に触れない上書きは、このフックの仕事ではない
+
     if CHAINED.search(command) or not TRASH_ONLY.match(command):
         # allow は権限判定そのものを飛ばすので、**trash.ps1 を 1 本呼ぶだけ**の形にしか出さない。
         return None, None
@@ -216,25 +294,7 @@ T = f"pwsh -NoProfile -File {TRASH_SCRIPT}"  # 検体を短く書くための別
 # 期待する判定。**この表がこのフックの仕様である。**
 # 守る道具にテストが無いと、書き換えたときに「止めているつもりで素通り」になる。
 SELFTEST = [
-    # --- 保護対象に触れる削除は、書き方によらず拒む
-    ("rm -rf LocalData/db", "deny"),
-    ("rm LocalData/designs/App.zip", "deny"),
-    ("Remove-Item -Recurse LocalData", "deny"),
-    ('rm -rf "LocalData"', "deny"),
-    ("rm Designer/LocalEnvironment.md", "deny"),
-    ("rm .claude/settings.local.json", "deny"),
-    ("rm BusinessApp/BusinessApp.Server/appsettings.Development.json", "deny"),
-    ("rm Designer/Design/designer.settings.Development.json", "deny"),
-    ("rm -rf .git", "deny"),
-    ("find . -name '*.tmp' -path './LocalData/*' -delete", "deny"),
-    ("[System.IO.File]::Delete('LocalData/db/x.db')", "deny"),
-    (f"{T} LocalData/db", "deny"),
-    (f"{T} Designer/LocalEnvironment.md", "deny"),
-    (f"{T} .claude/settings.local.json", "deny"),
-    (f"{T} BusinessApp/BusinessApp.Server/appsettings.Development.json", "deny"),
-    (f"{T} Designer/Design/designer.settings.Development.json", "deny"),
-    (f"{T} .git/config", "deny"),
-    # --- 完全削除の語彙。**1 語ずつ検体を置く**（消えても誰も気づかない語を作らない）
+    # --- 削除の語彙。**1 語ずつ検体を置く**（消えても誰も気づかない語を作らない）
     ("rm work/x", "deny"),
     ("rmdir work", "deny"),
     ("del work\\x", "deny"),
@@ -253,19 +313,32 @@ SELFTEST = [
     ("python -c \"import shutil; shutil.rmtree('work')\"", "deny"),
     ("python -c \"import os; os.remove('work/x')\"", "deny"),
     ("python -c \"from pathlib import Path; Path('x').unlink()\"", "deny"),
+    ("find . -name '*.tmp' -delete", "deny"),
     # コマンド名の前が / \ " でも当てる
     ("/bin/rm -rf work", "deny"),
     ('"rm" -rf work', "deny"),
     ("\\rm -rf work", "deny"),
+    # スクラッチパッド配下も例外にしない（**絶対パスは検体に書かない**。CLAUDE.md §5）
+    ("rm -rf work/scratchpad/clone", "deny"),
+    ("rm -rf work\\scratchpad\\rev8", "deny"),
     # --- git 自身の破壊コマンド
     ("git clean -xdf", "deny"),
     ("git reset --hard HEAD~1", "deny"),
     ("git stash drop", "deny"),
     ("git stash clear", "deny"),
     ("git checkout -- docs/README.md", "deny"),
-    # --- スクラッチパッド配下も例外にしない（**絶対パスは検体に書かない**。CLAUDE.md §5）
-    ("rm -rf work/scratchpad/clone", "deny"),
-    ("rm -rf work\\scratchpad\\rev8", "deny"),
+    # --- 上書き。**保護対象の名前が出たときだけ**拒む
+    ("sed -i 's/a/b/' LocalData/db/x.db", "deny"),
+    ("Copy-Item -Force x LocalData/db/x.db", "deny"),
+    ("python -c \"open('LocalData/db/x.db','w')\"", "deny"),
+    ("Invoke-WebRequest http://example.com -OutFile Designer/LocalEnvironment.md", "deny"),
+    ("echo x > .claude/settings.local.json", "deny"),
+    ("New-Item -Force Designer/Design/designer.settings.Development.json", "deny"),
+    # 保護対象に触れない上書きは、このフックの仕事ではない
+    ("sed -i 's/a/b/' docs/README.md", None),
+    ("Copy-Item -Force a b", None),
+    ("echo x > work/out.txt", None),
+    ("cp a b", None),
     # --- ごみ箱送りは通す
     (f"{T} BusinessApp/foo.cs", "allow"),
     (f"{T} -DryRun docs/x.md", "allow"),
@@ -282,7 +355,7 @@ SELFTEST = [
     # 別の場所の trash.ps1 を装う形は allow にしない
     ("pwsh -NoProfile -File work/scratch/trash.ps1 anything", None),
     ('pwsh -NoProfile -Command "Invoke-WebRequest http://x -OutFile y" # trash.ps1', None),
-    # --- 削除でないものには触れない
+    # --- 削除でも上書きでもないものには触れない
     ("cat LocalData/README.md", None),
     ("cat tools/claude/trash.ps1", None),
     ("pwsh -NoProfile -File tools/clb/migrate.ps1 -Verify", None),
@@ -291,24 +364,48 @@ SELFTEST = [
     ("dotnet build", None),
 ]
 
+# `Write` の当たり先の期待。**正典に載っているものは、直すなら Edit を使う。**
+WRITE_SELFTEST = [
+    ("LocalData/db/x.db", "deny"),
+    ("LocalData/designs/App.zip", "deny"),
+    (".git/config", "deny"),
+    (".claude/settings.local.json", "deny"),
+    ("Designer/.claude/settings.local.json", "deny"),
+    ("Designer/LocalEnvironment.md", "deny"),
+    ("BusinessApp/BusinessApp.Server/appsettings.Development.json", "deny"),
+    ("Designer/Design/designer.settings.Development.json", "deny"),
+    # 名前が前方一致するだけのものは止めない（区切りまで見ているか）
+    ("LocalDataX/foo.txt", None),
+    (".gitignore", None),
+    ("BusinessApp/BusinessApp.Server/appsettings.json", None),
+    # 追跡ファイルは止めない（git で戻せる）
+    ("docs/README.md", None),
+    ("tools/claude/trash.ps1", None),
+]
+
 
 def _check_canon(failed: int) -> int:
-    """正典の各行が、**ごみ箱送りの形でも**止まるか。理由文まで突き合わせる。
+    """正典の各行が、**ごみ箱送りの形でも・`Write` でも**止まるか。
 
     生の削除（`rm ...`）で試すと当たり先によらず deny になるので、
-    **保護判定を殺しても緑になる**。ここは trash の形で投げなければ意味がない。
+    **保護判定を殺しても緑になる**。ここは trash と Write の形で投げなければ意味がない。
 
-    突き合わせるのは `why` そのものではなく**末尾の名前**である。
-    このフックはコマンド文字列に末尾の名前を探すので、
-    `.claude/settings.local.json` と `Designer/.claude/settings.local.json` のように
-    名前が同じ行は同じ理由文を返す（**拒む結論は同じで、正確な行は trash.ps1 が見る**）。
+    削除側で突き合わせるのは `why` そのものではなく**末尾の名前**である。
+    このフックはコマンド文字列に末尾の名前を探すので、名前が同じ行は同じ理由文を返す
+    （**拒む結論は同じで、正確な行はパスで見る側が判定する**）。
     """
-    for entry in json.loads(CANON.read_text(encoding="utf-8"))["protected"]:
-        name = entry["path"].replace("\\", "/").rstrip("/").split("/")[-1]
+    for entry in load_entries():
+        name = basename_of(entry["path"])
         decision, reason = decide(f"{T} {entry['path']}")
         if decision != "deny" or name not in (reason or ""):
             failed += 1
-            print(f"NG  正典に載っているのに保護されない: {entry['path']}（{decision}）")
+            print(f"NG  正典に載っているのに保護されない（削除）: {entry['path']}（{decision}）")
+
+        # **Write は当たり先が 1 つに決まる**ので、行ごとの理由文まで突き合わせられる。
+        decision, reason = decide_write(entry["path"], str(REPO_ROOT))
+        if decision != "deny" or entry["why"] not in (reason or ""):
+            failed += 1
+            print(f"NG  正典に載っているのに保護されない（Write）: {entry['path']}（{decision}）")
     return failed
 
 
@@ -316,6 +413,10 @@ def _check_wiring(failed: int) -> int:
     """**関門が settings.json に配線されているか。**
 
     フックの登録や deny を消しても検査が緑のままなら、関門は配線ごと外せてしまう。
+
+    **保証していないもの**: フックが実際に起動すること（`python` が PATH にあるか・
+    `$CLAUDE_PROJECT_DIR` が解決されるか）、`Write` 以外の書き換え道具（`NotebookEdit` 等）、
+    `defaultMode` の設定。
     """
     try:
         settings = json.loads(SETTINGS.read_text(encoding="utf-8"))
@@ -323,16 +424,77 @@ def _check_wiring(failed: int) -> int:
         print(f"NG  {SETTINGS} を読めない: {exc}")
         return failed + 1
 
-    hooks = json.dumps(settings.get("hooks", {}), ensure_ascii=False)
-    if "guard_delete.py" not in hooks:
+    pre = settings.get("hooks", {}).get("PreToolUse", [])
+    if "guard_delete.py" not in json.dumps(pre, ensure_ascii=False):
         failed += 1
         print("NG  settings.json の PreToolUse に guard_delete.py が登録されていない")
 
-    deny = set(settings.get("permissions", {}).get("deny", []))
+    # **Write を見る配線が要る。** matcher から漏れると、上書きの判定は一度も呼ばれない。
+    if not [entry for entry in pre
+            if "Write" in str(entry.get("matcher", ""))
+            and "guard_delete.py" in json.dumps(entry, ensure_ascii=False)]:
+        failed += 1
+        print("NG  settings.json の PreToolUse に、Write を guard_delete.py へ回す配線が無い")
+
+    permissions = settings.get("permissions", {})
+    deny = set(permissions.get("deny", []))
+    ask = set(permissions.get("ask", []))
     for required in ("Bash(rm:*)", "PowerShell(Remove-Item:*)", "Bash(git clean:*)"):
         if required not in deny:
             failed += 1
             print(f"NG  settings.json の deny に {required} が無い（フックが落ちたときの控え）")
+
+    # **控えは生成規則で突き合わせる。** 部分文字列で見ると `Write(LocalDataX/**)` でも緑になる。
+    for entry in load_entries():
+        path = entry["path"]
+        if not ({f"Write({path})", f"Write({path}/**)"} & deny):
+            failed += 1
+            print(f"NG  settings.json の deny に Write({path}) も Write({path}/**) も無い")
+        if not ({f"Edit({path})", f"Edit({path}/**)"} & ask):
+            failed += 1
+            print(f"NG  settings.json の ask に Edit({path}) も Edit({path}/**) も無い")
+    return failed
+
+
+def _run_hook(payload):
+    """**本体（main）を実際に動かす。** 判定関数だけを検査すると、入口を殺しても緑になる。"""
+    proc = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve())],
+        input=json.dumps(payload, ensure_ascii=False),
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    out = (proc.stdout or "").strip()
+    if not out:
+        return None
+    return json.loads(out)["hookSpecificOutput"]["permissionDecision"]
+
+
+def _check_entrypoint(failed: int) -> int:
+    protected = str(REPO_ROOT / "LocalData" / "db" / "x.db")
+    cases = [
+        ({"tool_name": "Write", "cwd": str(REPO_ROOT),
+          "tool_input": {"file_path": protected}}, "deny"),
+        ({"tool_name": "Write", "cwd": None,
+          "tool_input": {"file_path": protected}}, "deny"),
+        # **cwd が null で相対パス**——`or ""` を落とすと "None" という場所に着地して素通りする
+        ({"tool_name": "Write", "cwd": None,
+          "tool_input": {"file_path": "LocalData/db/probe.db"}}, "deny"),
+        ({"tool_name": "Write", "cwd": str(REPO_ROOT),
+          "tool_input": {"file_path": str(REPO_ROOT / "docs" / "README.md")}}, None),
+        ({"tool_name": "Bash", "cwd": str(REPO_ROOT),
+          "tool_input": {"command": "rm -rf work"}}, "deny"),
+        ({"tool_name": "Bash", "cwd": str(REPO_ROOT),
+          "tool_input": {"command": f"{T} work/x"}}, "allow"),
+        # **Write の payload は command を持たない**——入口の振り分けを消すと、ここが None に落ちる
+        ({"tool_name": "Read", "cwd": str(REPO_ROOT),
+          "tool_input": {"file_path": protected}}, None),
+    ]
+    for payload, expected in cases:
+        actual = _run_hook(payload)
+        if actual != expected:
+            failed += 1
+            print(f"NG  入口: 期待 {expected} / 実際 {actual}: {payload['tool_name']} "
+                  f"{payload['tool_input']}")
     return failed
 
 
@@ -345,8 +507,39 @@ def selftest() -> int:
             failed += 1
             print(f"NG  期待 {expected} / 実際 {actual}: {command!r}")
 
+    # **理由文も表明する。** ADR-0044 は「拒むときに次の一手を示す」を関門の中核に置いている。
+    _, reason = decide("rm work/x")
+    if TRASH_SCRIPT not in (reason or ""):
+        failed += 1
+        print(f"NG  削除を拒む理由文に {TRASH_SCRIPT} が出ていない")
+
+    # `Write` の当たり先。**相対・Windows 形の絶対・Git Bash 形の絶対**のどれでも同じ判定になるか。
+    # **形が違うだけで判定が外れると、保護は無いのと同じ**である。
+    for relative, expected in WRITE_SELFTEST:
+        windows_absolute = str(REPO_ROOT / relative)
+        forms = [relative, windows_absolute, windows_absolute + os.sep]
+        if os.name == "nt":
+            forms.append("/" + windows_absolute[0].lower() + windows_absolute[2:].replace("\\", "/"))
+        for target in forms:
+            actual, _ = decide_write(target, str(REPO_ROOT))
+            if actual != expected:
+                failed += 1
+                print(f"NG  Write: 期待 {expected} / 実際 {actual}: {target!r}")
+
+    # **`cwd` を実際に使っているか。** 常に repo 根で解決していると、下 2 件が外れる。
+    for cwd, relative, expected in [
+        (str(REPO_ROOT / "LocalData" / "db"), "x.db", "deny"),
+        (str(REPO_ROOT / "docs"), "README.md", None),
+        ("", "LocalData/db/x.db", "deny"),  # cwd が空なら repo 根で解決する
+    ]:
+        actual, _ = decide_write(relative, cwd)
+        if actual != expected:
+            failed += 1
+            print(f"NG  cwd: 期待 {expected} / 実際 {actual}: cwd={cwd!r} path={relative!r}")
+
     failed = _check_canon(failed)
     failed = _check_wiring(failed)
+    failed = _check_entrypoint(failed)
 
     # 正典が読めないときに素通りしないか（fail-open にしていないか）。
     # **この一手は表では書けない**——表は正典が読める前提の判定しか並べられないため。
@@ -355,6 +548,9 @@ def selftest() -> int:
         if decide("rm -rf work/tmp")[0] != "deny":
             failed += 1
             print("NG  正典を読めないのに削除を通した")
+        if decide_write("docs/README.md", str(REPO_ROOT))[0] != "deny":
+            failed += 1
+            print("NG  正典を読めないのに上書きを通した")
     finally:
         CANON = readable
 
@@ -371,8 +567,13 @@ def main() -> None:
     except Exception:
         return  # 読めない入力は判定しない（フック自身が作業を止めない）
 
-    command = str(payload.get("tool_input", {}).get("command", ""))
-    decision, reason = decide(command)
+    tool_input = payload.get("tool_input", {})
+    if str(payload.get("tool_name", "")) == "Write":
+        # `cwd` は無い・null のことがある。`or ""` にしないと "None" という名前の場所に着地する。
+        decision, reason = decide_write(str(tool_input.get("file_path") or ""),
+                                        str(payload.get("cwd") or ""))
+    else:
+        decision, reason = decide(str(tool_input.get("command") or ""))
     if decision is None:
         return
 

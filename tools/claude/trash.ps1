@@ -94,21 +94,36 @@ function Test-DriveRoot {
     return $full -ieq [System.IO.Path]::GetPathRoot($full)
 }
 
-function Get-RepoRoots {
-    <#  守る範囲の起点。**worktree から実行されたときは本体のリポジトリも守る**——
-        稼働 DB や環境設定は本体側にあり、worktree 側の複製を守っても意味が無い。 #>
-    $primary = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-    $roots = @($primary)
+function Get-GitCommonDir {
+    <#  本体のリポジトリの `.git` の絶対パス（取れなければ空）。worktree から呼ぶと本体を指す。 #>
+    param([string] $From)
     try {
-        $common = git -C $primary rev-parse --path-format=absolute --git-common-dir 2>$null
-        if ($LASTEXITCODE -eq 0 -and $common) {
-            $mainRoot = Split-Path -Parent (@($common)[0])
-            if ($mainRoot -and -not (Test-PathWithin -Child $mainRoot -Ancestor $primary)) {
-                $roots += $mainRoot
-            }
-        }
+        $common = git -C $From rev-parse --path-format=absolute --git-common-dir 2>$null
+        if ($LASTEXITCODE -eq 0 -and $common) { return (@($common)[0]) }
     }
     catch { }  # git が無くても本体は動く（守る範囲が狭まるだけ）
+    return ''
+}
+
+function Get-ProtectedRoots {
+    <#  保護判定の起点。**worktree から実行されたときは、本体のリポジトリも守る。**
+
+        `.claude/worktrees/` はこの repo が実際に使う作業形態である（[30 §6](../../docs/30_作業のルール.md)）。
+        そこから `../../../Designer` のように**本体を相対で指せてしまい**、
+        しかも**コマンド文字列に保護対象の名前が出ない**のでフック側も止められない
+        （自己レビューで実証。2026-09-07）。
+
+        **引数で受けるのは検査できる形にするため**——git を呼ぶ側（Get-GitCommonDir）と分けてある。 #>
+    param([string] $ScriptRoot, [string] $GitCommonDir)
+
+    $primary = Split-Path -Parent (Split-Path -Parent $ScriptRoot)
+    $roots = @($primary)
+    if ($GitCommonDir) {
+        $mainRoot = Split-Path -Parent $GitCommonDir
+        if ($mainRoot -and -not (Test-PathWithin -Child $mainRoot -Ancestor $primary)) {
+            $roots += $mainRoot
+        }
+    }
     return $roots
 }
 
@@ -132,38 +147,26 @@ function Get-ProtectedEntries {
     return $entries
 }
 
-function Resolve-LinkTargetPath {
-    <#  シンボリックリンク・ジャンクションの実体を返す（リンクでなければ $null）。
-        **実体も保護判定にかける**——保護対象を指すリンクを消させないため。 #>
-    param([string] $FullPath)
-    try {
-        $target = (Get-Item -LiteralPath $FullPath -Force -ErrorAction Stop).ResolveLinkTarget($true)
-        if ($target) { return $target.FullName }
-    }
-    catch { }
-    return $null
-}
-
 function Get-BlockReason {
-    <#  消してはいけない相手なら理由を返す。消してよいなら $null を返す。 #>
+    <#  消してはいけない相手なら理由を返す。消してよいなら $null を返す。
+
+        **シンボリックリンクの実体は追わない**——このリポジトリにリンクは 1 つも無く、
+        追う分岐を置くと「一度も動かないまま残り続けるコード」になる。要るときに足す。 #>
     param([string] $Target)
 
     if (Test-DriveRoot $Target) {
         return 'ドライブの直下（ボリュームの根）は削除しない'
     }
 
-    foreach ($candidate in @($Target, (Resolve-LinkTargetPath $Target))) {
-        if (-not $candidate) { continue }
-        foreach ($root in $script:RepoRoots) {
-            foreach ($entry in $script:Protected) {
-                $protectedPath = Join-Path $root $entry.path
-                if (Test-PathWithin -Child $candidate -Ancestor $protectedPath) {
-                    return $entry.why
-                }
-                # 保護対象を**内側に含む**フォルダごとの削除も止める（ルートの削除は .git を巻き込む）。
-                if (Test-PathWithin -Child $protectedPath -Ancestor $candidate) {
-                    return "$($entry.why)——これを内側に含むフォルダごとの削除になる"
-                }
+    foreach ($root in $script:RepoRoots) {
+        foreach ($entry in $script:Protected) {
+            $protectedPath = Join-Path $root $entry.path
+            if (Test-PathWithin -Child $Target -Ancestor $protectedPath) {
+                return $entry.why
+            }
+            # 保護対象を**内側に含む**フォルダごとの削除も止める（ルートの削除は .git を巻き込む）。
+            if (Test-PathWithin -Child $protectedPath -Ancestor $Target) {
+                return "$($entry.why)——これを内側に含むフォルダごとの削除になる"
             }
         }
     }
@@ -174,7 +177,7 @@ function Get-BlockReason {
 
 function Format-ForDisplay {
     param([string] $FullPath)
-    $root = ConvertTo-ComparablePath $script:RepoRoots[0]
+    $root = ConvertTo-ComparablePath $script:RepoRoot
     if (Test-PathWithin -Child $FullPath -Ancestor $root) {
         $rel = (ConvertTo-ComparablePath $FullPath).Substring($root.Length).TrimStart('\', '/')
         if ($rel) { return $rel }
@@ -246,7 +249,7 @@ function Invoke-SelfTest {
         `exit (Invoke-SelfTest)` と書くと理由が画面から消え、終了コードも壊れる。 #>
 
     $failed = 0
-    $root = $script:RepoRoots[0]
+    $root = $script:RepoRoot
     $driveRoot = [System.IO.Path]::GetPathRoot($root)
     $outside = Join-Path ([System.IO.Path]::GetTempPath()) 'claude-trash-selftest'
 
@@ -294,6 +297,29 @@ function Invoke-SelfTest {
         }
     }
 
+    # worktree から実行したときに、**本体のリポジトリも守るか**。
+    # 本体側の `Designer/` は `.claude/worktrees/x/` から `../../../Designer` で指せてしまい、
+    # コマンド文字列に保護対象の名前が出ないのでフック側も止められない（2026-09-07 に実証）。
+    $inMainRepo = @(Get-ProtectedRoots -ScriptRoot (Join-Path $root 'tools/claude') -GitCommonDir (Join-Path $root '.git'))
+    if ($inMainRepo.Count -ne 1) {
+        $failed++
+        Write-Output "NG  本体から実行したのに根が 1 つでない: $($inMainRepo -join ' / ')"
+    }
+    $fromWorktree = @(Get-ProtectedRoots -ScriptRoot (Join-Path $root '.claude/worktrees/x/tools/claude') -GitCommonDir (Join-Path $root '.git'))
+    if ($fromWorktree.Count -ne 2 -or -not (Test-PathWithin -Child $root -Ancestor $fromWorktree[1])) {
+        $failed++
+        Write-Output "NG  worktree から本体のリポジトリを守れていない: $($fromWorktree -join ' / ')"
+    }
+    $savedRoots = $script:RepoRoots
+    try {
+        $script:RepoRoots = $fromWorktree
+        if (-not (Get-BlockReason -Target (Join-Path $root 'Designer'))) {
+            $failed++
+            Write-Output 'NG  worktree から本体の Designer/ を拒まない'
+        }
+    }
+    finally { $script:RepoRoots = $savedRoots }
+
     # ワイルドカードに見える名前の実在ファイルを、文字どおりに扱えるか。
     # **取り違えると「隣の実在ファイル」を消す**——`report[1].pdf` を glob と読むと report1.pdf に当たる。
     # 検体は一時フォルダに作って必ず片づける（DryRun すら通さないので、他は何も触らない）。
@@ -303,10 +329,20 @@ function Invoke-SelfTest {
         New-Item -ItemType Directory -Force -Path $fixture | Out-Null
         Set-Content -LiteralPath (Join-Path $fixture 'report1.pdf') -Value 'decoy' -Encoding utf8
         Set-Content -LiteralPath $literal -Value 'literal' -Encoding utf8
+        # **Windows では先頭のドットは隠しではない。** 属性を立てないと -Force の有無を撃ち分けられない。
+        $hidden = Join-Path $fixture 'hidden.pdf'
+        Set-Content -LiteralPath $hidden -Value 'hidden' -Encoding utf8
+        (Get-Item -LiteralPath $hidden -Force).Attributes = [System.IO.FileAttributes]::Hidden
         $resolved = @(Expand-Target -Raw $literal)
         if ($resolved.Count -ne 1 -or $resolved[0] -ne $literal) {
             $failed++
             Write-Output "NG  ワイルドカードに見える実在ファイルを取り違えた: $($resolved -join ' / ')"
+        }
+        # **展開の枝そのもの**（実在しない字だけがここへ来る）。`-Force` が無いと隠しファイルが落ちる。
+        $globbed = @(Expand-Target -Raw (Join-Path $fixture '*.pdf'))
+        if ($globbed.Count -ne 3) {
+            $failed++
+            Write-Output "NG  ワイルドカードの展開が 3 件でない（隠しファイルを落とした可能性）: $($globbed.Count) 件"
         }
     }
     finally {
@@ -329,11 +365,15 @@ function Invoke-SelfTest {
     # 拒否のブロックごと消しても緑になる（関門を殺す最短の変異がそれである）。
     # **期待する字は、集計行に出ない字にする。**「拒否 0 件・見つからない等 1 件」という
     # 最後の 1 行がどの語も含むので、語だけを探すと何をどう壊しても緑になる。
+    # 拒否の検体は**正典の 1 行目から組み立てる**——文言を直しただけで赤くなると、
+    # 「関門が壊れた」と「言い回しを変えた」の区別がつかなくなる。
+    $firstProtected = $script:Protected[0]
     $probes = @(
-        @{ Args = @('-DryRun', (Join-Path $root 'LocalData')); Expect = '消すと戻せない'; Code = 1 }
+        @{ Args = @('-DryRun', (Join-Path $root $firstProtected.path)); Expect = $firstProtected.why; Code = 1 }
         @{ Args = @('-DryRun', (Join-Path $root 'docs/README.md')); Expect = 'DryRun      :'; Code = 0 }
         @{ Args = @('-DryRun', (Join-Path $root 'この名前のファイルは無いはず.txt')); Expect = '見つからない:'; Code = 1 }
         @{ Args = @('-DryRun', '   '); Expect = '空白だけ'; Code = 1 }
+        @{ Args = @('-DryRun', 'C:'); Expect = 'ドライブ名だけ'; Code = 1 }
     )
     foreach ($probe in $probes) {
         $out = (& pwsh -NoProfile -File $PSCommandPath @($probe.Args) 2>&1 | Out-String)
@@ -355,8 +395,9 @@ function Invoke-SelfTest {
 
 # ----------------------------------------------------------------------- 本体
 
+$script:RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)   # 表示と検体の基準
 # **`@()` で受ける**——要素 1 個の配列は戻り値で文字列に潰れ、`[0]` が 1 文字目になる。
-$script:RepoRoots = @(Get-RepoRoots)
+$script:RepoRoots = @(Get-ProtectedRoots -ScriptRoot $PSScriptRoot -GitCommonDir (Get-GitCommonDir -From $script:RepoRoot))
 $script:Protected = Get-ProtectedEntries
 
 if ($SelfTest) {
