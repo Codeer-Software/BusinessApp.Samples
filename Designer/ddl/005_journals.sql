@@ -390,7 +390,9 @@ END;
 -- REPLACE の経路を塞ぐ（ADR-0038）。仕訳側の no_replace_posted と同じ穴（qa/03 L-26。仕組みはあちらの注記）。
 -- 上の 4 本は UPDATE にしか張っていないので、id を指定した INSERT OR REPLACE と UPDATE OR REPLACE ... SET id で
 -- 計上済みの明細が参照している id を別の中身の行が乗っ取れた。
--- **id を指定しない INSERT（seed・画面）には当たらない**（NEW.id が NULL で EXISTS が偽になる）。
+-- **id を指定しない INSERT（seed・画面）には当たらない**——BEFORE INSERT の時点の NEW.id は
+-- 実在しない値なので、どの明細とも一致しない（SQLite 3.53.1 で実測すると -1。仕様上は未定義なので、
+-- 値そのものには依存しない。NULL ではないので NEW.id IS NULL で見分けようとすると静かに外れる）。
 CREATE TRIGGER trg_accounts_no_replace_used_insert
 BEFORE INSERT ON accounts
 FOR EACH ROW
