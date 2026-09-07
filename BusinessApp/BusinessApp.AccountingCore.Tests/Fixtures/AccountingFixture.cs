@@ -107,6 +107,16 @@ public static class AccountingFixture
     public static JournalEntry Entry(DateOnly date, params JournalLine[] lines)
         => Entry(date, date.AddDays(2), lines);
 
+    /// <summary>摘要の既定値。<b>計上には要る</b>ので、既定で入れておく（docs/10 §4-2-1）。</summary>
+    /// <remarks>
+    /// <para><b>空の摘要を試すテストは <c>with { Description = null }</c> と書く。</b>
+    /// 既定を空のままにすると、摘要を要求する関門を入れた日に<b>全部のテストが赤になる</b>ので、
+    /// 「摘要が要る」ことを検査しているテストと、そうでないテストの区別が付かなくなる。</para>
+    /// <para><b>サーバ検体・訂正のテストが使う字とは別にしてある</b>——同じにすると、
+    /// 訂正の摘要から接頭辞を剥がす検査が、既定値だけで成立して緑になる（qa/03 L-02 の縮退）。</para>
+    /// </remarks>
+    public const string DefaultDescription = "5 月分の現金売上";
+
     public static JournalEntry Entry(DateOnly date, DateOnly postingDate, params JournalLine[] lines)
         => new()
         {
@@ -116,6 +126,7 @@ public static class AccountingFixture
             PostingDate = postingDate,
             Status = EntryStatus.Draft,
             EntryType = EntryType.Normal,
+            Description = DefaultDescription,
             EnteredAt = new DateTimeOffset(2026, 8, 23, 10, 0, 0, TimeSpan.FromHours(9)),
             Lines = lines,
         };

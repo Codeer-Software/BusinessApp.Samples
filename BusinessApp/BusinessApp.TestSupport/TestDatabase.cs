@@ -47,6 +47,78 @@ public static class TestDatabase
     }
 
     /// <summary>
+    /// トリガを 1 本だけ外して <paramref name="sql"/> を流し、外す前の定義で貼り直す。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>いまの関門なら作れない行を、テストの中で再現するためだけに使う。</b>
+    /// 実例: 摘要のない計上済みの伝票（docs/10 §4-2-1）。いまは計上できないが、
+    /// <b>規則より前に計上された行が稼働 DB に 2 件あり、計上済みは直せない</b>（I-05）。
+    /// 帳簿はその行も探せなければならない（電帳通達 8-13）ので、検体にも同じ行が要る。</para>
+    /// <para><b>定義は <c>sqlite_master</c> から読む。</b> テストに書き写すと、
+    /// 正典（<c>Designer/ddl/</c>）を直したときに写しだけが古くなり、
+    /// <b>守っているつもりで別物を貼り直す</b>ことになる。</para>
+    /// <para><b>普通の検体づくりに使わない。</b> 使うたびに「なぜこの行が作れないのか」を
+    /// 呼ぶ側のコメントに書くこと。</para>
+    /// <para><b>貼り直したトリガは、その表の中で最後に作られた状態になる。</b>
+    /// 発火順は SQLite の仕様上 undefined で、実測では後に作ったものから鳴るので、
+    /// <b>複数のトリガが同時に当たる検体では、鳴る順が本番と変わりうる。</b>
+    /// いまの使い道（摘要のない計上済みを作る）では他のトリガと重ならない。</para>
+    /// </remarks>
+    public static void WithoutTrigger(SqliteConnection connection, string triggerName, string sql)
+    {
+        if (!RemovableTriggers.Contains(triggerName))
+        {
+            throw new InvalidOperationException(
+                $"{triggerName} は外せない。外してよいトリガは {string.Join(" / ", RemovableTriggers)} だけである。");
+        }
+
+        var definition = ScalarOf<string>(
+            connection,
+            $"SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = '{triggerName}'");
+
+        // 名前を打ち間違えると、外れないまま静かに通ってしまう（=> 検体が作れず別の理由で落ちる）。
+        if (string.IsNullOrEmpty(definition))
+        {
+            throw new InvalidOperationException($"トリガ {triggerName} がこの DB に無い。名前を確かめること。");
+        }
+
+        Execute(connection, $"DROP TRIGGER {triggerName}");
+        try
+        {
+            Execute(connection, sql);
+        }
+        finally
+        {
+            // **落ちても必ず貼り直す。** 貼り直さないと、その接続の残りのテストが
+            // 「トリガの無い DB」で緑になる——外した本人ではなく、後続が静かに嘘をつく。
+            Execute(connection, definition);
+        }
+
+        if (ScalarOf<long>(
+                connection,
+                $"SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = '{triggerName}'") != 1)
+        {
+            throw new InvalidOperationException($"トリガ {triggerName} を貼り直せなかった。");
+        }
+    }
+
+    /// <summary>
+    /// <see cref="WithoutTrigger"/> で外してよいトリガ。<b>ここに無い名前は投げる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>「検体が作れないときの逃げ道」にしないための許可表である。</b> 名前を自由に取ると、
+    /// I-05（計上済みは変更も削除もされない）の守りごと外した検体が書けてしまい、
+    /// <b>ADR-0004 が「規約ではなく機械に守らせる」と決めた場所を、テストが規約に戻す。</b>
+    /// 足すときは、<b>なぜその行が正規の経路で作れないのか</b>を理由に書くこと。
+    /// </remarks>
+    private static readonly string[] RemovableTriggers =
+    [
+        // 摘要のない計上済みは、いまは作れない。**規則より前に計上された行が稼働 DB に 2 件あり、
+        // 帳簿はその行も探せなければならない**（電帳通達 8-13。docs/10 §4-2-1）。
+        "trg_journal_entries_description_required_when_posted",
+    ];
+
+    /// <summary>
     /// 同じインメモリ DB への 2 本目の接続。同時実行の検査に使う。
     /// <b>1 本目を閉じると DB ごと消える</b>ので、こちらを先に閉じること。
     /// </summary>

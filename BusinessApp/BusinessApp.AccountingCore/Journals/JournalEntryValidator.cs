@@ -25,6 +25,7 @@ public static class JournalEntryValidator
 
         var violations = new List<Violation>();
         ValidateState(entry, violations);
+        ValidateDescription(entry, violations);
         ValidateStructure(entry, violations);
         ValidateDates(entry, context.Calendar, violations);
         ValidateLines(entry, context, violations);
@@ -41,7 +42,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.AlreadyPosted,
-                "計上済みの伝票は、もう一度計上できません。訂正・取消は反対仕訳で行います。"));
+                "この伝票は計上済みです。訂正・取消は反対仕訳で行います。"));
         }
 
         if (entry.EntryNo is not null)
@@ -49,6 +50,38 @@ public static class JournalEntryValidator
             violations.Add(new Violation(
                 JournalViolationCodes.EntryNoNotAllowed,
                 "伝票番号は計上のときに自動で付きます。計上前の伝票に番号があってはいけません。"));
+        }
+    }
+
+    /// <summary>
+    /// 摘要が入っていること（docs/10 §4-2-1）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>仕訳帳の法定記載事項「内容」は、伝票の摘要が持つ</b>（法税規則 55 ①。
+    /// 明細の「内容」は消税法 30 ⑧③の「資産又は役務の内容」で別の欄である）。
+    /// <b>下書き保存では求めない</b>（開発者の決定。2026-09-05）——条文が求めるのは帳簿への記載で、
+    /// 計上を止めれば記載事項を欠いた行は帳簿に載らない。</para>
+    /// <para><b>空白だけも「入っていない」とみなす。</b> 全角空白・タブも同じで、
+    /// <see cref="string.IsNullOrWhiteSpace"/> がそこまで見る。
+    /// <b>DDL のトリガも同じ字を落として比べる</b>（最後の守り。ddl/005_journals.sql）。</para>
+    /// <para><b>ここは <see cref="ValidateStructure"/> の外に置く。</b> あちらは明細が 0 行なら
+    /// 早く返るので、中に入れると<b>明細を入れ忘れた伝票で摘要の違反が出ない</b>。
+    /// 直すところが 2 つあるなら 2 つとも見せる。</para>
+    /// <para><b>「内容」の語を使わない。</b> 同じ画面に明細の「内容」欄があり、
+    /// そこへ書けと言う注記まで出ているので、「取引の内容を書いてください」は
+    /// <b>別の欄を指して読める</b>（2026-09-08 の自己レビュー）。</para>
+    /// <para><b>文に「計上できません」を入れない。</b> 計上の違反は
+    /// <c>JournalPostingRejectedException</c> が「計上できません（n 件）。」という見出しに束ねるので、
+    /// 各文が結果を繰り返すと <b>1 つの断りに「計上できません」が 2 回出る</b>（実機で見た。2026-09-08）。
+    /// 束ねる関門では、各文は<b>事実と次の一手</b>だけを持つ（docs/21 §2-6）。</para>
+    /// </remarks>
+    private static void ValidateDescription(JournalEntry entry, List<Violation> violations)
+    {
+        if (string.IsNullOrWhiteSpace(entry.Description))
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.DescriptionMissing,
+                "「摘要」が入っていません。何の取引かを書いてください。"));
         }
     }
 
@@ -116,7 +149,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PeriodClosed,
-                $"会計期間 {period.Period} は締め済みのため、計上できません。"));
+                $"会計期間 {period.Period} は締め済みです。計上日を開いている期間に直してください。"));
             return;
         }
 
@@ -133,7 +166,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PeriodClosed,
-                $"会計年度「{fiscalYear.Label}」は締め済みのため、計上できません。"));
+                $"会計年度「{fiscalYear.Label}」は締め済みです。計上日を開いている年度に直してください。"));
             return;
         }
 

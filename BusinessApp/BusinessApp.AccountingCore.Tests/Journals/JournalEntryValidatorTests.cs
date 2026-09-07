@@ -41,6 +41,50 @@ public class JournalEntryValidatorTests
         Assert.DoesNotContain(violations, v => v.Code == JournalViolationCodes.Unbalanced);
     }
 
+    // --- 摘要（docs/10 §4-2-1。法税規則 55 ① の記載事項「内容」）---
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("	")]
+    [InlineData("　")]          // 全角空白だけ
+    [InlineData(" 　	 ")]      // 混ぜても同じ
+    public void 摘要が空の仕訳は計上できない(string? description)
+    {
+        var entry = AccountingFixture.CashSale(Ordinary) with { Description = description };
+
+        var violation = AssertViolation(JournalViolationCodes.DescriptionMissing, Validate(entry));
+
+        // **利用者に出る文**そのものを固定する。事実と次の一手を持ち、
+        // **「計上できません」を繰り返さない**こと——見出しが既にそう言っている（docs/21 §2-6）。
+        // **「内容」の語を使わない**——同じ画面に明細の「内容」欄がある（2026-09-08 の自己レビュー）。
+        Assert.Equal("「摘要」が入っていません。何の取引かを書いてください。", violation.Message);
+    }
+
+    // 「摘要が入っていれば通る」は `貸借が一致した仕訳は計上できる` が既に表明している
+    // （検体は既定で摘要を持つ）ので、ここには置かない（ADR-0012 §2 の「カバレッジのためのテスト」）。
+
+    [Fact]
+    public void 摘要の前後に空白があっても中身があれば計上できる()
+    {
+        var entry = AccountingFixture.CashSale(Ordinary) with { Description = "  8 月分の通信費  " };
+
+        Assert.DoesNotContain(
+            Validate(entry), v => v.Code == JournalViolationCodes.DescriptionMissing);
+    }
+
+    [Fact]
+    public void 明細が_1_行も無くても摘要の違反は出る()
+    {
+        // **早く返る検査の中に入れると、直すところが 2 つあるのに 1 つしか見えない。**
+        // 明細を入れ忘れた伝票で摘要の違反が消えないことを、ここで固定する。
+        var violations = Validate(AccountingFixture.Entry(Ordinary) with { Description = null });
+
+        AssertViolation(JournalViolationCodes.NoLines, violations);
+        AssertViolation(JournalViolationCodes.DescriptionMissing, violations);
+    }
+
     [Fact]
     public void 会計期間のない日付には計上できない()
     {

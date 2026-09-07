@@ -180,7 +180,11 @@ internal sealed class AccountingServer : IDisposable
         {
             var status = (entry.Fields["Status"] as SelectFieldData)?.Value ?? "draft";
             var enteredAt = (entry.Fields["EnteredAt"] as DateTimeFieldData)?.Value;
-            var id = InsertEntry(status, enteredAt);
+
+            // **摘要も送られてきた値だけを書く。** 既定を差し込むと、
+            // **本番なら摘要の関門が拒む保存を、検体だけが通してしまう**（2026-09-08 の自己レビュー）。
+            var description = (entry.Fields.GetValueOrDefault("Description") as TextFieldData)?.Value;
+            var id = InsertEntry(status, enteredAt, description);
 
             var lineNo = 0;
             foreach (var (debitCredit, accountCode, amount) in lines)
@@ -239,13 +243,24 @@ internal sealed class AccountingServer : IDisposable
     /// </remarks>
     public static string DateLiteral(string date) => $"'{date} 00:00:00'";
 
+    /// <summary>摘要の既定値。<b>計上には要る</b>ので、下書きにも既定で入れる（docs/10 §4-2-1）。</summary>
+    /// <remarks>
+    /// <para><b>空の摘要を試すテストは <c>description: null</c> と書く。</b> 既定を空のままにすると、
+    /// 摘要を要求する関門を入れた日に<b>計上を通すテストが全部赤になる</b>ので、
+    /// 「摘要が要る」ことを検査しているテストと、そうでないテストの区別が付かなくなる。</para>
+    /// <para><b>ドメイン側の <c>AccountingFixture.DefaultDescription</c> とは別の字にしてある</b>——
+    /// 同じにすると、層をまたいで値が漏れていても気づけない（qa/03 L-02 の縮退）。</para>
+    /// </remarks>
+    public const string DefaultDescription = "9 月分の通信費";
+
     /// <summary>下書きの伝票を 1 件入れて、その識別子を返す。</summary>
     public JournalEntryId InsertDraft(
         string transactionDate = "2026-08-24",
         string postingDate = "2026-08-24",
         string entryType = "normal",
         JournalEntryId? originalEntryId = null,
-        FiscalYearId? fiscalYearId = null)
+        FiscalYearId? fiscalYearId = null,
+        string? description = DefaultDescription)
     {
         // 訂正・取消は原仕訳が要る（I-06）。DDL の CHECK は INSERT の時点で効くので、
         // 後から UPDATE で足すことはできない。
@@ -255,15 +270,19 @@ internal sealed class AccountingServer : IDisposable
         Execute($"""
             insert into journal_entries
                 (fiscal_year_id, transaction_date, posting_date, status, entry_type,
-                 original_entry_id, entered_at)
+                 original_entry_id, description, entered_at)
             values ({year}, {DateLiteral(transactionDate)}, {DateLiteral(postingDate)}, 'draft', '{entryType}',
-                    {original}, '2026-08-24 13:00:00')
+                    {original}, {TextLiteral(description)}, '2026-08-24 13:00:00')
             """);
 
         return new JournalEntryId(Scalar<long>("select last_insert_rowid()"));
     }
 
-    private JournalEntryId InsertEntry(string status, DateTime? enteredAt)
+    /// <summary>SQL の文字列リテラル。<b>null は NULL に落とす</b>（空文字にしない。docs/10 §4-4）。</summary>
+    private static string TextLiteral(string? value)
+        => value is null ? "null" : $"'{value.Replace("'", "''", StringComparison.Ordinal)}'";
+
+    private JournalEntryId InsertEntry(string status, DateTime? enteredAt, string? description)
     {
         var entered = enteredAt is DateTime value
             ? $"'{value.ToString("yyyy-MM-dd HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture)}'"
@@ -271,8 +290,9 @@ internal sealed class AccountingServer : IDisposable
 
         Execute($"""
             insert into journal_entries
-                (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-            values ({FiscalYear.Value}, {DateLiteral("2026-08-24")}, {DateLiteral("2026-08-24")}, '{status}', 'normal', {entered})
+                (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+            values ({FiscalYear.Value}, {DateLiteral("2026-08-24")}, {DateLiteral("2026-08-24")}, '{status}', 'normal',
+                    {TextLiteral(description)}, {entered})
             """);
 
         return new JournalEntryId(Scalar<long>("select last_insert_rowid()"));
@@ -384,6 +404,12 @@ internal sealed class AccountingServer : IDisposable
         => InsertPosted(entryNo, description, transactionDate, null, lines);
 
     /// <summary>取引先つきの計上済み仕訳（取消・訂正で取引先が写ることの検査に使う）。</summary>
+    /// <remarks>
+    /// <b><paramref name="description"/> に null を渡すと「摘要の無い計上済み」を作る。</b>
+    /// いまの製品では作れない形だが、<b>規則より前に計上された行が稼働 DB に 2 件あり</b>
+    /// （伝票番号 1・12。docs/10 §4-2-1）、その伝票も取り消せなければならない。
+    /// そのときだけ計上のトリガを外す（<see cref="TestDatabase.WithoutTrigger"/>）。
+    /// </remarks>
     public JournalEntryId InsertPosted(
         int entryNo,
         string? description,
@@ -391,13 +417,11 @@ internal sealed class AccountingServer : IDisposable
         long? partnerId,
         params (string DebitCredit, string AccountCode, long Amount)[] lines)
     {
-        var id = InsertDraft(transactionDate: transactionDate, postingDate: transactionDate);
-
-        // 摘要は下書きのうちに入れる。計上済みの変更はトリガが止める。
-        if (description is not null)
-        {
-            Execute($"update journal_entries set description = '{description}' where id = {id.Value}");
-        }
+        // **摘要は下書きを作るときに渡す。** 後から UPDATE で足す形にすると、
+        // null（＝摘要なし）を渡したときに InsertDraft の既定が残り、
+        // **「摘要の無い原仕訳」のつもりのテストが摘要つきの伝票を検査する**（2026-09-08 の自己レビュー）。
+        var id = InsertDraft(
+            transactionDate: transactionDate, postingDate: transactionDate, description: description);
 
         if (partnerId is long partner)
         {
@@ -411,11 +435,21 @@ internal sealed class AccountingServer : IDisposable
         }
 
         // 下書きとして書いてから状態を進める（DDL のトリガが唯一許す順序）。
-        Execute($"""
+        var post = $"""
             update journal_entries
                set status = 'posted', entry_no = {entryNo}, posted_at = '2026-08-24 13:00:00'
              where id = {id.Value}
-            """);
+            """;
+
+        if (description is null)
+        {
+            TestDatabase.WithoutTrigger(
+                connection, "trg_journal_entries_description_required_when_posted", post);
+        }
+        else
+        {
+            Execute(post);
+        }
 
         // 採番も一緒に進める。進めないと、次の計上が同じ番号を取って一意制約に当たる。
         Execute($"""

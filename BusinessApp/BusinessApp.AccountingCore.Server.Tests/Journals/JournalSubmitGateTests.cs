@@ -78,6 +78,30 @@ public class JournalSubmitGateTests
         Assert.Equal(0L, server.Scalar<long>("select count(*) from journal_entries"));
     }
 
+    /// <summary>
+    /// 摘要のない伝票は計上できない（docs/10 §4-2-1。A-2）。
+    /// </summary>
+    /// <remarks>
+    /// <b>純粋関数のテスト（<c>JournalEntryValidatorTests</c>）とは別に、DB を通した経路でも見る。</b>
+    /// 保存の差分に摘要が載らなければ列は NULL のままで、
+    /// <b>関門は保存の後に読み直した伝票を見る</b>ので、ここが本番と同じ形になる。
+    /// </remarks>
+    [Fact]
+    public async Task 摘要のない伝票は計上できず_保存ごと巻き戻る()
+    {
+        using var server = new AccountingServer();
+        var entry = SubmitData.NewEntryWithout(TemporaryId, "Description");
+        entry.Fields["Status"] = new SelectFieldData { Value = "posted" };
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([SubmitData.Adding(entry, SubmitData.Line())], server.Saving(entry, Balanced)));
+
+        Assert.Contains("「摘要」が入っていません。", error.Message, StringComparison.Ordinal);
+
+        // **巻き戻ることまで見る。** 差し戻したのに行が残ると、下書きが黙って増える。
+        Assert.Equal(0L, server.Scalar<long>("select count(*) from journal_entries"));
+    }
+
     [Fact]
     public async Task 入力年月日はシステムが打ち_保存された値がそのまま読み戻せる()
     {

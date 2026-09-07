@@ -27,6 +27,40 @@ public sealed record SchemaObject(string Type, string Name, string Sql);
 /// </remarks>
 public static class SchemaSnapshot
 {
+    /// <summary>
+    /// 表ごとのトリガを、<b>作られた順</b>に返す（<c>sqlite_master</c> の並び）。
+    /// </summary>
+    /// <remarks>
+    /// <b>発火順は SQLite の仕様上 undefined</b>（2026-09-08 に公式ドキュメントで確認）で、
+    /// <b>実測（3.53.1。1 回）では後に作ったものから鳴った</b>——つまり
+    /// <b>同じ定義でも作る順が違えば、鳴る RAISE が入れ替わりうる</b>。
+    /// <see cref="FromRows"/> は名前で並べ替えてから比べるため、この違いを見ていない——
+    /// **正典（ddl/）から作った DB と baseline+migrations を再生した DB で順序がずれた**のを、
+    /// 同値テストが「同値」と言っていた。
+    /// <b>だから順序は別に取り出して突き合わせる。</b>
+    /// </remarks>
+    public static IReadOnlyList<string> TriggerOrder(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT tbl_name, name FROM sqlite_master WHERE type = 'trigger' AND name NOT LIKE 'sqlite_%'";
+        using var reader = command.ExecuteReader();
+
+        var rows = new List<(string Table, string Trigger)>();
+        while (reader.Read())
+        {
+            rows.Add((reader.GetString(0), reader.GetString(1)));
+        }
+
+        // **表ごとに束ねる。** 発火順が効くのは同じ表の中だけで、
+        // 表そのものが並ぶ順は正典（ddl の 001〜007）と再生（baseline+migrations）で違ってよい。
+        return rows
+            .GroupBy(r => r.Table, StringComparer.Ordinal)
+            .OrderBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g => $"{g.Key}: {string.Join(" → ", g.Select(r => r.Trigger))}")
+            .ToList();
+    }
+
     /// <summary>開いている接続のスキーマを正規化して返す。</summary>
     public static IReadOnlyList<SchemaObject> Dump(SqliteConnection connection)
     {

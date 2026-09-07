@@ -154,6 +154,21 @@ public class JournalCorrectionTests
     }
 
     [Fact]
+    public void 摘要の無い訂正伝票を訂正しても接頭辞の剥がしが落ちない()
+    {
+        // **規則より前に計上された伝票には摘要が無い**（docs/10 §4-2-1。稼働 DB に 2 件）。
+        // その伝票を直した訂正伝票を、さらに訂正する経路を通す。
+        // 接頭辞を剥がす側は原仕訳が訂正・取消のときだけ走るので、
+        // **摘要が null の訂正伝票**を通さないと、この分岐は一度も踏まれない。
+        var corrected = Posted(entryType: EntryType.Correction, entryNo: 7) with { Description = null };
+
+        var result = JournalCorrection.Start(corrected, CorrectedOn, EnteredAt, StartContext());
+
+        Assert.Equal("伝票番号 7 の訂正", result.Drafts!.Value.Correction.Description);
+        Assert.Equal("伝票番号 7 の取消", result.Drafts!.Value.Reversal.Description);
+    }
+
+    [Fact]
     public void 何段重なった接頭辞も落とす()
     {
         // 直す前に作られた伝票が既に入れ子を抱えていても、そこから先は伸びない。

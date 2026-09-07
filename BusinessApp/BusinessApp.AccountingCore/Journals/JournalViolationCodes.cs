@@ -35,6 +35,17 @@ public static class JournalViolationCodes
     public const string NoLines = "E-LINES-EMPTY";
 
     /// <summary>
+    /// 摘要が空のまま計上しようとした。<b>仕訳帳の法定記載事項「内容」を欠く</b>（法税規則 55 ①。docs/10 §4-2-1）。
+    /// </summary>
+    /// <remarks>
+    /// <b>docs/10 §1 の不変条件に足していないので <c>E-</c> である</b>（この型の冒頭の規則）。
+    /// 足さなかったのは、<b>規則より前に計上された伝票がその性質を破っている</b>からだが、
+    /// <b>同じ論法は I-17 にも効く</b>ので基準として立っていない——
+    /// <b>足すかどうかは docs/04 §5 の未決</b>（Claude の判断。2026-09-08）。
+    /// </remarks>
+    public const string DescriptionMissing = "E-DESCRIPTION-EMPTY";
+
+    /// <summary>
     /// <b>DDL の <c>NOT NULL</c> に当たる項目が入っていない。</b>
     /// 伝票（取引日・計上日・会計年度）と明細（借方貸方・勘定科目・金額・行番号）の両方に使う。
     /// <b>税区分の欠落だけは <see cref="TaxCategoryMissing"/></b>——計上の検証が先に固有のコードを

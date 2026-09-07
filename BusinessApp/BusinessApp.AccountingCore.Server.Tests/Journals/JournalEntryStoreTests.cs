@@ -45,7 +45,10 @@ public class JournalEntryStoreTests
     public async Task 下書きでは伝票番号も計上日時も入っていない()
     {
         using var server = new AccountingServer();
-        var id = server.InsertDraft();
+
+        // **摘要も null で入れる。** ここは「任意の欄が NULL のまま読み戻せるか」を見るテストで、
+        // 既定の摘要が入ると description の NULL 読みだけ検査されなくなる（docs/10 §4-2-1）。
+        var id = server.InsertDraft(description: null);
 
         var entry = await server.EntryStore.LoadAsync(id);
 

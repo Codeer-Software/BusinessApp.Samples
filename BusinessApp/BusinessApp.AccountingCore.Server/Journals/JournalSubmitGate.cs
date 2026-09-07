@@ -214,7 +214,7 @@ public sealed class JournalSubmitGate(
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.AlreadyPosted,
-                    $"計上済みの伝票（伝票番号 {stored.EntryNo}）は削除できません。"
+                    $"伝票番号 {stored.EntryNo} は計上済みです。"
                     + "取り消すか、訂正してください。"));
             }
             else if (calendar.ResolvePeriod(stored.PostingDate) is not null
@@ -222,8 +222,8 @@ public sealed class JournalSubmitGate(
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.PeriodClosed,
-                    $"計上日（{stored.PostingDate:yyyy/MM/dd}）の会計期間は締められているので、"
-                    + "この伝票は削除できません。締めを解除してから削除してください。"));
+                    $"計上日（{stored.PostingDate:yyyy/MM/dd}）の会計期間は締められています。"
+                    + "締めを解除してから、もう一度お試しください。"));
             }
         }
 
@@ -395,7 +395,7 @@ public sealed class JournalSubmitGate(
             [
                 new Violation(
                     JournalViolationCodes.EntryTypeNotSupported,
-                    $"種別が「{draft.EntryType.DisplayName()}」の伝票は、まだ計上できません。"),
+                    $"種別「{draft.EntryType.DisplayName()}」の伝票には、まだ対応していません。"),
             ]),
         };
 

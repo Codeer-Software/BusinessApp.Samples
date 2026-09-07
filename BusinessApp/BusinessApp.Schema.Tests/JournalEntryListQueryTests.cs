@@ -21,18 +21,18 @@ public class JournalEntryListQueryTests
     /// </summary>
     private const string Entries = """
         INSERT INTO partners (code, name) VALUES ('P002', 'いまのマスタ名');
-        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, partner_id, partner_name_snapshot, entered_at)
-            VALUES (1, '2026-05-10', '2026-05-10', 'draft', 'normal', 2, '計上したときの名前', '2026-05-10 10:00:00');
+        INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, partner_id, partner_name_snapshot, entered_at)
+            VALUES ('8 月分の取引', 1, '2026-05-10', '2026-05-10', 'draft', 'normal', 2, '計上したときの名前', '2026-05-10 10:00:00');
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (1, 1, 'debit', 1, 1000, 1);
 
-        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, partner_id, partner_name_snapshot, entered_at)
-            VALUES (1, '2026-05-11', '2026-05-11', 'draft', 'normal', 2, '', '2026-05-11 10:00:00');
+        INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, partner_id, partner_name_snapshot, entered_at)
+            VALUES ('8 月分の取引', 1, '2026-05-11', '2026-05-11', 'draft', 'normal', 2, '', '2026-05-11 10:00:00');
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (2, 1, 'debit', 1, 2000, 1);
 
-        INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, partner_id, entered_at)
-            VALUES (1, '2026-05-12', '2026-05-12', 'draft', 'normal', 2, '2026-05-12 10:00:00');
+        INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, partner_id, entered_at)
+            VALUES ('8 月分の取引', 1, '2026-05-12', '2026-05-12', 'draft', 'normal', 2, '2026-05-12 10:00:00');
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (3, 1, 'debit', 1, 3000, 1);
 

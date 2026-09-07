@@ -3,7 +3,7 @@ title: ddl — スキーマ定義
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-09-07
+updated: 2026-09-08
 supersedes: []
 related: [../Project.md, ../../docs/10_会計ドメイン設計.md, ../../docs/12_マスタ台帳.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---
@@ -108,8 +108,16 @@ dotnet test BusinessApp.slnx
 | 行番号は正の整数で伝票内に一意 | `CHECK (line_no > 0)` ＋ `UNIQUE` | `E-LINE-NO` |
 | 消費税行だけが親行を持つ | `CHECK` | `E-TAX-PARENT` ＋ `E-TAX-INHERIT` |
 | 部門「全社共通」は 1 件だけ | 部分 UNIQUE インデックス | — |
+| 摘要のない仕訳は計上できない（[10 §4-2-1](../../docs/10_会計ドメイン設計.md)） | `BEFORE UPDATE` のトリガ（**下書き → 計上のときだけ**鳴る。空白だけも空とみなす） | `E-DESCRIPTION-EMPTY` |
 | 使用中のマスタは意味を変えられない（[ADR-0038](../../docs/decisions/0038-使用中のマスタは意味を変えられない.md)） | 4 マスタの `BEFORE UPDATE OF <意味を決める列>` トリガ ＋ REPLACE で id を乗っ取る経路を止める `BEFORE INSERT` / `BEFORE UPDATE OF id` トリガ | `MasterMeaningGate` |
 | 単一法人（[ADR-0005](../../docs/decisions/0005-単一法人に徹する.md)） | `CHECK (id = 1)` | — |
+
+**摘要の「空白」の範囲を、関門とトリガで同じにしてある理由は
+[10 §4-2-1](../../docs/10_会計ドメイン設計.md) が持つ**（両方向の同値は `JournalDescriptionGuardTests` が見る）。
+
+**トリガ・インデックスは、このファイルの末尾に足す**——マイグレーションは既存 DB の末尾に作るので、
+途中に置くと**同じ表のトリガの作られた順が正典と食い違う**（理由と守り方は
+[migrations/README](../migrations/README.md)）。
 
 行をまたぐ判定・マスタを引く判定は DB の `CHECK` では書けないので、`JournalEntryValidator` だけが担保する。
 

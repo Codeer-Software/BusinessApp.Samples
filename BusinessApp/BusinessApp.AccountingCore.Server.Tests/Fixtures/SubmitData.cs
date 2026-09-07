@@ -55,6 +55,11 @@ internal static class SubmitData
     {
         var data = new ModuleData { Name = "JournalEntry" };
         data.Fields["Id"] = new IdFieldData { Value = id };
+
+        // **摘要を載せる。** 計上には要る（docs/10 §4-2-1）ので、載せない差分は関門が差し戻す——
+        // それを試すテストは NewEntryWithout(id, "Description") と書く。
+        // **他の検体と別の字**にしてある（qa/03 L-02 の縮退）。
+        data.Fields["Description"] = new TextFieldData { Value = DefaultDescription };
         if (status is not null)
         {
             data.Fields["Status"] = new SelectFieldData { Value = status };
@@ -79,6 +84,9 @@ internal static class SubmitData
         data.Fields["FiscalYear"] = new LinkFieldData { Value = "1" };
         return data;
     }
+
+    /// <summary>保存の差分に載る摘要。<b>層ごとに別の字にしてある</b>（qa/03 L-02）。</summary>
+    public const string DefaultDescription = "7 月分の水道光熱費";
 
     /// <summary>項目を 1 つ<b>差分から落とした</b>新規の伝票。</summary>
     public static ModuleData NewEntryWithout(string id, string fieldName)

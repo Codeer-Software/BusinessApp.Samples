@@ -52,6 +52,27 @@ public class MigrationEquivalenceTests
     }
 
     /// <summary>
+    /// 表ごとのトリガの<b>作られた順</b>まで一致する。
+    /// </summary>
+    /// <remarks>
+    /// <b>発火順は SQLite の仕様上 undefined</b>なので、
+    /// 定義が同じでも作る順が違えば<b>どの RAISE が鳴るかが入れ替わりうる</b>
+    /// （実測 3.53.1 では後に作ったものから鳴った）。
+    /// 上の同値検査は名前で並べ替えてから比べるため、この違いを見ていない——
+    /// 実際に、正典の途中にトリガを挿したせいで
+    /// <b>正典から作った DB と再生した DB で断りの文言が違った</b>（2026-09-08 実測）。
+    /// <b>新しいトリガは正典でも末尾に足す</b>（Designer/migrations/README.md）。
+    /// </remarks>
+    [Fact]
+    public void 再生した_DB_はトリガの発火順も正典と同じである()
+    {
+        using var expected = TestDatabase.Create();
+        using var actual = ReplayBaselinePlusMigrations();
+
+        Assert.Equal(SchemaSnapshot.TriggerOrder(expected), SchemaSnapshot.TriggerOrder(actual));
+    }
+
+    /// <summary>
     /// 作り直しマイグレーション（0004）を<b>データありで</b>再生する。
     /// スキーマの同値テストは空の DB を再生するので、書き戻しの INSERT ... SELECT の列の取り違えや
     /// 採番（sqlite_sequence）の復元漏れを検出できない（2026-08-25 の自己レビューで、

@@ -62,13 +62,14 @@ public static class JournalLineRules
 
     // --- 選択肢の値が DDL の CHECK の外（すべて JournalViolationCodes.ChoiceNotStorable）---
     //
-    // **画面からは起こらない。** 借貸・状態・種別はどれも選択欄で、候補は画面が出す。
+    // **画面からは起こらない。** 貸借・状態・種別はどれも選択欄で、候補は画面が出す。
+    // **鉤括弧の中は画面のラベルそのもの**（docs/21 §2-6）。明細の見出しは「貸借」である。
     // 起こるのは画面を通らない経路（取込・API）だけなので、
     // **「選び直してください」ではなく「入力し直してください」と言う**（docs/21 §2-3。
     // 直す欄が画面に無い状態で「選べ」と言わない——行番号の 2 つと同じ扱い）。
 
     /// <summary>借方貸方が `debit` / `credit` のどちらでもない。</summary>
-    public const string DebitCreditNotStorable = "「借貸」の値が正しくありません。明細を入力し直してください。";
+    public const string DebitCreditNotStorable = "「貸借」の値が正しくありません。明細を入力し直してください。";
 
     /// <summary>状態が「下書き」「計上済み」のどちらでもない。</summary>
     public const string StatusNotStorable = "伝票の状態が正しくありません。伝票を入力し直してください。";
@@ -86,7 +87,7 @@ public static class JournalLineRules
 
     public const string LineNoMissing = "「行」が入っていません。明細の行を入れ直してください。";
 
-    public const string DebitCreditMissing = "「借貸」で借方か貸方かを選んでください。";
+    public const string DebitCreditMissing = "「貸借」で借方か貸方かを選んでください。";
 
     public const string AccountMissing = "勘定科目を選んでください。";
 
