@@ -134,7 +134,7 @@ public class MasterMeaningGateTests
         PostPayment(server);
         var cash = Row("Account", Id(server.AccountOf("1100").Value), "Category", new SelectFieldData { Value = "expense" });
         cash.Fields["IsContra"] = new BooleanFieldData { Value = true };
-        cash.Fields["RequiresSubAccount"] = new BooleanFieldData { Value = true };
+        cash.Fields["UsesSubAccount"] = new BooleanFieldData { Value = true };
 
         var thrown = await Rejected(server, Updating("Account", cash));
 
@@ -163,7 +163,9 @@ public class MasterMeaningGateTests
     public async Task 使用中の部門と補助科目も意味を変えられない()
     {
         using var server = new AccountingServer();
-        var sub = server.InsertSubAccount("1100");
+        // **補助科目を使う科目に付ける**（ADR-0038 §3。1100 現金は使わない科目なので、
+        // 補助科目を付けた明細は計上できない——docs/04 §1 の A-3 で塞いだ）。
+        var sub = server.InsertSubAccount("1200");
         var dept = server.DepartmentOf("20").Value;
         // 補助科目と部門つきの明細は、フィクスチャの InsertPosted が作れないので SQL で計上する
         // （下書きで書いてから状態を進める。DDL のトリガが唯一許す順序）。
@@ -171,7 +173,7 @@ public class MasterMeaningGateTests
             insert into journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
             values (1, '2026-08-24', '2026-08-24', 'draft', 'normal', '支払', '2026-08-24 10:00:00');
             insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, sub_account_id, department_id, amount, tax_category_id)
-            values ((select max(id) from journal_entries), 1, 'debit', (select id from accounts where code = '1100'), {sub}, {dept}, 500, 1);
+            values ((select max(id) from journal_entries), 1, 'debit', (select id from accounts where code = '1200'), {sub}, {dept}, 500, 1);
             insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
             values ((select max(id) from journal_entries), 2, 'credit', (select id from accounts where code = '2100'), {dept}, 500, 1);
             update journal_entries set status = 'posted', entry_no = 1, posted_at = '2026-08-24 11:00:00'

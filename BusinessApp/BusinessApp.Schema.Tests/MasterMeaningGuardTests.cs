@@ -23,7 +23,7 @@ public class MasterMeaningGuardTests
     [InlineData("UPDATE accounts SET category = 'expense' WHERE id = 1", "勘定科目の意味", "SELECT category FROM accounts WHERE id = 1", "asset")]
     [InlineData("UPDATE accounts SET code = '1101' WHERE id = 1", "勘定科目の意味", "SELECT code FROM accounts WHERE id = 1", "1100")]
     [InlineData("UPDATE accounts SET is_contra = 1 WHERE id = 1", "勘定科目の意味", "SELECT is_contra FROM accounts WHERE id = 1", "0")]
-    [InlineData("UPDATE accounts SET requires_sub_account = 1 WHERE id = 1", "勘定科目の意味", "SELECT requires_sub_account FROM accounts WHERE id = 1", "0")]
+    [InlineData("UPDATE accounts SET uses_sub_account = 1 WHERE id = 1", "勘定科目の意味", "SELECT uses_sub_account FROM accounts WHERE id = 1", "0")]
     [InlineData("UPDATE departments SET code = 'D09' WHERE id = 2", "部門の意味", "SELECT code FROM departments WHERE id = 2", "D01")]
     [InlineData("UPDATE departments SET is_company_wide = 1 WHERE id = 2", "部門の意味", "SELECT is_company_wide FROM departments WHERE id = 2", "0")]
     [InlineData("UPDATE tax_categories SET taxation_type = 'non_taxable_sales' WHERE id = 1", "税区分の意味", "SELECT taxation_type FROM tax_categories WHERE id = 1", "out_of_scope")]
@@ -201,6 +201,10 @@ public class MasterMeaningGuardTests
     {
         var db = SchemaSeed.Create();
         TestDatabase.Execute(db, """
+            -- **補助科目を使う科目にしてから付ける**（ADR-0038 §3。使わない科目の明細に
+            -- 補助科目を付けたままでは計上できない——trg_journal_entries_sub_account_presence_when_posted）。
+            -- 計上済みの明細がまだ無いので、意味の凍結のトリガには当たらない。
+            UPDATE accounts SET uses_sub_account = 1 WHERE id = 1;
             INSERT INTO sub_accounts (account_id, code, name) VALUES (1, 'S001', '本店');
             INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
                 VALUES ('5 月分の現金売上', 1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');

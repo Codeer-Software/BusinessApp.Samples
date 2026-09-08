@@ -460,6 +460,58 @@ internal sealed class AccountingServer : IDisposable
         return id;
     }
 
+    /// <summary>
+    /// <b>補助科目を使わない科目に補助科目が付いた計上済みの伝票</b>を 1 件作る（ADR-0038 §3）。
+    /// </summary>
+    /// <remarks>
+    /// <b>いまの製品では作れない形である。</b> 規則より前に計上された行が稼働 DB に 1 行あり
+    /// （伝票 36。qa/04 の 2026-09-08）、<b>その伝票を取り消せることがこの規則の免除の根拠</b>なので、
+    /// 検体が要る。そのときだけ計上のトリガを外す（<see cref="TestDatabase.WithoutTrigger"/>）。
+    /// </remarks>
+    public JournalEntryId InsertPostedWithSubAccountOnUnusedAccount(int entryNo, string transactionDate)
+    {
+        // 1100（現金）は「補助科目を使う」がオフのまま。そこに補助科目を作る（マスタ側の関門はまだ無い）。
+        Execute("""
+            insert into sub_accounts (account_id, code, name)
+            values ((select id from accounts where code = '1100'), 'X001', '規則より前の補助科目')
+            """);
+
+        var id = InsertDraft(transactionDate: transactionDate, postingDate: transactionDate, description: "規則より前の伝票");
+        Execute($"""
+            insert into journal_lines
+                (journal_entry_id, line_no, debit_credit, account_id, sub_account_id, amount, tax_category_id)
+            values ({id.Value}, 1, 'debit',
+                    (select id from accounts where code = '1100'),
+                    (select id from sub_accounts where code = 'X001'),
+                    1000,
+                    (select id from tax_categories where code = 'OUT'))
+            """);
+        InsertLine(id, 2, "credit", "2100", 1000);
+
+        TestDatabase.WithoutTrigger(
+            connection,
+            "trg_journal_entries_sub_account_presence_when_posted",
+            $"""
+            update journal_entries
+               set status = 'posted', entry_no = {entryNo}, posted_at = '2026-08-24 13:00:00'
+             where id = {id.Value}
+            """);
+
+        Execute($"""
+            update journal_entry_sequences set next_entry_no = {entryNo + 1}
+             where fiscal_year_id = {FiscalYear.Value} and next_entry_no <= {entryNo}
+            """);
+
+        return id;
+    }
+
+    /// <summary>コードから補助科目の識別子を引く。</summary>
+    public SubAccountId SubAccountOf(string accountCode, string code)
+        => new(Scalar<long>($"""
+            select s.id from sub_accounts s join accounts a on a.id = s.account_id
+             where a.code = '{accountCode}' and s.code = '{code}'
+            """));
+
     /// <summary>取消の下書きを 1 件作る（明細は入れない。中身はサーバが決める）。</summary>
     public JournalEntryId InsertReversalDraft(JournalEntryId originalId, string postingDate = "2026-08-25")
         => InsertDraft(postingDate: postingDate, entryType: "reversal", originalEntryId: originalId);

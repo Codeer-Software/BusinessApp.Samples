@@ -341,13 +341,13 @@ END;
 -- **下書きだけが参照している行は変えてよい**——下書きは直せる。違反は計上の関門が拾う（同 §1）。
 -- これらを journals の後ろに置くのは、本体が journal_lines / journal_entries を参照するから。
 CREATE TRIGGER trg_accounts_meaning_frozen_when_posted
-BEFORE UPDATE OF code, category, is_contra, requires_sub_account ON accounts
+BEFORE UPDATE OF code, category, is_contra, uses_sub_account ON accounts
 FOR EACH ROW WHEN NEW.code IS NOT OLD.code
               OR NEW.category IS NOT OLD.category
               OR NEW.is_contra IS NOT OLD.is_contra
-              OR NEW.requires_sub_account IS NOT OLD.requires_sub_account
+              OR NEW.uses_sub_account IS NOT OLD.uses_sub_account
 BEGIN
-    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている勘定科目の意味（科目コード・科目区分・評価勘定・補助科目を使う）は変更できない。新しい科目を作る。')
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている勘定科目の意味は変更できない。新しい科目を作る。')
      WHERE EXISTS (SELECT 1 FROM journal_lines l
                      JOIN journal_entries e ON e.id = l.journal_entry_id
                     WHERE l.account_id = OLD.id AND e.status = 'posted');
@@ -494,4 +494,54 @@ FOR EACH ROW WHEN NEW.status = 'posted' AND OLD.status <> 'posted'
                        8232, 8233, 8239, 8287, 12288)) = ''
 BEGIN
     SELECT RAISE(ABORT, '摘要のない仕訳は計上できない。帳簿の記載事項「内容」を欠くため。');
+END;
+
+-- 補助科目の 2 値を、計上のときに守る（ADR-0038 §3。docs/04 §1 の A-3）。
+-- **使う科目では補助科目が要り、使わない科目は持てない。**
+-- 上の摘要のトリガと同じく**下書き → 計上の UPDATE だけを見る**（status = 'posted' の INSERT は
+-- trg_journal_entries_no_posted_insert が拒む）。
+--
+-- **ここは計上の関門（JournalEntryValidator）より狭い**（docs/10 §4-2-1 の二層の広さ）——
+-- 関門は取消をすべて外すが、ここは「計上済みの原仕訳の写し」だけを外す。
+-- **アプリからは差が出ない**（取消の明細はサーバが原仕訳から作るので必ず写しになる。JournalReversalPosting）。
+-- **狭くしてあるのは、関門を通らない経路のためだけ**である。
+-- **外すのは取消の、原仕訳を写しただけの明細だけ**である——取消の明細はサーバが原仕訳を反転して作り、
+-- 利用者に直す手立てが無いので、止めると規則より前の伝票を打ち消せなくなる（docs/10 §5・ADR-0004）。
+-- **種別だけを見て外さない**——entry_type は取込・CLI・手打ちの SQL が自由に書ける列なので、
+-- 「取消だ」と名乗るだけで規則を外せてしまう。**計上済みの原仕訳に同じ組み合わせの明細があること**まで見る。
+-- **「計上済み」まで見るのは、下書きをおとりに立てられるから**である——原仕訳が計上済みであることを
+-- 保証する制約は journal_entries に無いので、違反する下書きを 1 件作って指せば外せてしまう。
+-- **訂正（再計上）は外さない**——中身は利用者が決めるので、補助科目を空にすれば通る。
+--
+-- **見るのは補助科目の有無だけである。** 「その補助科目が明細の勘定科目に属しているか」は
+-- 計上の関門（E-SUBACCOUNT-MISMATCH）だけが見ており、DB の層は無い（ddl/README の二重防御の表）。
+CREATE TRIGGER trg_journal_entries_sub_account_presence_when_posted
+BEFORE UPDATE ON journal_entries
+FOR EACH ROW WHEN NEW.status = 'posted' AND OLD.status <> 'posted'
+BEGIN
+    SELECT RAISE(ABORT, '補助科目を使う勘定科目の明細には補助科目が要る。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN accounts a ON a.id = l.account_id
+                    WHERE l.journal_entry_id = NEW.id
+                      AND a.uses_sub_account = 1 AND l.sub_account_id IS NULL
+                      AND NOT (NEW.entry_type = 'reversal'
+                               AND EXISTS (SELECT 1 FROM journal_lines o
+                                             JOIN journal_entries oe ON oe.id = o.journal_entry_id
+                                            WHERE o.journal_entry_id = NEW.original_entry_id
+                                              AND oe.status = 'posted'
+                                              AND o.account_id = l.account_id
+                                              AND o.sub_account_id IS l.sub_account_id)));
+
+    SELECT RAISE(ABORT, '補助科目を使わない勘定科目の明細に補助科目は付けられない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN accounts a ON a.id = l.account_id
+                    WHERE l.journal_entry_id = NEW.id
+                      AND a.uses_sub_account = 0 AND l.sub_account_id IS NOT NULL
+                      AND NOT (NEW.entry_type = 'reversal'
+                               AND EXISTS (SELECT 1 FROM journal_lines o
+                                             JOIN journal_entries oe ON oe.id = o.journal_entry_id
+                                            WHERE o.journal_entry_id = NEW.original_entry_id
+                                              AND oe.status = 'posted'
+                                              AND o.account_id = l.account_id
+                                              AND o.sub_account_id IS l.sub_account_id)));
 END;

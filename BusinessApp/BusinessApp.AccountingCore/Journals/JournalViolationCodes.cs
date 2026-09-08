@@ -128,6 +128,9 @@ public static class JournalViolationCodes
     /// <summary>補助科目を使う科目なのに補助科目が無い。</summary>
     public const string SubAccountRequired = "E-SUBACCOUNT-REQUIRED";
 
+    /// <summary>補助科目を使わない科目なのに補助科目が付いている（ADR-0038 §3）。</summary>
+    public const string SubAccountNotAllowed = "E-SUBACCOUNT-NOT-ALLOWED";
+
     /// <summary>部門がマスタに無い。</summary>
     public const string DepartmentUnknown = "E-DEPARTMENT-UNKNOWN";
 

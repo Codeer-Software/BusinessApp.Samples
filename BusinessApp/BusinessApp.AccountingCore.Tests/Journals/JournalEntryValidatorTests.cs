@@ -273,8 +273,31 @@ public class JournalEntryValidatorTests
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000),
             AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
 
-        AssertViolation(JournalViolationCodes.SubAccountRequired, Validate(entry));
+        var violation = AssertViolation(JournalViolationCodes.SubAccountRequired, Validate(entry));
+
+        // **選べる補助科目があるので「選んでください」でよい。**
+        Assert.Equal("勘定科目「普通預金」は「補助科目を使う」がオンです。「補助科目」を選んでください。", violation.Message);
     }
+
+    [Fact]
+    public void 選べる補助科目が無い科目では登録してからと言う()
+    {
+        // **踏めない案内をしない**（docs/21 §1・§2-3。qa/02 R45-17 と同じ型）。
+        // 当座預金は「補助科目を使う」がオンだが、補助科目は無効なものしか無いので、
+        // 候補ダイアログは 0 件で開く——「選んでください」では次の一手にならない。
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.CurrentAccount, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+
+        var violation = AssertViolation(JournalViolationCodes.SubAccountRequired, Validate(entry));
+
+        Assert.Equal(
+            "勘定科目「当座預金」は「補助科目を使う」がオンですが、選べる補助科目がありません。"
+            + "補助科目マスタに登録してから選んでください。",
+            violation.Message);
+    }
+
 
     [Fact]
     public void 親の勘定科目に属さない補助科目は使えない()
@@ -312,6 +335,96 @@ public class JournalEntryValidatorTests
 
         AssertViolation(JournalViolationCodes.SubAccountInactive, Validate(entry));
     }
+
+    [Fact]
+    public void 補助科目を使わない科目の明細に補助科目は付けられない()
+    {
+        // **補助科目は 2 値**（ADR-0038 §3。docs/04 §1 の A-3）。
+        // 現金は「補助科目を使う」がオフなので、補助科目を付けたまま計上できない。
+        // **この形は開発機に実在する**（規則より前に計上された明細 1 行。伝票 36）。
+        var entry = SubAccountOnUnusedAccount();
+
+        var violation = AssertViolation(JournalViolationCodes.SubAccountNotAllowed, Validate(entry));
+
+        // **利用者に出る文**を固定する（docs/21 §2-6。事実と次の一手だけを持つ）。
+        Assert.Equal("勘定科目「現金」は「補助科目を使う」がオフです。「補助科目」を空にしてください。", violation.Message);
+        Assert.Equal(ViolationSeverity.Error, violation.Severity);
+        Assert.Equal(1, violation.LineNo);
+
+        // **「その補助科目は親が違う」を重ねて出さない。** レジ（現金の補助科目）は親としては正しく、
+        // 直すべきは補助科目の選び方ではなく、補助科目を付けたこと自体である。
+        Assert.DoesNotContain(Validate(entry), v => v.Code == JournalViolationCodes.SubAccountMismatch);
+    }
+
+    [Fact]
+    public void 取消では補助科目の付いた明細でも止めない()
+    {
+        // **規則より前に計上された伝票を打ち消せなくなってはいけない**（docs/10 §5・ADR-0004）。
+        // 取消の明細はサーバが原仕訳から作るので、利用者に直す手立てが無い。
+        // **DDL のトリガはここより狭い**（計上済みの原仕訳を写した明細だけを外す）。
+        // 関門を通らない経路のために狭くしてあり、アプリからは差が出ない。
+        var entry = SubAccountOnUnusedAccount() with
+        {
+            EntryType = EntryType.Reversal,
+            OriginalEntryId = new JournalEntryId(9),
+        };
+
+        var violations = Validate(entry);
+
+        Assert.Equal(
+            ViolationSeverity.Warning,
+            AssertViolation(JournalViolationCodes.SubAccountNotAllowed, violations).Severity);
+        Assert.False(violations.HasError());
+    }
+
+    [Fact]
+    public void 取消では補助科目が無くても止めない()
+    {
+        // 「要る」側も同じ線である（使う科目に変えられた後の過去の明細は補助科目を持たない）。
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000)) with
+        {
+            EntryType = EntryType.Reversal,
+            OriginalEntryId = new JournalEntryId(9),
+        };
+
+        var violations = Validate(entry);
+
+        Assert.Equal(
+            ViolationSeverity.Warning,
+            AssertViolation(JournalViolationCodes.SubAccountRequired, violations).Severity);
+        Assert.False(violations.HasError());
+    }
+
+    [Fact]
+    public void 訂正では補助科目の付いた明細を止める()
+    {
+        // **再計上の中身は利用者が決める**（JournalCorrectionPosting は明細を書き換えない）ので、
+        // 補助科目を空にすれば通る——止めても行き止まりにならない。
+        // **外すと、訂正を経由して規則より後の違反を新しく帳簿へ入れられる**（自己レビューで見つけた）。
+        var entry = SubAccountOnUnusedAccount() with
+        {
+            EntryType = EntryType.Correction,
+            OriginalEntryId = new JournalEntryId(9),
+        };
+
+        var violations = Validate(entry);
+
+        Assert.Equal(
+            ViolationSeverity.Error,
+            AssertViolation(JournalViolationCodes.SubAccountNotAllowed, violations).Severity);
+        Assert.True(violations.HasError());
+    }
+
+    /// <summary>補助科目を使わない科目（現金）の明細に補助科目を付けた伝票。</summary>
+    private static JournalEntry SubAccountOnUnusedAccount()
+        => AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                subAccountId: AccountingFixture.SubAccountOfCash),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
 
     [Fact]
     public void 親の勘定科目に属する補助科目は使える()
@@ -369,8 +482,8 @@ public class JournalEntryValidatorTests
                 TaxTreatment = TaxTreatment.ForTaxableSales,
                 TaxPoint = Ordinary,
             },
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Cash, 10_000,
-                subAccountId: AccountingFixture.SubAccountOfCash));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.BankAccount, 10_000,
+                subAccountId: AccountingFixture.MainBank));
 
         Assert.Empty(Validate(entry));
     }

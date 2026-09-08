@@ -14,7 +14,10 @@ using BusinessApp.AccountingCore.Shared;
 /// <param name="DefaultTaxCategoryId">
 /// 入力時の初期値としての税区分。<b>値が入っていない行の穴埋めに使わない</b>（docs/10 §6）。
 /// </param>
-/// <param name="RequiresSubAccount">補助科目を使う科目か。使う科目では補助科目の指定を必須にする。</param>
+/// <param name="UsesSubAccount">
+/// 補助科目を使う科目か。<b>2 値である</b>——使う科目では補助科目が必須で、
+/// 使わない科目は補助科目を<b>持てない</b>（ADR-0038 §3）。
+/// </param>
 /// <param name="IsContra">
 /// 評価勘定（控除科目）か。減価償却累計額・貸倒引当金・売上値引戻り高・期末棚卸高のように、
 /// <b>通常残高が科目区分と逆</b>の科目がある。
@@ -26,7 +29,7 @@ public sealed record AccountDefinition(
     string Name,
     AccountCategory Category,
     TaxCategoryId? DefaultTaxCategoryId = null,
-    bool RequiresSubAccount = false,
+    bool UsesSubAccount = false,
     bool IsContra = false,
     bool IsActive = true)
 {

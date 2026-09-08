@@ -25,7 +25,7 @@ CREATE TABLE accounts (
     -- 借方残／貸方残を決める処理が必ず誤る（試算表の異常値判定・決算書の控除表示）。
     is_contra                   INTEGER NOT NULL DEFAULT 0 CHECK (is_contra IN (0, 1)),
 
-    requires_sub_account        INTEGER NOT NULL DEFAULT 0 CHECK (requires_sub_account IN (0, 1)),
+    uses_sub_account            INTEGER NOT NULL DEFAULT 0 CHECK (uses_sub_account IN (0, 1)),
     is_cash_equivalent          INTEGER NOT NULL DEFAULT 0 CHECK (is_cash_equivalent IN (0, 1)),
     is_fixed_asset              INTEGER NOT NULL DEFAULT 0 CHECK (is_fixed_asset IN (0, 1)),
     is_active                   INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),

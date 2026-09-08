@@ -265,16 +265,25 @@ public static class JournalEntryValidator
     {
         if (line.SubAccountId is not SubAccountId subAccountId)
         {
-            if (account.RequiresSubAccount)
+            if (account.UsesSubAccount)
             {
+                // **次の一手は、選べる補助科目があるかで変わる。** 1 つも無い科目に
+                // 「選んでください」と言うと、候補ダイアログが 0 件で開くだけで踏めない
+                // （docs/21 §1・§2-3。qa/02 R45-17 と同じ型）。
                 violations.Add(new Violation(
                     JournalViolationCodes.SubAccountRequired,
-                    $"勘定科目「{account.Name}」は補助科目を使います。補助科目を選んでください。",
-                    line.LineNo));
+                    subAccounts.HasSelectable(account.Id)
+                        ? $"勘定科目「{account.Name}」は「補助科目を使う」がオンです。「補助科目」を選んでください。"
+                        : $"勘定科目「{account.Name}」は「補助科目を使う」がオンですが、選べる補助科目がありません。"
+                          + "補助科目マスタに登録してから選んでください。",
+                    line.LineNo,
+                    ReversalOnlySeverity(entry)));
             }
             return;
         }
 
+        // **実在は先に見る。** ここを 2 値の検査より後ろに置くと、取消では 2 値が警告なので
+        // **マスタに無い補助科目が関門を素通りし、DB の外部キーで落ちる**（qa/03 L-14 の型）。
         var subAccount = subAccounts.Find(subAccountId);
         if (subAccount is null)
         {
@@ -282,6 +291,21 @@ public static class JournalEntryValidator
                 JournalViolationCodes.SubAccountUnknown,
                 "補助科目が補助科目マスタにありません。",
                 line.LineNo));
+            return;
+        }
+
+        // **補助科目は 2 値である**（ADR-0038 §3）。使わない科目は補助科目を持てない——
+        // 持てると「全補助科目の合計＝科目の残高」が崩れ、補助元帳に載らない残高ができる。
+        // **親の一致より先に見る。** どちらも「その補助科目でよいか」の話だが、
+        // ここで断られる利用者に必要なのは「この科目では補助科目を使わない」であって、
+        // 別の補助科目を選び直せという案内ではない。
+        if (!account.UsesSubAccount)
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.SubAccountNotAllowed,
+                $"勘定科目「{account.Name}」は「補助科目を使う」がオフです。「補助科目」を空にしてください。",
+                line.LineNo,
+                ReversalOnlySeverity(entry)));
             return;
         }
 
@@ -318,11 +342,40 @@ public static class JournalEntryValidator
     /// 再計上の下書きを開く（ADR-0015）。ここが Error のままだと、原仕訳が無効なマスタを使っていた場合に
     /// <b>取消だけが確定して再計上は永久に計上できない</b>——利用者から見れば、訂正しようとしたら
     /// 取り消されただけで詰む。ADR-0015 の「誤って取り消したときの復旧」も同じ理由で塞がれていた。</para>
+    /// <para><b>補助科目の 2 値（ADR-0038 §3）には、この重さを使わない。</b>
+    /// あちらは<b>取消だけ</b>を外す（<see cref="ReversalOnlySeverity"/>）——
+    /// 訂正の再計上は利用者が補助科目を空にできるので、止めても行き止まりにならない。</para>
     /// </remarks>
     private static ViolationSeverity InactiveSeverity(JournalEntry entry)
         => entry.EntryType is EntryType.Reversal or EntryType.Correction
             ? ViolationSeverity.Warning
             : ViolationSeverity.Error;
+
+    /// <summary>
+    /// <b>取消でだけ止めない</b>ことの重さ（補助科目の 2 値。ADR-0038 §3）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>外すのは取消だけである。</b> 取消の明細はサーバが原仕訳を反転して作り
+    /// （<c>JournalReversalPosting</c>）、<b>利用者が直す手立てが無い</b>。
+    /// Error にすると、規則より前に計上された伝票を<b>取り消せなくなる</b>——
+    /// 開発機に「補助科目を使わない科目に補助科目が付いた計上済み明細」が 1 行ある
+    /// （2026-09-08 実測。数え方は qa/04）。</para>
+    /// <para><b>訂正（再計上）は外さない。</b> 再計上の中身は利用者が決め、サーバは一切書き換えない
+    /// （<c>JournalCorrectionPosting</c> の注記）ので、<b>補助科目を空にすれば通る</b>——
+    /// 行き止まりにならない。外すと、訂正を経由して<b>規則より後の違反を新しく帳簿へ入れられる</b>
+    /// （自己レビューで見つけた。2026-09-08）。</para>
+    /// <para><b>「要る」側にも同じ線を引く。</b> 使う科目に変えられた後の過去の明細は
+    /// 補助科目を持たないので、Error のままだと同じく取り消せなくなる
+    /// （開発機では 0 行。2026-09-08 実測）。</para>
+    /// <para><b>DDL のトリガはここより狭い</b>（docs/10 §4-2-1 の二層の広さ）——
+    /// ここは取消をすべて外すが、トリガは<b>計上済みの原仕訳を写しただけの明細</b>だけを外す
+    /// （<c>trg_journal_entries_sub_account_presence_when_posted</c>）。
+    /// <c>entry_type</c> は取込・CLI・手打ちの SQL が自由に書ける列だからである。
+    /// <b>アプリからは差が出ない</b>——取消の明細は <c>JournalReversalPosting</c> が原仕訳から作るので、
+    /// 必ず写しになる。<b>関門を通らない経路のためだけに、あちらを狭くしてある。</b></para>
+    /// </remarks>
+    private static ViolationSeverity ReversalOnlySeverity(JournalEntry entry)
+        => entry.EntryType is EntryType.Reversal ? ViolationSeverity.Warning : ViolationSeverity.Error;
 
     private static void ValidateTaxLine(JournalLine line, JournalEntry entry, List<Violation> violations)
     {

@@ -18,7 +18,7 @@
 -- 別途控除する項目であり、課税売上そのものではないため（docs/11 §7 の保留リスト）。
 
 -- 資産 ---------------------------------------------------------------------
-INSERT INTO accounts (code, name, category, is_cash_equivalent, is_fixed_asset, requires_sub_account, is_contra, display_order) VALUES
+INSERT INTO accounts (code, name, category, is_cash_equivalent, is_fixed_asset, uses_sub_account, is_contra, display_order) VALUES
     ('1100', '現金',               'asset', 1, 0, 0, 0, 1010),
     ('1110', '小口現金',           'asset', 1, 0, 0, 0, 1020),
     ('1200', '普通預金',           'asset', 1, 0, 1, 0, 1030),
