@@ -941,6 +941,32 @@ public class PartnerSubmitGateTests
         Assert.Contains(expected, rejected.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// <b>欄が読めない型で届いたら、素通しではなく止める。</b>
+    /// </summary>
+    /// <remarks>
+    /// <c>as T</c> で <c>null</c> に落として帰る形だと、<b>デザインで欄の型を変えた日に
+    /// 書式も重複も丸ごと素通しになる</b>のに、フィクスチャが自分で <c>TextFieldData</c> を
+    /// 組むのでテストは緑のままである（2026-09-09 の自己レビュー）。
+    /// <b>利用者向けの断りではなく <c>InvalidOperationException</c></b>——
+    /// 直すのは利用者ではなく、デザインを変えた側だからである。
+    /// </remarks>
+    [Fact]
+    public async Task 読めない型で届いた欄は素通ししないで止める()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+        var partner = Partner();
+        partner.Fields["Code"] = new NumberFieldData { Value = 1 };
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Gate(server).SubmitAsync([Adding(partner)], save.SaveAsync));
+
+        Assert.Contains("Code", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("NumberFieldData", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
     [Fact]
     public async Task コードが空なら必須として断る()
     {

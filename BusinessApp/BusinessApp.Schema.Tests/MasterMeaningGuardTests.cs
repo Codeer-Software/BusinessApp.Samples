@@ -286,6 +286,108 @@ public class MasterMeaningGuardTests
         Assert.Equal(3L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounts"));
     }
 
+    // --- 取引先（009。ADR-0047 の決定 9 で 4 マスタと揃えた） ----------------------
+
+    /// <summary>
+    /// 計上済みの伝票が使っている取引先は、コードを変えられない。
+    /// </summary>
+    /// <remarks>
+    /// <b>取引先だけは「使用中」の数え方が違う</b>——明細（<c>journal_lines.partner_id</c>）と
+    /// <b>伝票（<c>journal_entries.partner_id</c>）の両方</b>を見る。明細が空なら伝票の値が
+    /// 実効値になるからで、明細だけを見ると<b>伝票にだけ取引先を入れた計上済みの伝票を取りこぼす</b>。
+    /// </remarks>
+    [Theory]
+    [InlineData("UPDATE journal_lines SET partner_id = 1 WHERE id = 1")]
+    [InlineData("UPDATE journal_entries SET partner_id = 1 WHERE id = 1")]
+    public void 使用中の取引先のコードは変えられない(string use)
+    {
+        using var db = WithPostedPartner(use);
+
+        var thrown = Assert.Throws<SqliteException>(
+            () => TestDatabase.Execute(db, "UPDATE partners SET code = 'P999' WHERE id = 1"));
+
+        Assert.Contains("取引先のコードは変更できない", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("P001", TestDatabase.ScalarOf<string>(db, "SELECT code FROM partners WHERE id = 1"));
+    }
+
+    /// <summary>下書きだけが使う取引先のコードは変えられる（使用中は計上済みだけ。ADR-0038 §1）。</summary>
+    [Fact]
+    public void 下書きだけが使う取引先のコードは変えられる()
+    {
+        using var db = SchemaSeed.CreateWithPostedEntry();
+        TestDatabase.Execute(db, """
+            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at, partner_id)
+                VALUES (1, '2026-05-21', '2026-05-21', 'draft', 'normal', '下書き', '2026-05-21 10:00:00', 1);
+            UPDATE partners SET code = 'P999' WHERE id = 1;
+            """);
+
+        Assert.Equal("P999", TestDatabase.ScalarOf<string>(db, "SELECT code FROM partners WHERE id = 1"));
+    }
+
+    /// <summary>
+    /// 使用中の取引先の id は、<c>REPLACE</c> でも <c>UPDATE</c> でも乗っ取れない（qa/03 L-26 の型）。
+    /// </summary>
+    /// <remarks>
+    /// <b>UPDATE のトリガを通らずに意味が変わる経路</b>を塞ぐ。
+    /// <c>INSERT OR REPLACE</c> は行ごと差し替えるので、コードの凍結だけでは足りない。
+    /// </remarks>
+    [Theory]
+    [InlineData("INSERT OR REPLACE INTO partners (id, code, name) VALUES (1, 'P999', '別の会社')")]
+    [InlineData("UPDATE partners SET id = 9 WHERE id = 1")]
+    public void 使用中の取引先は置き換えられない(string sql)
+    {
+        using var db = WithPostedPartner("UPDATE journal_lines SET partner_id = 1 WHERE id = 1");
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, sql));
+
+        Assert.Contains("取引先は置き換えられない", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("株式会社取引先", TestDatabase.ScalarOf<string>(db, "SELECT name FROM partners WHERE id = 1"));
+    }
+
+    /// <summary>
+    /// <b>id が動かない更新は、SET 句に id が並んでいても通る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <c>UPDATE OF id</c> は<b>値が同じでも SET 句に列があれば発火する</b>ので、
+    /// <c>WHEN NEW.id IS NOT OLD.id</c> が無いと<b>使用中の取引先は名称も住所も一切直せない</b>
+    /// ——しかも断りは「置き換えられない」なので、利用者には理由が分からない。
+    /// 会計コアの 4 マスタは持っていた条件が、取引先へ写したときに落ちていた（2026-09-09 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public void 使用中の取引先でもidが動かない更新は通る()
+    {
+        using var db = WithPostedPartner("UPDATE journal_lines SET partner_id = 1 WHERE id = 1");
+
+        TestDatabase.Execute(db, "UPDATE partners SET id = id, name = '株式会社取引先（新）' WHERE id = 1");
+
+        Assert.Equal("株式会社取引先（新）", TestDatabase.ScalarOf<string>(db, "SELECT name FROM partners WHERE id = 1"));
+    }
+
+    /// <summary>計上済みの伝票が取引先 1 を使っている DB。<paramref name="use"/> が明細か伝票かを決める。</summary>
+    /// <remarks>
+    /// <b>計上する前に付ける。</b> 計上済みの明細も伝票も、後からは書き換えられない（I-05）ので、
+    /// 下書きのうちに取引先を入れてから計上する（画面と同じ順である）。
+    /// </remarks>
+    private static SqliteConnection WithPostedPartner(string use)
+    {
+        var db = TestDatabase.Create();
+        TestDatabase.Execute(db, SchemaSeed.Masters);
+        TestDatabase.Execute(db, """
+            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+                VALUES (1, '2026-05-20', '2026-05-20', 'draft', 'normal', '5 月分の現金売上', '2026-05-20 10:00:00');
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (1, 1, 'debit', 1, 100000, 1);
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
+                VALUES (1, 2, 'credit', 2, 2, 100000, 1);
+            """);
+        TestDatabase.Execute(db, use);
+        TestDatabase.Execute(db, """
+            UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-05-20 10:00:00' WHERE id = 1;
+            UPDATE journal_entry_sequences SET next_entry_no = next_entry_no + 1 WHERE fiscal_year_id = 1;
+            """);
+        return db;
+    }
+
     private static SqliteConnection WithPostedSubAccountLine()
     {
         var db = SchemaSeed.Create();

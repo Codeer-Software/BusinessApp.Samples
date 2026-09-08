@@ -83,29 +83,40 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     }
 
     /// <summary>コードの書式と、大小を無視した重複（ADR-0047）。</summary>
+    /// <remarks>
+    /// <b>コードを触っていなくても、親が動いたら数え直す。</b> 補助科目を別の勘定科目へ移すと、
+    /// コードは 1 字も変わらないのに<b>一意の範囲（勘定科目, コード）が変わる</b>ので、
+    /// 移した先に同じコードがあれば重複になる。差分にはコードが載らない（qa/01 F-12）から、
+    /// <b>保存されている字を読み直して数える</b>（2026-09-09 の自己レビュー。
+    /// 親を読み直す穴と同じ家系で、こちらだけ残っていた）。
+    /// </remarks>
     private async Task RejectBadCodeAsync(CodedMaster master, ModuleData data, long? id)
     {
-        if (Text(data, "Code") is not string code)
+        var touched = Text(data, "Code") is string code ? MasterCode.Normalize(code) : null;
+        var normalized = touched ?? await StoredCodeForParentMoveAsync(master, data, id);
+        if (normalized is null)
         {
             return;
         }
 
-        var normalized = MasterCode.Normalize(code);
-        if (normalized.Length == 0)
+        if (touched is not null)
         {
-            throw new MasterRejectedException($"「{master.CodeLabel}」を入れてください。");
-        }
+            if (normalized.Length == 0)
+            {
+                throw new MasterRejectedException($"「{master.CodeLabel}」を入れてください。");
+            }
 
-        if (MasterCode.DescribeProblem(master.CodeLabel, normalized) is string problem)
-        {
-            throw new MasterRejectedException(problem);
-        }
+            if (MasterCode.DescribeProblem(master.CodeLabel, normalized) is string problem)
+            {
+                throw new MasterRejectedException(problem);
+            }
 
-        // **正規化した姿を差分に書き戻す。** 比べるときだけ落とすと、関門が「同じ」と通した値を
-        // DB のトリガが「違う」と拒む（関門の受理集合が DB より広い。qa/03 L-14 の型）。
-        if (data.Fields["Code"] is TextFieldData text)
-        {
-            text.Value = normalized;
+            // **正規化した姿を差分に書き戻す。** 比べるときだけ落とすと、関門が「同じ」と通した値を
+            // DB のトリガが「違う」と拒む（関門の受理集合が DB より広い。qa/03 L-14 の型）。
+            if (data.Fields["Code"] is TextFieldData text)
+            {
+                text.Value = normalized;
+            }
         }
 
         var conflict = await store.FindConflictingCodeAsync(
@@ -123,8 +134,32 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             ? $"{scope}既に使われています。"
             : $"大文字と小文字を区別しないので、{scope}既にある「{conflict}」と同じコードになります。";
 
+        // **直し方は、利用者が動かした欄の側で言う。** コードを触っていないのに
+        // 「別のコードを入れてください」だけ出すと、いま選んだ勘定科目が原因だと伝わらない。
+        var howToFix = touched is null
+            ? "別の勘定科目を選ぶか、コードを変えてください。"
+            : "別のコードを入れてください。";
+
         throw new MasterRejectedException(
-            $"「{master.CodeLabel}」の「{normalized}」は{reason}別のコードを入れてください。");
+            $"「{master.CodeLabel}」の「{normalized}」は{reason}{howToFix}");
+    }
+
+    /// <summary>
+    /// コードを触らずに親だけを動かした更新で、<b>保存されているコード</b>。数え直す必要が無ければ <c>null</c>。
+    /// </summary>
+    private async Task<string?> StoredCodeForParentMoveAsync(CodedMaster master, ModuleData data, long? id)
+    {
+        if (master.ParentFieldName is not string field
+            || !data.Fields.ContainsKey(field)
+            || id is not long existing)
+        {
+            return null;
+        }
+
+        var stored = await store.FindStoredAsync(master, existing, ["code"]);
+        return stored is null
+            ? null
+            : Convert.ToString(stored["code"], CultureInfo.InvariantCulture);
     }
 
     /// <summary>「全社共通」の部門は 1 つだけ（docs/10 §9-1）。</summary>
@@ -213,13 +248,19 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     }
 
     /// <summary>触られた文字列の欄。<b>触られていなければ <c>null</c></b>（更新は差分しか届かない）。</summary>
+    /// <remarks>
+    /// <b>届いているのに読めない型なら止める。</b> <c>null</c> を返すと「触られていない」と
+    /// 見分けがつかず、<b>欄の型が変わった日に検査が黙って素通しへ落ちる</b>
+    /// （<c>PartnerSubmitGate.Reference</c> が名指しする形。2026-09-09 の自己レビュー）。
+    /// </remarks>
     private static string? Text(ModuleData data, string field)
         => data.Fields.TryGetValue(field, out var value)
             ? value switch
             {
                 TextFieldData text => text.Value ?? string.Empty,
                 SelectFieldData select => select.Value ?? string.Empty,
-                _ => null,
+                _ => throw new InvalidOperationException(
+                    $"「{field}」が読めない型 {value.GetType().Name} で届いた。関門が守れないので止める。"),
             }
             : null;
 

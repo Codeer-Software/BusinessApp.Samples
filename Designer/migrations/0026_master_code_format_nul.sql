@@ -1,27 +1,39 @@
--- 008 マスタのコードの書式（docs/12 §2-1・ADR-0047）
+-- 0026 コードの書式のトリガに、NUL を弾く条件を足す
 --
--- コードを持つ 6 つの表すべてに、同じ規則を当てる。
--- 半角英数字とハイフン・アンダーバーだけ。記号は先頭・末尾に置けず、連続もできない。長さは 1〜20。
+-- 正典は Designer/ddl/008_master_code_format.sql。
 --
--- **CHECK ではなくトリガで書く。** CHECK を後から足すには表を作り直すしかなく、
--- accounts は journal_lines から参照され、既にトリガも持っているので、作り直しは危険に見合わない。
--- トリガなら追加で配れる（005 のマスタの守りと同じ形）。
+-- **SQLite の LENGTH と GLOB は、文字列の途中の U+0000 で止まる**（2026-09-09 に実測。3.53.1）。
+--   select length('A' || char(0) || 'B')                  -> 1
+--   select 'A' || char(0) || 'B' glob '*[^0-9A-Za-z_-]*'  -> 0（＝使える字だと答える）
+--   select hex('A' || char(0) || 'B')                     -> 410042（値は 3 文字ぶん入っている）
+-- そのため、NUL を混ぜたコードは 008 の 6 条件を全部すり抜けて保存できた。
+-- **関門（C# の MasterCode）は U+0000 を「目に見えない文字」として断る**ので、
+-- 通ってしまうのは取込・CLI・SQL の直打ち——**トリガが最後の守りである持ち場そのもの**である。
 --
--- **この 1 ファイルにまとめる理由は、トリガの作られる順である。** 004 の末尾に足すと、
--- 既存 DB へ配る側（migrations）では 005 のトリガより後に作られ、正典と順が食い違う。
--- 同値テストは表ごとのトリガの作られた順まで見る（MigrationEquivalenceTests）。
+-- バイト数と文字数を突き合わせる条件を足して塞ぐ。半角英数だけのコードでは必ず等しく、
+-- NUL でも非 ASCII でも食い違う（自己レビュー。2026-09-09）。
 --
--- **前後の空白を落とすのは関門（C# の MasterCode）の仕事**である。ここへ来る値は落とした後の姿で、
--- 空白が残っていれば「使えない字」として断る——字種の GLOB がすべての空白を拾う。
+-- **009 の 3 本も作り直す。** 表ごとのトリガの作られた順は、正典と再生（baseline + migrations）で
+-- 一致していないといけない（MigrationEquivalenceTests）。partners の書式のトリガを作り直すと、
+-- そのままでは意味の凍結の 3 本より後ろに回ってしまう。
 --
--- **最後の条件は NUL のためにある。** SQLite の LENGTH と GLOB は文字列の途中の U+0000 で止まるので、
--- 'A' || char(0) || 'B' のような値は上の 6 条件を全部すり抜ける（2026-09-09 に実測。3.53.1）。
--- バイト数（BLOB の長さ）と文字数が食い違えば ASCII でない——半角英数だけを通す規則と同じことを、
--- GLOB が読めない領域まで含めて言い直している。**関門は U+0000 を「目に見えない文字」として断る**ので、
--- ここが効くのは取込・CLI・SQL の直打ちだけである（それがこのトリガの持ち場でもある）。
---
--- 大小を無視した重複は、末尾の一意索引が止める。COLLATE NOCASE が畳むのは ASCII の英字だけだが、
--- 字種を半角英数に絞ってあるので過不足なく噛み合う。
+-- **既存の行は評価しない**（トリガは新しく書き込まれる値しか見ない。migrations/README）。
+
+DROP TRIGGER trg_fiscal_years_code_format_insert;
+DROP TRIGGER trg_fiscal_years_code_format_update;
+DROP TRIGGER trg_tax_categories_code_format_insert;
+DROP TRIGGER trg_tax_categories_code_format_update;
+DROP TRIGGER trg_accounts_code_format_insert;
+DROP TRIGGER trg_accounts_code_format_update;
+DROP TRIGGER trg_sub_accounts_code_format_insert;
+DROP TRIGGER trg_sub_accounts_code_format_update;
+DROP TRIGGER trg_departments_code_format_insert;
+DROP TRIGGER trg_departments_code_format_update;
+DROP TRIGGER trg_partners_code_format_insert;
+DROP TRIGGER trg_partners_code_format_update;
+DROP TRIGGER trg_partners_meaning_frozen_when_posted;
+DROP TRIGGER trg_partners_no_replace_used_insert;
+DROP TRIGGER trg_partners_no_replace_used_update;
 
 CREATE TRIGGER trg_fiscal_years_code_format_insert
 BEFORE INSERT ON fiscal_years
@@ -191,11 +203,40 @@ BEGIN
     SELECT RAISE(ABORT, '取引先のコードは半角の英数字と「-」「_」で、20 文字以内です。「-」「_」は先頭と末尾には置けません。');
 END;
 
--- 大小を無視した重複を止める。**保存される字は入力のまま**で、畳むのは判定だけである（ADR-0047 の決定 7）。
--- 列の UNIQUE（バイト列で見る）は残す——外すには表の作り直しが要り、得るのは重複した制約 1 本の削除だけ。
-CREATE UNIQUE INDEX ux_fiscal_years_code_nocase ON fiscal_years (code COLLATE NOCASE);
-CREATE UNIQUE INDEX ux_tax_categories_code_nocase ON tax_categories (code COLLATE NOCASE);
-CREATE UNIQUE INDEX ux_accounts_code_nocase ON accounts (code COLLATE NOCASE);
-CREATE UNIQUE INDEX ux_sub_accounts_code_nocase ON sub_accounts (account_id, code COLLATE NOCASE);
-CREATE UNIQUE INDEX ux_departments_code_nocase ON departments (code COLLATE NOCASE);
-CREATE UNIQUE INDEX ux_partners_code_nocase ON partners (code COLLATE NOCASE);
+CREATE TRIGGER trg_partners_meaning_frozen_when_posted
+BEFORE UPDATE OF code ON partners
+FOR EACH ROW WHEN NEW.code IS NOT OLD.code
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳が使っている取引先のコードは変更できない。新しい取引先を作る。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.partner_id = OLD.id AND e.status = 'posted')
+        OR EXISTS (SELECT 1 FROM journal_entries e
+                    WHERE e.partner_id = OLD.id AND e.status = 'posted');
+END;
+
+-- REPLACE で id を乗っ取る経路（qa/03 L-26 と同じ型）。
+-- 使用中の id へ別の行を流し込むと、UPDATE のトリガを通らずに意味が変わる。
+CREATE TRIGGER trg_partners_no_replace_used_insert
+BEFORE INSERT ON partners
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳が使っている取引先は置き換えられない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.partner_id = NEW.id AND e.status = 'posted')
+        OR EXISTS (SELECT 1 FROM journal_entries e
+                    WHERE e.partner_id = NEW.id AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_partners_no_replace_used_update
+BEFORE UPDATE OF id ON partners
+FOR EACH ROW WHEN NEW.id IS NOT OLD.id
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳が使っている取引先は置き換えられない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.partner_id IN (OLD.id, NEW.id) AND e.status = 'posted')
+        OR EXISTS (SELECT 1 FROM journal_entries e
+                    WHERE e.partner_id IN (OLD.id, NEW.id) AND e.status = 'posted');
+END;

@@ -41,7 +41,7 @@ END;
 
 CREATE TRIGGER trg_partners_no_replace_used_update
 BEFORE UPDATE OF id ON partners
-FOR EACH ROW
+FOR EACH ROW WHEN NEW.id IS NOT OLD.id
 BEGIN
     SELECT RAISE(ABORT, '計上済みの仕訳が使っている取引先は置き換えられない。')
      WHERE EXISTS (SELECT 1 FROM journal_lines l

@@ -55,6 +55,13 @@ public class MasterSubmitGateTests
     private static (string Field, FieldDataBase Value) Select(string field, string? value)
         => (field, new SelectFieldData { Value = value });
 
+    /// <summary>補助科目の親（勘定科目）を、コードから引いた識別子で指す。</summary>
+    private static (string Field, FieldDataBase Value) Account(AccountingServer server, string code)
+        => ("Account", new LinkFieldData
+        {
+            Value = server.AccountOf(code).Value.ToString(CultureInfo.InvariantCulture),
+        });
+
     private static async Task<bool> Submit(AccountingServer server, params ModuleSubmitData[] data)
     {
         var called = false;
@@ -435,6 +442,101 @@ public class MasterSubmitGateTests
         Assert.Contains("B1", thrown.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// <b>コードを触らずに勘定科目だけを移した更新でも、移した先の重複を見る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>一意なのは（勘定科目, コード）の組なので、コードが 1 字も変わらなくても
+    /// 親が動けば重複になり得る。</b> 差分にはコードが載らない（qa/01 F-12）から、
+    /// <b>保存されている字を読み直して数える</b>（2026-09-09 の自己レビュー。
+    /// 親を読み直す穴と同じ家系で、こちらだけ残っていた）。
+    /// </remarks>
+    [Fact]
+    public async Task 勘定科目だけを移した更新でも移した先の重複を見る()
+    {
+        using var server = new AccountingServer();
+        server.InsertSubAccount("1220", "B1", "みずほ（定期）");
+        var target = server.InsertSubAccount("1210", "b1", "みずほ（当座）");
+
+        var thrown = await Rejected(
+            server,
+            Updating("SubAccount", Row("SubAccount", target, Account(server, "1220"))));
+
+        Assert.Contains("補助科目コード", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("B1", thrown.Message, StringComparison.Ordinal);
+
+        // **直し方は、利用者が動かした欄の側で言う**（コードは触っていない）。
+        Assert.Contains("別の勘定科目を選ぶか", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>移した先が空いていれば通る（<b>移動そのものを止めない</b>）。</summary>
+    [Fact]
+    public async Task 移した先にぶつかるコードが無ければ通る()
+    {
+        using var server = new AccountingServer();
+        var target = server.InsertSubAccount("1210", "B1", "みずほ");
+
+        Assert.True(await Submit(
+            server,
+            Updating("SubAccount", Row("SubAccount", target, Account(server, "1220")))));
+    }
+
+    /// <summary>
+    /// <b>欄が読めない型で届いたら、素通しではなく止める。</b>
+    /// </summary>
+    /// <remarks>
+    /// <c>_ =&gt; null</c> で帰る形だと「触られていない」と見分けがつかず、
+    /// <b>デザインで欄の型を変えた日に検査が黙って素通しへ落ちる</b>のに、
+    /// フィクスチャが自分で正しい型を組むのでテストは緑のままである（2026-09-09 の自己レビュー）。
+    /// <b>利用者向けの断りではない</b>——直すのは利用者ではなく、デザインを変えた側だからである。
+    /// </remarks>
+    [Fact]
+    public async Task 読めない型で届いた欄は素通ししないで止める()
+    {
+        using var server = new AccountingServer();
+        var data = New("Account", Text("Name", "現金その 2"));
+        data.Fields["Code"] = new NumberFieldData { Value = 1100 };
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Submit(server, Adding("Account", data)));
+
+        Assert.Contains("Code", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("NumberFieldData", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>コードも勘定科目も触らない補助科目の更新は、数え直さない。</summary>
+    /// <remarks><b>読み直しは親が動いたときだけ</b>——名前を直すだけの保存で毎回引かない。</remarks>
+    [Fact]
+    public async Task コードも勘定科目も触らない補助科目の更新は数え直さない()
+    {
+        using var server = new AccountingServer();
+        var target = server.InsertSubAccount("1210", "B1", "みずほ");
+
+        Assert.True(await Submit(
+            server, Updating("SubAccount", Row("SubAccount", target, Text("Name", "みずほ銀行")))));
+    }
+
+    /// <summary>保存されている行が無い補助科目を移す更新は、読める字が無いので数えない（fail-safe）。</summary>
+    [Fact]
+    public async Task 保存されている行が無い補助科目を移す更新は数えない()
+    {
+        using var server = new AccountingServer();
+
+        Assert.True(await Submit(
+            server, Updating("SubAccount", Row("SubAccount", 999999, Account(server, "1220")))));
+    }
+
+    /// <summary>コードの無い新規の補助科目は、読み直す先が無い（画面からは作れない形）。</summary>
+    [Fact]
+    public async Task コードの無い新規の補助科目は読み直さない()
+    {
+        using var server = new AccountingServer();
+
+        Assert.True(await Submit(
+            server,
+            Adding("SubAccount", New("SubAccount", Text("Name", "本店"), Account(server, "1210")))));
+    }
+
     /// <summary>親を触らない更新でも、補助科目の 2 値を見る（同じ穴の裏側）。</summary>
     [Fact]
     public async Task 親を触らない補助科目の更新でも2値を見る()
@@ -526,16 +628,6 @@ public class MasterSubmitGateTests
     }
 
     // --- 壊れた要求・触っていない欄（fail-safe の側） ------------------------------
-
-    /// <summary>コードの欄が文字列でない要求は、コードを見ない（画面からは作れない形）。</summary>
-    [Fact]
-    public async Task コードの欄が文字列でなければ見ない()
-    {
-        using var server = new AccountingServer();
-        var row = New("Account", ("Code", new BooleanFieldData { Value = true }), Text("Name", "検証"));
-
-        Assert.True(await Submit(server, Adding("Account", row)));
-    }
 
     /// <summary>「全社共通」を触っていない部門の保存は、全社共通を見ない。</summary>
     [Fact]

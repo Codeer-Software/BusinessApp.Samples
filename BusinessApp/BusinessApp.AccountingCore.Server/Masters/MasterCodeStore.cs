@@ -11,9 +11,12 @@ using static BusinessApp.AccountingCore.Server.Masters.MasterSubmitGate;
 /// マスタの値を保存する前に、DB へ問い合わせるもの（<see cref="MasterSubmitGate"/> の口）。
 /// </summary>
 /// <remarks>
-/// <para><b>表と列の名前は <see cref="CodedMaster"/> でしか受けない。</b>
-/// 生の文字列を受ける口を持たないので、利用者の入力が SQL に混ざる面が無い
-/// （値は必ずパラメータで渡す。<see cref="MasterUsageStore"/> と同じ作法）。</para>
+/// <para><b>利用者が入れた値は、必ずパラメータで渡す</b>（<see cref="MasterUsageStore"/> と同じ作法）。
+/// SQL の文へ埋め込むのは<b>表と列の名前だけ</b>で、その出どころは
+/// <see cref="CodedMaster"/> か<b>呼び出し側がソースに書いたリテラル</b>
+/// （<see cref="FindStoredAsync"/> の <c>columns</c>）に限られる。
+/// <b><c>columns</c> に外から来た文字列を渡さないこと</b>——
+/// 型は防いでいないので、ここだけは書く人が守る（2026-09-09 の自己レビュー）。</para>
 /// <para><b>大小を無視した突き合わせは、DB の <c>COLLATE NOCASE</c> に任せる。</b>
 /// C# 側で畳むと、DB の一意索引と畳み方がずれたときに気づけない——
 /// <b>同じ照合順序で同じことを 2 回言わない</b>（docs/20 §4）。</para>

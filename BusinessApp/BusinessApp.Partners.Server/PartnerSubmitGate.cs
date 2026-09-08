@@ -74,6 +74,11 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// <c>BusinessApp.ServerSupport</c> は依存ゼロで、この部品が既に参照している。</para>
     /// <para><b>正規化した姿を差分に書き戻す。</b> 比べるときだけ落とすと、関門が「同じ」と通した値を
     /// DDL のトリガが「違う」と拒む（関門の受理集合が DB より広い。qa/03 L-14 の型）。</para>
+    /// <para><b>型を決め打ちして黙って抜けない。</b> <c>is not TextFieldData</c> で帰る形にすると、
+    /// <b>欄の型が変わった日に書式も重複も丸ごと素通しに落ちる</b>——しかもフィクスチャが自分で
+    /// <see cref="TextFieldData"/> を組むのでテストは緑のままである。<see cref="Reference"/> が
+    /// 同じ戒めを書いているのに、こちらに残っていた（2026-09-09 の自己レビュー）。
+    /// <b>届いているのに読めないなら、素通しではなく止める</b>——その判定は <see cref="Field{T}"/> が持つ。</para>
     /// </remarks>
     private async Task RejectBadCodeAsync(ModuleData data)
     {
@@ -377,8 +382,21 @@ public sealed class PartnerSubmitGate(PartnerStore store)
             : null;
     }
 
+    /// <summary>
+    /// 触られた欄。<b>載っていなければ <c>null</c></b>（更新は差分しか届かない。qa/01 F-12）。
+    /// </summary>
+    /// <remarks>
+    /// <b>載っているのに型が違うときは止める。</b> <c>as T</c> のまま <c>null</c> を返すと
+    /// 「触られていない」と見分けがつかず、<b>欄の型が変わった日に、その欄を見る検査が
+    /// まとめて素通しへ落ちる</b>——しかもフィクスチャが自分で正しい型を組むので
+    /// テストは緑のままである（<see cref="Reference"/> が名指しする形。2026-09-09 の自己レビュー）。
+    /// </remarks>
     private static T? Field<T>(ModuleData data, string name) where T : FieldDataBase
-        => data.Fields.TryGetValue(name, out var field) ? field as T : null;
+        => data.Fields.TryGetValue(name, out var field)
+            ? field as T
+                ?? throw new InvalidOperationException(
+                    $"「{name}」が読めない型 {field.GetType().Name} で届いた。関門が守れないので止める。")
+            : null;
 
     /// <summary>
     /// その項目が差分に載っているか。<b>型を問わない。</b>

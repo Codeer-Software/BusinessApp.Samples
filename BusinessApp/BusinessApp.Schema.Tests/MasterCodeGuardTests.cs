@@ -100,6 +100,11 @@ public class MasterCodeGuardTests
     /// <para><b>字を並べた一覧を持たない。</b> 符号位置を端から当てるので、
     /// どちらかに字を足し忘れたら必ず赤くなる。<b>サロゲートの範囲は外す</b>——
     /// 単独では文字にならず、<c>char()</c> が返すものが C# の <c>char</c> 1 つと対応しない。</para>
+    /// <para><b>U+0000 も当てる。</b> <c>LENGTH</c> と <c>GLOB</c> は文字列の途中の NUL で止まるので、
+    /// 字種の GLOB だけでは <c>A</c>‖NUL‖<c>B</c> が「使える字」と答える（2026-09-09 に実測）。
+    /// トリガの最後の条件（バイト数と文字数の突き合わせ）がここで効いている。
+    /// <b>0 を外しておくと、その穴はこの総当たりからも隠れる</b>——外していた
+    /// （2026-09-09 の自己レビュー）。</para>
     /// </remarks>
     [Fact]
     public void トリガが通す字は関門が通す字と過不足なく一致する()
@@ -111,14 +116,14 @@ public class MasterCodeGuardTests
         var accepted = new HashSet<int>(TestDatabase.Query(
             db,
             $"""
-            WITH RECURSIVE code(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM code WHERE n < {(int)char.MaxValue})
+            WITH RECURSIVE code(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM code WHERE n < {(int)char.MaxValue})
             SELECT n FROM code
              WHERE (n < 55296 OR n > 57343)
                AND NOT ({WhenClause(db, "accounts").Replace("NEW.code", "('A' || char(n) || 'B')", StringComparison.Ordinal)})
             """).Select(int.Parse));
 
         var expected = new HashSet<int>(
-            Enumerable.Range(1, char.MaxValue)
+            Enumerable.Range(0, char.MaxValue + 1)
                 .Where(n => (n < 55296 || n > 57343)
                             && MasterCode.DescribeProblem("科目コード", "A" + (char)n + "B") is null));
 

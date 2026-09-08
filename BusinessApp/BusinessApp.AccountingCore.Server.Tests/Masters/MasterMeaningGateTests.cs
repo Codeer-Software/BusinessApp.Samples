@@ -606,6 +606,14 @@ public class MasterMeaningGateTests
                 guarded.Groups["columns"].Value.Split(',').Select(c => c.Trim()).Order());
             Assert.Contains($"l.{master.LineColumn} = OLD.id", frozen, StringComparison.Ordinal);
 
+            // **伝票にも入る列は、伝票の側も数える**（取引先だけ。docs/10 §6-2）。
+            // 明細しか見ないトリガは、伝票にだけ取引先を入れた計上済みの伝票を取りこぼす
+            // ——関門は数えるので、画面は断るのに DB は通す（守りが 1 層に落ちる。2026-09-09 の自己レビュー）。
+            if (master.EntryColumn is string entryColumn)
+            {
+                Assert.Contains($"e.{entryColumn} = OLD.id", frozen, StringComparison.Ordinal);
+            }
+
             // **一方通行の列は、緩める向きだけを見る別のトリガが守る**（docs/10 §6-2）。
             // 意味の凍結のトリガに混ぜると、オンにする向きまで止まる。
             foreach (var column in master.OneWay.Select(o => o.Column))
@@ -616,10 +624,20 @@ public class MasterMeaningGateTests
                 Assert.Contains($"l.{master.LineColumn} = OLD.id", oneWay, StringComparison.Ordinal);
             }
 
-            Assert.Contains($"l.{master.LineColumn} = NEW.id",
-                TriggerSql(server, $"trg_{master.Table}_no_replace_used_insert"), StringComparison.Ordinal);
-            Assert.Contains($"l.{master.LineColumn} IN (OLD.id, NEW.id)",
-                TriggerSql(server, $"trg_{master.Table}_no_replace_used_update"), StringComparison.Ordinal);
+            var replaceInsert = TriggerSql(server, $"trg_{master.Table}_no_replace_used_insert");
+            var replaceUpdate = TriggerSql(server, $"trg_{master.Table}_no_replace_used_update");
+            Assert.Contains($"l.{master.LineColumn} = NEW.id", replaceInsert, StringComparison.Ordinal);
+            Assert.Contains($"l.{master.LineColumn} IN (OLD.id, NEW.id)", replaceUpdate, StringComparison.Ordinal);
+            if (master.EntryColumn is string replaceColumn)
+            {
+                Assert.Contains($"e.{replaceColumn} = NEW.id", replaceInsert, StringComparison.Ordinal);
+                Assert.Contains($"e.{replaceColumn} IN (OLD.id, NEW.id)", replaceUpdate, StringComparison.Ordinal);
+            }
+
+            // **id が動いたときだけ鳴らす。** `UPDATE OF id` は SET 句に id が並べば
+            // 値が同じでも発火するので、この条件が無いと**使用中の行は名前すら直せない**
+            // （取引先へ写したときに落ちていた。2026-09-09 の自己レビュー）。
+            Assert.Contains("WHEN NEW.id IS NOT OLD.id", replaceUpdate, StringComparison.Ordinal);
         }
     }
 
