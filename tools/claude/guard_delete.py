@@ -77,6 +77,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 try:
@@ -95,12 +96,17 @@ TRASH_COMMAND = f"pwsh -NoProfile -File {TRASH_SCRIPT} <パス>"
 _BEFORE = r"(^|[\s;&|(/\\\"'])"
 _AFTER = r"([\s;&|)\"']|$)"
 
+# 完全削除の語。**この並びが語彙の正典である**——正規表現・`settings.json` の `deny`・
+# 自己検査の検体の 3 つを、すべてここから導く。**散文でも表でも二重に持たない**
+# （`deny` の語がこの並びと切れていて、語を消しても鳴らなかった。自己レビューで判明。2026-09-08）。
+DELETION_WORDS = (
+    "rm", "rmdir", "del", "erase", "unlink", "shred", "truncate",
+    "Remove-Item", "ri", "rd", "Clear-Content", "Clear-Item",
+)
+
 # 完全削除。Bash と PowerShell の両方を見る。
 DELETION = re.compile(
-    _BEFORE
-    + r"(rm|rmdir|del|erase|unlink|shred|truncate"
-    r"|Remove-Item|ri|rd|Clear-Content|Clear-Item)"
-    + _AFTER,
+    _BEFORE + "(" + "|".join(DELETION_WORDS) + ")" + _AFTER,
     re.IGNORECASE,
 )
 
@@ -124,23 +130,45 @@ GIT_DESTRUCTIVE = re.compile(
     re.IGNORECASE,
 )
 
+# ファイルへのリダイレクト（`> 先` `>> 先`）。**`>` を素で拾わない。**
+# `2>/dev/null`・`2>&1`・`'->'`・`>=`・`> 1` は上書きではないのに当たっていて、
+# **保護対象の名前が出るだけの `ls` や `cat` まで拒んでいた**（2026-09-08 に実測。4 回踏んだ）。
+# 外したのは 3 種類——**矢印と比較演算子**（前後の字で見る）、**捨て先**（`/dev/null`・`$null`）、
+# **数だけの右辺**（`> 1`。日付の入ったファイル名 `> 2026.log` は数だけではないので残る）。
+# **残る過剰検出**: 変数どうしの比較（`if (a > b)`）は当たる。**そちらへ倒したままにする**——
+# 見逃した上書きは戻せないが、過剰な拒否は書き方を変えれば済む。
+REDIRECT = r"(?<![-=<>!])>{1,2}\s*(?![&=])(?!/dev/null\b)(?!\$null\b)(?!\d+(?![\w./\\-]))\S"
+
 # **中身を置き換える形。** これ単体では拒まない——**保護対象の名前が出たときだけ**拒む
 # （`Write` ツール以外にも上書きの道はいくらでもあり、全部を止めると作業が成り立たない）。
 OVERWRITE = re.compile(
     _BEFORE + r"(cp|copy|Copy-Item|mv|move|Move-Item|tee|Set-Content|Out-File|New-Item"
     r"|Expand-Archive|unzip|dd)" + _AFTER
-    + r"|\bsed\s+-i|-OutFile\b|>\s*\S|\bopen\([^)]*['\"][wa]",
+    + r"|\bsed\s+-i|-OutFile\b|" + REDIRECT + r"|\bopen\([^)]*['\"][wa]",
     re.IGNORECASE,
 )
 
-# ごみ箱送りの削除コマンドへの言及（保護対象の検査にかけるため、ゆるく拾う）。
-TRASH_MENTION = re.compile(r"(^|[\s;&|(])(pwsh|powershell)\b[^;&|]*trash\.ps1", re.IGNORECASE)
+# **戻せる道具。** ごみ箱送り（前の中身を残す）と、稼働 DB の退避・復元
+# （消さず、上書きの前に必ず退避する）。**規則は docs/30_作業のルール.md §10。**
+# **足してよいのは「取り返しがつく」ことをスクリプト自身が保証している道具だけ**である——
+# allow は権限判定そのものを飛ばすので、1 本増やすたびに確認の外へ出る面積が広がる。
+RECOVERABLE_SCRIPTS = (TRASH_SCRIPT, "tools/clb/db_snapshot.ps1")
 
-# **コマンド全体がこの repo の trash.ps1 を 1 本呼ぶだけ**か（allow を出してよい形）。
-TRASH_ONLY = re.compile(
+# 戻せる道具への言及（保護対象の検査にかけるため、ゆるく拾う）。
+RECOVERABLE_MENTION = re.compile(
+    r"(^|[\s;&|(])(pwsh|powershell)\b[^;&|]*("
+    + "|".join(re.escape(s.rsplit("/", 1)[-1]) for s in RECOVERABLE_SCRIPTS)
+    + r")",
+    re.IGNORECASE,
+)
+
+# **コマンド全体が、この repo の戻せる道具を 1 本呼ぶだけ**か（allow を出してよい形）。
+RECOVERABLE_ONLY = re.compile(
     r"^\s*(pwsh|powershell)(\.exe)?\s+"
     r"((-|--)\w[\w-]*\s+)*"
-    r"-File\s+[\"']?(\./)?tools[\\/]claude[\\/]trash\.ps1[\"']?(\s|$)",
+    r"-File\s+[\"']?(\./)?("
+    + "|".join(re.escape(s).replace("/", r"[\\/]") for s in RECOVERABLE_SCRIPTS)
+    + r")[\"']?(\s|$)",
     re.IGNORECASE,
 )
 
@@ -302,8 +330,8 @@ def decide(command: str):
     )
     git_destructive = bool(GIT_DESTRUCTIVE.search(command))
     overwrite = bool(OVERWRITE.search(command))
-    mentions_trash = bool(TRASH_MENTION.search(command))
-    if not (raw_deletion or git_destructive or overwrite or mentions_trash):
+    mentions_recoverable = bool(RECOVERABLE_MENTION.search(command))
+    if not (raw_deletion or git_destructive or overwrite or mentions_recoverable):
         return None, None
 
     try:
@@ -338,17 +366,21 @@ def decide(command: str):
             "要るなら開発者に相談する。ファイルを消したいだけなら " + USE_TRASH
         )
 
-    if not mentions_trash:
+    if not mentions_recoverable:
         return None, None  # 保護対象に触れない上書きは、このフックの仕事ではない
 
-    if CHAINED.search(command) or not TRASH_ONLY.match(command):
-        # allow は権限判定そのものを飛ばすので、**trash.ps1 を 1 本呼ぶだけ**の形にしか出さない。
+    if CHAINED.search(command) or not RECOVERABLE_ONLY.match(command):
+        # allow は権限判定そのものを飛ばすので、**戻せる道具を 1 本呼ぶだけ**の形にしか出さない。
         return None, None
 
-    return "allow", "ごみ箱へ送る削除（完全削除しない。tools/claude/guard_delete.py）。"
+    return "allow", (
+        "戻せる道具なので通す（ごみ箱送り、または稼働 DB の退避・復元。"
+        "どちらも前の中身を残す。tools/claude/guard_delete.py）。"
+    )
 
 
-T = f"pwsh -NoProfile -File {TRASH_SCRIPT}"  # 検体を短く書くための別名
+T = f"pwsh -NoProfile -File {TRASH_SCRIPT}"          # 検体を短く書くための別名
+S = "pwsh -NoProfile -File tools/clb/db_snapshot.ps1"
 
 # 期待する判定。**この表がこのフックの仕様である。**
 # 守る道具にテストが無いと、書き換えたときに「止めているつもりで素通り」になる。
@@ -398,6 +430,19 @@ SELFTEST = [
     ("Copy-Item -Force a b", None),
     ("echo x > work/out.txt", None),
     ("cp a b", None),
+    # **リダイレクトに見えるだけの字は上書きではない**（2026-09-08。保護対象の名前が出ていても拒まない。
+    # 実測でこの 4 つの形が拒まれ、`ls` や `cat` すら通らなかった）
+    ("ls LocalData/ 2>/dev/null", None),
+    ("cat LocalData/README.md 2>&1", None),
+    ("python -c \"print('->', 'LocalData')\"", None),
+    ("pwsh -c \"Get-ChildItem LocalData 2>$null\"", None),
+    ("python -c \"assert n >= 1\" # LocalData", None),
+    ("python -c \"assert len(sys.argv) > 1\" # LocalData", None),
+    # **本物のリダイレクトは拾う**（追い書きも、標準エラーの振り向け先も上書きである）
+    ("echo x > LocalData/db/x.db", "deny"),
+    ("echo x >> LocalData/db/x.db", "deny"),
+    ("dotnet run 2> LocalData/db/x.db", "deny"),
+    ("echo x > LocalData/db/2026.log", "deny"),   # 数で始まる名前は「数だけの右辺」ではない
     # --- ごみ箱送りは通す
     (f"{T} BusinessApp/foo.cs", "allow"),
     (f"{T} -DryRun docs/x.md", "allow"),
@@ -414,6 +459,14 @@ SELFTEST = [
     # 別の場所の trash.ps1 を装う形は allow にしない
     ("pwsh -NoProfile -File work/scratch/trash.ps1 anything", None),
     ('pwsh -NoProfile -Command "Invoke-WebRequest http://x -OutFile y" # trash.ps1', None),
+    # --- 稼働 DB の退避・復元も戻せる道具である（消さず、上書きの前に必ず退避する）
+    (f"{S} -Save", "allow"),
+    (f"{S} -Save -Name before-migration-0023", "allow"),
+    (f"{S} -Restore -Name before-migration-0023", "allow"),
+    (f"{S} -List", "allow"),
+    (f"{S} -Save && rm -rf b", "deny"),   # 連結の先が削除なら拒む
+    (f"{S} -List | tee log.txt", None),   # 連結は allow にせず通常の判定へ降ろす
+    ("pwsh -NoProfile -File work/scratch/db_snapshot.ps1 -Restore -Name x", None),
     # --- 削除でも上書きでもないものには触れない
     ("cat LocalData/README.md", None),
     ("cat tools/claude/trash.ps1", None),
@@ -512,10 +565,30 @@ def _check_wiring(failed: int) -> int:
     deny = set(permissions.get("deny", []))
     ask = set(permissions.get("ask", []))
 
-    # **削除の控え。** ここは代表の 3 語しか見ていない——`deny` の語の並びは `DELETION` の正規表現と
-    # 対称ではなく（`Bash` と `PowerShell` で語が違う）、生成規則で突き合わせられないため。
-    # **語を消しても鳴らない**のは承知の穴で、docs/README.md の保留リストに置いてある。
-    for required in ("Bash(rm:*)", "PowerShell(Remove-Item:*)", "Bash(git clean:*)"):
+    # **削除の控えを、語彙の正典（`DELETION_WORDS`）と両方向で結ぶ。**
+    # 以前はここが代表の 3 語しか見ておらず、**正典から語を消しても・deny から規則を消しても
+    # 鳴らなかった**（2026-09-08 に塞いだ）。**どちらの語形（Bash / PowerShell）で控えるかは問わない**
+    # ——`unlink` は Bash にしか、`Clear-Item` は PowerShell にしか無い語だからである。
+    single_word_rules = {}
+    for rule in deny:
+        matched = re.fullmatch(r"(Bash|PowerShell)\((\S+):\*\)", str(rule))
+        if matched:
+            single_word_rules.setdefault(matched.group(2).lower(), []).append(str(rule))
+
+    for word in DELETION_WORDS:
+        if word.lower() not in single_word_rules:
+            failed += 1
+            print(f"NG  settings.json の deny に {word} の控えが無い（フックが落ちたときの控え）")
+
+    known_words = {word.lower() for word in DELETION_WORDS}
+    for word, rules in sorted(single_word_rules.items()):
+        if word not in known_words:
+            failed += 1
+            print(f"NG  settings.json の deny に、削除の語彙に無い 1 語の規則がある: {'・'.join(rules)}"
+                  "（guard_delete.py の DELETION_WORDS と揃える）")
+
+    # git 自身の破壊コマンドは 1 語ではないので、名指しで見る（`GIT_DESTRUCTIVE` の代表）。
+    for required in ("Bash(git clean:*)", "PowerShell(git clean:*)"):
         if required not in deny:
             failed += 1
             print(f"NG  settings.json の deny に {required} が無い（フックが落ちたときの控え）")
@@ -547,12 +620,17 @@ def _check_wiring(failed: int) -> int:
     return failed
 
 
-def _run_hook(payload):
-    """**本体（main）を実際に動かす。** 判定関数だけを検査すると、入口を殺しても緑になる。"""
+def _run_hook(payload, argv=None, cwd=None, env=None):
+    """**本体（main）を実際に動かす。** 判定関数だけを検査すると、入口を殺しても緑になる。
+
+    `argv` を渡すと、その並びで起こす（**本番と同じ形**——シェル越しの起動を試すため）。
+    `cwd` は**このプロセスの作業ディレクトリ**であって、payload の `cwd` とは別物である。
+    """
     proc = subprocess.run(
-        [sys.executable, str(Path(__file__).resolve())],
+        argv or [sys.executable, str(Path(__file__).resolve())],
         input=json.dumps(payload, ensure_ascii=False),
         capture_output=True, text=True, encoding="utf-8",
+        cwd=cwd, env=env,
     )
     out = (proc.stdout or "").strip()
     if not out:
@@ -586,6 +664,58 @@ def _check_entrypoint(failed: int) -> int:
             failed += 1
             print(f"NG  入口: 期待 {expected} / 実際 {actual}: {payload['tool_name']} "
                   f"{payload['tool_input']}")
+
+    # **プロセスの `cwd` と交ざっていないか。** 既定の起点は「このファイルの repo 根」であって
+    # 呼ばれた場所ではない。**repo の中から起こしている限り、両者は同じ値なので区別できない**
+    # ——repo の外から起こして初めて表明できる（自己レビューで判明。2026-09-08）。
+    outside = tempfile.gettempdir()
+    actual = _run_hook({"tool_name": "Write", "cwd": None,
+                        "tool_input": {"file_path": "LocalData/db/probe.db"}}, cwd=outside)
+    if actual != "deny":
+        failed += 1
+        print(f"NG  入口: repo の外から起こすと、相対パスの保護が外れる（実際 {actual}）")
+    return failed
+
+
+def _check_production_entrypoint(failed: int) -> int:
+    """**本番と同じ形でフックが起きるか。**
+
+    `settings.json` が書いている `command` と `shell` をそのまま使って起こす。
+    `_check_entrypoint` は `sys.executable` と絶対パスで呼ぶので、**`python` が PATH から
+    消えても、`$CLAUDE_PROJECT_DIR` が解決されなくても緑のまま**である
+    （自己レビューで判明。2026-09-08）。ここが赤いなら、**上書きの拒否は「確認」に落ち、
+    削除の拒否は `deny` に並べた語だけになる。**
+    """
+    try:
+        settings = json.loads(SETTINGS.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(f"NG  {SETTINGS} を読めない: {exc}")
+        return failed + 1
+
+    wirings = set()
+    for entry in settings.get("hooks", {}).get("PreToolUse", []):
+        for hook in entry.get("hooks", []):
+            command = str(hook.get("command", ""))
+            if "guard_delete.py" in command:
+                wirings.add((command, str(hook.get("shell") or "bash")))
+    if not wirings:
+        print("NG  settings.json に guard_delete.py を呼ぶ PreToolUse フックが無い")
+        return failed + 1
+
+    # フックは `$CLAUDE_PROJECT_DIR` を Claude Code から受け取る。ここでは自分で与える。
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=str(REPO_ROOT))
+    payload = {"tool_name": "Write", "cwd": str(REPO_ROOT),
+               "tool_input": {"file_path": "LocalData/db/probe.db"}}
+    for command, shell in sorted(wirings):
+        try:
+            actual = _run_hook(payload, argv=[shell, "-c", command], env=env)
+        except Exception as exc:
+            failed += 1
+            print(f"NG  本番の形でフックを起こせない（shell={shell}）: {command}（{exc}）")
+            continue
+        if actual != "deny":
+            failed += 1
+            print(f"NG  本番の形で起こすと拒まない（shell={shell}・期待 deny / 実際 {actual}）: {command}")
     return failed
 
 
@@ -597,6 +727,14 @@ def selftest() -> int:
         if actual != expected:
             failed += 1
             print(f"NG  期待 {expected} / 実際 {actual}: {command!r}")
+
+    # **語彙の正典に、検体の無い語を作らない。** 語を足したときに検体を忘れると、
+    # その語だけ「拒んでいるつもり」で書き換えられる（表の冒頭が課している約束を機械で守る）。
+    for word in DELETION_WORDS:
+        probe = re.compile(_BEFORE + re.escape(word) + _AFTER, re.IGNORECASE)
+        if not any(expected == "deny" and probe.search(command) for command, expected in SELFTEST):
+            failed += 1
+            print(f"NG  削除の語 {word} に、deny を期待する検体が SELFTEST に無い")
 
     # **理由文も表明する。** ADR-0044 は「拒むときに次の一手を示す」を関門の中核に置いている。
     _, reason = decide("rm work/x")
@@ -636,6 +774,7 @@ def selftest() -> int:
     failed = _check_canon(failed)
     failed = _check_wiring(failed)
     failed = _check_entrypoint(failed)
+    failed = _check_production_entrypoint(failed)
 
     # 正典が読めないときに素通りしないか（fail-open にしていないか）。
     # **この一手は表では書けない**——表は正典が読める前提の判定しか並べられないため。
