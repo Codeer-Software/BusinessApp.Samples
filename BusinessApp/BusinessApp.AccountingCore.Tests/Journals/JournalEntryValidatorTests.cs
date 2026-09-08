@@ -497,7 +497,7 @@ public class JournalEntryValidatorTests
     public void 取消では取引先が無くても止めない()
     {
         // **規則より前に計上された伝票を打ち消せなくなってはいけない**（docs/10 §5・ADR-0004）。
-        // 開発機に取引先の無い計上済み明細が 10 行ある（2026-09-08 実測）。
+        // 開発機に取引先の無い計上済み明細が実在する（件数と数え方は qa/04）。
         var entry = ReceivableWithoutPartner() with
         {
             EntryType = EntryType.Reversal,

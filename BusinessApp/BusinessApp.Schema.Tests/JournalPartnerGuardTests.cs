@@ -171,7 +171,7 @@ public class JournalPartnerGuardTests
     public void 取消は取引先が無くても計上できる()
     {
         // **規則より前に計上された伝票を打ち消せなくなってはいけない**（docs/10 §5・ADR-0004）。
-        // 稼働 DB に取引先の無い計上済み明細が 10 行ある（2026-09-08 実測）。
+        // 稼働 DB に取引先の無い計上済み明細が実在する（件数と数え方は qa/04）。
         using var db = Draft(linePartnerId: null, entryType: "reversal");
 
         TestDatabase.Execute(db, Post);
@@ -299,7 +299,7 @@ public class JournalPartnerGuardTests
     {
         // **トリガは「この伝票の明細」だけを見る。** `l.journal_entry_id = NEW.id` を落とすと、
         // **違反明細を持つ伝票が 1 件でもある DB では、以後どの伝票も計上できなくなる**——
-        // 稼働 DB がその形である（規則より前の 10 行）。
+        // 稼働 DB がその形である（規則より前の明細が実在する）。
         using var db = Draft(linePartnerId: null, entryType: "reversal");
         TestDatabase.Execute(db, Post);
 

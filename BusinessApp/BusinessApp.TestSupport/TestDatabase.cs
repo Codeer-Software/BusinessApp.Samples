@@ -127,9 +127,8 @@ public static class TestDatabase
         "trg_journal_entries_sub_account_presence_when_posted",
 
         // 取引先を要する科目に取引先の無い計上済みの明細も、いまは作れない。
-        // **規則より前に計上された行が稼働 DB に 10 行あり**（売掛金 1・買掛金 7・外注費 2。
-        // 2026-09-08 実測。数え方は qa/04）、**それらを取り消せることが免除の根拠**なので、
-        // 検体が要る（docs/10 §6-2）。
+        // **規則より前に計上された行が稼働 DB に実在し**（件数と数え方は qa/04）、
+        // **それらを取り消せることが免除の根拠**なので、検体が要る（docs/10 §6-2）。
         "trg_journal_entries_partner_presence_when_posted",
     ];
 
