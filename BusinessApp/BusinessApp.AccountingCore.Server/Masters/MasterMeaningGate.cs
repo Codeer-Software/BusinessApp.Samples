@@ -39,7 +39,9 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
             [new("Code", "code", "科目コード"),
              new("Category", "category", "科目区分"),
              new("UsesSubAccount", "uses_sub_account", "補助科目を使う"),
-             new("IsContra", "is_contra", "評価勘定")]),
+             new("IsContra", "is_contra", "評価勘定")],
+            [new(new("RequiresPartner", "requires_partner", "取引先を要する"),
+                 "以後の明細から相手方が抜けて、取引先で絞った帳簿に穴が空きます")]),
         new("SubAccount", "補助科目", "sub_accounts", "sub_account_id",
             [new("Account", "account_id", "勘定科目"),
              new("Code", "code", "補助科目コード")]),
@@ -80,7 +82,8 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
 
     private async Task RejectChangedMeaningAsync(GuardedMaster master, ModuleData data)
     {
-        var touched = master.Columns.Where(c => data.Fields.ContainsKey(c.FieldName)).ToList();
+        var touched = master.Columns.Concat(master.OneWay.Select(o => o.Column))
+            .Where(c => data.Fields.ContainsKey(c.FieldName)).ToList();
         if (touched.Count == 0)
         {
             return;
@@ -111,7 +114,6 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
         // ラベルは鉤括弧で括る——「補助科目を使う」のような動詞句のラベルは、裸だと文に溶ける。
         var changed = touched
             .Where(c => !string.Equals(Normalize(stored[c.Column]), Submitted(data.Fields[c.FieldName]), StringComparison.Ordinal))
-            .Select(c => $"「{c.Label}」")
             .ToList();
         if (changed.Count == 0)
         {
@@ -124,6 +126,24 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
             return;
         }
 
+        // **一方通行の列は、緩める向きだけを拒む**（docs/10 §6-2）。
+        // **先に見る**——同じ保存で意味を決める列も触られていたら、そちらの断りのほうが重い
+        // ……ではなく、**理由は 1 つだけ返す**（docs/21 §2-6 の (a)）ので、
+        // **どちらの断りになるかを決め打ちにしない**。ここでは「厳しいほうの規則から先に見る」
+        // という順にせず、**意味の凍結（下）を後に置く**——一方通行の列は 1 つしかなく、
+        // 混ぜて名指しすると「変えられません」が「オンにもできない」と読めてしまう。
+        if (master.OneWay.FirstOrDefault(o => changed.Contains(o.Column)) is OneWayColumn loosened
+            && Submitted(data.Fields[loosened.Column.FieldName]) == "0")
+        {
+            throw new MasterRejectedException(Loosening(master, loosened, used));
+        }
+
+        changed = [.. changed.Where(c => !master.OneWay.Any(o => o.Column == c))];
+        if (changed.Count == 0)
+        {
+            return;
+        }
+
         // 文言の形は ADR-0038 §4——**何件あるか**と**次に何をすればよいか**を入れる。
         // 理由と結果は「〜ので」で 1 文にする（取引先・仕訳の関門と同じ形）。
         // 数える単位は「仕訳明細」（伝票ではない。ADR-0017）。**「仕訳」を単独で画面に出さない**（同 ADR）ので、
@@ -131,9 +151,23 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
         // 4 マスタで成り立つ動詞にする。
         throw new MasterRejectedException(
             $"この{master.Label}は計上済みの仕訳明細 {used.ToString("N0", CultureInfo.InvariantCulture)} 行で使われているので、"
-            + $"{string.Join("・", changed)}は変えられません。"
+            + $"{string.Join("・", changed.Select(c => $"「{c.Label}」"))}は変えられません。"
             + $"新しい{master.Label}を作って、以後の振替伝票ではそちらを選んでください。");
     }
+
+    /// <summary>
+    /// 一方通行の列を緩めようとしたときの断り。
+    /// </summary>
+    /// <remarks>
+    /// <b>「変えられません」とは言わない。</b> 厳しくする向き（オフ → オン）はいつでも通るので、
+    /// 両方できないと読まれると、規則を採り入れようとする利用者まで止めてしまう（docs/21 §2-3）。
+    /// </remarks>
+    private static string Loosening(GuardedMaster master, OneWayColumn column, long used)
+        => $"この{master.Label}は計上済みの仕訳明細 {used.ToString("N0", CultureInfo.InvariantCulture)} 行で使われているので、"
+           + $"「{column.Column.Label}」をオフにできません。"
+           + $"オフにすると、{column.Harm}。"
+           + $"新しい{master.Label}を作って、以後の振替伝票ではそちらを選んでください。"
+           + $"（オンにするのは、いつでもできます。）";
 
     /// <summary>
     /// 差分に載った値を、保存されている値と比べられる字面にする。
@@ -187,12 +221,47 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
     /// <param name="Table">DB の表（CLB の <c>DbTable</c> の写し）。</param>
     /// <param name="LineColumn"><c>journal_lines</c> でこのマスタを指す列。</param>
     /// <param name="Columns">意味を決める列。</param>
+    /// <param name="OneWayColumns">
+    /// <b>緩める向きだけを拒む列</b>（真偽値。オフ → オンは通し、オン → オフを拒む）。
+    /// </param>
     public sealed record GuardedMaster(
-        string ModuleName, string Label, string Table, string LineColumn, IReadOnlyList<GuardedColumn> Columns);
+        string ModuleName,
+        string Label,
+        string Table,
+        string LineColumn,
+        IReadOnlyList<GuardedColumn> Columns,
+        IReadOnlyList<OneWayColumn>? OneWayColumns = null)
+    {
+        /// <summary>緩める向きだけを拒む列（未指定なら空）。</summary>
+        public IReadOnlyList<OneWayColumn> OneWay => OneWayColumns ?? [];
+    }
 
     /// <summary>意味を決める列 1 つ。</summary>
     /// <param name="FieldName">CLB のフィールド名。</param>
     /// <param name="Column">DB の列（CLB の <c>DbColumn</c> の写し）。</param>
     /// <param name="Label">利用者に見せる呼び名（CLB の <c>DisplayName</c> の写し）。</param>
     public sealed record GuardedColumn(string FieldName, string Column, string Label);
+
+    /// <summary>
+    /// <b>緩める向きだけを拒む列</b>（オフ → オンは通す。docs/10 §6-2）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>「使用中は変えられない」（<see cref="GuardedMaster.Columns"/>）とは別の規則である。</b>
+    /// あちらは<b>過去の記録の意味が変わる</b>から止めるが、こちらは意味を変えない——
+    /// 止めるのは、<b>止めないと二層の守りをまとめて外せる</b>からである。</para>
+    /// <para><b>レコードにしない。</b> 値としての等価も <c>with</c> による複製も要らず、
+    /// レコードにすると<b>誰も呼ばない複製コンストラクタ</b>がカバレッジの穴として残る
+    /// （ADR-0012 は<b>カバレッジを埋めるためだけのテスト</b>を禁じているので、
+    /// 使わない機能を型に持たせないほうを採る）。</para>
+    /// </remarks>
+    /// <param name="column">守る列（意味を決める列と同じ形で持つ）。</param>
+    /// <param name="harm">オフにすると何が起きるかの 1 文（断りの中で「〜と、」に続けて読む）。</param>
+    public sealed class OneWayColumn(GuardedColumn column, string harm)
+    {
+        /// <summary>守る列。</summary>
+        public GuardedColumn Column { get; } = column;
+
+        /// <summary>オフにすると何が起きるか。</summary>
+        public string Harm { get; } = harm;
+    }
 }

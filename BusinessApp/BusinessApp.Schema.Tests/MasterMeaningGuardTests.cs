@@ -40,6 +40,61 @@ public class MasterMeaningGuardTests
     }
 
     /// <summary>
+    /// <b>「取引先を要する」は、使用中の科目ではオフにできない</b>（docs/10 §6-2。<b>一方通行</b>）。
+    /// </summary>
+    /// <remarks>
+    /// <b>これを止めないと、二層の守りをまとめて外せる</b>——オフにして計上し、また戻せば、
+    /// 計上の関門も <c>trg_journal_entries_partner_presence_when_posted</c> も素通りする
+    /// （自己レビューで見つけた。2026-09-08。qa/03 L-08 の型）。
+    /// </remarks>
+    [Fact]
+    public void 使用中の科目では取引先の必須を外せない()
+    {
+        using var db = SchemaSeed.CreateWithPostedEntry();
+        TestDatabase.Execute(db, "UPDATE accounts SET requires_partner = 1 WHERE id = 1");
+
+        var thrown = Assert.Throws<SqliteException>(
+            () => TestDatabase.Execute(db, "UPDATE accounts SET requires_partner = 0 WHERE id = 1"));
+
+        Assert.Contains("取引先を必須から外すことはできない", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(1L, TestDatabase.ScalarOf<long>(db, "SELECT requires_partner FROM accounts WHERE id = 1"));
+    }
+
+    /// <summary>
+    /// <b>厳しくする向き（オフ → オン）は、使用中でも通る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>ここが赤くなったら、規則を後から採り入れられなくしている</b>——
+    /// 立てたいのは<b>計上済みの明細がある科目</b>（売掛金・買掛金）である（docs/10 §6-2）。
+    /// </remarks>
+    [Fact]
+    public void 使用中の科目でも取引先を必須にはできる()
+    {
+        using var db = SchemaSeed.CreateWithPostedEntry();
+
+        TestDatabase.Execute(db, "UPDATE accounts SET requires_partner = 1 WHERE id = 1");
+
+        Assert.Equal(1L, TestDatabase.ScalarOf<long>(db, "SELECT requires_partner FROM accounts WHERE id = 1"));
+    }
+
+    /// <summary>
+    /// <b>計上済みの明細が無い科目なら、オフにできる。</b>（「使用中」の線は ADR-0038 §1 と同じ）
+    /// </summary>
+    [Fact]
+    public void 使っていない科目なら取引先の必須を外せる()
+    {
+        using var db = SchemaSeed.CreateWithPostedEntry();
+        // 科目 1・2 は計上済みの明細が使っている。**別の科目**を足して踏む。
+        TestDatabase.Execute(db, """
+            INSERT INTO accounts (code, name, category, requires_partner) VALUES ('1300', '売掛金', 'asset', 1);
+            UPDATE accounts SET requires_partner = 0 WHERE code = '1300';
+            """);
+
+        Assert.Equal(0L, TestDatabase.ScalarOf<long>(
+            db, "SELECT requires_partner FROM accounts WHERE code = '1300'"));
+    }
+
+    /// <summary>
     /// 意味を決めない列（<c>Guarded</c> に無い列。一覧は docs/12 §2）は、使用中でも変えられる。
     /// </summary>
     [Theory]

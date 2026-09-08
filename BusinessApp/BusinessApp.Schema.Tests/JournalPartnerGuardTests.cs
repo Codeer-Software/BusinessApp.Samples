@@ -63,16 +63,17 @@ public class JournalPartnerGuardTests
         TestDatabase.Execute(db, RequiresPartner);
         if (entryType != "normal")
         {
-            // **原仕訳は計上済みで、同じ組み合わせの明細を持つ**（本番の形）。
-            // トリガが外すのは「計上済みの原仕訳を写しただけの明細」だけなので、この明細が要る。
+            // **原仕訳は計上済みで、取消がその行を写した形になっている**（本番の形）。
+            // トリガが外すのは「計上済みの原仕訳の同じ行を、貸借だけ入れ替えて写した明細」だけなので、
+            // **原仕訳の貸借は取消と逆**にする（JournalReversal が作る形。qa/02 の 2026-09-08）。
             TestDatabase.Execute(db, $"""
                 INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type,
                                              description, entered_at)
                     VALUES (99, 1, '2026-05-19', '2026-05-19', 'draft', 'normal', '原仕訳', '2026-05-19 10:00:00');
                 INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, partner_id, amount, tax_category_id)
-                    VALUES (99, 1, 'debit', {ReceivableAccount}, {mirrorPartnerId ?? "NULL"}, 100000, 1);
+                    VALUES (99, 1, 'credit', {ReceivableAccount}, {mirrorPartnerId ?? "NULL"}, 100000, 1);
                 INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
-                    VALUES (99, 2, 'credit', 2, 2, 100000, 1);
+                    VALUES (99, 2, 'debit', 2, 2, 100000, 1);
                 """);
 
             if (mirrorPosted)
@@ -168,6 +169,52 @@ public class JournalPartnerGuardTests
         // **entry_type は取込・CLI・手打ちの SQL が自由に書ける列である。**
         // 原仕訳の同じ科目の明細が取引先を持っていれば、この取消は写しではない。
         using var db = Draft(linePartnerId: null, entryType: "reversal", mirrorPartnerId: OtherPartner);
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Post));
+
+        Assert.Contains("取引先を要する勘定科目の明細には取引先が要る", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("draft", StatusOf(db));
+    }
+
+    [Fact]
+    public void 金額の違う行は写しではない()
+    {
+        // **規則より前の伝票を踏み台にできない。** 科目が同じ明細が原仕訳に 1 行でもあればよい、
+        // という判定だと、**取引先の無い明細を何行でも・任意の金額で**新しく計上できてしまう
+        // （自己レビューで見つけた。2026-09-08）。
+        using var db = Draft(linePartnerId: null, entryType: "reversal");
+        TestDatabase.Execute(db, "UPDATE journal_lines SET amount = 999 WHERE journal_entry_id = 1 AND line_no = 1");
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Post));
+
+        Assert.Contains("取引先を要する勘定科目の明細には取引先が要る", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("draft", StatusOf(db));
+    }
+
+    [Fact]
+    public void 貸借が同じ向きの行は写しではない()
+    {
+        // 取消は**貸借を入れ替えて**作る（JournalReversal）。同じ向きの行は原仕訳の写しではない。
+        using var db = Draft(linePartnerId: null, entryType: "reversal");
+        TestDatabase.Execute(db, """
+            UPDATE journal_lines SET debit_credit = 'credit' WHERE journal_entry_id = 1 AND line_no = 1;
+            UPDATE journal_lines SET debit_credit = 'debit'  WHERE journal_entry_id = 1 AND line_no = 2;
+            """);
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Post));
+
+        Assert.Contains("取引先を要する勘定科目の明細には取引先が要る", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("draft", StatusOf(db));
+    }
+
+    [Fact]
+    public void 行番号の違う行は写しではない()
+    {
+        // 行番号は取消でもそのまま写る（JournalReversal は貸借しか変えない）。
+        using var db = Draft(linePartnerId: null, entryType: "reversal");
+        TestDatabase.Execute(db, """
+            UPDATE journal_lines SET line_no = 9 WHERE journal_entry_id = 1 AND line_no = 1;
+            """);
 
         var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Post));
 

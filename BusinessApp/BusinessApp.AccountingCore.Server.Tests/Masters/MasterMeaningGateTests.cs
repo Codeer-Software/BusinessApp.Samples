@@ -88,6 +88,65 @@ public class MasterMeaningGateTests
     }
 
     /// <summary>
+    /// <b>「取引先を要する」をオフにすると差し戻される</b>（docs/10 §6-2。<b>一方通行の列</b>）。
+    /// </summary>
+    /// <remarks>
+    /// <b>止めないと、二層の守りをまとめて外せる</b>——オフにして計上し、また戻せば、
+    /// 計上の関門も DDL のトリガも素通りする（自己レビューで見つけた。2026-09-08。qa/03 L-08 の型）。
+    /// <b>文言は「変えられません」ではない</b>——オンにするのはいつでも通るからである。
+    /// </remarks>
+    [Fact]
+    public async Task 使用中の科目の取引先の必須は外せない()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var payable = Id(server.AccountOf("2200").Value);
+        server.Execute("update accounts set requires_partner = 1 where code = '2200'");
+
+        var thrown = await Rejected(server,
+            Updating("Account", Row("Account", payable, "RequiresPartner", new BooleanFieldData { Value = false })));
+
+        Assert.Equal(
+            "登録できません。この勘定科目は計上済みの仕訳明細 1 行で使われているので、「取引先を要する」をオフにできません。"
+            + "オフにすると、以後の明細から相手方が抜けて、取引先で絞った帳簿に穴が空きます。"
+            + "新しい勘定科目を作って、以後の振替伝票ではそちらを選んでください。（オンにするのは、いつでもできます。）",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>厳しくする向き（オフ → オン）は、使用中でも通る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>ここが赤くなったら、規則を後から採り入れられなくしている</b>——
+    /// 立てたいのは計上済みの明細がある科目（売掛金・買掛金）である（docs/10 §6-2）。
+    /// </remarks>
+    [Fact]
+    public async Task 使用中の科目でも取引先を必須にはできる()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var payable = Id(server.AccountOf("2200").Value);
+
+        Assert.True(await Submit(server,
+            Updating("Account", Row("Account", payable, "RequiresPartner", new BooleanFieldData { Value = true }))));
+    }
+
+    /// <summary>
+    /// <b>使っていない科目なら、オフにできる</b>（「使用中」の線は ADR-0038 §1 と同じ）。
+    /// </summary>
+    [Fact]
+    public async Task 使っていない科目なら取引先の必須を外せる()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        // 売掛金は初期データで requires_partner = 1 だが、計上済みの明細は無い。
+        var receivable = Id(server.AccountOf("1300").Value);
+
+        Assert.True(await Submit(server,
+            Updating("Account", Row("Account", receivable, "RequiresPartner", new BooleanFieldData { Value = false }))));
+    }
+
+    /// <summary>
     /// 明細の数は伝票ではなく<b>明細</b>で数える（ADR-0017）。
     /// <b>1 伝票に現金の明細が 2 行</b>——伝票で数えると 1、明細で数えると 2 になる形で撃ち分ける。
     /// </summary>
@@ -440,7 +499,8 @@ public class MasterMeaningGateTests
 
             var fields = design.RootElement.GetProperty("Fields").EnumerateArray()
                 .ToDictionary(f => f.GetProperty("Name").GetString()!);
-            foreach (var column in master.Columns)
+            // **一方通行の列も同じ突き合わせに乗せる**（列名とラベルの写しはどちらも画面から取る）。
+            foreach (var column in master.Columns.Concat(master.OneWay.Select(o => o.Column)))
             {
                 Assert.True(fields.TryGetValue(column.FieldName, out var field),
                     $"{master.ModuleName}.{column.FieldName} がデザインに無い");
@@ -511,6 +571,16 @@ public class MasterMeaningGateTests
                 master.Columns.Select(c => c.Column).Order(),
                 guarded.Groups["columns"].Value.Split(',').Select(c => c.Trim()).Order());
             Assert.Contains($"l.{master.LineColumn} = OLD.id", frozen, StringComparison.Ordinal);
+
+            // **一方通行の列は、緩める向きだけを見る別のトリガが守る**（docs/10 §6-2）。
+            // 意味の凍結のトリガに混ぜると、オンにする向きまで止まる。
+            foreach (var column in master.OneWay.Select(o => o.Column))
+            {
+                var oneWay = TriggerSql(server, $"trg_{master.Table}_{column.Column}_not_loosened_when_posted");
+                Assert.Contains($"UPDATE OF {column.Column} ON {master.Table}", oneWay, StringComparison.Ordinal);
+                Assert.Contains($"OLD.{column.Column} = 1 AND NEW.{column.Column} = 0", oneWay, StringComparison.Ordinal);
+                Assert.Contains($"l.{master.LineColumn} = OLD.id", oneWay, StringComparison.Ordinal);
+            }
 
             Assert.Contains($"l.{master.LineColumn} = NEW.id",
                 TriggerSql(server, $"trg_{master.Table}_no_replace_used_insert"), StringComparison.Ordinal);

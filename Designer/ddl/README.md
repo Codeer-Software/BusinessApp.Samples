@@ -113,6 +113,7 @@ dotnet test BusinessApp.slnx
 | 取引先を要する科目の明細には取引先がある（[10 §6-2](../../docs/10_会計ドメイン設計.md)） | `BEFORE UPDATE` のトリガ（**下書き → 計上のときだけ**鳴る。**実効値**——明細が空なら伝票の取引先を見る。**外すのは計上済みの原仕訳を写した取消だけ**——補助科目の 2 値と同じ形） | `E-PARTNER-REQUIRED` |
 | 補助科目が明細の勘定科目に属する（[10 §6](../../docs/10_会計ドメイン設計.md)） | **無い。関門だけが見ている**——取込・CLI・SQL の直打ちからは素通りする（塞ぐのは取込と投入 API を作る回。[04 §3](../../docs/04_実装計画と現在地.md) のフェーズ 6） | `E-SUBACCOUNT-MISMATCH` |
 | 使用中のマスタは意味を変えられない（[ADR-0038](../../docs/decisions/0038-使用中のマスタは意味を変えられない.md)） | 4 マスタの `BEFORE UPDATE OF <意味を決める列>` トリガ ＋ REPLACE で id を乗っ取る経路を止める `BEFORE INSERT` / `BEFORE UPDATE OF id` トリガ | `MasterMeaningGate` |
+| 使用中の科目で「取引先を要する」をオフにできない（[10 §6-2](../../docs/10_会計ドメイン設計.md)。**一方通行**。オンはいつでも通る） | `BEFORE UPDATE OF requires_partner` のトリガ（`OLD = 1 AND NEW = 0` のときだけ鳴る） | `MasterMeaningGate` の一方通行の列 |
 | 単一法人（[ADR-0005](../../docs/decisions/0005-単一法人に徹する.md)） | `CHECK (id = 1)` | — |
 
 **摘要の「空白」の範囲を、関門とトリガで同じにしてある理由は
