@@ -59,6 +59,7 @@ dotnet test BusinessApp.slnx
 | 006 | [`006_partner_registrations.sql`](006_partner_registrations.sql) | 適格請求書発行事業者の登録（有効期間つき。**公表情報の写し**。取引先部品のもの） |
 | 007 | [`007_auth.sql`](007_auth.sql) | 利用者アカウント（**認証部品のテーブル**。本体は CLB のもので、役割の列だけを間借りする——[ADR-0032](../../docs/decisions/0032-認証部品のapp_usersを正典に迎え入れる.md)） |
 | 008 | [`008_master_code_format.sql`](008_master_code_format.sql) | **マスタのコードの書式**（6 つの表に同じ規則。docs/12 §2-1・[ADR-0047](../../docs/decisions/0047-マスタのコードは空白を落とす以外書き換えず字種で断る.md)）。**1 ファイルにまとめてあるのはトリガの作られる順のため**——表の定義の隣に置くと、既存 DB へ配る側で 005 のトリガより後になり、正典と順が食い違う |
+| 009 | [`009_partner_meaning.sql`](009_partner_meaning.sql) | **使用中の取引先はコードを変えられない**（会計コアの 4 マスタと揃える。[ADR-0047](../../docs/decisions/0047-マスタのコードは空白を落とす以外書き換えず字種で断る.md) の決定 9）。**取引先だけは伝票（`journal_entries.partner_id`）も見る**——明細が空なら伝票の値が実効値になるから |
 
 各テーブルの扱い（所有・誰が編集するか・版と削除）は [docs/12_マスタ台帳](../../docs/12_マスタ台帳.md) が持つ。
 
@@ -113,7 +114,7 @@ dotnet test BusinessApp.slnx
 | 補助科目は 2 値（[10 §6](../../docs/10_会計ドメイン設計.md)・[ADR-0038 §3](../../docs/decisions/0038-使用中のマスタは意味を変えられない.md)） | `BEFORE UPDATE` のトリガ（**下書き → 計上のときだけ**鳴る。**外すのは計上済みの原仕訳を写した取消だけ**——**関門より外す範囲が小さい**。理由は 005_journals.sql の注記） | `E-SUBACCOUNT-REQUIRED` ＋ `E-SUBACCOUNT-NOT-ALLOWED` |
 | 取引先を要する科目の明細には取引先がある（[10 §6-2](../../docs/10_会計ドメイン設計.md)） | `BEFORE UPDATE` のトリガ（**下書き → 計上のときだけ**鳴る。**実効値**——明細が空なら伝票の取引先を見る。**「無い」は NULL だけでなく「マスタに実在しない」まで**——外部キーを切った経路が守る相手だから。**外すのは計上済みの原仕訳を写した取消だけ**——補助科目の 2 値と同じ形） | `E-PARTNER-REQUIRED`（**実在は見ていない**——[04 §1](../../docs/04_実装計画と現在地.md) の B-1） |
 | 補助科目が明細の勘定科目に属する（[10 §6](../../docs/10_会計ドメイン設計.md)） | **無い。関門だけが見ている**——取込・CLI・SQL の直打ちからは素通りする（塞ぐのは取込と投入 API を作る回。[04 §3](../../docs/04_実装計画と現在地.md) のフェーズ 6） | `E-SUBACCOUNT-MISMATCH` |
-| 使用中のマスタは意味を変えられない（[ADR-0038](../../docs/decisions/0038-使用中のマスタは意味を変えられない.md)） | 4 マスタの `BEFORE UPDATE OF <意味を決める列>` トリガ ＋ REPLACE で id を乗っ取る経路を止める `BEFORE INSERT` / `BEFORE UPDATE OF id` トリガ | `MasterMeaningGate` |
+| 使用中のマスタは意味を変えられない（[ADR-0038](../../docs/decisions/0038-使用中のマスタは意味を変えられない.md)） | **5 マスタ**の `BEFORE UPDATE OF <意味を決める列>` トリガ ＋ REPLACE で id を乗っ取る経路を止める `BEFORE INSERT` / `BEFORE UPDATE OF id` トリガ | `MasterMeaningGate`（**取引先は 2026-09-09 に足した**。ADR-0047 の決定 9。数える単位は振替伝票の枚数） |
 | 使用中の科目で「取引先を要する」をオフにできない（[10 §6-2](../../docs/10_会計ドメイン設計.md)。**一方通行**。オンはいつでも通る。**使用中になるまでは働かない**——残余は 10 §6-2） | `BEFORE UPDATE OF requires_partner` のトリガ（`OLD = 1 AND NEW = 0` のときだけ鳴る） | `MasterMeaningGate` の一方通行の列 |
 | マスタのコードの書式（[docs/12 §2-1](../../docs/12_マスタ台帳.md)・[ADR-0047](../../docs/decisions/0047-マスタのコードは空白を落とす以外書き換えず字種で断る.md)） | 6 表の `BEFORE INSERT` / `BEFORE UPDATE OF code` トリガ（**`CHECK` ではない**——後から足すには表の作り直しが要る）。**大小を無視した重複は `UNIQUE ... COLLATE NOCASE` の索引** | `MasterCode`（**前後の空白を落とすのはこちらだけ**。トリガは落とした後の姿を見る） |
 | 単一法人（[ADR-0005](../../docs/decisions/0005-単一法人に徹する.md)） | `CHECK (id = 1)` | — |

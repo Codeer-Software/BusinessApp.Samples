@@ -634,4 +634,72 @@ public class MasterMeaningGateTests
             .Single();
         return JsonDocument.Parse(File.ReadAllText(path));
     }
+
+    // --- 取引先（ADR-0047 の決定 9。2026-09-09 に 4 マスタと揃えた） ----------------
+
+    /// <summary>
+    /// 計上済みの明細が使っている取引先は、コードを変えられない。
+    /// </summary>
+    /// <remarks>
+    /// <b>帳簿には取引先の名称と登録番号を焼き込んでいる</b>（ADR-0018）ので、
+    /// コードを変えても過去の記載は動かない。それでも揃えるのは、利用者から見て
+    /// 「科目コードは変えられないのに取引先コードは変えられる」を説明できないからである。
+    /// </remarks>
+    [Fact]
+    public async Task 計上済みの明細が使っている取引先のコードは変えられない()
+    {
+        using var server = new AccountingServer();
+        var partner = server.InsertPartner();
+
+        // **計上する前に入れる。** 計上済みの明細は DDL のトリガが変更を拒む（I-05）。
+        var entry = server.InsertDraft(
+            transactionDate: "2026-08-24", postingDate: "2026-08-24", description: "支払");
+        server.InsertLine(entry, 1, "debit", "2200", 1000);
+        server.InsertLine(entry, 2, "credit", "1100", 1000);
+        server.Execute($"update journal_lines set partner_id = {partner} where journal_entry_id = {entry.Value} and line_no = 1");
+        server.Execute(
+            $"update journal_entries set status = 'posted', entry_no = 1, posted_at = '2026-08-24 13:00:00' where id = {entry.Value}");
+
+        var thrown = await Rejected(
+            server,
+            Updating("Partner", Row("Partner", Id(partner), "Code", new TextFieldData { Value = "P999" })));
+
+        Assert.Contains("この取引先は計上済みの振替伝票 1 枚で使われている", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「取引先コード」は変えられません", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>伝票にだけ入れた取引先も数える</b>（明細が空なら伝票の値が実効値になる。docs/10 §6-2）。
+    /// </summary>
+    /// <remarks>
+    /// <b>明細だけを数えると、この経路を取りこぼす。</b> 取引先は伝票にも明細にも入るので、
+    /// 数える単位も「振替伝票の枚数」にしてある——行で数えると同じ伝票を何度も数える。
+    /// </remarks>
+    [Fact]
+    public async Task 伝票にだけ入れた取引先も使用中に数える()
+    {
+        using var server = new AccountingServer();
+        var partner = server.InsertPartner();
+        server.InsertPosted(1, "支払", "2026-08-24", partner, ("debit", "2200", 1000), ("credit", "1100", 1000));
+
+        var thrown = await Rejected(
+            server,
+            Updating("Partner", Row("Partner", Id(partner), "Code", new TextFieldData { Value = "P999" })));
+
+        Assert.Contains("振替伝票 1 枚", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>下書きだけが使っている取引先は変えられる（使用中は計上済みだけ。ADR-0038 §1）。</summary>
+    [Fact]
+    public async Task 下書きだけが使う取引先のコードは変えられる()
+    {
+        using var server = new AccountingServer();
+        var partner = server.InsertPartner();
+        var draft = server.InsertDraft();
+        server.Execute($"update journal_entries set partner_id = {partner} where id = {draft.Value}");
+
+        Assert.True(await Submit(
+            server,
+            Updating("Partner", Row("Partner", Id(partner), "Code", new TextFieldData { Value = "P999" }))));
+    }
 }

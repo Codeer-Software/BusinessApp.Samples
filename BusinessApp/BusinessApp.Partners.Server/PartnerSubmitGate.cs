@@ -57,11 +57,57 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     private async Task RejectAsync(ModuleData data)
     {
         RejectSelfParent(data);
+        await RejectBadCodeAsync(data);
         RejectMalformedCorporateNumber(data);
         await RejectSoleProprietorWithCorporateNumberAsync(data);
         await RejectMismatchedParentAsync(data);
         await RejectMismatchedChildrenAsync(data);
         await RejectDeepParentAsync(data);
+    }
+
+    /// <summary>
+    /// コードの書式と、大小を無視した重複（ADR-0047）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>書式の判定は <see cref="MasterCode"/> が持つ。</b> 会計コアのマスタと同じ規則で、
+    /// 同じ実装を両方が参照する（docs/12 §2-1）。<b>取引先だけを載せるホストでも効く</b>——
+    /// <c>BusinessApp.ServerSupport</c> は依存ゼロで、この部品が既に参照している。</para>
+    /// <para><b>正規化した姿を差分に書き戻す。</b> 比べるときだけ落とすと、関門が「同じ」と通した値を
+    /// DDL のトリガが「違う」と拒む（関門の受理集合が DB より広い。qa/03 L-14 の型）。</para>
+    /// </remarks>
+    private async Task RejectBadCodeAsync(ModuleData data)
+    {
+        if (Field<TextFieldData>(data, "Code") is not TextFieldData field)
+        {
+            return;
+        }
+
+        var code = MasterCode.Normalize(field.Value);
+        if (code.Length == 0)
+        {
+            throw new PartnerRejectedException("「取引先コード」を入れてください。");
+        }
+
+        if (MasterCode.DescribeProblem(code) is string problem)
+        {
+            throw new PartnerRejectedException(problem);
+        }
+
+        field.Value = code;
+
+        var conflict = await store.FindConflictingCodeAsync(code, Id(data) is long id ? new PartnerId(id) : null);
+        if (conflict is null)
+        {
+            return;
+        }
+
+        // **ぶつかった相手の字を見せる。** 大小だけが違うとき、字を見比べないと理由が分からない。
+        var note = string.Equals(conflict, code, StringComparison.Ordinal)
+            ? string.Empty
+            : $"コードは大文字と小文字を区別しないので、「{conflict}」と同じものになります。";
+
+        throw new PartnerRejectedException(
+            $"「取引先コード」{code} は既に使われています。{note}別のコードを入れてください。");
     }
 
     /// <summary>

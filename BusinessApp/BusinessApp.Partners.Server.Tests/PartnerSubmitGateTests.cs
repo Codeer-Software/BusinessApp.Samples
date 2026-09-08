@@ -33,9 +33,15 @@ public class PartnerSubmitGateTests
 
     /// <summary>CLB は<b>変更されたフィールドしか送ってこない</b>ので、渡された項目だけ載せる。</summary>
     private static ModuleData Partner(
-        long? id = null, string? corporateNumber = null, string? entityType = null, string? parentId = null)
+        long? id = null, string? corporateNumber = null, string? entityType = null, string? parentId = null,
+        string? code = null)
     {
         var data = new ModuleData { Name = PartnerSubmitGate.ModuleName };
+
+        if (code is not null)
+        {
+            data.Fields["Code"] = new TextFieldData { Value = code };
+        }
 
         if (id is long rowId)
         {
@@ -915,5 +921,113 @@ public class PartnerSubmitGateTests
             """);
 
         return server.Scalar<long>("select last_insert_rowid()");
+    }
+
+    // --- コードの書式と重複（ADR-0047。docs/04 §1 の B-1・B-2） -------------------
+
+    [Theory]
+    [InlineData("11 00", "目に見えない文字")]
+    [InlineData("Ｐ００１", "使えません")]
+    [InlineData("-P001", "最初と最後")]
+    [InlineData("P--001", "続けて")]
+    [InlineData("123456789012345678901", "20 文字以内")]
+    public async Task 書式に反するコードは利用者の語で断る(string code, string expected)
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        var rejected = await RejectedAsync(server, Adding(Partner(code: code)), save);
+
+        Assert.Contains(expected, rejected.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task コードが空なら必須として断る()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        var rejected = await RejectedAsync(server, Adding(Partner(code: "   ")), save);
+
+        Assert.Contains("「取引先コード」を入れてください", rejected.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary><b>前後の空白は落として差分に書き戻す</b>（ADR-0047 の決定 5）。</summary>
+    [Fact]
+    public async Task 前後の空白は落として差分に書き戻す()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+        var row = Partner(code: "  P001  ");
+
+        await Gate(server).SubmitAsync([Adding(row)], save.SaveAsync);
+
+        Assert.True(save.Called);
+        Assert.Equal("P001", ((TextFieldData)row.Fields["Code"]).Value);
+    }
+
+    /// <summary>
+    /// 大小だけが違うコードも断り、ぶつかった相手の字を見せる。
+    /// </summary>
+    /// <remarks>
+    /// 字を見せないと、利用者は「そのコードは入っていないのに」と思う。
+    /// </remarks>
+    [Fact]
+    public async Task 大小だけが違うコードは相手の字を見せて断る()
+    {
+        using var server = new PartnerServer();
+        server.Execute("insert into partners (code, name) values ('P001', '株式会社アルタイル')");
+        var save = new SaveSpy();
+
+        var rejected = await RejectedAsync(server, Adding(Partner(code: "p001")), save);
+
+        Assert.Contains("P001", rejected.Message, StringComparison.Ordinal);
+        Assert.Contains("大文字と小文字を区別しない", rejected.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 同じ字のコードは、大小の注記を付けずに断る。
+    /// </summary>
+    /// <remarks>
+    /// <b>注記は「見比べても分からない」ときにだけ要る。</b> 同じ字なら、
+    /// 「大文字と小文字を区別しない」と言われても利用者には無関係な情報である。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ字のコードは注記なしで断る()
+    {
+        using var server = new PartnerServer();
+        server.Execute("insert into partners (code, name) values ('P001', '株式会社アルタイル')");
+        var save = new SaveSpy();
+
+        var rejected = await RejectedAsync(server, Adding(Partner(code: "P001")), save);
+
+        Assert.Contains("「取引先コード」P001 は既に使われています", rejected.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("大文字と小文字", rejected.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>自分自身は重複に数えない。</summary>
+    [Fact]
+    public async Task 自分と同じコードは重複に数えない()
+    {
+        using var server = new PartnerServer();
+        server.Execute("insert into partners (code, name) values ('P001', '株式会社アルタイル')");
+        var id = server.Scalar<long>("select id from partners where code = 'P001'");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync([Updating(Partner(id: id, code: "P001"))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>コードを触っていない保存は、コードを見ない（差分に載らない欄は「変えていない」）。</summary>
+    [Fact]
+    public async Task コードを触っていなければ見ない()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync([Adding(Partner(corporateNumber: ValidNumber))], save.SaveAsync);
+
+        Assert.True(save.Called);
     }
 }

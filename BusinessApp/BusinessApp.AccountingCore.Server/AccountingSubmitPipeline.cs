@@ -30,11 +30,16 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 /// 1 つ足りないまま通る——しかもテストは緑のままである（ADR-0025 §6 の「持ち出し忘れ」の型）。</para>
 /// <para><b>マスタの関門（<see cref="MasterMeaningGate"/>。ADR-0038）も保存の前に検査するだけ</b>なので内側でよい。
 /// 2026-09-07 に足した（docs/04 §1 の A-1）。</para>
+/// <para><b>値の関門（<see cref="MasterSubmitGate"/>。docs/04 §1 の B-1・B-2）は、意味の凍結の内側に置く。</b>
+/// <b>先に返すべきは意味の凍結のほう</b>——あちらは直す手立てが無い（新しい行を作るしかない）が、
+/// こちらは値を直せば通るからである（<c>MasterMeaningGate</c> が同じ理由で
+/// 意味を決める列の断りを一方通行の列より先に返している）。2026-09-09 に足した。</para>
 /// </remarks>
 public sealed class AccountingSubmitPipeline(
     JournalSubmitGate journals,
     CompanyProfileSubmitGate companyProfile,
     MasterMeaningGate masters,
+    MasterSubmitGate masterValues,
     PartnerSubmitPipeline partners,
     Action<string>? onSaveFailure = null)
 {
@@ -50,6 +55,7 @@ public sealed class AccountingSubmitPipeline(
         => new(JournalSubmitGate.Create(dbAccessor, dataSourceName, timeProvider, authenticationContext),
                new CompanyProfileSubmitGate(),
                MasterMeaningGate.Create(dbAccessor, dataSourceName),
+               MasterSubmitGate.Create(dbAccessor, dataSourceName),
                PartnerSubmitPipeline.Create(dbAccessor, dataSourceName),
                onSaveFailure);
 
@@ -71,7 +77,9 @@ public sealed class AccountingSubmitPipeline(
                 transactionData,
                 () => masters.SubmitAsync(
                     transactionData,
-                    () => partners.SubmitAsync(transactionData, save))));
+                    () => masterValues.SubmitAsync(
+                        transactionData,
+                        () => partners.SubmitAsync(transactionData, save)))));
 
         return SaveFailureMessage.ToUserLanguage(results, onSaveFailure);
     }

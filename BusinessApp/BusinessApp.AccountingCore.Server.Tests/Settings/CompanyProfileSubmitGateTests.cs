@@ -49,6 +49,14 @@ public class CompanyProfileSubmitGateTests
         return data;
     }
 
+    /// <summary>決算月だけを触った更新（実機で来る形。触った欄しか載らない）。</summary>
+    private static ModuleData Month(decimal? month)
+    {
+        var data = new ModuleData { Name = CompanyProfileSubmitGate.ModuleName };
+        data.Fields["FiscalYearEndMonth"] = new NumberFieldData { Value = month };
+        return data;
+    }
+
     private static ModuleSubmitData Updating(params ModuleData[] data)
         => new() { ModuleName = CompanyProfileSubmitGate.ModuleName, Update = [.. data] };
 
@@ -260,5 +268,66 @@ public class CompanyProfileSubmitGateTests
         var missingSave = await Assert.ThrowsAsync<ArgumentNullException>(
             () => gate.SubmitAsync([], null!));
         Assert.Equal("save", missingSave.ParamName);
+    }
+
+    // --- 決算月（qa/03 L-28 の 3 例目） -------------------------------------------
+
+    /// <summary>
+    /// 月でない決算月は、利用者の語で断る。
+    /// </summary>
+    /// <remarks>
+    /// <b>13 を入れると定型文になっていた</b>（qa/03 L-28。2026-09-04 の探索的テストで実測）。
+    /// DDL の <c>CHECK</c> は止めるが、そこまで進むと利用者に見えるのは DB の失敗である。
+    /// </remarks>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(13)]
+    [InlineData(-1)]
+    [InlineData(1.5)]
+    public async Task 月でない決算月は断る(double month)
+    {
+        var save = new SaveSpy();
+        var gate = new CompanyProfileSubmitGate();
+
+        var thrown = await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => gate.SubmitAsync([Updating(Month((decimal)month))], save.SaveAsync));
+
+        Assert.Contains("「決算月」は 1 〜 12 の月で入れてください", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(12)]
+    public async Task 月として正しい決算月は保存へ進む(int month)
+    {
+        var save = new SaveSpy();
+
+        await new CompanyProfileSubmitGate().SubmitAsync([Updating(Month(month))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>決算月を触っていない保存は、決算月を見ない（差分に載らない欄は「変えていない」）。</summary>
+    [Fact]
+    public async Task 決算月を触っていなければ見ない()
+    {
+        var save = new SaveSpy();
+
+        await new CompanyProfileSubmitGate().SubmitAsync([Updating(Profile(name: "株式会社アルタイル"))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>決算月を空にした保存も、この関門は止めない（必須は画面と DB の <c>NOT NULL</c> が持つ）。</summary>
+    [Fact]
+    public async Task 決算月が空ならこの関門では止めない()
+    {
+        var save = new SaveSpy();
+
+        await new CompanyProfileSubmitGate().SubmitAsync([Updating(Month(null))], save.SaveAsync);
+
+        Assert.True(save.Called);
     }
 }
