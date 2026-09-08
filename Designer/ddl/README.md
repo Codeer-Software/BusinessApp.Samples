@@ -109,7 +109,7 @@ dotnet test BusinessApp.slnx
 | 消費税行だけが親行を持つ | `CHECK` | `E-TAX-PARENT` ＋ `E-TAX-INHERIT` |
 | 部門「全社共通」は 1 件だけ | 部分 UNIQUE インデックス | — |
 | 摘要のない仕訳は計上できない（[10 §4-2-1](../../docs/10_会計ドメイン設計.md)） | `BEFORE UPDATE` のトリガ（**下書き → 計上のときだけ**鳴る。空白だけも空とみなす） | `E-DESCRIPTION-EMPTY` |
-| 補助科目は 2 値（[10 §6](../../docs/10_会計ドメイン設計.md)・[ADR-0038 §3](../../docs/decisions/0038-使用中のマスタは意味を変えられない.md)） | `BEFORE UPDATE` のトリガ（**下書き → 計上のときだけ**鳴る。**外すのは計上済みの原仕訳を写した取消だけ**——**関門より狭い**。理由は 005_journals.sql の注記） | `E-SUBACCOUNT-REQUIRED` ＋ `E-SUBACCOUNT-NOT-ALLOWED` |
+| 補助科目は 2 値（[10 §6](../../docs/10_会計ドメイン設計.md)・[ADR-0038 §3](../../docs/decisions/0038-使用中のマスタは意味を変えられない.md)） | `BEFORE UPDATE` のトリガ（**下書き → 計上のときだけ**鳴る。**外すのは計上済みの原仕訳を写した取消だけ**——**関門より外す範囲が小さい**。理由は 005_journals.sql の注記） | `E-SUBACCOUNT-REQUIRED` ＋ `E-SUBACCOUNT-NOT-ALLOWED` |
 | 補助科目が明細の勘定科目に属する（[10 §6](../../docs/10_会計ドメイン設計.md)） | **無い。関門だけが見ている**——取込・CLI・SQL の直打ちからは素通りする（塞ぐのは取込と投入 API を作る回。[04 §3](../../docs/04_実装計画と現在地.md) のフェーズ 6） | `E-SUBACCOUNT-MISMATCH` |
 | 使用中のマスタは意味を変えられない（[ADR-0038](../../docs/decisions/0038-使用中のマスタは意味を変えられない.md)） | 4 マスタの `BEFORE UPDATE OF <意味を決める列>` トリガ ＋ REPLACE で id を乗っ取る経路を止める `BEFORE INSERT` / `BEFORE UPDATE OF id` トリガ | `MasterMeaningGate` |
 | 単一法人（[ADR-0005](../../docs/decisions/0005-単一法人に徹する.md)） | `CHECK (id = 1)` | — |
