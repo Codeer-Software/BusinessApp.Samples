@@ -22,11 +22,15 @@ public static class AccountingFixture
     public static readonly AccountId SuppliesExpense = new(4);
     public static readonly AccountId RetiredExpense = new(5);
     public static readonly AccountId BankAccount = new(6);
+
+    /// <summary>補助科目を使うが、<b>選べる補助科目が 1 つも無い</b>科目（無効なものだけがある）。</summary>
+    public static readonly AccountId CurrentAccount = new(7);
     public static readonly AccountId UnknownAccount = new(999);
 
     public static readonly SubAccountId MainBank = new(1);
     public static readonly SubAccountId RetiredBank = new(2);
     public static readonly SubAccountId SubAccountOfCash = new(3);
+    public static readonly SubAccountId RetiredCurrent = new(4);
     public static readonly SubAccountId UnknownSubAccount = new(999);
 
     public static readonly DepartmentId SalesDepartment = new(1);
@@ -45,6 +49,7 @@ public static class AccountingFixture
         new(SuppliesExpense, "5200", "消耗品費", AccountCategory.Expense),
         new(RetiredExpense, "5900", "廃止した費用科目", AccountCategory.Expense, IsActive: false),
         new(BankAccount, "1200", "普通預金", AccountCategory.Asset, UsesSubAccount: true),
+        new(CurrentAccount, "1210", "当座預金", AccountCategory.Asset, UsesSubAccount: true),
     ];
 
     public static IReadOnlyList<SubAccountDefinition> SubAccounts { get; } =
@@ -52,6 +57,7 @@ public static class AccountingFixture
         new(MainBank, BankAccount, "01", "みずほ銀行"),
         new(RetiredBank, BankAccount, "99", "解約した口座", IsActive: false),
         new(SubAccountOfCash, Cash, "01", "レジ"),
+        new(RetiredCurrent, CurrentAccount, "01", "解約した当座", IsActive: false),
     ];
 
     public static IReadOnlyList<DepartmentDefinition> Departments { get; } =

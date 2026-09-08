@@ -273,8 +273,31 @@ public class JournalEntryValidatorTests
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000),
             AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
 
-        AssertViolation(JournalViolationCodes.SubAccountRequired, Validate(entry));
+        var violation = AssertViolation(JournalViolationCodes.SubAccountRequired, Validate(entry));
+
+        // **選べる補助科目があるので「選んでください」でよい。**
+        Assert.Equal("勘定科目「普通預金」は「補助科目を使う」がオンです。「補助科目」を選んでください。", violation.Message);
     }
+
+    [Fact]
+    public void 選べる補助科目が無い科目では登録してからと言う()
+    {
+        // **踏めない案内をしない**（docs/21 §1・§2-3。qa/02 R45-17 と同じ型）。
+        // 当座預金は「補助科目を使う」がオンだが、補助科目は無効なものしか無いので、
+        // 候補ダイアログは 0 件で開く——「選んでください」では次の一手にならない。
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.CurrentAccount, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+
+        var violation = AssertViolation(JournalViolationCodes.SubAccountRequired, Validate(entry));
+
+        Assert.Equal(
+            "勘定科目「当座預金」は「補助科目を使う」がオンですが、選べる補助科目がありません。"
+            + "補助科目マスタに登録してから選んでください。",
+            violation.Message);
+    }
+
 
     [Fact]
     public void 親の勘定科目に属さない補助科目は使えない()
@@ -324,7 +347,7 @@ public class JournalEntryValidatorTests
         var violation = AssertViolation(JournalViolationCodes.SubAccountNotAllowed, Validate(entry));
 
         // **利用者に出る文**を固定する（docs/21 §2-6。事実と次の一手だけを持つ）。
-        Assert.Equal("勘定科目「現金」は補助科目を使いません。補助科目を空にしてください。", violation.Message);
+        Assert.Equal("勘定科目「現金」は「補助科目を使う」がオフです。「補助科目」を空にしてください。", violation.Message);
         Assert.Equal(ViolationSeverity.Error, violation.Severity);
         Assert.Equal(1, violation.LineNo);
 
@@ -338,7 +361,8 @@ public class JournalEntryValidatorTests
     {
         // **規則より前に計上された伝票を打ち消せなくなってはいけない**（docs/10 §5・ADR-0004）。
         // 取消の明細はサーバが原仕訳から作るので、利用者に直す手立てが無い。
-        // **DDL のトリガも同じ広さ**（entry_type <> 'reversal'）。
+        // **DDL のトリガはここより狭い**（計上済みの原仕訳を写した明細だけを外す）。
+        // 関門を通らない経路のために狭くしてあり、アプリからは差が出ない。
         var entry = SubAccountOnUnusedAccount() with
         {
             EntryType = EntryType.Reversal,

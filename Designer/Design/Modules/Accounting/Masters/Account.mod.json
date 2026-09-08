@@ -1481,6 +1481,23 @@
             "ListElementComponent": ""
           },
           {
+            "FieldName": "UsesSubAccount",
+            "ContextMenu": "",
+            "Label": "補助科目を使う",
+            "IsMaxWidthFixed": false,
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": true,
+            "CanUserSort": true,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
             "FieldName": "IsContra",
             "ContextMenu": "",
             "Label": "評価勘定",

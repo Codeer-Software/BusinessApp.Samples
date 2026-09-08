@@ -267,9 +267,15 @@ public static class JournalEntryValidator
         {
             if (account.UsesSubAccount)
             {
+                // **次の一手は、選べる補助科目があるかで変わる。** 1 つも無い科目に
+                // 「選んでください」と言うと、候補ダイアログが 0 件で開くだけで踏めない
+                // （docs/21 §1・§2-3。qa/02 R45-17 と同じ型）。
                 violations.Add(new Violation(
                     JournalViolationCodes.SubAccountRequired,
-                    $"勘定科目「{account.Name}」は補助科目を使います。補助科目を選んでください。",
+                    subAccounts.HasSelectable(account.Id)
+                        ? $"勘定科目「{account.Name}」は「補助科目を使う」がオンです。「補助科目」を選んでください。"
+                        : $"勘定科目「{account.Name}」は「補助科目を使う」がオンですが、選べる補助科目がありません。"
+                          + "補助科目マスタに登録してから選んでください。",
                     line.LineNo,
                     ReversalOnlySeverity(entry)));
             }
@@ -297,7 +303,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.SubAccountNotAllowed,
-                $"勘定科目「{account.Name}」は補助科目を使いません。補助科目を空にしてください。",
+                $"勘定科目「{account.Name}」は「補助科目を使う」がオフです。「補助科目」を空にしてください。",
                 line.LineNo,
                 ReversalOnlySeverity(entry)));
             return;
