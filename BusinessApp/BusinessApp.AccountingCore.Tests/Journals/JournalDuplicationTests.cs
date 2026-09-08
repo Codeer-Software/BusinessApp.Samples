@@ -22,8 +22,16 @@ public class JournalDuplicationTests
     private static readonly DateOnly DuplicatedOn = new(2026, 6, 10);
     private static readonly DateTimeOffset EnteredAt = new(2026, 6, 10, 9, 0, 0, TimeSpan.FromHours(9));
 
+    /// <summary>複製して、できた下書きを取り出す（作れないはずの検体は下の Theory が見る）。</summary>
     private static JournalEntry Duplicate(JournalEntry original)
-        => JournalDuplication.Duplicate(original, DuplicatedOn, EnteredAt, AccountingFixture.FiscalYear);
+    {
+        var result = JournalDuplication.Duplicate(
+            original, DuplicatedOn, EnteredAt, AccountingFixture.FiscalYear);
+
+        Assert.True(result.Created);
+        Assert.Empty(result.Violations);
+        return result.Draft!;
+    }
 
     /// <summary>計上済みの伝票（写してはいけない欄を全部埋めてある）。</summary>
     /// <remarks>
@@ -131,6 +139,33 @@ public class JournalDuplicationTests
         Assert.Null(copy.Description);
     }
 
+    /// <summary>摘要の無い伝票を複製しても落ちない（空は空のまま）。</summary>
+    /// <remarks>
+    /// <b>摘要の無い計上済みが稼働 DB に 2 件ある</b>（規則より前の伝票。docs/10 §4-2-1）。
+    /// </remarks>
+    [Theory]
+    [InlineData(EntryType.Normal)]
+    [InlineData(EntryType.Reversal)]
+    public void 摘要の無い伝票を複製しても落ちない(EntryType entryType)
+    {
+        var copy = Duplicate(Posted() with { EntryType = entryType, Description = null });
+
+        Assert.Null(copy.Description);
+    }
+
+    /// <summary>空白だけの摘要は、通常の伝票でも空にする。</summary>
+    /// <remarks>
+    /// <b>素通しにすると「見た目は入っているのに計上のときだけ断られる」</b>
+    /// （10 §4-2-1 の二層は空白だけを空とみなす。2026-09-09 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public void 空白だけの摘要は通常の伝票でも空にする()
+    {
+        var copy = Duplicate(Posted() with { EntryType = EntryType.Normal, Description = "   " });
+
+        Assert.Null(copy.Description);
+    }
+
     /// <summary>
     /// <b>通常の伝票の摘要は、同じ形をしていても剥がさない。</b>
     /// </summary>
@@ -232,8 +267,10 @@ public class JournalDuplicationTests
         Assert.Null(line.PartnerNameSnapshot);
         Assert.Null(line.RegistrationNoSnapshot);
         Assert.Null(line.AppliedRuleVersion);
-        Assert.Null(line.TaxPoint);
         Assert.Null(line.EvidenceRef);
+
+        // **課税仕入れの時点は写す**（画面に無い欄なので、落とすと入れ直せない）。
+        Assert.Equal(new DateOnly(2026, 5, 20), line.TaxPoint);
     }
 
     /// <summary>
@@ -282,14 +319,13 @@ public class JournalDuplicationTests
     {
         var original = Posted() with { FiscalYearId = AccountingFixture.OtherFiscalYear };
 
-        var copy = JournalDuplication.Duplicate(
-            original, DuplicatedOn, EnteredAt, AccountingFixture.FiscalYear);
+        var copy = Duplicate(original);
 
         Assert.Equal(DuplicatedOn, copy.PostingDate);
         Assert.Equal(AccountingFixture.FiscalYear, copy.FiscalYearId);
         Assert.Equal(EnteredAt, copy.EnteredAt);
 
-        // **取引日だけは原仕訳のものを引き継ぐ**（ADR-0048 の決定 4）。
+        // **取引日だけは原仕訳のものを引き継ぐ**（ADR-0048 の決定 5）。
         Assert.Equal(original.TransactionDate, copy.TransactionDate);
         Assert.NotEqual(copy.PostingDate, copy.TransactionDate);
     }
@@ -313,6 +349,45 @@ public class JournalDuplicationTests
             Assert.Throws<ArgumentNullException>(
                 () => JournalDuplication.Duplicate(null!, DuplicatedOn, EnteredAt, AccountingFixture.FiscalYear))
                 .ParamName);
+
+    // --- 複製できる種別（ADR-0048 の決定 6） -----------------------------------
+
+    /// <summary>
+    /// <b>期首残高・決算振替・繰越は複製できない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>複製でできるのは通常の伝票</b>なので、決算振替を複製すると
+    /// 「損益 → 繰越利益剰余金」を<b>期中に通常の伝票として計上できる</b>（I-10）し、
+    /// 繰越の複製は翌期首の残高を二重に載せる（I-12）。
+    /// <b>いまはどれも未実装だが、実装した日に黙って開かないようにここで止める</b>
+    /// （2026-09-09 の自己レビュー。qa/03 L-13 の型）。
+    /// </remarks>
+    [Theory]
+    [InlineData(EntryType.Opening, "期首残高")]
+    [InlineData(EntryType.Closing, "決算振替")]
+    [InlineData(EntryType.Carryover, "繰越")]
+    public void 期首残高と決算振替と繰越は複製できない(EntryType entryType, string label)
+    {
+        var result = JournalDuplication.Duplicate(
+            Posted() with { EntryType = entryType }, DuplicatedOn, EnteredAt, AccountingFixture.FiscalYear);
+
+        Assert.False(result.Created);
+        Assert.Equal(
+            [JournalViolationCodes.DuplicationTargetNotDuplicable],
+            result.Violations.Select(v => v.Code));
+        Assert.Contains($"「{label}」", result.Violations[0].Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>通常・訂正・取消は複製できる（種別ごとの線を両側から見る）。</summary>
+    [Theory]
+    [InlineData(EntryType.Normal)]
+    [InlineData(EntryType.Correction)]
+    [InlineData(EntryType.Reversal)]
+    public void 通常と訂正と取消は複製できる(EntryType entryType)
+        => Assert.True(
+            JournalDuplication.Duplicate(
+                Posted() with { EntryType = entryType },
+                DuplicatedOn, EnteredAt, AccountingFixture.FiscalYear).Created);
 
     // --- 欄が増えた日に気づく ---------------------------------------------------
 
@@ -348,15 +423,74 @@ public class JournalDuplicationTests
             copied:
             [
                 "DebitCredit", "AccountId", "SubAccountId", "DepartmentId", "PartnerId",
-                "Amount", "TaxCategoryId", "TaxTreatment", "ItemDescription", "BookOnlyDeduction",
+                "Amount", "TaxCategoryId", "TaxTreatment", "TaxPoint",
+                "ItemDescription", "BookOnlyDeduction",
             ],
             notCopied:
             [
                 "PartnerNameSnapshot", "RegistrationNoSnapshot", "AppliedRuleVersion",
-                "TaxPoint", "IsTaxLine", "ParentLineNo", "EvidenceRef",
+                "IsTaxLine", "ParentLineNo", "EvidenceRef",
             ],
             decidedOutside: ["LineNo"],
             computed: []);
+
+    /// <summary>
+    /// <b>「写す」に並べた明細の欄が、本当に写っている。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>一覧に足しただけで実装を直し忘れると、上の網羅テストは緑のまま</b>である
+    /// （和が一致することしか見ていない。2026-09-09 の自己レビュー）。
+    /// ここは<b>既定値と違う値を入れた明細</b>を 1 本作り、写した結果を欄ごとに読み比べる。</para>
+    /// <para><b>伝票の側は欄ごとに型が違う</b>ので、上の個別の検体が見る（3 つしかない）。</para>
+    /// </remarks>
+    [Fact]
+    public void 写すと決めた明細の欄は本当に写る()
+    {
+        var original = AccountingFixture.Entry(
+            TransactionDate,
+            AccountingFixture.Line(
+                7, DebitCredit.Credit, AccountingFixture.BankAccount, 12_345,
+                subAccountId: AccountingFixture.MainBank,
+                department: AccountingFixture.SalesDepartment,
+                taxCategoryId: AccountingFixture.TaxablePurchase,
+                partner: AccountingFixture.Partner) with
+            {
+                TaxTreatment = TaxTreatment.Common,
+                TaxPoint = new DateOnly(2026, 4, 30),
+                ItemDescription = "文房具",
+                BookOnlyDeduction = "public_transport",
+            });
+
+        var line = Duplicate(original).Lines[0];
+        var source = original.Lines[0];
+
+        // **1 つずつ読み比べる。** まとめて Equals で見ると、
+        // 写さない欄まで一致することを要求してしまう。
+        Assert.Equal(source.DebitCredit, line.DebitCredit);
+        Assert.Equal(source.AccountId, line.AccountId);
+        Assert.Equal(source.SubAccountId, line.SubAccountId);
+        Assert.Equal(source.DepartmentId, line.DepartmentId);
+        Assert.Equal(source.PartnerId, line.PartnerId);
+        Assert.Equal(source.Amount, line.Amount);
+        Assert.Equal(source.TaxCategoryId, line.TaxCategoryId);
+        Assert.Equal(source.TaxTreatment, line.TaxTreatment);
+        Assert.Equal(source.TaxPoint, line.TaxPoint);
+        Assert.Equal(source.ItemDescription, line.ItemDescription);
+        Assert.Equal(source.BookOnlyDeduction, line.BookOnlyDeduction);
+
+        // **どれも既定値ではない**（縮退していたら、写していなくても一致する。qa/03 L-02）。
+        Assert.NotEqual(default, line.SubAccountId);
+        Assert.NotEqual(default, line.DepartmentId);
+        Assert.NotEqual(default, line.PartnerId);
+        Assert.NotNull(line.TaxTreatment);
+        Assert.NotNull(line.TaxPoint);
+        Assert.NotNull(line.ItemDescription);
+        Assert.NotNull(line.BookOnlyDeduction);
+
+        // **行番号だけは振り直す**（写さない側）。
+        Assert.Equal(1, line.LineNo);
+        Assert.NotEqual(source.LineNo, line.LineNo);
+    }
 
     /// <summary>型の欄が、4 つの区分のどれかに 1 度だけ現れることを確かめる。</summary>
     private static void AssertCovered(

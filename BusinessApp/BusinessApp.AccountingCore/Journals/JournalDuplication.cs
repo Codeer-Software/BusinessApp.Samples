@@ -1,6 +1,7 @@
 namespace BusinessApp.AccountingCore.Journals;
 
 using BusinessApp.AccountingCore.Periods;
+using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
 /// 伝票を複製する（[ADR-0048]）。
@@ -24,7 +25,7 @@ public static class JournalDuplication
     /// <param name="postingDate">計上日。<b>複製した日</b>であって原仕訳の計上日ではない（I-03）。</param>
     /// <param name="enteredAt">入力年月日。システムが決める（docs/10 §2）。</param>
     /// <param name="fiscalYearId">計上日の属する会計年度。<b>原仕訳の年度ではない。</b></param>
-    public static JournalEntry Duplicate(
+    public static DuplicationResult Duplicate(
         JournalEntry original,
         DateOnly postingDate,
         DateTimeOffset enteredAt,
@@ -32,7 +33,20 @@ public static class JournalDuplication
     {
         ArgumentNullException.ThrowIfNull(original);
 
-        return new JournalEntry
+        // **複製できるのは、利用者が起こせる種別だけ**（ADR-0048 の決定 6）。
+        // 期首残高・決算振替・繰越を通常の伝票として写すと、残高の前提が崩れる。
+        if (!original.EntryType.IsDuplicable())
+        {
+            return new DuplicationResult(
+            [
+                new Violation(
+                    JournalViolationCodes.DuplicationTargetNotDuplicable,
+                    $"種別が「{original.EntryType.DisplayName()}」の伝票は複製できません。"
+                    + "複製できるのは通常の伝票と訂正・取消です。"),
+            ]);
+        }
+
+        var draft = new JournalEntry
         {
             FiscalYearId = fiscalYearId,
 
@@ -53,6 +67,8 @@ public static class JournalDuplication
             EnteredAt = enteredAt,
             Lines = [.. Copy(original.Lines)],
         };
+
+        return new DuplicationResult([], draft);
     }
 
     /// <summary>
@@ -75,7 +91,37 @@ public static class JournalDuplication
                     Amount = line.Amount,
                     TaxCategoryId = line.TaxCategoryId,
                     TaxTreatment = line.TaxTreatment,
+
+                    // **課税仕入れの時点は写す。** 入っていなければ NULL のままで、
+                    // 計上時に取引日へ落ちる（<c>LedgerSnapshotWriter.TaxPointOf</c>）——
+                    // つまり**写しても、既定の伝票では取引日に従う**。
+                    // **入っている値は「取引の事実」である**（締め日基準・支払日起票。docs/11 §5）ので、
+                    // 落とすと同じ取引なのに課税仕入れの日が黙って変わる。
+                    // **画面にこの欄が無い**ので、落としたら利用者は入れ直せない（2026-09-09 の自己レビュー）。
+                    TaxPoint = line.TaxPoint,
                     ItemDescription = line.ItemDescription,
                     BookOnlyDeduction = line.BookOnlyDeduction,
                 });
+}
+
+/// <summary>
+/// 複製した結果。
+/// </summary>
+/// <remarks>
+/// <para><b>違反が空かどうかで判定しない</b>（<see cref="ReversalResult"/> と同じ作法）。</para>
+/// <para><b>レコードにしない</b>——値としての等価も <c>with</c> による複製も使わないので、
+/// 誰も呼ばない生成メンバがカバレッジの穴になる（ADR-0012 がそれを埋めるためだけのテストを禁じている）。</para>
+/// </remarks>
+/// <param name="violations">見つかった違反。</param>
+/// <param name="draft">作れたときの下書き。作れなかったときは <c>null</c>。</param>
+public sealed class DuplicationResult(IReadOnlyList<Violation> violations, JournalEntry? draft = null)
+{
+    /// <summary>見つかった違反。</summary>
+    public IReadOnlyList<Violation> Violations { get; } = violations;
+
+    /// <summary>作れたときの下書き。作れなかったときは <c>null</c>。</summary>
+    public JournalEntry? Draft { get; } = draft;
+
+    /// <summary>作れたか。</summary>
+    public bool Created => Draft is not null;
 }

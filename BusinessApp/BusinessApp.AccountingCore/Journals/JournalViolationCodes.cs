@@ -173,6 +173,9 @@ public static class JournalViolationCodes
     /// <summary>対象にできない種別（取消・期首残高・決算振替・繰越）を取り消す／訂正しようとした。</summary>
     public const string AmendmentTargetNotAmendable = "E-AMEND-TARGET-TYPE";
 
+    /// <summary>複製できない種別（期首残高・決算振替・繰越）を複製しようとした。</summary>
+    public const string DuplicationTargetNotDuplicable = "E-DUPLICATE-TARGET-TYPE";
+
     // --- 取消 ---
 
     /// <summary>既に取り消されている仕訳を、もう一度取り消そうとした。</summary>

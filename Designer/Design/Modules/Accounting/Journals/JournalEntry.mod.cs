@@ -369,44 +369,33 @@ void ReverseButton_OnClick()
 
 // 複製する。サーバが同じ内容の下書きを作って返す（ADR-0048）。
 //
-// **確認を出さない。** 帳簿は 1 行も動かず、できるのは下書き 1 本なので、
-// 間違えても削除すれば済む（docs/21 §2-5「戻せる操作に確認を挟まない」）。
 // **何を写して何を写さないかはサーバが決める**——ここは頼んで開くだけである（ADR-0008）。
+//
+// **確認は「保存していない変更があるとき」だけ出す。** 複製そのものは帳簿を 1 行も動かさず、
+// できるのは下書き 1 本なので、間違えても削除すればよい（ADR-0048 の決定 7）。
+// **ただし写るのは保存済みの内容**なので、直しかけたまま押すと、
+// その変更は複製にも入らず、離脱で消える（2026-09-09 の自己レビュー）。
 void DuplicateButton_OnClick()
 {
-    var body = new JsonObject();
-    body.OriginalEntryId = $"{Id.Value}";
+    var message = IsModified
+        ? "保存していない変更があります。複製に写るのは保存済みの内容で、変更は失われます。よろしいですか？"
+        : "";
 
-    var result = WebApiService.Post("/api/journals/duplicate", body);
-
-    // **業務の差し戻しも 200 で返ってくる**（qa/01 K-01）。
-    if (result.StatusCode != 200)
-    {
-        Toaster.Error($"複製できませんでした。しばらくしてからもう一度お試しください（サーバ応答 {result.StatusCode}）。");
-        return;
-    }
-
-    if ($"{result.JsonObject.status}" != "ok")
-    {
-        Toaster.Error($"{result.JsonObject.message}");
-        return;
-    }
-
-    // **開いた先が複製であることを言う。** 見た目は原仕訳と同じなので、
-    // 言わないと「保存されなかった」と読まれる（docs/21 §2-4）。
-    Toaster.Success("複製しました。内容を確かめて計上してください。");
-
-    NavigationService.NavigateTo(
-        NavigationService.GetModuleDataUrl("JournalEntry", $"{result.JsonObject.openEntryId}"));
+    Amend("duplicate", "複製", message,
+        "複製しました。内容を確かめて計上してください。");
 }
 
 // 確認 → サーバに依頼 → 返ってきた伝票を開く。
 //
 // 取消は「計上済みの反対仕訳」、訂正は「これから直す下書き」を開く。
 // どちらを開くかはサーバが決めて openEntryId で返すので、ここでは分岐しない。
-void Amend(string operation, string noun, string message)
+// **入口を 1 本にしてある。** サーバ側が「入口を分けると片方に関門を書き忘れる」と言って
+// 1 本にしたのと同じ理由で、画面も 1 本にする——文言を直す日に片方だけ直るのを避ける。
+// **message が空なら確認を出さない**（複製。上の理由）。
+// **done が空なら成功のトーストを出さない**（取消・訂正は開いた先の画面がそれを語る）。
+void Amend(string operation, string noun, string message, string done = "")
 {
-    if (MessageBox.ShowWithTitle($"{noun}の確認", message, "はい", "いいえ") != "はい") return;
+    if (message != "" && MessageBox.ShowWithTitle($"{noun}の確認", message, "はい", "いいえ") != "はい") return;
 
     var body = new JsonObject();
     // Id は文字列で持つ。数値に直してから渡すと、桁と型の解釈が 2 か所に分かれる。
@@ -429,6 +418,10 @@ void Amend(string operation, string noun, string message)
         Toaster.Error($"{result.JsonObject.message}");
         return;
     }
+
+    // **開いた先が何であるかを言う。** 複製は見た目が原仕訳と同じなので、
+    // 言わないと「保存されなかった」と読まれる。
+    if (done != "") Toaster.Success(done);
 
     NavigationService.NavigateTo(
         NavigationService.GetModuleDataUrl("JournalEntry", $"{result.JsonObject.openEntryId}"));

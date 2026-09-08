@@ -175,8 +175,13 @@ public sealed class JournalAmendmentService(
             ]);
         }
 
-        return await entryStore.InsertDraftAsync(
-            JournalDuplication.Duplicate(original, today, now, period.FiscalYearId));
+        var result = JournalDuplication.Duplicate(original, today, now, period.FiscalYearId);
+        if (!result.Created)
+        {
+            throw new JournalPostingRejectedException(result.Violations);
+        }
+
+        return await entryStore.InsertDraftAsync(result.Draft!);
     }
 
     /// <summary>

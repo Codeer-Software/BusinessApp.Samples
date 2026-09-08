@@ -103,12 +103,14 @@ internal static class AmendmentRules
     {
         ArgumentNullException.ThrowIfNull(original);
 
-        if (!original.EntryType.RequiresOriginalEntry())
-        {
-            return original.Description;
-        }
+        // **前後の空白を落とし、空になったら NULL にするのは種別によらない。**
+        // 通常の伝票だけ素通しにすると、空白だけの摘要が**見た目は入っているのに
+        // 計上のときだけ断られる**（10 §4-2-1 の二層は空白だけを空とみなす。
+        // 2026-09-09 の自己レビュー）。
+        var body = original.EntryType.RequiresOriginalEntry()
+            ? StripPrefixes(original.Description)
+            : (original.Description ?? string.Empty).Trim();
 
-        var body = StripPrefixes(original.Description);
         return body.Length == 0 ? null : body;
     }
 

@@ -77,7 +77,33 @@ public class JournalAmendmentServiceTests
         Assert.All(copy.Lines, l => Assert.Null(l.PartnerNameSnapshot));
         Assert.All(copy.Lines, l => Assert.Null(l.RegistrationNoSnapshot));
         Assert.All(copy.Lines, l => Assert.Null(l.AppliedRuleVersion));
-        Assert.All(copy.Lines, l => Assert.Null(l.TaxPoint));
+
+        // **課税仕入れの時点は、書く経路でも写る**（画面に無い欄なので落とすと入れ直せない）。
+        Assert.All(copy.Lines, l => Assert.Equal(new DateOnly(2026, 5, 20), l.TaxPoint));
+    }
+
+    /// <summary>複製できない種別は「複製できません」で断る（種別の線がサーバまで届く）。</summary>
+    /// <remarks>
+    /// <b>種別は後から変えられない</b>（DDL のトリガ）ので、その種別で作る。
+    /// 決算振替を作る画面も経路もまだ無い（フェーズ 4）が、<b>DDL は値を許している</b>
+    /// ので、取込・CLI では作れる。
+    /// </remarks>
+    [Fact]
+    public async Task 決算振替は複製できない()
+    {
+        using var server = new AccountingServer();
+        server.Execute("""
+            insert into journal_entries
+                (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+            values (1, '2026-05-20', '2026-05-20', 'draft', 'closing', '決算振替', '2026-05-20 10:00:00')
+            """);
+        var original = new JournalEntryId(server.Scalar<long>("select max(id) from journal_entries"));
+
+        var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.DuplicateAsync(original)));
+
+        Assert.StartsWith("複製できません", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「決算振替」", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>複製した下書きは、そのまま計上できる（作った下書きが計上の関門を通る）。</summary>
