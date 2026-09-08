@@ -61,20 +61,30 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         ArgumentNullException.ThrowIfNull(save);
 
         // **入れ物の名前ではなく、中身の名前で担当を決める**（qa/02 R16-16 の型）。
-        foreach (var data in transactionData.SelectMany(d => d.Add.Concat(d.Update)))
+        foreach (var (data, adding) in transactionData.SelectMany(
+                     d => d.Add.Select(r => (Row: r, Adding: true))
+                           .Concat(d.Update.Select(r => (Row: r, Adding: false)))))
         {
             if (Coded.FirstOrDefault(m => m.ModuleName == data.Name) is CodedMaster master)
             {
-                await RejectAsync(master, data);
+                await RejectAsync(master, data, adding);
             }
         }
 
         return await save();
     }
 
-    private async Task RejectAsync(CodedMaster master, ModuleData data)
+    private async Task RejectAsync(CodedMaster master, ModuleData data, bool adding)
     {
         var id = Id(data);
+
+        // **追加はコードを必ず伴う。** 画面は必ず送ってくるが、**取込は列ごと落とせる**
+        // （`code` の無い CSV）——**取込こそこの関門が守る経路である**（2026-09-09 の自己レビュー）。
+        // 更新は差分しか届かない（qa/01 F-12）ので、載っていないことが正常である。
+        if (adding && !data.Fields.ContainsKey("Code"))
+        {
+            throw new MasterRejectedException($"「{master.CodeLabel}」を入れてください。");
+        }
 
         await RejectBadCodeAsync(master, data, id);
         await RejectSecondCompanyWideDepartmentAsync(master, data, id);
@@ -247,10 +257,13 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         }
     }
 
-    /// <summary>触られた文字列の欄。<b>触られていなければ <c>null</c></b>（更新は差分しか届かない）。</summary>
+    /// <summary>
+    /// 触られた文字列の欄。<b>触られていなければ <c>null</c></b>（更新は差分しか届かない）。
+    /// </summary>
     /// <remarks>
-    /// <b>届いているのに読めない型なら止める。</b> <c>null</c> を返すと「触られていない」と
-    /// 見分けがつかず、<b>欄の型が変わった日に検査が黙って素通しへ落ちる</b>
+    /// <b>届いているのに読めない型なら止める</b>（<see cref="UnreadableFieldException"/>）。
+    /// <c>null</c> を返すと「触られていない」と見分けがつかず、
+    /// <b>欄の型が変わった日に検査が黙って素通しへ落ちる</b>
     /// （<c>PartnerSubmitGate.Reference</c> が名指しする形。2026-09-09 の自己レビュー）。
     /// </remarks>
     private static string? Text(ModuleData data, string field)
@@ -259,15 +272,21 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             {
                 TextFieldData text => text.Value ?? string.Empty,
                 SelectFieldData select => select.Value ?? string.Empty,
-                _ => throw new InvalidOperationException(
-                    $"「{field}」が読めない型 {value.GetType().Name} で届いた。関門が守れないので止める。"),
+                _ => throw UnreadableFieldException.For(field, value),
             }
             : null;
 
-    /// <summary>触られた真偽の欄。</summary>
+    /// <summary>
+    /// 触られた真偽の欄。<b>読めない型なら止める</b>（<see cref="Text"/> と同じ理由）。
+    /// </summary>
+    /// <remarks>
+    /// 黙って <c>null</c> を返すと、<b>「全社共通」の 2 件目の検査だけが丸ごと素通し</b>になる。
+    /// </remarks>
     private static bool? Boolean(ModuleData data, string field)
-        => data.Fields.TryGetValue(field, out var value) && value is BooleanFieldData boolean
-            ? boolean.Value
+        => data.Fields.TryGetValue(field, out var value)
+            ? value is BooleanFieldData boolean
+                ? boolean.Value
+                : throw UnreadableFieldException.For(field, value)
             : null;
 
     /// <summary>
@@ -292,11 +311,14 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
 
         if (data.Fields.TryGetValue(field, out var value))
         {
+            // **型を 1 つに決め打ちしない**（<c>PartnerSubmitGate.Reference</c> と同じ戒め）。
+            // **読めない型は止める**——黙って保存されている親へ落ちると、
+            // 「移した先」ではなく「移す前」の範囲で重複を数えることになる。
             var raw = value switch
             {
                 LinkFieldData link => link.Value,
                 IdFieldData reference => reference.Value,
-                _ => null,
+                _ => throw UnreadableFieldException.For(field, value),
             };
 
             if (long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
@@ -305,7 +327,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             }
         }
 
-        // 差分に無い（か読めない）ので、保存されている親を読む。新規なら親が要るので届いているはず。
+        // 差分に無い（か仮の識別子で数値として読めない）ので、保存されている親を読む。
         if (id is not long stored)
         {
             return null;
@@ -323,12 +345,30 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             ? null
             : string.Format(CultureInfo.InvariantCulture, "{0}", value);
 
-    /// <summary>保存しようとしている行の識別子。新規（仮の識別子）なら <c>null</c>。</summary>
+    /// <summary>
+    /// 保存しようとしている行の識別子。新規（仮の識別子）なら <c>null</c>。
+    /// </summary>
+    /// <remarks>
+    /// <b>「読めない型」と「まだ識別子が無い」を分ける。</b> 型で黙って <c>null</c> に落とすと、
+    /// <b>更新が新規として扱われ、自分自身を重複と誤って断る</b>向きに倒れる
+    /// （<c>@temporary:</c> の値が数値として読めないのは<b>正常</b>なので、そちらは <c>null</c> のまま）。
+    /// </remarks>
     private static long? Id(ModuleData data)
-        => data.Fields.TryGetValue("Id", out var field) && field is IdFieldData id
-           && long.TryParse(id.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+    {
+        if (!data.Fields.TryGetValue("Id", out var field))
+        {
+            return null;
+        }
+
+        if (field is not IdFieldData id)
+        {
+            throw UnreadableFieldException.For("Id", field);
+        }
+
+        return long.TryParse(id.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
             ? parsed
             : null;
+    }
 
     /// <summary>
     /// コードを持つマスタ 1 つ。

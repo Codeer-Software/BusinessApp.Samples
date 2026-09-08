@@ -297,31 +297,30 @@ public class MasterMeaningGuardTests
     /// 実効値になるからで、明細だけを見ると<b>伝票にだけ取引先を入れた計上済みの伝票を取りこぼす</b>。
     /// </remarks>
     [Theory]
-    [InlineData("UPDATE journal_lines SET partner_id = 1 WHERE id = 1")]
-    [InlineData("UPDATE journal_entries SET partner_id = 1 WHERE id = 1")]
+    [InlineData(UsedByLine)]
+    [InlineData(UsedByEntry)]
     public void 使用中の取引先のコードは変えられない(string use)
     {
         using var db = WithPostedPartner(use);
 
         var thrown = Assert.Throws<SqliteException>(
-            () => TestDatabase.Execute(db, "UPDATE partners SET code = 'P999' WHERE id = 1"));
+            () => TestDatabase.Execute(db, $"UPDATE partners SET code = 'P999' WHERE id = {TargetPartner}"));
 
         Assert.Contains("取引先のコードは変更できない", thrown.Message, StringComparison.Ordinal);
-        Assert.Equal("P001", TestDatabase.ScalarOf<string>(db, "SELECT code FROM partners WHERE id = 1"));
+        Assert.Equal("P004", TestDatabase.ScalarOf<string>(db, $"SELECT code FROM partners WHERE id = {TargetPartner}"));
     }
 
     /// <summary>下書きだけが使う取引先のコードは変えられる（使用中は計上済みだけ。ADR-0038 §1）。</summary>
-    [Fact]
-    public void 下書きだけが使う取引先のコードは変えられる()
+    [Theory]
+    [InlineData(UsedByLine)]
+    [InlineData(UsedByEntry)]
+    public void 下書きだけが使う取引先のコードは変えられる(string use)
     {
-        using var db = SchemaSeed.CreateWithPostedEntry();
-        TestDatabase.Execute(db, """
-            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at, partner_id)
-                VALUES (1, '2026-05-21', '2026-05-21', 'draft', 'normal', '下書き', '2026-05-21 10:00:00', 1);
-            UPDATE partners SET code = 'P999' WHERE id = 1;
-            """);
+        using var db = WithDraftPartner(use);
 
-        Assert.Equal("P999", TestDatabase.ScalarOf<string>(db, "SELECT code FROM partners WHERE id = 1"));
+        TestDatabase.Execute(db, $"UPDATE partners SET code = 'P999' WHERE id = {TargetPartner}");
+
+        Assert.Equal("P999", TestDatabase.ScalarOf<string>(db, $"SELECT code FROM partners WHERE id = {TargetPartner}"));
     }
 
     /// <summary>
@@ -330,18 +329,38 @@ public class MasterMeaningGuardTests
     /// <remarks>
     /// <b>UPDATE のトリガを通らずに意味が変わる経路</b>を塞ぐ。
     /// <c>INSERT OR REPLACE</c> は行ごと差し替えるので、コードの凍結だけでは足りない。
+    /// <b>明細と伝票の両方で撃つ</b>——片方だけだと、トリガの `EXISTS` を 1 つ消しても緑になる。
     /// </remarks>
     [Theory]
-    [InlineData("INSERT OR REPLACE INTO partners (id, code, name) VALUES (1, 'P999', '別の会社')")]
-    [InlineData("UPDATE partners SET id = 9 WHERE id = 1")]
-    public void 使用中の取引先は置き換えられない(string sql)
+    [InlineData(UsedByLine, ReplaceByInsert)]
+    [InlineData(UsedByLine, ReplaceByUpdate)]
+    [InlineData(UsedByEntry, ReplaceByInsert)]
+    [InlineData(UsedByEntry, ReplaceByUpdate)]
+    public void 使用中の取引先は置き換えられない(string use, string sql)
     {
-        using var db = WithPostedPartner("UPDATE journal_lines SET partner_id = 1 WHERE id = 1");
+        using var db = WithPostedPartner(use);
 
         var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, sql));
 
         Assert.Contains("取引先は置き換えられない", thrown.Message, StringComparison.Ordinal);
-        Assert.Equal("株式会社取引先", TestDatabase.ScalarOf<string>(db, "SELECT name FROM partners WHERE id = 1"));
+        Assert.Equal(
+            "株式会社取引先",
+            TestDatabase.ScalarOf<string>(db, $"SELECT name FROM partners WHERE id = {TargetPartner}"));
+    }
+
+    /// <summary>下書きだけが使う取引先は置き換えられる（<c>status = 'posted'</c> の条件が効いていること）。</summary>
+    [Theory]
+    [InlineData(UsedByLine)]
+    [InlineData(UsedByEntry)]
+    public void 下書きだけが使う取引先は置き換えられる(string use)
+    {
+        using var db = WithDraftPartner(use);
+
+        TestDatabase.Execute(db, ReplaceByInsert);
+
+        Assert.Equal(
+            "別の会社",
+            TestDatabase.ScalarOf<string>(db, $"SELECT name FROM partners WHERE id = {TargetPartner}"));
     }
 
     /// <summary>
@@ -356,35 +375,72 @@ public class MasterMeaningGuardTests
     [Fact]
     public void 使用中の取引先でもidが動かない更新は通る()
     {
-        using var db = WithPostedPartner("UPDATE journal_lines SET partner_id = 1 WHERE id = 1");
+        using var db = WithPostedPartner(UsedByLine);
 
-        TestDatabase.Execute(db, "UPDATE partners SET id = id, name = '株式会社取引先（新）' WHERE id = 1");
+        TestDatabase.Execute(
+            db, $"UPDATE partners SET id = id, name = '株式会社取引先（新）' WHERE id = {TargetPartner}");
 
-        Assert.Equal("株式会社取引先（新）", TestDatabase.ScalarOf<string>(db, "SELECT name FROM partners WHERE id = 1"));
+        Assert.Equal(
+            "株式会社取引先（新）",
+            TestDatabase.ScalarOf<string>(db, $"SELECT name FROM partners WHERE id = {TargetPartner}"));
     }
 
-    /// <summary>計上済みの伝票が取引先 1 を使っている DB。<paramref name="use"/> が明細か伝票かを決める。</summary>
+    /// <summary>
+    /// 守る取引先の識別子。
+    /// </summary>
     /// <remarks>
-    /// <b>計上する前に付ける。</b> 計上済みの明細も伝票も、後からは書き換えられない（I-05）ので、
-    /// 下書きのうちに取引先を入れてから計上する（画面と同じ順である）。
+    /// <b>4 にしてあるのは、他のどの識別子とも違う値にするためである</b>
+    /// （勘定科目 1・2、税区分 1、部門 2、会計年度 1、伝票 2、明細 3・4）。
+    /// 全部が 1 の検体だと、トリガの <c>l.partner_id</c> を <c>l.account_id</c> にも
+    /// <c>l.journal_entry_id</c> にも書き換えられるのにテストが緑のままになる
+    /// （qa/03 L-02 の縮退。2026-09-09 の自己レビューで指摘された）。
     /// </remarks>
+    private const int TargetPartner = 4;
+
+    private const string UsedByLine =
+        "UPDATE journal_lines SET partner_id = 4 WHERE line_no = 1 AND journal_entry_id = (SELECT MAX(id) FROM journal_entries)";
+
+    private const string UsedByEntry =
+        "UPDATE journal_entries SET partner_id = 4 WHERE id = (SELECT MAX(id) FROM journal_entries)";
+
+    private const string ReplaceByInsert =
+        "INSERT OR REPLACE INTO partners (id, code, name) VALUES (4, 'P999', '別の会社')";
+
+    private const string ReplaceByUpdate = "UPDATE partners SET id = 9 WHERE id = 4";
+
+    /// <summary>計上済みの伝票が取引先 4 を使っている DB。</summary>
     private static SqliteConnection WithPostedPartner(string use)
+        => WithPartner(use, SchemaSeed.Post);
+
+    /// <summary>下書きだけが取引先 4 を使っている DB。</summary>
+    private static SqliteConnection WithDraftPartner(string use)
+        => WithPartner(use, string.Empty);
+
+    /// <summary>
+    /// 取引先 4 を伝票か明細に付けた DB。<paramref name="post"/> が空なら下書きのまま残す。
+    /// </summary>
+    /// <remarks>
+    /// <b>取引先を付けるのは計上の前である。</b> 計上済みの明細も伝票も、後からは書き換えられない（I-05）。
+    /// <b>識別子をずらすために、先に捨て伝票と取引先を入れる</b>（上の <see cref="TargetPartner"/>）。
+    /// </remarks>
+    private static SqliteConnection WithPartner(string use, string post)
     {
         var db = TestDatabase.Create();
         TestDatabase.Execute(db, SchemaSeed.Masters);
         TestDatabase.Execute(db, """
+            INSERT INTO partners (code, name) VALUES ('P002', '識別子をずらすための取引先');
+            INSERT INTO partners (code, name) VALUES ('P003', '識別子をずらすための取引先');
+            INSERT INTO partners (code, name) VALUES ('P004', '株式会社取引先');
             INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
-                VALUES (1, '2026-05-20', '2026-05-20', 'draft', 'normal', '5 月分の現金売上', '2026-05-20 10:00:00');
-            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
-                VALUES (1, 1, 'debit', 1, 100000, 1);
-            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
-                VALUES (1, 2, 'credit', 2, 2, 100000, 1);
+                VALUES (1, '2026-05-19', '2026-05-19', 'draft', 'normal', '識別子をずらすための伝票', '2026-05-19 10:00:00');
             """);
+        TestDatabase.Execute(db, SchemaSeed.Draft);
         TestDatabase.Execute(db, use);
-        TestDatabase.Execute(db, """
-            UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-05-20 10:00:00' WHERE id = 1;
-            UPDATE journal_entry_sequences SET next_entry_no = next_entry_no + 1 WHERE fiscal_year_id = 1;
-            """);
+        if (post.Length > 0)
+        {
+            TestDatabase.Execute(db, post);
+        }
+
         return db;
     }
 

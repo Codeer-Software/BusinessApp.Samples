@@ -390,12 +390,11 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// 「触られていない」と見分けがつかず、<b>欄の型が変わった日に、その欄を見る検査が
     /// まとめて素通しへ落ちる</b>——しかもフィクスチャが自分で正しい型を組むので
     /// テストは緑のままである（<see cref="Reference"/> が名指しする形。2026-09-09 の自己レビュー）。
+    /// <b>文言はホストが定型文へ差し替える</b>（<see cref="UnreadableFieldException"/>）。
     /// </remarks>
     private static T? Field<T>(ModuleData data, string name) where T : FieldDataBase
         => data.Fields.TryGetValue(name, out var field)
-            ? field as T
-                ?? throw new InvalidOperationException(
-                    $"「{name}」が読めない型 {field.GetType().Name} で届いた。関門が守れないので止める。")
+            ? field as T ?? throw UnreadableFieldException.For(name, field)
             : null;
 
     /// <summary>

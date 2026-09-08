@@ -4,6 +4,8 @@ using System.Globalization;
 
 using BusinessApp.Partners.Server;
 using BusinessApp.Partners.Server.Tests.Fixtures;
+using BusinessApp.ServerSupport;
+using BusinessApp.TestSupport;
 
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
@@ -942,14 +944,45 @@ public class PartnerSubmitGateTests
     }
 
     /// <summary>
+    /// <b>関門が読む欄の型が、デザインで変わったらここで赤くなる。</b>
+    /// </summary>
+    /// <remarks>
+    /// 関門は読めない型で止まるが、<b>止まるのは本番で保存された瞬間</b>である。
+    /// デザインに <c>TypeFullName</c> が入っているので、<b>型を変えた瞬間にコミット前で赤くする</b>
+    /// （会計コア側の <c>MasterSubmitGateTests</c> と同じ形。2026-09-09 の自己レビュー）。
+    /// </remarks>
+    [Theory]
+    [InlineData("Code", "TextFieldDesign")]
+    [InlineData("CorporateNumber", "TextFieldDesign")]
+    [InlineData("EntityType", "SelectFieldDesign")]
+    public void 関門が読む欄の型はデザインと一致する(string field, string designType)
+    {
+        var path = Directory
+            .EnumerateFiles(TestDatabase.ModulesDirectory, "Partner.mod.json", SearchOption.AllDirectories)
+            .Single();
+        using var design = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+
+        var found = design.RootElement.GetProperty("Fields").EnumerateArray()
+            .Single(f => f.GetProperty("Name").GetString() == field);
+
+        Assert.Equal(
+            $"Codeer.LowCode.Blazor.Repository.Design.{designType}",
+            found.GetProperty("TypeFullName").GetString());
+    }
+
+    /// <summary>
     /// <b>欄が読めない型で届いたら、素通しではなく止める。</b>
     /// </summary>
     /// <remarks>
     /// <c>as T</c> で <c>null</c> に落として帰る形だと、<b>デザインで欄の型を変えた日に
     /// 書式も重複も丸ごと素通しになる</b>のに、フィクスチャが自分で <c>TextFieldData</c> を
     /// 組むのでテストは緑のままである（2026-09-09 の自己レビュー）。
-    /// <b>利用者向けの断りではなく <c>InvalidOperationException</c></b>——
+    /// <b>利用者向けの断りではない</b>（<c>UnreadableFieldException</c>）——
     /// 直すのは利用者ではなく、デザインを変えた側だからである。
+    /// <b>会計コアのホストでは、入口が定型文へ差し替えて原文をログへ回す</b>
+    /// （<c>AccountingSubmitPipeline</c>。<c>MasterSubmitGateTests.AssertUnreadable</c> が見る）。
+    /// <b>取引先だけを載せるホストを作るときは、その差し替えもここへ持ってくる</b>——
+    /// <c>SaveFailureMessage</c> と同じ宿題である（<c>PartnerSubmitPipeline</c> の注記）。
     /// </remarks>
     [Fact]
     public async Task 読めない型で届いた欄は素通ししないで止める()
@@ -959,11 +992,11 @@ public class PartnerSubmitGateTests
         var partner = Partner();
         partner.Fields["Code"] = new NumberFieldData { Value = 1 };
 
-        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+        var thrown = await Assert.ThrowsAsync<UnreadableFieldException>(
             () => Gate(server).SubmitAsync([Adding(partner)], save.SaveAsync));
 
-        Assert.Contains("Code", thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("NumberFieldData", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("Code", thrown.Field);
+        Assert.Equal("NumberFieldData", thrown.TypeName);
         Assert.False(save.Called);
     }
 

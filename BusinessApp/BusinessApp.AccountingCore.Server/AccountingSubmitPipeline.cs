@@ -4,6 +4,7 @@ using BusinessApp.AccountingCore.Server.Journals;
 using BusinessApp.AccountingCore.Server.Masters;
 using BusinessApp.AccountingCore.Server.Settings;
 using BusinessApp.Partners.Server;
+using BusinessApp.ServerSupport;
 
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
@@ -77,15 +78,28 @@ public sealed class AccountingSubmitPipeline(
         // 片方が空文字・片方が NULL で「変わった」と読んでしまう。
         BlankTextNormalizer.ToNull(transactionData);
 
-        var results = await journals.SubmitAsync(
-            transactionData,
-            () => companyProfile.SubmitAsync(
+        List<ModuleSubmitResult> results;
+        try
+        {
+            results = await journals.SubmitAsync(
                 transactionData,
-                () => masters.SubmitAsync(
+                () => companyProfile.SubmitAsync(
                     transactionData,
-                    () => masterValues.SubmitAsync(
+                    () => masters.SubmitAsync(
                         transactionData,
-                        () => partners.SubmitAsync(transactionData, save)))));
+                        () => masterValues.SubmitAsync(
+                            transactionData,
+                            () => partners.SubmitAsync(transactionData, save)))));
+        }
+        catch (UnreadableFieldException unreadable)
+        {
+            // **欄の型が読めないのは利用者の誤りではない**ので、利用者には定型文だけを見せ、
+            // 中身はホストのログへ回す（<see cref="SaveFailureMessage"/> と同じ分担）。
+            // **投げ直す例外に内側を残さない**——ホストの例外ハンドラは
+            // InnerException の文言まで連ねて返すので、残すと結局そのまま画面に出る。
+            onSaveFailure?.Invoke(unreadable.Message);
+            throw new InvalidOperationException(SaveFailureMessage.Text);
+        }
 
         return SaveFailureMessage.ToUserLanguage(results, onSaveFailure);
     }

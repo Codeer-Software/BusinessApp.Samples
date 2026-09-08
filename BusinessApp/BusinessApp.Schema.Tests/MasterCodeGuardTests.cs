@@ -169,6 +169,51 @@ public class MasterCodeGuardTests
     }
 
     /// <summary>
+    /// <b>BLOB のコードは断る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>BLOB は TEXT の列にそのまま入る</b>——STRICT ではないので affinity が効かず、
+    /// 数値は text へ変換されるのに <b>BLOB だけは BLOB のまま残る</b>（2026-09-09 に実測）。
+    /// そして <c>GLOB</c> は BLOB に「使える字」と答える。</para>
+    /// <para><b>そのままだと qa/03 L-32 が別の入口から開き直る</b>——
+    /// <c>x'4142'</c> と <c>'AB'</c> は<b>別の値</b>なので <c>COLLATE NOCASE</c> の一意索引でもぶつからず、
+    /// <b>見た目が同じ 2 行が並ぶ</b>。<c>x'41004200'</c> は NUL の条件もすり抜ける
+    /// （BLOB では <c>LENGTH</c> も <c>CAST(… AS BLOB)</c> もバイト数を返して必ず等しくなる）。
+    /// 2026-09-09 の自己レビューで見つけた。</para>
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Tables))]
+    public void BLOB_のコードは追加できない(string table)
+    {
+        using var db = SchemaSeed.Create();
+
+        foreach (var blob in new[] { "x'4142'", "x'41004200'" })
+        {
+            var thrown = Assert.Throws<SqliteException>(
+                () => TestDatabase.Execute(db, Insert(table, blob, quoted: false)));
+
+            Assert.Contains("半角の英数字と「-」「_」", thrown.Message, StringComparison.Ordinal);
+        }
+
+        Assert.Equal(0L, TestDatabase.ScalarOf<long>(db, $"SELECT COUNT(*) FROM {table} WHERE typeof(code) = 'blob'"));
+    }
+
+    /// <summary>BLOB のコードへは更新もできない。</summary>
+    [Theory]
+    [MemberData(nameof(Tables))]
+    public void BLOB_のコードへは更新できない(string table)
+    {
+        using var db = SchemaSeed.Create();
+        TestDatabase.Execute(db, Insert(table, "Z999"));
+
+        var thrown = Assert.Throws<SqliteException>(
+            () => TestDatabase.Execute(db, $"UPDATE {table} SET code = x'4142' WHERE code = 'Z999'"));
+
+        Assert.Contains("半角の英数字と「-」「_」", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("Z999", TestDatabase.ScalarOf<string>(db, $"SELECT code FROM {table} WHERE id = (SELECT MAX(id) FROM {table})"));
+    }
+
+    /// <summary>
     /// 書式に反するコードは追加できない。
     /// </summary>
     /// <remarks>
@@ -231,20 +276,31 @@ public class MasterCodeGuardTests
     }
 
     /// <summary>表ごとに要る列だけを埋めて 1 行入れる。</summary>
-    private static string Insert(string table, string code) => table switch
+    /// <summary>
+    /// コードを 1 つ入れる SQL。
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="quoted"/> を <c>false</c> にすると <paramref name="code"/> を<b>そのまま式として置く</b>
+    /// （<c>x'4142'</c> のような BLOB のリテラルを渡すため）。
+    /// </remarks>
+    private static string Insert(string table, string code, bool quoted = true)
     {
-        "fiscal_years" =>
-            $"INSERT INTO fiscal_years (code, label, start_date, end_date, status)"
-            + $" VALUES ('{code}', '検証', '2027-04-01', '2028-03-31', 'open')",
-        "tax_categories" => $"INSERT INTO tax_categories (code, name, taxation_type) VALUES ('{code}', '検証', 'out_of_scope')",
-        "accounts" => $"INSERT INTO accounts (code, name, category) VALUES ('{code}', '検証', 'asset')",
-        // **親をコードで引く。** id をベタ書きすると、シードの並びが変わった日に
-        // 外部キー違反でも同じ例外が出て、書式のトリガを撃ったつもりで緑になる（qa/03 L-02）。
-        "sub_accounts" =>
-            $"INSERT INTO sub_accounts (account_id, code, name)"
-            + $" VALUES ((SELECT id FROM accounts WHERE code = '1100'), '{code}', '検証')",
-        "departments" => $"INSERT INTO departments (code, name) VALUES ('{code}', '検証')",
-        "partners" => $"INSERT INTO partners (code, name) VALUES ('{code}', '検証')",
-        _ => throw new ArgumentOutOfRangeException(nameof(table), table, "コードを持たない表"),
-    };
+        var value = quoted ? "'" + code + "'" : code;
+        return table switch
+        {
+            "fiscal_years" =>
+                $"INSERT INTO fiscal_years (code, label, start_date, end_date, status)"
+                + $" VALUES ({value}, '検証', '2027-04-01', '2028-03-31', 'open')",
+            "tax_categories" => $"INSERT INTO tax_categories (code, name, taxation_type) VALUES ({value}, '検証', 'out_of_scope')",
+            "accounts" => $"INSERT INTO accounts (code, name, category) VALUES ({value}, '検証', 'asset')",
+            // **親をコードで引く。** id をベタ書きすると、シードの並びが変わった日に
+            // 外部キー違反でも同じ例外が出て、書式のトリガを撃ったつもりで緑になる（qa/03 L-02）。
+            "sub_accounts" =>
+                $"INSERT INTO sub_accounts (account_id, code, name)"
+                + $" VALUES ((SELECT id FROM accounts WHERE code = '1100'), {value}, '検証')",
+            "departments" => $"INSERT INTO departments (code, name) VALUES ({value}, '検証')",
+            "partners" => $"INSERT INTO partners (code, name) VALUES ({value}, '検証')",
+            _ => throw new ArgumentOutOfRangeException(nameof(table), table, "コードを持たない表"),
+        };
+    }
 }

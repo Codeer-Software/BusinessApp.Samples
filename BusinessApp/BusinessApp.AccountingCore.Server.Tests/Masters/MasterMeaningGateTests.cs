@@ -27,10 +27,17 @@ public class MasterMeaningGateTests
         => new() { ModuleName = module, Add = [data] };
 
     private static ModuleData Row(string module, string id, string field, FieldDataBase value)
+        => Row(module, id, (field, value));
+
+    private static ModuleData Row(string module, string id, params (string Field, FieldDataBase Value)[] fields)
     {
         var data = new ModuleData { Name = module };
         data.Fields["Id"] = new IdFieldData { Value = id };
-        data.Fields[field] = value;
+        foreach (var (field, value) in fields)
+        {
+            data.Fields[field] = value;
+        }
+
         return data;
     }
 
@@ -435,14 +442,22 @@ public class MasterMeaningGateTests
     }
 
     /// <summary>新規の行は見ない（仮の識別子。計上済みの明細から参照されえない）。</summary>
+    /// <remarks>
+    /// <b>追加はコードと名前も伴う。</b> 画面が送ってくる形に揃えてある——
+    /// 値の関門（<c>MasterSubmitGate</c>）が<b>追加にコードを要求する</b>ので、
+    /// 欠けた検体は意味の凍結に届く前に断られる（2026-09-09）。
+    /// </remarks>
     [Fact]
     public async Task 新規の科目は見ない()
     {
         using var server = new AccountingServer();
         PostPayment(server);
 
-        Assert.True(await Submit(server,
-            Adding("Account", Row("Account", "@temporary:1", "Category", new SelectFieldData { Value = "asset" }))));
+        Assert.True(await Submit(server, Adding("Account", Row(
+            "Account", "@temporary:1",
+            ("Category", new SelectFieldData { Value = "asset" }),
+            ("Code", new TextFieldData { Value = "9101" }),
+            ("Name", new TextFieldData { Value = "検証" })))));
     }
 
     /// <summary>更新の側に仮の識別子の行が混ざった形も、新規の行として通す（識別子が読めない更新の唯一の例外）。</summary>
@@ -640,6 +655,40 @@ public class MasterMeaningGateTests
             Assert.Contains("WHEN NEW.id IS NOT OLD.id", replaceUpdate, StringComparison.Ordinal);
         }
     }
+
+    /// <summary>
+    /// <b>置き換えの守りは、表と列の名前を除いて 4 マスタで 1 字も違わない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>断片一致では、写しから 1 行落ちたことを捕まえられない</b>——
+    /// <c>WHEN</c> 節の脱落を実際に見逃した（qa/03 L-37）。
+    /// <c>MasterCodeGuardTests.トリガ12本は同じ条件を持つ</c> と同じ形で、<b>全文で突き合わせる</b>。</para>
+    /// <para><b>取引先だけは外す。</b> 明細だけでなく伝票の側も数えるので、
+    /// EXISTS が 1 つ多い（docs/10 §6-2）。その差は
+    /// <see cref="関門とトリガは同じ列を守る"/> と <c>MasterMeaningGuardTests</c> の振る舞いの検体が見る。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData("insert")]
+    [InlineData("update")]
+    public void 置き換えの守りは4マスタで同じ全文である(string kind)
+    {
+        using var server = new AccountingServer();
+
+        var normalized = MasterMeaningGate.Guarded
+            .Where(m => m.EntryColumn is null)
+            .Select(m => Normalize(TriggerSql(server, $"trg_{m.Table}_no_replace_used_{kind}"), m))
+            .ToList();
+
+        Assert.Equal(4, normalized.Count);
+        Assert.All(normalized, sql => Assert.Equal(normalized[0], sql));
+    }
+
+    /// <summary>表・列・トリガ・呼び名を伏せる（残るのは条件の形だけ）。</summary>
+    private static string Normalize(string sql, MasterMeaningGate.GuardedMaster master)
+        => sql.Replace($"l.{master.LineColumn}", "l.@column", StringComparison.Ordinal)
+              .Replace($"trg_{master.Table}_", "trg_@table_", StringComparison.Ordinal)
+              .Replace($"ON {master.Table}", "ON @table", StringComparison.Ordinal)
+              .Replace(master.Label, "@label", StringComparison.Ordinal);
 
     private static string TriggerSql(AccountingServer server, string name)
         => server.Scalar<string>($"select sql from sqlite_master where type = 'trigger' and name = '{name}'");

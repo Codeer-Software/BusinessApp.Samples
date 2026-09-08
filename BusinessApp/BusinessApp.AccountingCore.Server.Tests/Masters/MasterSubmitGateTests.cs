@@ -4,6 +4,7 @@ using System.Globalization;
 
 using BusinessApp.AccountingCore.Server.Masters;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
+using BusinessApp.ServerSupport;
 
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
@@ -411,6 +412,42 @@ public class MasterSubmitGateTests
         }
     }
 
+    /// <summary>
+    /// <b>関門が読む欄の型が、デザインで変わったらここで赤くなる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>関門は読めない型で止まるようにしてあるが、<b>止まるのは本番で保存された瞬間</b>である
+    /// ——利用者に定型文が出て、直すべき側にはログが届くだけになる。
+    /// <b>デザインに <c>TypeFullName</c> が入っている</b>ので、
+    /// <b>型を変えた瞬間にコミット前で赤くする</b>ほうが早い（2026-09-09 の自己レビュー）。</para>
+    /// <para><b>デザインの型と、関門が期待するデータの型は名前で対応する</b>——
+    /// <c>TextFieldDesign</c> の値は <c>TextFieldData</c> で届く。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData("Account", "Code", "TextFieldDesign")]
+    [InlineData("SubAccount", "Code", "TextFieldDesign")]
+    [InlineData("SubAccount", "Account", "LinkFieldDesign")]
+    [InlineData("Department", "Code", "TextFieldDesign")]
+    [InlineData("Department", "IsCompanyWide", "BooleanFieldDesign")]
+    [InlineData("TaxCategory", "Code", "TextFieldDesign")]
+    [InlineData("TaxCategory", "TaxationType", "SelectFieldDesign")]
+    [InlineData("TaxCategory", "RateKind", "SelectFieldDesign")]
+    [InlineData("FiscalYear", "Code", "TextFieldDesign")]
+    public void 関門が読む欄の型はデザインと一致する(string module, string field, string designType)
+    {
+        var path = Directory
+            .EnumerateFiles(TestSupport.TestDatabase.ModulesDirectory, $"{module}.mod.json", SearchOption.AllDirectories)
+            .Single();
+        using var design = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+
+        var found = design.RootElement.GetProperty("Fields").EnumerateArray()
+            .Single(f => f.GetProperty("Name").GetString() == field);
+
+        Assert.Equal(
+            $"Codeer.LowCode.Blazor.Repository.Design.{designType}",
+            found.GetProperty("TypeFullName").GetString());
+    }
+
     /// <summary>コードを持つ 5 つのマスタを、この関門が見ている（docs/12 §2-1。取引先は取引先部品）。</summary>
     [Fact]
     public void 会計コードを持つ5つのマスタを見ている()
@@ -462,11 +499,33 @@ public class MasterSubmitGateTests
             server,
             Updating("SubAccount", Row("SubAccount", target, Account(server, "1220"))));
 
-        Assert.Contains("補助科目コード", thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("B1", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "登録できません。「補助科目コード」の「b1」は大文字と小文字を区別しないので、"
+            + "この勘定科目の中では既にある「B1」と同じコードになります。"
+            + "別の勘定科目を選ぶか、コードを変えてください。",
+            thrown.Message);
+    }
 
-        // **直し方は、利用者が動かした欄の側で言う**（コードは触っていない）。
-        Assert.Contains("別の勘定科目を選ぶか", thrown.Message, StringComparison.Ordinal);
+    /// <summary>大小まで同じコードで移したときは、相手の字を見せる代わりに「既に使われています」と言う。</summary>
+    /// <remarks>
+    /// <b>大小が違うときだけ「区別しないので」と説明する。</b> 同じ字なのにその説明を出すと、
+    /// 利用者は「同じに見えるのに何が違うのか」と読む（<c>string.Equals</c> の枝）。
+    /// </remarks>
+    [Fact]
+    public async Task 大小まで同じコードで移したときは相手の字を見せない()
+    {
+        using var server = new AccountingServer();
+        server.InsertSubAccount("1220", "B1", "みずほ（定期）");
+        var target = server.InsertSubAccount("1210", "B1", "みずほ（当座）");
+
+        var thrown = await Rejected(
+            server,
+            Updating("SubAccount", Row("SubAccount", target, Account(server, "1220"))));
+
+        Assert.Equal(
+            "登録できません。「補助科目コード」の「B1」はこの勘定科目の中では既に使われています。"
+            + "別の勘定科目を選ぶか、コードを変えてください。",
+            thrown.Message);
     }
 
     /// <summary>移した先が空いていれば通る（<b>移動そのものを止めない</b>）。</summary>
@@ -497,12 +556,154 @@ public class MasterSubmitGateTests
         var data = New("Account", Text("Name", "現金その 2"));
         data.Fields["Code"] = new NumberFieldData { Value = 1100 };
 
-        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => Submit(server, Adding("Account", data)));
-
-        Assert.Contains("Code", thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("NumberFieldData", thrown.Message, StringComparison.Ordinal);
+        await AssertUnreadable(server, Adding("Account", data), "Code", "NumberFieldData");
     }
+
+    /// <summary>
+    /// 同じ保存の中で作る勘定科目を指す補助科目は、親を数値として読めない（仮の識別子）。
+    /// </summary>
+    /// <remarks>
+    /// <b>これは正常な形である</b>（qa/01 C-08）。<b>読めない型とは違う</b>ので止めない——
+    /// 追加なら保存されている親も無いので、重複は DB の一意索引が見る。
+    /// </remarks>
+    [Fact]
+    public async Task 仮の識別子の親を指す補助科目の追加は通る()
+    {
+        using var server = new AccountingServer();
+
+        Assert.True(await Submit(server, Adding("SubAccount", New(
+            "SubAccount", Text("Code", "S9"), Text("Name", "検証"),
+            ("Account", new LinkFieldData { Value = "@temporary:2" })))));
+    }
+
+    /// <summary>更新で親が仮の識別子なら、保存されている親で数える。</summary>
+    /// <remarks>
+    /// <b>読めない値のときに「範囲なし」へ落とさない</b>——落とすと重複の照会が
+    /// <c>account_id = NULL</c> になり、1 行も返さずに素通りする（qa/03 L-28 に戻る）。
+    /// </remarks>
+    [Fact]
+    public async Task 更新で親が仮の識別子なら保存されている親で数える()
+    {
+        using var server = new AccountingServer();
+        server.InsertSubAccount("1210", "B1", "みずほ");
+        var target = server.InsertSubAccount("1210", "B2", "三井");
+
+        var thrown = await Rejected(server, Updating("SubAccount", Row(
+            "SubAccount", target,
+            Text("Code", "b1"),
+            ("Account", new LinkFieldData { Value = "@temporary:2" }))));
+
+        Assert.Contains("既にある「B1」", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 更新の側に混ざった仮の識別子の行は、保存されているコードを読み直せない。
+    /// </summary>
+    /// <remarks>
+    /// <b>CLB は新しく作った子を更新の側に載せることがある</b>
+    /// （<c>MasterMeaningGateTests.更新の側に混ざった仮の識別子の行は通す</c> と同じ形）。
+    /// その行はまだ DB に無いので、<b>読み直す先が無い</b>——重複は DB の一意索引が見る。
+    /// </remarks>
+    [Fact]
+    public async Task 更新に混ざった仮の識別子の行は読み直さない()
+    {
+        using var server = new AccountingServer();
+
+        Assert.True(await Submit(server, Updating("SubAccount", New(
+            "SubAccount", ("Account", new LinkFieldData { Value = "@temporary:2" })))));
+    }
+
+    /// <summary>識別子の欄が届かない要求は、新規として扱う（画面からは作れない形）。</summary>
+    [Fact]
+    public async Task 識別子の欄が届かなければ新規として扱う()
+    {
+        using var server = new AccountingServer();
+        var row = new ModuleData { Name = "Department" };
+        row.Fields["Code"] = new TextFieldData { Value = "92" };
+        row.Fields["Name"] = new TextFieldData { Value = "検証" };
+
+        Assert.True(await Submit(server, Adding("Department", row)));
+    }
+
+    /// <summary>識別子の欄が読めない型なら止める（新規として扱わない）。</summary>
+    /// <remarks>
+    /// <para>黙って <c>null</c> に落とすと<b>更新が新規として扱われ、自分自身を重複と誤って断る</b>向きに倒れる。</para>
+    /// <para><b>検体に会計年度を選ぶ。</b> 意味の凍結の関門（<c>MasterMeaningGate</c>）は
+    /// 先に走って「登録する行を特定できませんでした」と<b>利用者の語で</b>断るが、
+    /// <b>会計年度はそちらの対象ではない</b>（計上済みの明細から参照されない）。
+    /// つまりここが<b>唯一の守り</b>になるマスタである。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 識別子の欄が読めない型なら止める()
+    {
+        using var server = new AccountingServer();
+        var row = new ModuleData { Name = "FiscalYear" };
+        row.Fields["Id"] = new NumberFieldData { Value = 1 };
+        row.Fields["Code"] = new TextFieldData { Value = "FY99" };
+
+        await AssertUnreadable(server, Updating("FiscalYear", row), "Id", "NumberFieldData");
+    }
+
+    /// <summary>原文の受け皿を繋がない配線でも、利用者への文言は同じ。</summary>
+    /// <remarks>
+    /// 受け皿は任意なので（<c>AccountingSubmitPipeline.Create</c> の既定は「何もしない」）、
+    /// <b>繋ぎ忘れたときに文言まで変わらないこと</b>を見る。
+    /// </remarks>
+    [Fact]
+    public async Task 受け皿を繋がなくても利用者への文言は同じ()
+    {
+        using var server = new AccountingServer();
+        var data = New("Account", Text("Name", "検証"));
+        data.Fields["Code"] = new NumberFieldData { Value = 1100 };
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => server.PipelineWithoutLog.SubmitAsync(
+                [Adding("Account", data)], () => Task.FromResult(new List<ModuleSubmitResult>())));
+
+        Assert.Equal(SaveFailureMessageText, thrown.Message);
+        Assert.Empty(server.SaveFailureLog);
+    }
+
+    /// <summary>
+    /// 読めない型で止まったとき、<b>利用者には定型文・原文はログへ</b>回っていることを見る。
+    /// </summary>
+    /// <remarks>
+    /// <b>利用者の誤りではない</b>ので、欄の名前も CLB の型名も画面に出さない（docs/21 §2-2）。
+    /// <b>同時に、直すべき側には届かせる</b>——ホストの例外ハンドラは <c>Message</c> を
+    /// そのまま返すので、投げたままだと内部表現が画面に出る（2026-09-09 の自己レビュー）。
+    /// </remarks>
+    private static async Task AssertUnreadable(
+        AccountingServer server, ModuleSubmitData submitted, string field, string typeName)
+    {
+        var called = false;
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => server.Pipeline.SubmitAsync([submitted], () =>
+            {
+                called = true;
+                return Task.FromResult(new List<ModuleSubmitResult>());
+            }));
+
+        Assert.Equal(SaveFailureMessageText, thrown.Message);
+        Assert.Null(thrown.InnerException);
+        Assert.DoesNotContain(field, thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(typeName, thrown.Message, StringComparison.Ordinal);
+
+        var logged = Assert.Single(server.SaveFailureLog);
+        Assert.Contains(field, logged, StringComparison.Ordinal);
+        Assert.Contains(typeName, logged, StringComparison.Ordinal);
+        Assert.False(called);
+    }
+
+    /// <summary>
+    /// 保存が失敗したときの定型文。
+    /// </summary>
+    /// <remarks>
+    /// <b>写しである</b>（<c>SaveFailureMessage</c> は <c>internal</c>）。
+    /// 食い違ったらこのテストが赤くなるので、写しが古くなったままにはならない。
+    /// </remarks>
+    private const string SaveFailureMessageText =
+        "保存できませんでした。入力内容を確かめ、画面を開き直してもう一度お試しください。"
+        + "同じことが続くときは、管理者にお知らせください。";
 
     /// <summary>コードも勘定科目も触らない補助科目の更新は、数え直さない。</summary>
     /// <remarks><b>読み直しは親が動いたときだけ</b>——名前を直すだけの保存で毎回引かない。</remarks>
@@ -526,15 +727,28 @@ public class MasterSubmitGateTests
             server, Updating("SubAccount", Row("SubAccount", 999999, Account(server, "1220")))));
     }
 
-    /// <summary>コードの無い新規の補助科目は、読み直す先が無い（画面からは作れない形）。</summary>
-    [Fact]
-    public async Task コードの無い新規の補助科目は読み直さない()
+    /// <summary>
+    /// <b>コードの無い追加は断る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>画面は必ずコードを送るが、取込は列ごと落とせる</b>（`code` の無い CSV）——
+    /// <b>取込こそこの関門が守る経路である</b>。素通しにすると DB の <c>NOT NULL</c> に当たり、
+    /// 利用者には定型文が出る（qa/03 L-28 に戻る）。
+    /// <b>この形を「通る」と表明する検体が置かれていた</b>（2026-09-09 の自己レビュー）。
+    /// </remarks>
+    [Theory]
+    [InlineData("SubAccount", "補助科目コード")]
+    [InlineData("Account", "科目コード")]
+    [InlineData("Department", "部門コード")]
+    [InlineData("TaxCategory", "税区分コード")]
+    [InlineData("FiscalYear", "年度コード")]
+    public async Task コードの無い追加は断る(string module, string label)
     {
         using var server = new AccountingServer();
 
-        Assert.True(await Submit(
-            server,
-            Adding("SubAccount", New("SubAccount", Text("Name", "本店"), Account(server, "1210")))));
+        var thrown = await Rejected(server, Adding(module, New(module, Text("Name", "検証"))));
+
+        Assert.EndsWith($"「{label}」を入れてください。", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>親を触らない更新でも、補助科目の 2 値を見る（同じ穴の裏側）。</summary>
@@ -599,6 +813,31 @@ public class MasterSubmitGateTests
     }
 
     /// <summary>
+    /// <b>関門が通した「移動」を、DB も受け取れる</b>（往復。qa/03 L-14 の処方）。
+    /// </summary>
+    /// <remarks>
+    /// <b>移動の争点は、関門の受理集合が <c>UNIQUE (account_id, code COLLATE NOCASE)</c> に
+    /// 収まっているかである。</b> 偽の <c>save</c> が呼ばれたことだけを見ても、それは分からない
+    /// ——**実際に <c>UPDATE</c> を流して読み戻す**（2026-09-09 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 関門が通した移動は_DB_も受け取れる()
+    {
+        using var server = new AccountingServer();
+        var target = server.InsertSubAccount("1210", "B1", "みずほ");
+        var destination = server.AccountOf("1220").Value;
+
+        Assert.True(await Submit(
+            server, Updating("SubAccount", Row("SubAccount", target, Account(server, "1220")))));
+
+        server.Execute($"update sub_accounts set account_id = {destination} where id = {target}");
+
+        Assert.Equal(
+            destination,
+            server.Scalar<long>($"select account_id from sub_accounts where id = {target}"));
+    }
+
+    /// <summary>
     /// 参照の欄が読めない型で届いた追加は、親を読まずに通す（DB の外部キーが拒む）。
     /// </summary>
     /// <remarks>
@@ -606,15 +845,17 @@ public class MasterSubmitGateTests
     /// （<see cref="実在しない勘定科目はこの関門では止めない"/> と同じ分担）。
     /// </remarks>
     [Fact]
-    public async Task 参照の欄が読めない型の追加は親を読まない()
+    public async Task 参照の欄が読めない型なら止める()
     {
         using var server = new AccountingServer();
 
-        Assert.True(await Submit(server, Adding("SubAccount", New(
-            "SubAccount",
-            Text("Code", "S3"),
-            Text("Name", "検証"),
-            ("Account", new BooleanFieldData { Value = true })))));
+        await AssertUnreadable(
+            server,
+            Adding("SubAccount", New(
+                "SubAccount", Text("Code", "S3"), Text("Name", "検証"),
+                ("Account", new BooleanFieldData { Value = true }))),
+            "Account",
+            "BooleanFieldData");
     }
 
     /// <summary>保存されている行が無い補助科目の更新は、親を読めないので重複も 2 値も見ない。</summary>
@@ -639,14 +880,18 @@ public class MasterSubmitGateTests
             server, Updating("Department", Row("Department", server.DepartmentOf("10").Value, Text("Name", "総務課")))));
     }
 
-    /// <summary>「全社共通」の欄が真偽でない要求は、全社共通を見ない。</summary>
+    /// <summary>「全社共通」の欄が真偽でなければ止める（素通ししない）。</summary>
+    /// <remarks>
+    /// 黙って <c>null</c> を返すと、<b>「全社共通」の 2 件目の検査だけが丸ごと素通し</b>になる
+    /// ——欄の型を変えた日に、この規則だけが消える（2026-09-09 の自己レビュー）。
+    /// </remarks>
     [Fact]
-    public async Task 全社共通の欄が真偽でなければ見ない()
+    public async Task 全社共通の欄が真偽でなければ止める()
     {
         using var server = new AccountingServer();
         var row = New("Department", Text("Code", "91"), Text("Name", "検証"), Text("IsCompanyWide", "1"));
 
-        Assert.True(await Submit(server, Adding("Department", row)));
+        await AssertUnreadable(server, Adding("Department", row), "IsCompanyWide", "TextFieldData");
     }
 
     /// <summary>課税区分も税率区分も触っていない税区分の保存は、整合を見ない。</summary>
