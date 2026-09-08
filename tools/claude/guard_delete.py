@@ -152,22 +152,38 @@ OVERWRITE = re.compile(
 # （消さず、上書きの前に必ず退避する）。**規則は docs/30_作業のルール.md §10。**
 # **足してよいのは「取り返しがつく」ことをスクリプト自身が保証している道具だけ**である——
 # allow は権限判定そのものを飛ばすので、1 本増やすたびに確認の外へ出る面積が広がる。
-RECOVERABLE_SCRIPTS = (TRASH_SCRIPT, "tools/clb/db_snapshot.ps1")
-
-# 戻せる道具への言及（保護対象の検査にかけるため、ゆるく拾う）。
-RECOVERABLE_MENTION = re.compile(
-    r"(^|[\s;&|(])(pwsh|powershell)\b[^;&|]*("
-    + "|".join(re.escape(s.rsplit("/", 1)[-1]) for s in RECOVERABLE_SCRIPTS)
-    + r")",
-    re.IGNORECASE,
+# **第 2 要素は「当たり先をパスで受け取るか」。** `trash.ps1` は受け取るので、
+# 同じコマンドに保護対象の名前が出たら拒む必要がある。`db_snapshot.ps1` は `-Name` しか
+# 受け取らない——**名前でしか呼べない道具に、保護対象の名前の検査をかけると、
+# 同じコマンドで LocalData を読んだだけで拒まれる**（2026-09-08 に実測）。
+RECOVERABLE_SCRIPTS = (
+    (TRASH_SCRIPT, True),
+    ("tools/clb/db_snapshot.ps1", False),
 )
+
+
+def _mention(scripts) -> re.Pattern:
+    """`pwsh … <script>` への言及をゆるく拾う正規表現。"""
+    return re.compile(
+        r"(^|[\s;&|(])(pwsh|powershell)\b[^;&|]*("
+        + "|".join(re.escape(path.rsplit("/", 1)[-1]) for path in scripts)
+        + r")",
+        re.IGNORECASE,
+    )
+
+
+# 戻せる道具への言及（allow を出してよい形かを見るため）。
+RECOVERABLE_MENTION = _mention([path for path, _ in RECOVERABLE_SCRIPTS])
+
+# **当たり先をパスで受け取る道具**への言及（保護対象の名前の検査にかけるため）。
+PATH_TAKING_MENTION = _mention([path for path, takes_paths in RECOVERABLE_SCRIPTS if takes_paths])
 
 # **コマンド全体が、この repo の戻せる道具を 1 本呼ぶだけ**か（allow を出してよい形）。
 RECOVERABLE_ONLY = re.compile(
     r"^\s*(pwsh|powershell)(\.exe)?\s+"
     r"((-|--)\w[\w-]*\s+)*"
     r"-File\s+[\"']?(\./)?("
-    + "|".join(re.escape(s).replace("/", r"[\\/]") for s in RECOVERABLE_SCRIPTS)
+    + "|".join(re.escape(path).replace("/", r"[\\/]") for path, _ in RECOVERABLE_SCRIPTS)
     + r")[\"']?(\s|$)",
     re.IGNORECASE,
 )
@@ -331,7 +347,13 @@ def decide(command: str):
     git_destructive = bool(GIT_DESTRUCTIVE.search(command))
     overwrite = bool(OVERWRITE.search(command))
     mentions_recoverable = bool(RECOVERABLE_MENTION.search(command))
-    if not (raw_deletion or git_destructive or overwrite or mentions_recoverable):
+
+    # **保護対象の名前を探すのは、当たり先をパスで受け取る形のときだけ**である。
+    # `db_snapshot.ps1` は `-Name` しか受け取らないので、同じコマンドに `LocalData` が出ても
+    # それはこの道具の当たり先ではない（読んだだけかもしれない）。
+    names_a_target = (raw_deletion or git_destructive or overwrite
+                      or bool(PATH_TAKING_MENTION.search(command)))
+    if not (names_a_target or mentions_recoverable):
         return None, None
 
     try:
@@ -342,7 +364,7 @@ def decide(command: str):
             "読めないまま削除・上書きは通さない（tools/claude/guard_delete.py）。"
         )
 
-    for pattern, why in protected:
+    for pattern, why in (protected if names_a_target else []):
         if pattern.search(command):
             reason = (
                 f"{why}。この操作は許可しない（tools/claude/guard_delete.py）。"
@@ -467,6 +489,15 @@ SELFTEST = [
     (f"{S} -Save && rm -rf b", "deny"),   # 連結の先が削除なら拒む
     (f"{S} -List | tee log.txt", None),   # 連結は allow にせず通常の判定へ降ろす
     ("pwsh -NoProfile -File work/scratch/db_snapshot.ps1 -Restore -Name x", None),
+    # **`-Name` しか受け取らない道具に、保護対象の名前の検査をかけない**——
+    # かけると、同じコマンドで LocalData を読んだだけで拒まれる（2026-09-08 に実測）
+    (f"cat LocalData/README.md\n{S} -Save", None),
+    (f"{S} -Save -Name LocalData", "allow"),
+    # **パスを受け取る道具は、従来どおり保護対象を拒む**
+    (f"{T} LocalData/db/x.db", "deny"),
+    (f"cat docs/README.md\n{T} LocalData/db/x.db", "deny"),
+    # 連結の先が削除なら、道具の別によらず拒む
+    (f"{S} -Save && rm -rf LocalData/db", "deny"),
     # --- 削除でも上書きでもないものには触れない
     ("cat LocalData/README.md", None),
     ("cat tools/claude/trash.ps1", None),
