@@ -403,11 +403,11 @@ public class MasterSubmitGateTests
             Assert.Equal("code", code.GetProperty("DbColumn").GetString());
             Assert.Equal(master.CodeLabel, code.GetProperty("DisplayName").GetString());
 
-            if (master.ParentFieldName is string parent)
+            if (master.Parent is MasterSubmitGate.CodedParent parent)
             {
                 var link = design.RootElement.GetProperty("Fields").EnumerateArray()
-                    .Single(f => f.GetProperty("Name").GetString() == parent);
-                Assert.Equal(master.ParentColumn, link.GetProperty("DbColumn").GetString());
+                    .Single(f => f.GetProperty("Name").GetString() == parent.FieldName);
+                Assert.Equal(parent.Column, link.GetProperty("DbColumn").GetString());
             }
         }
     }
@@ -423,16 +423,30 @@ public class MasterSubmitGateTests
     /// <para><b>デザインの型と、関門が期待するデータの型は名前で対応する</b>——
     /// <c>TextFieldDesign</c> の値は <c>TextFieldData</c> で届く。</para>
     /// </remarks>
+    /// <summary>
+    /// コードと親の欄の型は、<see cref="MasterSubmitGate.Coded"/> から回して確かめる。
+    /// </summary>
+    /// <remarks>
+    /// <b>一覧を手で保つと、マスタが増えた日に行を足し忘れる</b>（2026-09-09 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public void コードと親の欄の型はデザインと一致する()
+    {
+        foreach (var master in MasterSubmitGate.Coded)
+        {
+            関門が読む欄の型はデザインと一致する(master.ModuleName, "Code", "TextFieldDesign");
+
+            if (master.Parent is MasterSubmitGate.CodedParent parent)
+            {
+                関門が読む欄の型はデザインと一致する(master.ModuleName, parent.FieldName, "LinkFieldDesign");
+            }
+        }
+    }
+
     [Theory]
-    [InlineData("Account", "Code", "TextFieldDesign")]
-    [InlineData("SubAccount", "Code", "TextFieldDesign")]
-    [InlineData("SubAccount", "Account", "LinkFieldDesign")]
-    [InlineData("Department", "Code", "TextFieldDesign")]
     [InlineData("Department", "IsCompanyWide", "BooleanFieldDesign")]
-    [InlineData("TaxCategory", "Code", "TextFieldDesign")]
     [InlineData("TaxCategory", "TaxationType", "SelectFieldDesign")]
     [InlineData("TaxCategory", "RateKind", "SelectFieldDesign")]
-    [InlineData("FiscalYear", "Code", "TextFieldDesign")]
     public void 関門が読む欄の型はデザインと一致する(string module, string field, string designType)
     {
         var path = Directory
@@ -564,7 +578,7 @@ public class MasterSubmitGateTests
     /// </summary>
     /// <remarks>
     /// <b>これは正常な形である</b>（qa/01 C-08）。<b>読めない型とは違う</b>ので止めない——
-    /// 追加なら保存されている親も無いので、重複は DB の一意索引が見る。
+    /// 同じ保存に親が居なければ 2 値も判定できないので、重複は DB の一意索引が見る。
     /// </remarks>
     [Fact]
     public async Task 仮の識別子の親を指す補助科目の追加は通る()
@@ -574,6 +588,108 @@ public class MasterSubmitGateTests
         Assert.True(await Submit(server, Adding("SubAccount", New(
             "SubAccount", Text("Code", "S9"), Text("Name", "検証"),
             ("Account", new LinkFieldData { Value = "@temporary:2" })))));
+    }
+
+    /// <summary>
+    /// <b>科目と補助科目を同じ保存で作るときも、2 値の規則を見る。</b>
+    /// </summary>
+    /// <remarks>
+    /// 親はまだ DB に無い（仮の識別子）ので、<b>同じ保存の中から探す</b>。
+    /// <b>この規則には DB 側の受け皿が無い</b>（<c>uses_sub_account</c> を見るトリガは明細の側だけ）ので、
+    /// ここを素通しにすると ADR-0038 §3 の 2 値が取込・API では丸ごと消える
+    /// （2026-09-09 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ保存で作る科目が補助科目を使わないなら断る()
+    {
+        using var server = new AccountingServer();
+
+        var account = New("Account", Text("Code", "9300"), Text("Name", "検証"), Select("Category", "asset"));
+        account.Fields["Id"] = new IdFieldData { Value = "@temporary:7" };
+        account.Fields["UsesSubAccount"] = new BooleanFieldData { Value = false };
+
+        var sub = New("SubAccount", Text("Code", "S9"), Text("Name", "検証"),
+            ("Account", new LinkFieldData { Value = "@temporary:7" }));
+
+        var thrown = await Rejected(
+            server,
+            new ModuleSubmitData { ModuleName = "Account", Add = [account, sub] });
+
+        Assert.Contains("「補助科目を使う」がオフなので、補助科目を作れません", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>勘定科目の欄が空の補助科目は、2 値を判定できない（外部キーが断る）。</summary>
+    [Fact]
+    public async Task 勘定科目が空の補助科目は2値を見ない()
+    {
+        using var server = new AccountingServer();
+
+        Assert.True(await Submit(server, Adding("SubAccount", New(
+            "SubAccount", Text("Code", "S9"), Text("Name", "検証"),
+            ("Account", new LinkFieldData { Value = string.Empty })))));
+    }
+
+    /// <summary>同じ保存に居る科目に識別子が無ければ、親として見つけられない。</summary>
+    /// <remarks>
+    /// <b>仮の識別子どうしを突き合わせる</b>ので、識別子の無い行は結び付けようがない。
+    /// 画面からは起きない（<c>Id</c> は常に来る。qa/01 F-12）。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ保存に居る科目に識別子が無ければ結び付かない()
+    {
+        using var server = new AccountingServer();
+
+        var account = new ModuleData { Name = "Account" };
+        account.Fields["Code"] = new TextFieldData { Value = "9300" };
+        account.Fields["Name"] = new TextFieldData { Value = "検証" };
+        account.Fields["Category"] = new SelectFieldData { Value = "asset" };
+        account.Fields["UsesSubAccount"] = new BooleanFieldData { Value = false };
+
+        var sub = New("SubAccount", Text("Code", "S9"), Text("Name", "検証"),
+            ("Account", new LinkFieldData { Value = "@temporary:7" }));
+
+        Assert.True(await Submit(
+            server, new ModuleSubmitData { ModuleName = "Account", Add = [sub, account] }));
+    }
+
+    /// <summary>同じ保存に居る科目の識別子が読めない型なら止める。</summary>
+    /// <remarks>
+    /// <b>自分の行より後ろの行も見る</b>ので、その行の <c>Id</c> をまだ検査していないことがある。
+    /// 黙って読み飛ばすと、<b>親が居るのに「居ない」と判断して 2 値の規則が消える</b>。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ保存に居る科目の識別子が読めない型なら止める()
+    {
+        using var server = new AccountingServer();
+
+        var account = New("Account", Text("Code", "9300"), Text("Name", "検証"), Select("Category", "asset"));
+        account.Fields["Id"] = new NumberFieldData { Value = 7 };
+
+        var sub = New("SubAccount", Text("Code", "S9"), Text("Name", "検証"),
+            ("Account", new LinkFieldData { Value = "@temporary:7" }));
+
+        await AssertUnreadable(
+            server,
+            new ModuleSubmitData { ModuleName = "Account", Add = [sub, account] },
+            "Id",
+            "NumberFieldData");
+    }
+
+    /// <summary>同じ保存で作る科目が「補助科目を使う」なら通る。</summary>
+    [Fact]
+    public async Task 同じ保存で作る科目が補助科目を使うなら通る()
+    {
+        using var server = new AccountingServer();
+
+        var account = New("Account", Text("Code", "9300"), Text("Name", "検証"), Select("Category", "asset"));
+        account.Fields["Id"] = new IdFieldData { Value = "@temporary:7" };
+        account.Fields["UsesSubAccount"] = new BooleanFieldData { Value = true };
+
+        var sub = New("SubAccount", Text("Code", "S9"), Text("Name", "検証"),
+            ("Account", new LinkFieldData { Value = "@temporary:7" }));
+
+        Assert.True(await Submit(
+            server, new ModuleSubmitData { ModuleName = "Account", Add = [account, sub] }));
     }
 
     /// <summary>更新で親が仮の識別子なら、保存されている親で数える。</summary>
@@ -613,7 +729,15 @@ public class MasterSubmitGateTests
             "SubAccount", ("Account", new LinkFieldData { Value = "@temporary:2" })))));
     }
 
-    /// <summary>識別子の欄が届かない要求は、新規として扱う（画面からは作れない形）。</summary>
+    /// <summary>
+    /// 識別子の欄が届かない要求は、新規として扱う。
+    /// </summary>
+    /// <remarks>
+    /// <b>画面からも CLB からも起きない</b>（<c>Id</c> と <c>OptimisticLocking</c> は常に来る。qa/01 F-12）ので、
+    /// これは取込・API を直に叩いた経路だけの形である。<b>新規の側へ倒すのは、
+    /// 更新として扱うと「自分自身」を除く相手が決まらず、重複の照会が意味を失うから</b>——
+    /// 新規として数えれば、既にあるコードは断り、無ければ最後に DB の一意索引が受け止める。
+    /// </remarks>
     [Fact]
     public async Task 識別子の欄が届かなければ新規として扱う()
     {
@@ -623,6 +747,15 @@ public class MasterSubmitGateTests
         row.Fields["Name"] = new TextFieldData { Value = "検証" };
 
         Assert.True(await Submit(server, Adding("Department", row)));
+
+        // **新規として数えている**ことを、既にあるコードで確かめる（自分自身を除いていない）。
+        var duplicate = new ModuleData { Name = "Department" };
+        duplicate.Fields["Code"] = new TextFieldData { Value = "10" };
+
+        Assert.Contains(
+            "既に使われています",
+            (await Rejected(server, Adding("Department", duplicate))).Message,
+            StringComparison.Ordinal);
     }
 
     /// <summary>識別子の欄が読めない型なら止める（新規として扱わない）。</summary>
@@ -661,7 +794,7 @@ public class MasterSubmitGateTests
                 [Adding("Account", data)], () => Task.FromResult(new List<ModuleSubmitResult>())));
 
         Assert.Equal(SaveFailureMessageText, thrown.Message);
-        Assert.Empty(server.SaveFailureLog);
+        Assert.Null(thrown.InnerException);
     }
 
     /// <summary>
@@ -827,6 +960,11 @@ public class MasterSubmitGateTests
         var target = server.InsertSubAccount("1210", "B1", "みずほ");
         var destination = server.AccountOf("1220").Value;
 
+        // **移した先に別のコードを置く。** 空の科目へ移すと
+        // `UNIQUE (account_id, code COLLATE NOCASE)` が鳴りようがなく、
+        // 「関門の受理集合が DB に収まるか」を 1 文字も表明できない（2026-09-09 の自己レビュー）。
+        server.InsertSubAccount("1220", "B2", "三井");
+
         Assert.True(await Submit(
             server, Updating("SubAccount", Row("SubAccount", target, Account(server, "1220")))));
 
@@ -835,6 +973,31 @@ public class MasterSubmitGateTests
         Assert.Equal(
             destination,
             server.Scalar<long>($"select account_id from sub_accounts where id = {target}"));
+        Assert.Equal(2L, server.Scalar<long>($"select count(*) from sub_accounts where account_id = {destination}"));
+    }
+
+    /// <summary>
+    /// <b>関門が断った移動は、DB も断る</b>（受理集合の逆向き。qa/03 L-14 の処方）。
+    /// </summary>
+    /// <remarks>
+    /// 関門が DB より<b>狭い</b>と、画面が断るのに取込は通る（守りが 1 層に落ちる）。
+    /// <b>関門を外したときに何が起きるか</b>を、同じ <c>UPDATE</c> で確かめる。
+    /// </remarks>
+    [Fact]
+    public async Task 関門が断った移動は_DB_も断る()
+    {
+        using var server = new AccountingServer();
+        var target = server.InsertSubAccount("1210", "b1", "みずほ（当座）");
+        server.InsertSubAccount("1220", "B1", "みずほ（定期）");
+        var destination = server.AccountOf("1220").Value;
+
+        await Rejected(server, Updating("SubAccount", Row("SubAccount", target, Account(server, "1220"))));
+
+        var thrown = Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(
+            () => server.Execute($"update sub_accounts set account_id = {destination} where id = {target}"));
+
+        Assert.Contains("UNIQUE constraint failed", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("sub_accounts", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -37,7 +37,7 @@ public sealed class MasterCodeStore(IDbAccessor accessor, string dataSourceName)
     {
         ArgumentNullException.ThrowIfNull(master);
 
-        var scope = master.ParentColumn is null ? string.Empty : $" and {master.ParentColumn} = @p3";
+        var scope = master.Parent is null ? string.Empty : $" and {master.Parent.Column} = @p3";
         var rows = await accessor.QueryAsync(
             dataSourceName,
             $"select code from {master.Table}"

@@ -34,9 +34,9 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         ArgumentNullException.ThrowIfNull(transactionData);
         ArgumentNullException.ThrowIfNull(save);
 
-        foreach (var data in PartnersIn(transactionData))
+        foreach (var (data, adding) in PartnersIn(transactionData))
         {
-            await RejectAsync(data);
+            await RejectAsync(data, adding);
         }
 
         return await save();
@@ -49,14 +49,32 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// <b>更新を見落とすと、正しい番号で作ってから壊した番号に直せる。</b>
     /// 追加だけを守る関門は、守っていないのと同じである。
     /// </remarks>
-    private static IEnumerable<ModuleData> PartnersIn(IReadOnlyList<ModuleSubmitData> transactionData)
+    /// <summary>
+    /// この保存に混ざっている取引先の行。<b>追加か更新かも一緒に返す。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>追加だけに掛ける規則があるので、どちらの箱に入っていたかを落とさない</b>
+    /// （コードの必須。<c>MasterSubmitGate</c> と同じ形。2026-09-09 の自己レビュー）。
+    /// </remarks>
+    private static IEnumerable<(ModuleData Data, bool Adding)> PartnersIn(
+        IReadOnlyList<ModuleSubmitData> transactionData)
         => transactionData
-            .SelectMany(d => d.Add.Concat(d.Update))
-            .Where(d => d.Name == ModuleName);
+            .SelectMany(d => d.Add.Select(r => (Data: r, Adding: true))
+                              .Concat(d.Update.Select(r => (Data: r, Adding: false))))
+            .Where(x => x.Data.Name == ModuleName);
 
-    private async Task RejectAsync(ModuleData data)
+    private async Task RejectAsync(ModuleData data, bool adding)
     {
         RejectSelfParent(data);
+
+        // **追加はコードを必ず伴う。** 画面は必ず送ってくるが、**取込は列ごと落とせる**
+        // （`code` の無い CSV）。素通しにすると DB の NOT NULL に当たり、
+        // 利用者には定型文が出る（qa/03 L-28 に戻る。2026-09-09 の自己レビュー）。
+        if (adding && !data.Fields.ContainsKey("Code"))
+        {
+            throw new PartnerRejectedException("「取引先コード」を入れてください。");
+        }
+
         await RejectBadCodeAsync(data);
         RejectMalformedCorporateNumber(data);
         await RejectSoleProprietorWithCorporateNumberAsync(data);
@@ -360,7 +378,9 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// しかもフィクスチャが自分で <see cref="LinkFieldData"/> を組むのでテストは緑のまま。
     /// 登録の関門で同じ穴を同じ日に直したのに、こちらに残っていた
     /// （2026-08-31 の自己レビュー）。</para>
-    /// <para><b>新規作成の相手を指しているときは仮の識別子</b>なので数値として読めず、null になる。</para>
+    /// <para><b>新規作成の相手を指しているときは仮の識別子</b>なので数値として読めず、null になる。
+    /// <b>それと「読めない型」は別</b>——後者は <see cref="UnreadableFieldException"/> で止める
+    /// （<c>null</c> に落とすと、この doc が名指しした 3 本がまとめて素通しになる。2026-09-09）。</para>
     /// </remarks>
     private static long? Reference(ModuleData data, string name)
     {
@@ -369,7 +389,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
             {
                 LinkFieldData link => link.Value,
                 IdFieldData id => id.Value,
-                _ => null,
+                _ => throw UnreadableFieldException.For(data.Name, name, field),
             }
             : null;
 
@@ -394,7 +414,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// </remarks>
     private static T? Field<T>(ModuleData data, string name) where T : FieldDataBase
         => data.Fields.TryGetValue(name, out var field)
-            ? field as T ?? throw UnreadableFieldException.For(name, field)
+            ? field as T ?? throw UnreadableFieldException.For(data.Name, name, field)
             : null;
 
     /// <summary>

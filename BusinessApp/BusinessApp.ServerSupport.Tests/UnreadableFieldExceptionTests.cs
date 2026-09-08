@@ -12,10 +12,11 @@ using BusinessApp.ServerSupport;
 public class UnreadableFieldExceptionTests
 {
     [Fact]
-    public void 欄の名前と型名を持つ()
+    public void モジュールと欄の名前と型名を持つ()
     {
-        var thrown = UnreadableFieldException.For("Code", new NumberBox());
+        var thrown = UnreadableFieldException.For("Account", "Code", new NumberBox());
 
+        Assert.Equal("Account", thrown.Module);
         Assert.Equal("Code", thrown.Field);
         Assert.Equal("NumberBox", thrown.TypeName);
     }
@@ -31,17 +32,23 @@ public class UnreadableFieldExceptionTests
     [Fact]
     public void 値が_null_でも型名を作れる()
     {
-        var thrown = UnreadableFieldException.For("Code", null);
+        var thrown = UnreadableFieldException.For("Account", "Code", null);
 
         Assert.Equal("null", thrown.TypeName);
     }
 
-    /// <summary>文言は欄の名前と型名を含む（ログに出したときに直す先が分かる）。</summary>
+    /// <summary>
+    /// 文言はモジュール・欄の名前・型名を全部含む。
+    /// </summary>
+    /// <remarks>
+    /// <b>欄の名前だけでは直す先が決まらない</b>——<c>Code</c> は 6 つのモジュールにある。
+    /// </remarks>
     [Fact]
-    public void 文言は欄の名前と型名を含む()
+    public void 文言はモジュールと欄の名前と型名を含む()
     {
-        var thrown = new UnreadableFieldException("IsCompanyWide", "TextFieldData");
+        var thrown = new UnreadableFieldException("Department", "IsCompanyWide", "TextFieldData");
 
+        Assert.Contains("Department", thrown.Message, StringComparison.Ordinal);
         Assert.Contains("IsCompanyWide", thrown.Message, StringComparison.Ordinal);
         Assert.Contains("TextFieldData", thrown.Message, StringComparison.Ordinal);
     }

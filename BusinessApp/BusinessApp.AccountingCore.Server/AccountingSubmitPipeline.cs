@@ -97,7 +97,9 @@ public sealed class AccountingSubmitPipeline(
             // 中身はホストのログへ回す（<see cref="SaveFailureMessage"/> と同じ分担）。
             // **投げ直す例外に内側を残さない**——ホストの例外ハンドラは
             // InnerException の文言まで連ねて返すので、残すと結局そのまま画面に出る。
-            onSaveFailure?.Invoke(unreadable.Message);
+            // **スタックまで渡す。** 内側を捨てた例外を投げ直すので、
+            // ホスト側の例外ログには「どの関門で読めなかったか」が残らない。
+            onSaveFailure?.Invoke(unreadable.ToString());
             throw new InvalidOperationException(SaveFailureMessage.Text);
         }
 

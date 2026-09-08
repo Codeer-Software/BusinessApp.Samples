@@ -42,7 +42,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     public static readonly IReadOnlyList<CodedMaster> Coded =
     [
         new("Account", "accounts", "科目コード"),
-        new("SubAccount", "sub_accounts", "補助科目コード", "account_id", "Account"),
+        new("SubAccount", "sub_accounts", "補助科目コード", new("account_id", "Account")),
         new("Department", "departments", "部門コード"),
         new("TaxCategory", "tax_categories", "税区分コード"),
         new("FiscalYear", "fiscal_years", "年度コード"),
@@ -67,14 +67,16 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         {
             if (Coded.FirstOrDefault(m => m.ModuleName == data.Name) is CodedMaster master)
             {
-                await RejectAsync(master, data, adding);
+                await RejectAsync(master, data, adding, transactionData);
             }
         }
 
         return await save();
     }
 
-    private async Task RejectAsync(CodedMaster master, ModuleData data, bool adding)
+    private async Task RejectAsync(
+        CodedMaster master, ModuleData data, bool adding,
+        IReadOnlyList<ModuleSubmitData> transactionData)
     {
         var id = Id(data);
 
@@ -89,7 +91,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         await RejectBadCodeAsync(master, data, id);
         await RejectSecondCompanyWideDepartmentAsync(master, data, id);
         await RejectInconsistentTaxCategoryAsync(master, data, id);
-        await RejectSubAccountUnderPlainAccountAsync(master, data);
+        await RejectSubAccountUnderPlainAccountAsync(master, data, transactionData);
     }
 
     /// <summary>コードの書式と、大小を無視した重複（ADR-0047）。</summary>
@@ -130,7 +132,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         }
 
         var conflict = await store.FindConflictingCodeAsync(
-            master, normalized, id, await ParentIdAsync(master, data, id));
+            master, normalized, id, (await ParentAsync(master, data, id)).Id);
         if (conflict is null)
         {
             return;
@@ -139,7 +141,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         // **ぶつかった相手の字を見せる。** 大小だけが違うとき、字を見比べないと理由が分からない。
         // **補助科目だけは範囲が違う**（一意なのは勘定科目とコードの組）。範囲を言わないと、
         // 利用者は「全社で一意」と読んで要らない採番規則を作る（2026-09-09 の自己レビュー）。
-        var scope = master.ParentColumn is null ? string.Empty : "この勘定科目の中では";
+        var scope = master.Parent is null ? string.Empty : "この勘定科目の中では";
         var reason = string.Equals(conflict, normalized, StringComparison.Ordinal)
             ? $"{scope}既に使われています。"
             : $"大文字と小文字を区別しないので、{scope}既にある「{conflict}」と同じコードになります。";
@@ -159,8 +161,8 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// </summary>
     private async Task<string?> StoredCodeForParentMoveAsync(CodedMaster master, ModuleData data, long? id)
     {
-        if (master.ParentFieldName is not string field
-            || !data.Fields.ContainsKey(field)
+        if (master.Parent is not CodedParent parent
+            || !data.Fields.ContainsKey(parent.FieldName)
             || id is not long existing)
         {
             return null;
@@ -239,22 +241,94 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// <b>2026-09-08 の回では明細の側しか塞いでいなかった</b>——
     /// マスタの画面からは、使わない設定の科目にも補助科目を足せた（docs/04 §1 の B-1）。
     /// </remarks>
-    private async Task RejectSubAccountUnderPlainAccountAsync(CodedMaster master, ModuleData data)
+    private async Task RejectSubAccountUnderPlainAccountAsync(
+        CodedMaster master, ModuleData data, IReadOnlyList<ModuleSubmitData> transactionData)
     {
-        if (master.ModuleName != "SubAccount"
-            || await ParentIdAsync(master, data, Id(data)) is not long accountId)
+        if (master.ModuleName != "SubAccount")
         {
             return;
         }
 
         // **科目が実在しないときは、ここで止めない**——外部キーが拒む。
         // 実在の断りは 1 か所（DB）に置き、ここは 2 値の規則だけを見る。
-        if (await store.UsesSubAccountAsync(accountId) is false)
+        var parent = await ParentAsync(master, data, Id(data));
+        var uses = parent.Id is long accountId
+            ? await store.UsesSubAccountAsync(accountId)
+            : UsesSubAccountInSubmit(parent.Key, transactionData);
+
+        if (uses is false)
         {
             throw new MasterRejectedException(
                 "この勘定科目は「補助科目を使う」がオフなので、補助科目を作れません。"
                 + "先に勘定科目の「補助科目を使う」をオンにしてください。");
         }
+    }
+
+    /// <summary>
+    /// 同じ保存の中で作られている勘定科目が「補助科目を使う」か。見つからなければ <c>null</c>。
+    /// </summary>
+    /// <remarks>
+    /// <b>科目と補助科目を同じ保存で作る形（取込・API）では、親がまだ DB に無い</b>
+    /// （仮の識別子。qa/01 C-08）。DB を引くだけだと <b>ADR-0038 §3 の 2 値が丸ごと消える</b>——
+    /// この規則には DB 側の受け皿が無い（<c>uses_sub_account</c> を見るトリガは明細の側だけ）ので、
+    /// <b>ここが唯一の守りである</b>（2026-09-09 の自己レビュー）。
+    /// </remarks>
+    private static bool? UsesSubAccountInSubmit(
+        string? key, IReadOnlyList<ModuleSubmitData> transactionData)
+    {
+        if (string.IsNullOrEmpty(key))
+        {
+            return null;
+        }
+
+        // **入れ物の名前ではなく、中身の名前で探す**（qa/02 R16-16 の型）。
+        var parent = transactionData
+            .SelectMany(d => d.Add.Concat(d.Update))
+            .FirstOrDefault(d => d.Name == "Account" && IdText(d) == key);
+
+        return parent is null ? null : Boolean(parent, "UsesSubAccount");
+    }
+
+    /// <summary>
+    /// 差分に載っている識別子の字面（仮の識別子もそのまま）。
+    /// </summary>
+    /// <remarks>
+    /// <b>読めない型なら止める</b>（<see cref="Id"/> と同じ理由）。ここは
+    /// <b>自分の行より後ろの行も見る</b>ので、その行の <c>Id</c> をまだ検査していないことがある。
+    /// </remarks>
+    private static string? IdText(ModuleData data)
+    {
+        if (!data.Fields.TryGetValue("Id", out var field))
+        {
+            return null;
+        }
+
+        return field is IdFieldData id
+            ? id.Value
+            : throw UnreadableFieldException.For(data.Name, "Id", field);
+    }
+
+    /// <summary>
+    /// 親を指している値の字面。<b>数値として読めるとは限らない</b>（仮の識別子）。
+    /// </summary>
+    /// <remarks>
+    /// <b>型を 1 つに決め打ちしない</b>（<c>PartnerSubmitGate.Reference</c> と同じ戒め）。
+    /// <b>読めない型は止める</b>——黙って保存されている親へ落ちると、
+    /// 「移した先」ではなく「移す前」の範囲で重複を数えることになる。
+    /// </remarks>
+    private static string? ParentKey(CodedParent parent, ModuleData data)
+    {
+        if (!data.Fields.TryGetValue(parent.FieldName, out var value))
+        {
+            return null;
+        }
+
+        return value switch
+        {
+            LinkFieldData link => link.Value,
+            IdFieldData reference => reference.Value,
+            _ => throw UnreadableFieldException.For(data.Name, parent.FieldName, value),
+        };
     }
 
     /// <summary>
@@ -272,7 +346,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             {
                 TextFieldData text => text.Value ?? string.Empty,
                 SelectFieldData select => select.Value ?? string.Empty,
-                _ => throw UnreadableFieldException.For(field, value),
+                _ => throw UnreadableFieldException.For(data.Name, field, value),
             }
             : null;
 
@@ -286,7 +360,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         => data.Fields.TryGetValue(field, out var value)
             ? value is BooleanFieldData boolean
                 ? boolean.Value
-                : throw UnreadableFieldException.For(field, value)
+                : throw UnreadableFieldException.For(data.Name, field, value)
             : null;
 
     /// <summary>
@@ -302,41 +376,30 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// 決め打ちにすると、フィールドの型が変わった日に検査が黙って素通しに落ち、
     /// フィクスチャが自分で同じ型を組むのでテストは緑のままになる。</para>
     /// </remarks>
-    private async Task<long?> ParentIdAsync(CodedMaster master, ModuleData data, long? id)
+    private async Task<(long? Id, string? Key)> ParentAsync(CodedMaster master, ModuleData data, long? id)
     {
-        if (master.ParentFieldName is not string field || master.ParentColumn is not string column)
+        if (master.Parent is not CodedParent parent)
         {
-            return null;
+            return (null, null);
         }
 
-        if (data.Fields.TryGetValue(field, out var value))
+        var key = ParentKey(parent, data);
+        if (long.TryParse(key, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
         {
-            // **型を 1 つに決め打ちしない**（<c>PartnerSubmitGate.Reference</c> と同じ戒め）。
-            // **読めない型は止める**——黙って保存されている親へ落ちると、
-            // 「移した先」ではなく「移す前」の範囲で重複を数えることになる。
-            var raw = value switch
-            {
-                LinkFieldData link => link.Value,
-                IdFieldData reference => reference.Value,
-                _ => throw UnreadableFieldException.For(field, value),
-            };
-
-            if (long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
-            {
-                return parsed;
-            }
+            return (parsed, key);
         }
 
         // 差分に無い（か仮の識別子で数値として読めない）ので、保存されている親を読む。
         if (id is not long stored)
         {
-            return null;
+            return (null, key);
         }
 
-        var row = await store.FindStoredAsync(master, stored, [column]);
-        return long.TryParse(Stored(row, column), NumberStyles.Integer, CultureInfo.InvariantCulture, out var found)
-            ? found
-            : null;
+        var row = await store.FindStoredAsync(master, stored, [parent.Column]);
+        return long.TryParse(
+                   Stored(row, parent.Column), NumberStyles.Integer, CultureInfo.InvariantCulture, out var found)
+            ? (found, key)
+            : (null, key);
     }
 
     /// <summary>保存されている値の字面。NULL は空文字。</summary>
@@ -362,7 +425,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
 
         if (field is not IdFieldData id)
         {
-            throw UnreadableFieldException.For("Id", field);
+            throw UnreadableFieldException.For(data.Name, "Id", field);
         }
 
         return long.TryParse(id.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
@@ -382,14 +445,15 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// <param name="moduleName">CLB のモジュール名。</param>
     /// <param name="table">DB の表（CLB の <c>DbTable</c> の写し）。</param>
     /// <param name="codeLabel">コードの欄の呼び名（CLB の <c>DisplayName</c> の写し）。</param>
-    /// <param name="parentColumn">一意の範囲を絞る列（補助科目だけ）。</param>
-    /// <param name="parentFieldName">同じものの CLB のフィールド名。</param>
+    /// <param name="moduleName">CLB のモジュール名。</param>
+    /// <param name="table">DB の表（CLB の <c>DbTable</c> の写し）。</param>
+    /// <param name="codeLabel">コードの欄の呼び名（CLB の <c>DisplayName</c> の写し）。</param>
+    /// <param name="parent">一意の範囲を絞る親（補助科目だけ）。</param>
     public sealed class CodedMaster(
         string moduleName,
         string table,
         string codeLabel,
-        string? parentColumn = null,
-        string? parentFieldName = null)
+        CodedParent? parent = null)
     {
         /// <summary>CLB のモジュール名。</summary>
         public string ModuleName { get; } = moduleName;
@@ -400,10 +464,28 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         /// <summary>コードの欄の呼び名。</summary>
         public string CodeLabel { get; } = codeLabel;
 
-        /// <summary>一意の範囲を絞る列（補助科目だけ）。</summary>
-        public string? ParentColumn { get; } = parentColumn;
+        /// <summary>一意の範囲を絞る親。無ければ <c>null</c>。</summary>
+        public CodedParent? Parent { get; } = parent;
+    }
+
+    /// <summary>
+    /// 一意の範囲を絞る親（補助科目の勘定科目）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>列とフィールド名を 1 つの型にまとめてある。</b> 別々の <c>string?</c> にすると
+    /// <b>「片方だけ null」という起こりえない組み合わせ</b>を毎回検査することになり、
+    /// その枝はどのテストからも踏めない（ADR-0012 がカバレッジの穴を禁じている。
+    /// 2026-09-09 の自己レビュー）。</para>
+    /// <para><b>設定を束ねるだけの型なので、レコードにしない</b>（<see cref="CodedMaster"/> と同じ理由）。</para>
+    /// </remarks>
+    /// <param name="column">一意の範囲を絞る列。</param>
+    /// <param name="fieldName">同じものの CLB のフィールド名。</param>
+    public sealed class CodedParent(string column, string fieldName)
+    {
+        /// <summary>一意の範囲を絞る列。</summary>
+        public string Column { get; } = column;
 
         /// <summary>同じものの CLB のフィールド名。</summary>
-        public string? ParentFieldName { get; } = parentFieldName;
+        public string FieldName { get; } = fieldName;
     }
 }

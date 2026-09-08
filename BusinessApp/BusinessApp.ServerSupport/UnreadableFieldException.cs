@@ -17,9 +17,18 @@ namespace BusinessApp.ServerSupport;
 /// <c>InvalidOperationException</c> のままだと、包む側が「どの例外なら定型文に差し替えてよいか」を
 /// 判断できず、想定外の失敗まで一緒に握り潰すことになる。</para>
 /// </remarks>
-public sealed class UnreadableFieldException(string field, string typeName)
-    : Exception($"「{field}」が読めない型 {typeName} で届いた。関門が守れないので止める。")
+public sealed class UnreadableFieldException(string module, string field, string typeName)
+    : Exception($"{module} の「{field}」が読めない型 {typeName} で届いた。関門が守れないので止める。")
 {
+    /// <summary>
+    /// 読めなかった欄を持つモジュール。
+    /// </summary>
+    /// <remarks>
+    /// <b>欄の名前だけでは直す先が決まらない。</b> <c>Code</c> は 6 つのモジュールにあるので、
+    /// ログに出したときにどのデザインを見ればよいか分からなくなる（2026-09-09 の自己レビュー）。
+    /// </remarks>
+    public string Module { get; } = module;
+
     /// <summary>読めなかった欄の名前。</summary>
     public string Field { get; } = field;
 
@@ -32,6 +41,6 @@ public sealed class UnreadableFieldException(string field, string typeName)
     /// デシリアライズで、<c>NullReferenceException</c> になると<b>この型を作った意味が消える</b>
     /// （定型文へ差し替える口を通らない。2026-09-09 の自己レビュー）。
     /// </remarks>
-    public static UnreadableFieldException For(string field, object? value)
-        => new(field, value?.GetType().Name ?? "null");
+    public static UnreadableFieldException For(string module, string field, object? value)
+        => new(module, field, value?.GetType().Name ?? "null");
 }

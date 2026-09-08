@@ -1,6 +1,7 @@
 namespace BusinessApp.Partners.Server;
 
 using BusinessApp.Partners;
+using BusinessApp.ServerSupport;
 
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
@@ -132,8 +133,11 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
     /// <b>取込（フェーズ 6）と API を直に叩く経路が同じ入口を通る</b>からである。
     /// 決め打ちにすると、型が動いた日に<b>この関門が丸ごと素通しに落ちる——
     /// しかもフィクスチャが型を自分で組むのでテストは緑のまま</b>になる。</para>
-    /// <para><b>読めない型で来たときは null を返す</b>（＝突き合わせの対象にしない）。
-    /// CLB は宣言した型でしか送らないので、ここに来るのは API を直に叩いた経路だけである。</para>
+    /// <para><b>読めない型で来たときは止める</b>（<see cref="UnreadableFieldException"/>）。
+    /// <c>null</c> に落とすと<b>保存済みの取引先へ落ちる</b>ので、登録期間の重なりを
+    /// <b>別の取引先の行と突き合わせる</b>ことになる。
+    /// 「CLB は宣言した型でしか送らない」は<b>素通しの理由にならない</b>——
+    /// 型を変えるのはデザインを触る人であって、CLB ではない（2026-09-09 の自己レビュー）。</para>
     /// </remarks>
     private static string? SubmittedPartner(ModuleData data)
         => data.Fields.TryGetValue("Partner", out var field)
@@ -141,7 +145,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
             {
                 LinkFieldData link => link.Value,
                 IdFieldData id => id.Value,
-                _ => null,
+                _ => throw UnreadableFieldException.For(data.Name, "Partner", field),
             })
             : null;
 

@@ -348,7 +348,43 @@ public class MasterMeaningGuardTests
             TestDatabase.ScalarOf<string>(db, $"SELECT name FROM partners WHERE id = {TargetPartner}"));
     }
 
-    /// <summary>下書きだけが使う取引先は置き換えられる（<c>status = 'posted'</c> の条件が効いていること）。</summary>
+    /// <summary>
+    /// <b>使用中の id へ、別の取引先を動かすこともできない</b>（トリガの <c>NEW.id</c> の側）。
+    /// </summary>
+    /// <remarks>
+    /// <b>OLD.id だけを見ると、この向きが素通しになる</b>——空いている取引先を
+    /// 使用中の id へ移すと、計上済みの明細が指す相手がすり替わる。
+    /// <b>主キーの衝突より先にトリガが鳴る</b>ので、断りは利用者の語で出る（2026-09-09 に実測）。
+    /// <c>IN (OLD.id, NEW.id)</c> を <c>= OLD.id</c> に縮めると、この 1 本だけが赤くなる。
+    /// </remarks>
+    [Theory]
+    [InlineData(UsedByLine)]
+    [InlineData(UsedByEntry)]
+    public void 使用中のidへ別の取引先を動かせない(string use)
+    {
+        using var db = WithPostedPartner(use);
+
+        var thrown = Assert.Throws<SqliteException>(
+            () => TestDatabase.Execute(db, MoveOntoTarget));
+
+        Assert.Contains("取引先は置き換えられない", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "識別子をずらすための取引先",
+            TestDatabase.ScalarOf<string>(db, "SELECT name FROM partners WHERE id = 3"));
+    }
+
+    /// <summary>
+    /// 下書きだけが使う取引先は置き換えられる（<c>status = 'posted'</c> の条件が効いていること）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>明細と伝票の両方で撃つ</b>ので、<c>INSERT</c> 側の
+    /// <c>AND e.status = 'posted'</c> をどちらか落とすとここが赤くなる。</para>
+    /// <para><b><c>UPDATE</c> 側の <c>status</c> は、通る側を書けない。</b>
+    /// 参照されている取引先の id を動かすと<b>外部キーが先に断る</b>ので
+    /// （2026-09-09 に実測）、下書きでも計上済みでも結果が変わらない。
+    /// <b>条件を落としても赤くならない</b>ことは分かったうえで残している——
+    /// 4 マスタと同じ全文であること（<c>置き換えの守りは4マスタで同じ全文である</c>）を優先する。</para>
+    /// </remarks>
     [Theory]
     [InlineData(UsedByLine)]
     [InlineData(UsedByEntry)]
@@ -390,7 +426,7 @@ public class MasterMeaningGuardTests
     /// </summary>
     /// <remarks>
     /// <b>4 にしてあるのは、他のどの識別子とも違う値にするためである</b>
-    /// （勘定科目 1・2、税区分 1、部門 2、会計年度 1、伝票 2、明細 3・4）。
+    /// （勘定科目 1・2、税区分 1、部門 2、会計年度 1、伝票 2、明細 1・2）。
     /// 全部が 1 の検体だと、トリガの <c>l.partner_id</c> を <c>l.account_id</c> にも
     /// <c>l.journal_entry_id</c> にも書き換えられるのにテストが緑のままになる
     /// （qa/03 L-02 の縮退。2026-09-09 の自己レビューで指摘された）。
@@ -407,6 +443,9 @@ public class MasterMeaningGuardTests
         "INSERT OR REPLACE INTO partners (id, code, name) VALUES (4, 'P999', '別の会社')";
 
     private const string ReplaceByUpdate = "UPDATE partners SET id = 9 WHERE id = 4";
+
+    /// <summary>空いている取引先を、守る取引先の id へ動かす（トリガの <c>NEW.id</c> の側）。</summary>
+    private const string MoveOntoTarget = "UPDATE partners SET id = 4 WHERE id = 3";
 
     /// <summary>計上済みの伝票が取引先 4 を使っている DB。</summary>
     private static SqliteConnection WithPostedPartner(string use)

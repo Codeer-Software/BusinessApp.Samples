@@ -277,6 +277,65 @@ public class MasterCodeGuardTests
 
     /// <summary>表ごとに要る列だけを埋めて 1 行入れる。</summary>
     /// <summary>
+    /// <b>自然キーとして使う列にも BLOB を入れさせない</b>（010）。
+    /// </summary>
+    /// <remarks>
+    /// <para>コードの 6 表を塞いだあと、<b>同じ穴が残っている列</b>を探して見つけたもの
+    /// （2026-09-09 の自己レビュー）。</para>
+    /// <para><c>partners.corporate_number</c> は<b>名寄せの自然キー</b>（ADR-0028）で、
+    /// 二重になると誤束ねが黙って起こる。<c>app_users.user_name</c> は<b>ログインの照合キー</b>で、
+    /// <c>x'61646D696E'</c> と <c>'admin'</c> が別の行として並ぶ。
+    /// <b>どちらも UNIQUE はぶつからず、GLOB の CHECK も素通りする。</b></para>
+    /// </remarks>
+    [Theory]
+    [InlineData("INSERT INTO partners (code, name, corporate_number) VALUES ('Z001', '検証', x'38373030313130303035393031')", "法人番号")]
+    [InlineData("INSERT INTO app_users (user_name, hash, salt) VALUES (x'61646D696E', 'h', 's')", "識別名")]
+    public void 自然キーの列に_BLOB_は入らない(string sql, string expected)
+    {
+        using var db = SchemaSeed.Create();
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, sql));
+
+        Assert.Contains(expected, thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>更新でも同じ（新しく書き込まれる値を見る）。</summary>
+    [Theory]
+    [InlineData("UPDATE partners SET corporate_number = x'38373030313130303035393031' WHERE code = 'Z001'", "法人番号")]
+    [InlineData("UPDATE app_users SET user_name = x'61646D696E' WHERE user_name = 'seed'", "識別名")]
+    public void 自然キーの列は更新でも_BLOB_を拒む(string sql, string expected)
+    {
+        using var db = SchemaSeed.Create();
+        TestDatabase.Execute(db, """
+            INSERT INTO partners (code, name) VALUES ('Z001', '検証');
+            INSERT INTO app_users (user_name, hash, salt) VALUES ('seed', 'h', 's');
+            """);
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, sql));
+
+        Assert.Contains(expected, thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>ふつうの文字列は通る（塞いだ条件が正しい値まで止めていない）。</summary>
+    [Fact]
+    public void 自然キーの列は文字列なら通る()
+    {
+        using var db = SchemaSeed.Create();
+
+        TestDatabase.Execute(db, """
+            INSERT INTO partners (code, name, corporate_number) VALUES ('Z001', '検証', '8700110005901');
+            UPDATE partners SET corporate_number = '1234567890123' WHERE code = 'Z001';
+            INSERT INTO app_users (user_name, hash, salt) VALUES ('seed', 'h', 's');
+            UPDATE app_users SET user_name = 'seed2' WHERE user_name = 'seed';
+            """);
+
+        Assert.Equal(
+            "1234567890123",
+            TestDatabase.ScalarOf<string>(db, "SELECT corporate_number FROM partners WHERE code = 'Z001'"));
+        Assert.Equal("seed2", TestDatabase.ScalarOf<string>(db, "SELECT user_name FROM app_users"));
+    }
+
+    /// <summary>
     /// コードを 1 つ入れる SQL。
     /// </summary>
     /// <remarks>

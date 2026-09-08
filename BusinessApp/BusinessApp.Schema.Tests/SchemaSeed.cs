@@ -37,8 +37,11 @@ internal static class SchemaSeed
     /// 計上済みの伝票も明細も、後からは書き換えられない（I-05）。
     /// </summary>
     /// <remarks>
-    /// <b>伝票の識別子を直に書かない。</b> 先に別の伝票を入れてから呼ぶテストがあるので、
-    /// 明細は <c>last_insert_rowid()</c> で親を指す（<see cref="Post"/> も同じ）。
+    /// <para><b>伝票の識別子を直に書かない。</b> 先に別の伝票を入れてから呼ぶテストがあるので、
+    /// 明細は <c>MAX(id)</c> で親を指す（<see cref="Post"/> も同じ）。</para>
+    /// <para><b>同じ DB で 2 回呼べない。</b> <see cref="Post"/> が <c>entry_no = 1</c> を固定で書くので、
+    /// 2 本目は <c>UNIQUE (fiscal_year_id, entry_no)</c> に当たる。
+    /// 2 本目が要るテストは、番号を自分で決めて計上する。</para>
     /// </remarks>
     public const string Draft = """
         INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)

@@ -2,6 +2,7 @@ namespace BusinessApp.Partners.Server.Tests;
 
 using BusinessApp.Partners.Server;
 using BusinessApp.Partners.Server.Tests.Fixtures;
+using BusinessApp.ServerSupport;
 
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
@@ -1282,26 +1283,27 @@ public class PartnerRegistrationSubmitGateTests
         Assert.False(save.Called);
     }
 
-    /// <summary>想定していない型で取引先が来たら、突き合わせの対象にしない。</summary>
+    /// <summary>想定していない型で取引先が来たら、素通しではなく止める。</summary>
     /// <remarks>
-    /// CLB は宣言した型でしか送らないので、ここに来るのは API を直に叩いた経路だけである。
-    /// 例外にせず素通しするのは、<b>止めるのは書式と二重登録の 2 つだけ</b>という
-    /// この関門の約束（docs/13 §3-2）を広げないため。DB の NOT NULL が最後に受け止める。
+    /// <b><c>null</c> に落とすと保存済みの取引先へ落ちる</b>ので、登録期間の重なりを
+    /// <b>別の取引先の行と突き合わせる</b>ことになる——<b>止めるべき二重登録を通し、
+    /// 通すべき登録を止める</b>両方が起きうる。「CLB は宣言した型でしか送らない」は
+    /// 素通しの理由にならない（型を変えるのはデザインを触る人である。2026-09-09 の自己レビュー）。
     /// </remarks>
     [Fact]
-    public async Task 想定していない型の取引先は突き合わせに使わない()
+    public async Task 想定していない型の取引先なら止める()
     {
         using var server = new PartnerServer();
         var save = new SaveSpy();
 
         var first = Registration(no: ValidNo, validFrom: new DateOnly(2023, 10, 1));
-        var second = Registration(no: "T9999999999999", validFrom: new DateOnly(2023, 10, 1));
         first.Fields["Partner"] = new NumberFieldData { Value = 3m };
-        second.Fields["Partner"] = new NumberFieldData { Value = 3m };
 
-        await Gate(server).SubmitAsync([Adding(first, second)], save.SaveAsync);
+        var thrown = await Assert.ThrowsAsync<UnreadableFieldException>(
+            () => Gate(server).SubmitAsync([Adding(first)], save.SaveAsync));
 
-        Assert.True(save.Called);
+        Assert.Equal("Partner", thrown.Field);
+        Assert.False(save.Called);
     }
 
     /// <summary>取引先の欄が空文字で来たら、突き合わせの対象にしない。</summary>
