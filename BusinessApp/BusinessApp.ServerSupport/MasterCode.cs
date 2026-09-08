@@ -17,13 +17,10 @@ using System.Text;
 /// <para><b>同一性の判定はここでは見ない。</b> 大小を無視した重複は保存の関門が問い合わせ、
 /// 最後は DB の <c>UNIQUE ... COLLATE NOCASE</c> が止める（ADR-0047 の決定 7）。</para>
 /// <para><b>DDL のトリガが同じ規則を持つ</b>（<c>Designer/ddl/008_master_code_format.sql</c>）。
-/// 長さと字種は <c>MasterCodeConsistencyTests</c> が突き合わせる（docs/20 §4）。</para>
+/// **関門とトリガが同じ字を通すことは <c>MasterCodeGuardTests</c> が符号位置の総当たりで、長さは <c>FieldLengthConsistencyTests</c> が C# と DDL とデザインの 3 か所で突き合わせる**（docs/20 §4）。</para>
 /// </remarks>
 public static class MasterCode
 {
-    /// <summary>最短の長さ（コードポイントで数える）。</summary>
-    public const int MinLength = 1;
-
     /// <summary>最長の長さ。<b>制度的な根拠は無い</b>（ADR-0047 の理由）。</summary>
     public const int MaxLength = 20;
 

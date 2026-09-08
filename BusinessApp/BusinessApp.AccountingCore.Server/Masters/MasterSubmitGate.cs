@@ -28,9 +28,6 @@ using Codeer.LowCode.Blazor.Repository.Data;
 /// </remarks>
 public sealed class MasterSubmitGate(MasterCodeStore store)
 {
-    /// <summary>仮の識別子の印（新規作成の行。qa/01 C-08）。</summary>
-    private const string TemporaryIdPrefix = "@temporary:";
-
     /// <summary>課税の区分（税率区分が要るもの）。<b>値は DDL の <c>CHECK</c> の写しである</b>（docs/20 §4）。</summary>
     private static readonly string[] TaxableTypes = ["taxable_sales", "taxable_purchase"];
 
@@ -44,11 +41,11 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// </remarks>
     public static readonly IReadOnlyList<CodedMaster> Coded =
     [
-        new("Account", "勘定科目", "accounts", "科目コード"),
-        new("SubAccount", "補助科目", "sub_accounts", "補助科目コード", "account_id", "Account"),
-        new("Department", "部門", "departments", "部門コード"),
-        new("TaxCategory", "税区分", "tax_categories", "税区分コード"),
-        new("FiscalYear", "会計年度", "fiscal_years", "年度コード"),
+        new("Account", "accounts", "科目コード"),
+        new("SubAccount", "sub_accounts", "補助科目コード", "account_id", "Account"),
+        new("Department", "departments", "部門コード"),
+        new("TaxCategory", "tax_categories", "税区分コード"),
+        new("FiscalYear", "fiscal_years", "年度コード"),
     ];
 
     /// <summary>部品の組み立て。</summary>
@@ -111,7 +108,8 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             text.Value = normalized;
         }
 
-        var conflict = await store.FindConflictingCodeAsync(master, normalized, id, ParentId(data, master));
+        var conflict = await store.FindConflictingCodeAsync(
+            master, normalized, id, await ParentIdAsync(master, data, id));
         if (conflict is null)
         {
             return;
@@ -195,7 +193,8 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// </remarks>
     private async Task RejectSubAccountUnderPlainAccountAsync(CodedMaster master, ModuleData data)
     {
-        if (master.ModuleName != "SubAccount" || ParentId(data, master) is not long accountId)
+        if (master.ModuleName != "SubAccount"
+            || await ParentIdAsync(master, data, Id(data)) is not long accountId)
         {
             return;
         }
@@ -227,14 +226,52 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             ? boolean.Value
             : null;
 
-    /// <summary>親（補助科目の勘定科目）の識別子。触られていなければ <c>null</c>。</summary>
-    private static long? ParentId(ModuleData data, CodedMaster master)
-        => master.ParentFieldName is string field
-           && data.Fields.TryGetValue(field, out var value)
-           && value is LinkFieldData link
-           && long.TryParse(link.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
+    /// <summary>
+    /// 親（補助科目の勘定科目）の識別子。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>差分に無ければ、保存されている値を読み直す。</b> CLB は触った欄しか送らない（qa/01 F-12）ので、
+    /// 「補助科目のコードだけを直す」という<b>いちばん普通の更新</b>で親が届かない。
+    /// そこで <c>null</c> のまま重複を照会すると、<c>account_id = NULL</c> が
+    /// <b>1 行も返さない</b>——関門は素通り、DB の一意索引が定型文で拒む、という
+    /// qa/03 L-28 に戻る形になる（2026-09-09 の自己レビューで見つけた）。</para>
+    /// <para><b>参照の型を 1 つに決め打ちしない</b>（<c>PartnerSubmitGate.Reference</c> と同じ理由）——
+    /// 決め打ちにすると、フィールドの型が変わった日に検査が黙って素通しに落ち、
+    /// フィクスチャが自分で同じ型を組むのでテストは緑のままになる。</para>
+    /// </remarks>
+    private async Task<long?> ParentIdAsync(CodedMaster master, ModuleData data, long? id)
+    {
+        if (master.ParentFieldName is not string field || master.ParentColumn is not string column)
+        {
+            return null;
+        }
+
+        if (data.Fields.TryGetValue(field, out var value))
+        {
+            var raw = value switch
+            {
+                LinkFieldData link => link.Value,
+                IdFieldData reference => reference.Value,
+                _ => null,
+            };
+
+            if (long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        // 差分に無い（か読めない）ので、保存されている親を読む。新規なら親が要るので届いているはず。
+        if (id is not long stored)
+        {
+            return null;
+        }
+
+        var row = await store.FindStoredAsync(master, stored, [column]);
+        return long.TryParse(Stored(row, column), NumberStyles.Integer, CultureInfo.InvariantCulture, out var found)
+            ? found
             : null;
+    }
 
     /// <summary>保存されている値の字面。NULL は空文字。</summary>
     private static string? Stored(IReadOnlyDictionary<string, object?>? row, string column)
@@ -249,15 +286,6 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             ? parsed
             : null;
 
-    /// <summary>新規作成の行か（仮の識別子を持つ）。</summary>
-    public static bool IsTemporary(ModuleData data)
-    {
-        ArgumentNullException.ThrowIfNull(data);
-
-        return data.Fields.TryGetValue("Id", out var field) && field is IdFieldData id
-               && id.Value is string value && value.StartsWith(TemporaryIdPrefix, StringComparison.Ordinal);
-    }
-
     /// <summary>
     /// コードを持つマスタ 1 つ。
     /// </summary>
@@ -268,14 +296,12 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// <c>MasterMeaningGate.OneWayColumn</c> と同じ理由）。
     /// </remarks>
     /// <param name="moduleName">CLB のモジュール名。</param>
-    /// <param name="label">利用者に見せる呼び名。</param>
     /// <param name="table">DB の表（CLB の <c>DbTable</c> の写し）。</param>
     /// <param name="codeLabel">コードの欄の呼び名（CLB の <c>DisplayName</c> の写し）。</param>
     /// <param name="parentColumn">一意の範囲を絞る列（補助科目だけ）。</param>
     /// <param name="parentFieldName">同じものの CLB のフィールド名。</param>
     public sealed class CodedMaster(
         string moduleName,
-        string label,
         string table,
         string codeLabel,
         string? parentColumn = null,
@@ -283,9 +309,6 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     {
         /// <summary>CLB のモジュール名。</summary>
         public string ModuleName { get; } = moduleName;
-
-        /// <summary>利用者に見せる呼び名。</summary>
-        public string Label { get; } = label;
 
         /// <summary>DB の表。</summary>
         public string Table { get; } = table;

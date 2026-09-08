@@ -41,6 +41,56 @@ public class MasterCodeGuardTests
     }
 
     /// <summary>
+    /// <b>12 本のトリガの <c>WHEN</c> 節が、1 字も違わず同じである。</b>
+    /// </summary>
+    /// <remarks>
+    /// 下の総当たりは <c>accounts</c> の 1 本しか読まない（65,535 個の符号位置を 6 表 × 2 で撃つと遅い）。
+    /// <b>残る 11 本は「同じ字であること」で担保する</b>——`departments` の `'*[-_][-_]*'` を
+    /// 1 文字打ち間違えても、`update` の条件が 1 つ欠けても、ここが赤くなる
+    /// （2026-09-09 の自己レビューで、1 本しか見ていないことを指摘された）。
+    /// </remarks>
+    [Fact]
+    public void トリガ12本は同じ条件を持つ()
+    {
+        using var db = SchemaSeed.Create();
+
+        var clauses = Tables.SelectMany(row => new[] { "insert", "update" }
+            .Select(kind => (Table: (string)row[0], Kind: kind,
+                             Clause: WhenClause(db, (string)row[0], kind))))
+            .ToList();
+
+        Assert.Equal(12, clauses.Count);
+        Assert.All(clauses, c => Assert.Equal(clauses[0].Clause, c.Clause));
+    }
+
+    /// <summary>断りの文言も 12 本で揃っていて、書式の説明を含む。</summary>
+    /// <remarks>
+    /// <b>この文言が届くのは <c>sql</c> CLI と取込だけである</b>——アプリの経路では
+    /// <c>SaveFailureMessage</c> が定型文へ差し替える（2026-09-09 に確かめた）。
+    /// それでも揃えるのは、<b>CLI で流す人にも直し方が要る</b>からである。
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Tables))]
+    public void 断りの文言は書式の説明を含む(string table)
+    {
+        using var db = SchemaSeed.Create();
+
+        foreach (var kind in new[] { "insert", "update" })
+        {
+            var definition = TestDatabase.ScalarOf<string>(
+                db,
+                "SELECT sql FROM sqlite_master WHERE type = 'trigger'"
+                + $" AND name = 'trg_{table}_code_format_{kind}'");
+
+            Assert.Contains("半角の英数字と「-」「_」", definition, StringComparison.Ordinal);
+            Assert.Contains(
+                MasterCode.MaxLength.ToString(System.Globalization.CultureInfo.InvariantCulture) + " 文字以内",
+                definition,
+                StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// <b>トリガが通す字と、関門が通す字が過不足なく一致する。</b>
     /// </summary>
     /// <remarks>
@@ -113,13 +163,23 @@ public class MasterCodeGuardTests
         Assert.Equal(rejectedByGate, rejectedByTrigger);
     }
 
+    /// <summary>
+    /// 書式に反するコードは追加できない。
+    /// </summary>
+    /// <remarks>
+    /// <b>例外の型だけを見ない。</b> 型だけだと、外部キー違反や NOT NULL 違反でも同じ
+    /// <see cref="SqliteException"/> が出て緑になる（qa/03 L-02 の縮退。2026-09-09 の自己レビュー）。
+    /// <b>書式のトリガが鳴ったことを、文言で特定する。</b>
+    /// </remarks>
     [Theory]
     [MemberData(nameof(Tables))]
     public void 書式に反するコードは追加できない(string table)
     {
         using var db = SchemaSeed.Create();
 
-        Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Insert(table, "1100 ")));
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Insert(table, "1100 ")));
+
+        Assert.Contains("半角の英数字と「-」「_」", thrown.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -129,8 +189,10 @@ public class MasterCodeGuardTests
         using var db = SchemaSeed.Create();
         TestDatabase.Execute(db, Insert(table, "Z999"));
 
-        Assert.Throws<SqliteException>(
+        var thrown = Assert.Throws<SqliteException>(
             () => TestDatabase.Execute(db, $"UPDATE {table} SET code = '１１００' WHERE code = 'Z999'"));
+
+        Assert.Contains("半角の英数字と「-」「_」", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -151,12 +213,12 @@ public class MasterCodeGuardTests
     }
 
     /// <summary>稼働しているトリガの <c>WHEN</c> 節。<b>規則の写しを持たないための口</b>。</summary>
-    private static string WhenClause(SqliteConnection db, string table)
+    private static string WhenClause(SqliteConnection db, string table, string kind = "insert")
     {
         var definition = TestDatabase.ScalarOf<string>(
             db,
             "SELECT sql FROM sqlite_master WHERE type = 'trigger'"
-            + $" AND name = 'trg_{table}_code_format_insert'");
+            + $" AND name = 'trg_{table}_code_format_{kind}'");
         var when = Regex.Match(definition, @"WHEN\s+(.+?)\s*BEGIN", RegexOptions.Singleline);
 
         Assert.True(when.Success, "トリガの WHEN 節を読めない。定義の書き方を変えたら、ここも直す。");
@@ -171,7 +233,11 @@ public class MasterCodeGuardTests
             + $" VALUES ('{code}', '検証', '2027-04-01', '2028-03-31', 'open')",
         "tax_categories" => $"INSERT INTO tax_categories (code, name, taxation_type) VALUES ('{code}', '検証', 'out_of_scope')",
         "accounts" => $"INSERT INTO accounts (code, name, category) VALUES ('{code}', '検証', 'asset')",
-        "sub_accounts" => $"INSERT INTO sub_accounts (account_id, code, name) VALUES (1, '{code}', '検証')",
+        // **親をコードで引く。** id をベタ書きすると、シードの並びが変わった日に
+        // 外部キー違反でも同じ例外が出て、書式のトリガを撃ったつもりで緑になる（qa/03 L-02）。
+        "sub_accounts" =>
+            $"INSERT INTO sub_accounts (account_id, code, name)"
+            + $" VALUES ((SELECT id FROM accounts WHERE code = '1100'), '{code}', '検証')",
         "departments" => $"INSERT INTO departments (code, name) VALUES ('{code}', '検証')",
         "partners" => $"INSERT INTO partners (code, name) VALUES ('{code}', '検証')",
         _ => throw new ArgumentOutOfRangeException(nameof(table), table, "コードを持たない表"),

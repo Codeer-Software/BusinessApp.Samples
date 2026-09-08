@@ -320,14 +320,37 @@ public class CompanyProfileSubmitGateTests
         Assert.True(save.Called);
     }
 
-    /// <summary>決算月を空にした保存も、この関門は止めない（必須は画面と DB の <c>NOT NULL</c> が持つ）。</summary>
+    /// <summary>
+    /// 決算月を空にした保存も、利用者の語で断る。
+    /// </summary>
+    /// <remarks>
+    /// <b>2026-09-09 の自己レビューで揃えた。</b> DB の <c>NOT NULL</c> に投げると定型文になり、
+    /// <b>「13 は利用者の語で断るのに、空は枠組みの言葉」という食い違いが同じ欄で起きる</b>。
+    /// </remarks>
     [Fact]
-    public async Task 決算月が空ならこの関門では止めない()
+    public async Task 決算月が空なら断る()
     {
         var save = new SaveSpy();
+        var gate = new CompanyProfileSubmitGate();
 
-        await new CompanyProfileSubmitGate().SubmitAsync([Updating(Month(null))], save.SaveAsync);
+        var thrown = await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => gate.SubmitAsync([Updating(Month(null))], save.SaveAsync));
 
-        Assert.True(save.Called);
+        Assert.Contains("「決算月」を入れてください", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>決算月の欄が数値でない要求も断る（検査できない値を通すのは fail-open である）。</summary>
+    [Fact]
+    public async Task 決算月の欄が数値でなければ断る()
+    {
+        var save = new SaveSpy();
+        var data = new ModuleData { Name = CompanyProfileSubmitGate.ModuleName };
+        data.Fields["FiscalYearEndMonth"] = new TextFieldData { Value = "3" };
+
+        await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => new CompanyProfileSubmitGate().SubmitAsync([Updating(data)], save.SaveAsync));
+
+        Assert.False(save.Called);
     }
 }

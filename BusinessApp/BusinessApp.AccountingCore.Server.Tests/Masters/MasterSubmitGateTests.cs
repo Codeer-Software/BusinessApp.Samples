@@ -370,6 +370,40 @@ public class MasterSubmitGateTests
         Assert.True(await Submit(server, Adding("CompanyProfile", New("CompanyProfile", Text("Code", "1100")))));
     }
 
+    /// <summary>
+    /// <b>写した表の名前と欄のラベルが、デザイン JSON と一致する</b>（docs/20 §4 の「已むを得ない重複」）。
+    /// </summary>
+    /// <remarks>
+    /// <b>ラベルは差し戻しの文言に出る。</b> ずれると、画面に無い語を名指しして「どの欄のことか」が
+    /// 分からなくなる（<c>MasterMeaningGateTests</c> が同じ形で守っている。2026-09-09 の自己レビューで、
+    /// こちらに無いことを指摘された）。
+    /// </remarks>
+    [Fact]
+    public void 写した表とラベルはデザインと一致する()
+    {
+        foreach (var master in MasterSubmitGate.Coded)
+        {
+            var path = Directory
+                .EnumerateFiles(TestSupport.TestDatabase.ModulesDirectory, $"{master.ModuleName}.mod.json", SearchOption.AllDirectories)
+                .Single();
+            using var design = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+
+            Assert.Equal(master.Table, design.RootElement.GetProperty("DbTable").GetString());
+
+            var code = design.RootElement.GetProperty("Fields").EnumerateArray()
+                .Single(f => f.GetProperty("Name").GetString() == "Code");
+            Assert.Equal("code", code.GetProperty("DbColumn").GetString());
+            Assert.Equal(master.CodeLabel, code.GetProperty("DisplayName").GetString());
+
+            if (master.ParentFieldName is string parent)
+            {
+                var link = design.RootElement.GetProperty("Fields").EnumerateArray()
+                    .Single(f => f.GetProperty("Name").GetString() == parent);
+                Assert.Equal(master.ParentColumn, link.GetProperty("DbColumn").GetString());
+            }
+        }
+    }
+
     /// <summary>コードを持つ 5 つのマスタを、この関門が見ている（docs/12 §2-1。取引先は取引先部品）。</summary>
     [Fact]
     public void 会計コードを持つ5つのマスタを見ている()
@@ -377,15 +411,118 @@ public class MasterSubmitGateTests
             ["Account", "Department", "FiscalYear", "SubAccount", "TaxCategory"],
             MasterSubmitGate.Coded.Select(m => m.ModuleName).OrderBy(n => n, StringComparer.Ordinal));
 
-    /// <summary>新規作成の行（仮の識別子）を、更新として見分ける。</summary>
-    [Fact]
-    public void 仮の識別子は新規として見分ける()
-    {
-        var temporary = New("Account", Text("Code", "9999"));
-        var stored = Row("Account", 1, Text("Code", "9999"));
+    // --- 更新の経路（差分しか届かない。qa/01 F-12） ------------------------------
 
-        Assert.True(MasterSubmitGate.IsTemporary(temporary));
-        Assert.False(MasterSubmitGate.IsTemporary(stored));
+    /// <summary>
+    /// <b>補助科目のコードだけを直す更新でも、同じ勘定科目の下の重複を見る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>2026-09-09 の自己レビューで見つけた穴である。</b> 親（勘定科目）は差分に載らないので、
+    /// 補わずに照会すると <c>account_id = NULL</c> が 1 行も返さず、関門が素通りしていた
+    /// ——最後は一意索引が拒み、利用者には定型文が出る（qa/03 L-28 に戻る）。
+    /// </remarks>
+    [Fact]
+    public async Task 補助科目のコードだけを直す更新でも重複を見る()
+    {
+        using var server = new AccountingServer();
+        server.InsertSubAccount("1210", "B1", "みずほ");
+        var target = server.InsertSubAccount("1210", "B2", "三井");
+
+        var thrown = await Rejected(
+            server, Updating("SubAccount", Row("SubAccount", target, Text("Code", "b1"))));
+
+        Assert.Contains("補助科目コード", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("B1", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>親を触らない更新でも、補助科目の 2 値を見る（同じ穴の裏側）。</summary>
+    [Fact]
+    public async Task 親を触らない補助科目の更新でも2値を見る()
+    {
+        using var server = new AccountingServer();
+        // 規則より前に作られた行を模す（画面からは作れない）。
+        var target = server.InsertSubAccount("1100", "S1", "規則より前の補助科目");
+
+        var thrown = await Rejected(
+            server, Updating("SubAccount", Row("SubAccount", target, Text("Name", "改名"))));
+
+        Assert.Contains("補助科目を使わない設定です", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 参照の欄が <c>IdFieldData</c> で届いても、親として読める。
+    /// </summary>
+    /// <remarks>
+    /// <b>型を 1 つに決め打ちしない</b>（<c>PartnerSubmitGate.Reference</c> が名指しで戒めている形）。
+    /// 決め打ちにすると、フィールドの型が変わった日に検査が黙って素通しに落ち、
+    /// フィクスチャが自分で同じ型を組むのでテストは緑のままになる。
+    /// </remarks>
+    [Fact]
+    public async Task 参照の欄が別の型で届いても親として読める()
+    {
+        using var server = new AccountingServer();
+        var cash = server.AccountOf("1100").Value.ToString(CultureInfo.InvariantCulture);
+
+        var thrown = await Rejected(server, Adding("SubAccount", New(
+            "SubAccount",
+            Text("Code", "S2"),
+            Text("Name", "検証"),
+            ("Account", new IdFieldData { Value = cash }))));
+
+        Assert.Contains("補助科目を使わない設定です", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>関門が通した値は、DB も受け取れる</b>（往復。qa/03 L-14 の処方）。
+    /// </summary>
+    /// <remarks>
+    /// 関門の受理集合が DB より広いと、「画面は通すのに保存で落ちる」という壊れ方をする。
+    /// <b>差分に書き戻した姿</b>をそのまま DB へ流して確かめる。
+    /// </remarks>
+    [Theory]
+    [InlineData("  9001  ", "9001")]
+    [InlineData("A-1_2", "A-1_2")]
+    [InlineData("12345678901234567890", "12345678901234567890")]
+    public async Task 関門が通した値は_DB_も受け取れる(string typed, string stored)
+    {
+        using var server = new AccountingServer();
+        var row = New("Account", Text("Code", typed), Text("Name", "検証"));
+
+        Assert.True(await Submit(server, Adding("Account", row)));
+
+        var normalized = ((TextFieldData)row.Fields["Code"]).Value;
+        server.Execute($"insert into accounts (code, name, category) values ('{normalized}', '検証', 'asset')");
+
+        Assert.Equal(stored, server.Scalar<string>($"select code from accounts where name = '検証'"));
+    }
+
+    /// <summary>
+    /// 参照の欄が読めない型で届いた追加は、親を読まずに通す（DB の外部キーが拒む）。
+    /// </summary>
+    /// <remarks>
+    /// <b>ここで断りを重ねない。</b> 実在の判定は DB の外部キー 1 か所に置いてある
+    /// （<see cref="実在しない勘定科目はこの関門では止めない"/> と同じ分担）。
+    /// </remarks>
+    [Fact]
+    public async Task 参照の欄が読めない型の追加は親を読まない()
+    {
+        using var server = new AccountingServer();
+
+        Assert.True(await Submit(server, Adding("SubAccount", New(
+            "SubAccount",
+            Text("Code", "S3"),
+            Text("Name", "検証"),
+            ("Account", new BooleanFieldData { Value = true })))));
+    }
+
+    /// <summary>保存されている行が無い補助科目の更新は、親を読めないので重複も 2 値も見ない。</summary>
+    [Fact]
+    public async Task 保存されている行が無い補助科目の更新は親を読めない()
+    {
+        using var server = new AccountingServer();
+
+        Assert.True(await Submit(
+            server, Updating("SubAccount", Row("SubAccount", 999999, Text("Code", "S4")))));
     }
 
     // --- 壊れた要求・触っていない欄（fail-safe の側） ------------------------------
@@ -447,33 +584,6 @@ public class MasterSubmitGateTests
             server, Updating("TaxCategory", Row("TaxCategory", 999999, Select("RateKind", null)))));
     }
 
-    /// <summary>識別子が読めない行は新規として扱う（仮の識別子の形が変わっても止めない）。</summary>
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    public void 識別子が読めない行は仮ではないと見分ける(string? id)
-    {
-        var data = new ModuleData { Name = "Account" };
-        data.Fields["Id"] = new IdFieldData { Value = id };
-
-        Assert.False(MasterSubmitGate.IsTemporary(data));
-    }
-
-    /// <summary>識別子の欄が無い行も、仮ではない。</summary>
-    [Fact]
-    public void 識別子の欄が無い行は仮ではない()
-        => Assert.False(MasterSubmitGate.IsTemporary(new ModuleData { Name = "Account" }));
-
-    /// <summary>識別子の欄が識別子でない行も、仮ではない。</summary>
-    [Fact]
-    public void 識別子の欄が識別子でなければ仮ではない()
-    {
-        var data = new ModuleData { Name = "Account" };
-        data.Fields["Id"] = new TextFieldData { Value = "@temporary:1" };
-
-        Assert.False(MasterSubmitGate.IsTemporary(data));
-    }
-
     /// <summary>コードの欄が空（null）の追加も、必須として断る。</summary>
     [Fact]
     public async Task コードが_null_なら必須として断る()
@@ -531,7 +641,5 @@ public class MasterSubmitGateTests
 
         var missingSave = await Assert.ThrowsAsync<ArgumentNullException>(() => gate.SubmitAsync([], null!));
         Assert.Equal("save", missingSave.ParamName);
-
-        Assert.Throws<ArgumentNullException>(() => MasterSubmitGate.IsTemporary(null!));
     }
 }

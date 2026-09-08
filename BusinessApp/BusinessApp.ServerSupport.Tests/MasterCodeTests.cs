@@ -185,11 +185,29 @@ public sealed class MasterCodeTests
             MasterCode.FormatDescription,
             StringComparison.Ordinal);
 
-    /// <summary>断る文言には、必ず書き方の説明が付く（利用者が次に何をすればよいか分かる）。</summary>
+    /// <summary>
+    /// <b>字種・記号の位置・記号の連続</b>の断りには、書き方の説明を添える。
+    /// </summary>
+    /// <remarks>
+    /// <b>長さの断りには添えない</b>（下の表明）——上限は文言そのものが言っているので、
+    /// 書き方の説明を重ねても情報が増えない。<b>「必ず添える」と書くと嘘になる</b>
+    /// （2026-09-09 の自己レビュー。検体がその 1 ケースを避けて選ばれていた）。
+    /// </remarks>
     [Theory]
     [InlineData("1.2")]
     [InlineData("-A")]
     [InlineData("1--2")]
-    public void 断るときは書き方の説明を添える(string code)
+    public void 字種と記号の断りには書き方の説明を添える(string code)
         => Assert.Contains(MasterCode.FormatDescription, MasterCode.DescribeProblem(code), StringComparison.Ordinal);
+
+    /// <summary>長さの断りは、上限と実際の文字数だけを言う。</summary>
+    [Fact]
+    public void 長さの断りには書き方の説明を添えない()
+    {
+        var problem = MasterCode.DescribeProblem(new string('A', MasterCode.MaxLength + 1));
+
+        Assert.Contains("20 文字以内です", problem, StringComparison.Ordinal);
+        Assert.Contains("21 文字あります", problem, StringComparison.Ordinal);
+        Assert.DoesNotContain("「-」「_」は先頭と末尾には置けません", problem, StringComparison.Ordinal);
+    }
 }

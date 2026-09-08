@@ -76,14 +76,22 @@ public sealed class CompanyProfileSubmitGate
     /// （qa/01 A-10。docs/04 §1 の B-3）ので、利用者の語で断るにはここが要る。</para>
     /// <para><b>小数も断る。</b> 「1.5 月」は月ではない。CLB の数値欄は小数を受け取れるので、
     /// ここで見ないと DB の <c>CHECK</c>（<c>BETWEEN</c> は 1.5 を通す）も素通りする。</para>
+    /// <para><b>空も断る。</b> DB の <c>NOT NULL</c> に投げると定型文になり、
+    /// 「13 は利用者の語で断るのに、空は枠組みの言葉」という食い違いが同じ欄で起きる。</para>
     /// </remarks>
     private static void RejectBadFiscalYearEndMonth(ModuleData data)
     {
-        if (!data.Fields.TryGetValue("FiscalYearEndMonth", out var field)
-            || field is not NumberFieldData month
-            || month.Value is not decimal value)
+        if (!data.Fields.TryGetValue("FiscalYearEndMonth", out var field))
         {
             return;
+        }
+
+        // **空にした保存も断る**（2026-09-09 の自己レビュー）。DB の NOT NULL に投げると定型文になり、
+        // 「13 は利用者の語で断るのに、空は枠組みの言葉」という食い違いが同じ欄で起きる。
+        // **読めない型も断る**——検査できない値を通すのは fail-open である。
+        if (field is not NumberFieldData month || month.Value is not decimal value)
+        {
+            throw new CompanyProfileRejectedException("「決算月」を入れてください。");
         }
 
         if (value != decimal.Truncate(value) || value < FirstMonth || value > LastMonth)

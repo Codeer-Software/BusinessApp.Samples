@@ -28,7 +28,16 @@ public class BlankTextNormalizerTests
     private static string? ValueOf(ModuleData data, string field)
         => ((TextFieldData)data.Fields[field]).Value;
 
-    /// <summary>空白だけの値は、どの空白文字でも NULL になる。</summary>
+    /// <summary>
+    /// 空白だけの値は、どの空白文字でも NULL になる。
+    /// </summary>
+    /// <remarks>
+    /// <b>検体に NULL 可の列を選ぶ</b>（<c>accounts.name_kana</c>）。
+    /// <c>accounts.name</c> のような <c>NOT NULL</c> の列で表明すると、
+    /// <b>「空の名前を NULL で保存するのが正しい」と読める</b>——実際には DB が拒み、
+    /// 利用者には定型文が出る（qa/03 L-28 の型。2026-09-09 の自己レビュー）。
+    /// <b>必須の欄が空のまま届く経路は、この正規化ではなく欄ごとの関門が断る。</b>
+    /// </remarks>
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
@@ -40,11 +49,11 @@ public class BlankTextNormalizerTests
     [InlineData(" \t　\r\n ")]      // 混ぜても同じ
     public void 空白だけの値は_NULL_になる(string value)
     {
-        var row = Row("Account", ("Name", new TextFieldData { Value = value }));
+        var row = Row("Account", ("NameKana", new TextFieldData { Value = value }));
 
         BlankTextNormalizer.ToNull([new ModuleSubmitData { ModuleName = "Account", Update = [row] }]);
 
-        Assert.Null(ValueOf(row, "Name"));
+        Assert.Null(ValueOf(row, "NameKana"));
     }
 
     /// <summary><b>字が 1 つでもあれば触らない。</b> 前後の空白も落とさない——落とすのは欄ごとの関門の仕事である。</summary>
@@ -54,22 +63,22 @@ public class BlankTextNormalizerTests
     [InlineData("0")]
     public void 字がある値は触らない(string value)
     {
-        var row = Row("Account", ("Name", new TextFieldData { Value = value }));
+        var row = Row("Account", ("NameKana", new TextFieldData { Value = value }));
 
         BlankTextNormalizer.ToNull([new ModuleSubmitData { ModuleName = "Account", Update = [row] }]);
 
-        Assert.Equal(value, ValueOf(row, "Name"));
+        Assert.Equal(value, ValueOf(row, "NameKana"));
     }
 
     /// <summary>もともと NULL の値は NULL のまま。</summary>
     [Fact]
     public void すでに_NULL_の値はそのまま()
     {
-        var row = Row("Account", ("Name", new TextFieldData { Value = null }));
+        var row = Row("Account", ("NameKana", new TextFieldData { Value = null }));
 
         BlankTextNormalizer.ToNull([new ModuleSubmitData { ModuleName = "Account", Update = [row] }]);
 
-        Assert.Null(ValueOf(row, "Name"));
+        Assert.Null(ValueOf(row, "NameKana"));
     }
 
     /// <summary>文字以外の欄は触らない。</summary>

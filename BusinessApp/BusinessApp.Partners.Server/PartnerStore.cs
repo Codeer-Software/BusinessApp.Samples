@@ -82,12 +82,6 @@ public sealed class PartnerStore(IDbAccessor dbAccessor, string dataSourceName)
     }
 
     /// <summary>
-    /// 問い合わせ用のパラメータに包む。
-    /// </summary>
-    /// <remarks>
-    /// <b><c>QueryAsync</c> と <c>ExecuteAsync</c> でパラメータ辞書の型が違う</b>（qa/01 C-12）。
-    /// </remarks>
-    /// <summary>
     /// 同じコードの取引先が既にあれば、<b>その行に保存されている字</b>を返す（<b>大小を無視して探す</b>。自分自身は除く）。
     /// </summary>
     /// <remarks>
@@ -104,6 +98,12 @@ public sealed class PartnerStore(IDbAccessor dbAccessor, string dataSourceName)
         return rows.Count == 0 ? null : DbValue.ToText(rows[0]["code"]);
     }
 
+    /// <summary>
+    /// 問い合わせ用のパラメータに包む。
+    /// </summary>
+    /// <remarks>
+    /// <b><c>QueryAsync</c> と <c>ExecuteAsync</c> でパラメータ辞書の型が違う</b>（qa/01 C-12）。
+    /// </remarks>
     private static ParamAndRawDbTypeName Param(object? value) => new() { Value = value };
 }
 
