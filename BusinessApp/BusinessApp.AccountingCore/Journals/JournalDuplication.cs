@@ -41,8 +41,10 @@ public static class JournalDuplication
             [
                 new Violation(
                     JournalViolationCodes.DuplicationTargetNotDuplicable,
-                    $"種別が「{original.EntryType.DisplayName()}」の伝票は複製できません。"
-                    + "複製できるのは通常の伝票と訂正・取消です。"),
+                    // **見出しが「複製できません」と言う**ので、文の側では繰り返さない（docs/21 §2-6）。
+                    // <c>AmendmentRules.ValidateOriginal</c> の同じ形の文と語を揃えてある。
+                    $"種別が「{original.EntryType.DisplayName()}」の伝票は対象にできません。"
+                    + "対象にできるのは通常の伝票と訂正・取消です。"),
             ]);
         }
 
@@ -51,7 +53,7 @@ public static class JournalDuplication
             FiscalYearId = fiscalYearId,
 
             // **取引日は写す。** 複製がいちばん効くのは「同じ取引をもう一度起こす」場面で、
-            // 訂正の下書きを消したあとの作り直しがまさにそれである（ADR-0048 の決定 4）。
+            // 訂正の下書きを消したあとの作り直しがまさにそれである（ADR-0048 の決定 5）。
             TransactionDate = original.TransactionDate,
             PostingDate = postingDate,
             Status = EntryStatus.Draft,

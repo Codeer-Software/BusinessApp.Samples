@@ -84,9 +84,13 @@ public sealed class JournalAmendmentService(
         // 「既に訂正されている」を別に見る必要は無い——訂正があるなら必ず取消もあるので、
         // 取消の判定（既に取り消されている）で先に落ちる。
         // 2 つの値に分けてあるのは、片方だけできる状態が将来生まれうるからである。
+        // **複製は原仕訳の状態を見ない**（ADR-0048 の決定 6）ので、種別だけで決まる。
+        // **ここで返さないと、画面は押せるボタンを出して必ず断られる**（docs/21 §1。
+        // 2026-09-09 の自己レビュー）。
         return new AmendmentAvailability(
             reversal.Created, reversal.Created, Describe(reversal),
-            amendments.ReversalEntryNo, amendments.CorrectionEntryNo);
+            amendments.ReversalEntryNo, amendments.CorrectionEntryNo,
+            original.EntryType.IsDuplicable());
     }
 
     /// <summary>できない理由。<b>できるときは空</b>にして、画面が出し分けなくてよいようにする。</summary>
@@ -266,12 +270,13 @@ public sealed class JournalAmendmentService(
 /// </summary>
 /// <param name="CanReverse">取り消せるか。</param>
 /// <param name="CanCorrect">訂正できるか。</param>
+/// <param name="CanDuplicate">複製できるか。</param>
 /// <param name="Reason">できない理由。できるときは空文字。</param>
 /// <param name="ReversalEntryNo">既に取り消されているなら、その取消伝票の伝票番号。</param>
 /// <param name="CorrectionEntryNo">既に訂正されているなら、その再計上の伝票番号。</param>
 public readonly record struct AmendmentAvailability(
     bool CanReverse, bool CanCorrect, string Reason,
-    int? ReversalEntryNo = null, int? CorrectionEntryNo = null)
+    int? ReversalEntryNo = null, int? CorrectionEntryNo = null, bool CanDuplicate = false)
 {
     /// <summary>
     /// どちらもできない。<b>取消・訂正の番号は、分かっているなら落とさずに返す。</b>

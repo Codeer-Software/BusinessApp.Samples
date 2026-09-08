@@ -102,8 +102,11 @@ public class JournalAmendmentServiceTests
         var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
             () => server.AmendAsync(s => s.DuplicateAsync(original)));
 
-        Assert.StartsWith("複製できません", thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("「決算振替」", thrown.Message, StringComparison.Ordinal);
+        // **何と言うかを表明する**（qa/03 L-17。見出しと本文が同じことを 2 回言っていないことも見る）。
+        Assert.Equal(
+            "複製できません。①種別が「決算振替」の伝票は対象にできません。"
+            + "対象にできるのは通常の伝票と訂正・取消です。",
+            thrown.Message);
     }
 
     /// <summary>複製した下書きは、そのまま計上できる（作った下書きが計上の関門を通る）。</summary>

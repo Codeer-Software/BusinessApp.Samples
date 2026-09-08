@@ -272,6 +272,59 @@ public class JournalAmendmentEndpointTests
     // --- 複製する（ADR-0048） ---
 
     /// <summary>
+    /// <b>できることに「複製できるか」も返す。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>複製は原仕訳の状態には依らないが、種別には依る</b>（ADR-0048 の決定 6）。
+    /// 返さないと画面は<b>押せるのに必ず断られるボタン</b>を出す（docs/21 §1。2026-09-09 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 複製できるかも返す()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        var available = await server.Amendment.AvailabilityAsync(server.Text(original.Value));
+
+        Assert.True(available.CanDuplicate);
+        Assert.True(available.CanReverse);
+    }
+
+    /// <summary>取消の伝票は「取り消せない・訂正できない」が「複製できる」。</summary>
+    /// <remarks><b>3 つの可否が同じ値で動かないことを見る</b>（縮退。qa/03 L-02）。</remarks>
+    [Fact]
+    public async Task 取消の伝票は複製だけできる()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        var reversalId = (await server.Amendment.ReverseAsync(server.Text(original.Value))).OpenEntryId;
+
+        var available = await server.Amendment.AvailabilityAsync(server.Text(reversalId));
+
+        Assert.True(available.CanDuplicate);
+        Assert.False(available.CanReverse);
+        Assert.False(available.CanCorrect);
+    }
+
+    /// <summary>複製できない種別は、可否でも false を返す（画面がボタンを出さない）。</summary>
+    [Fact]
+    public async Task 決算振替は複製もできないと返す()
+    {
+        using var server = new AccountingServer();
+        server.Execute("""
+            insert into journal_entries
+                (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+            values (1, '2026-05-20', '2026-05-20', 'draft', 'closing', '決算振替', '2026-05-20 10:00:00')
+            """);
+        var id = server.Scalar<long>("select max(id) from journal_entries");
+
+        var available = await server.Amendment.AvailabilityAsync(server.Text(id));
+
+        Assert.False(available.CanDuplicate);
+    }
+
+
+    /// <summary>
     /// 複製すると、開くのは<b>新しい下書き</b>で、取消は 1 本も作らない。
     /// </summary>
     /// <remarks>
@@ -350,7 +403,8 @@ public class JournalAmendmentEndpointTests
         var result = await server.Amendment.DuplicateAsync(server.Text(original.Value));
 
         Assert.Equal(AmendResult.RejectedStatus, result.Status);
-        Assert.StartsWith("複製できません", result.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            $"複製できません。①今日（2026/08/24）に対応する会計期間がありません。", result.Message);
         Assert.Equal([JournalViolationCodes.PeriodNotFound], result.Violations.Select(v => v.Code));
     }
 
@@ -458,7 +512,7 @@ public class JournalAmendmentEndpointTests
         // 1 つ落ちても改名されてもコンパイルは通り、画面が黙って値を読めなくなる。
         Assert.Equal(
             ["status", "openEntryId", "reversalId", "message", "violations", "canReverse", "canCorrect",
-             "reversalEntryNo", "correctionEntryNo"],
+             "canDuplicate", "reversalEntryNo", "correctionEntryNo"],
             root.EnumerateObject().Select(property => property.Name));
         Assert.Equal(
             ["code", "message", "lineNo"],

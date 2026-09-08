@@ -73,10 +73,11 @@ void ApplyPostedLock()
     CorrectButton.IsVisible = false;
     ReverseButton.IsVisible = false;
 
-    // **複製は保存済みなら常に出す**（ADR-0048 の決定 6）。下書きからも計上済みからも、
-    // 取消済み・訂正済みからも押せる——**複製は新しい記帳**で、原仕訳の状態に依らない。
-    // **新規（まだ保存していない）伝票には出さない**——写す元がまだ無い。
-    DuplicateButton.IsVisible = !IsNewData;
+    // **複製の可否はサーバに聞く**（下の ApplyAmendmentAvailability）。
+    // 原仕訳の状態には依らないが**種別には依る**（期首残高・決算振替・繰越は複製できない。
+    // ADR-0048 の決定 6）ので、**押せるのに必ず断られるボタンを出さない**（docs/21 §1。
+    // 2026-09-09 の自己レビュー）。**新規（まだ保存していない）伝票には出さない**——写す元がまだ無い。
+    DuplicateButton.IsVisible = false;
 
     // **削除は下書きにだけ出す。** 計上済みは不変（ADR-0004）で、取消か訂正で表す。
     // 新規（まだ保存していない）伝票にも出さない——消すものがまだ無い。
@@ -93,7 +94,9 @@ void ApplyPostedLock()
     ReverseButton.IsViewOnly = false;
     DuplicateButton.IsViewOnly = false;
 
-    if (posted) ApplyAmendmentAvailability();
+    // **下書きでも聞く。** 複製は下書きからも押せるので、
+    // 計上済みのときだけ聞くと下書きの画面に複製が出ない。
+    if (!IsNewData) ApplyAmendmentAvailability();
 }
 
 // 計上済みの伝票は、取引先も計上時の姿で見せる（ADR-0037）。
@@ -139,6 +142,7 @@ void ApplyAmendmentAvailability()
 
     CorrectButton.IsVisible = $"{result.JsonObject.canCorrect}".ToLower() == "true";
     ReverseButton.IsVisible = $"{result.JsonObject.canReverse}".ToLower() == "true";
+    DuplicateButton.IsVisible = $"{result.JsonObject.canDuplicate}".ToLower() == "true";
 
     var noticed = ShowAmendmentNotice(
         $"{result.JsonObject.reversalEntryNo}", $"{result.JsonObject.correctionEntryNo}");
@@ -151,8 +155,14 @@ void ApplyAmendmentAvailability()
     // 会計期間が無い・種別が取消の対象外、といった場合である。
     if (!CorrectButton.IsVisible && !ReverseButton.IsVisible && !noticed)
     {
+        // **操作を名乗る。** 関門の文は「見出しが結果を言う」前提で書いてあるので
+        // （docs/21 §2-6）、見出しの無いここに置くと**何の対象か**が読めない。
+        // **複製が押せる画面では「取消・訂正はできない」と読めることが要る**（2026-09-09 の自己レビュー）。
         var reason = $"{result.JsonObject.message}";
-        if (!string.IsNullOrEmpty(reason)) TotalsLabel.Text = $"{TotalsLabel.Text}　（{reason}）";
+        if (!string.IsNullOrEmpty(reason))
+        {
+            TotalsLabel.Text = $"{TotalsLabel.Text}　（取消・訂正はできません: {reason}）";
+        }
     }
 }
 
@@ -382,7 +392,7 @@ void DuplicateButton_OnClick()
         : "";
 
     Amend("duplicate", "複製", message,
-        "複製しました。内容を確かめて計上してください。");
+        "複製しました。いま開いているのは新しい下書きです。内容を確かめて計上してください。");
 }
 
 // 確認 → サーバに依頼 → 返ってきた伝票を開く。

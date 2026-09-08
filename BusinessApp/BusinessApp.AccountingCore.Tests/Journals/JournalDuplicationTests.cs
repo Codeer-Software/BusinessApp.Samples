@@ -375,7 +375,12 @@ public class JournalDuplicationTests
         Assert.Equal(
             [JournalViolationCodes.DuplicationTargetNotDuplicable],
             result.Violations.Select(v => v.Code));
-        Assert.Contains($"「{label}」", result.Violations[0].Message, StringComparison.Ordinal);
+        Assert.Equal(
+            $"種別が「{label}」の伝票は対象にできません。対象にできるのは通常の伝票と訂正・取消です。",
+            result.Violations[0].Message);
+
+        // **見出しの語を文の側で繰り返さない**（docs/21 §2-6。`ViolationMessageTests` が全文に当てる）。
+        Assert.DoesNotContain("複製できません", result.Violations[0].Message, StringComparison.Ordinal);
     }
 
     /// <summary>通常・訂正・取消は複製できる（種別ごとの線を両側から見る）。</summary>
