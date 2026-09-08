@@ -127,7 +127,7 @@ public static class MasterCode
             ? $"{at} 文字目に、目に見えない文字が入っています"
             : $"{at} 文字目の「{rune}」は使えません";
 
-        return $"コードの{what}。{FormatDescription}";
+        return $"コードの {what}。{FormatDescription}";
     }
 
     /// <summary>画面で見分けの付かない字か（制御文字・空白・書式用の字）。</summary>
