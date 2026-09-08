@@ -41,7 +41,7 @@ public sealed class JournalAmendmentEndpoint(
             JournalAmendmentService.Create(dbAccessor, dataSourceName, timeProvider, authenticationContext),
             new AccountingRoleStore(dbAccessor, dataSourceName, authenticationContext));
 
-    /// <summary>この伝票にできること（取り消せるか・訂正できるか）を返す。<b>何も書かない。</b></summary>
+    /// <summary>この伝票にできること（取り消せるか・訂正できるか・複製できるか）を返す。<b>何も書かない。</b></summary>
     public Task<AmendResult> AvailabilityAsync(string? originalEntryId)
         => RunAsync(originalEntryId, async originalId =>
         {
@@ -121,7 +121,7 @@ public sealed class JournalAmendmentEndpoint(
     }
 }
 
-/// <summary>取り消す・訂正する対象の伝票。</summary>
+/// <summary>操作の対象の伝票（取消・訂正の原仕訳、複製の写し元）。</summary>
 public record AmendRequest([property: JsonPropertyName("originalEntryId")] string? OriginalEntryId);
 
 /// <summary>
@@ -193,7 +193,7 @@ public record AmendResult(
         => new(RejectedStatus, 0, 0, message, violations);
 
     /// <summary>
-    /// できること。<b>成否ではないので status は ok</b> で、内容は 2 つの真偽値で表す。
+    /// できること。<b>成否ではないので status は ok</b> で、内容は 3 つの真偽値で表す。
     /// </summary>
     /// <remarks>
     /// <b>調べた結果をそのまま受け取る。</b> 項目を 1 つずつ渡す形にすると、

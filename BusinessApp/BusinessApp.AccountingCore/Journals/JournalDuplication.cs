@@ -9,7 +9,7 @@ using BusinessApp.AccountingCore.Shared;
 /// <remarks>
 /// <para><b>複製は新しい記帳である。</b> 取消・訂正とは別の操作で、原仕訳の状態を何も見ない
 /// ——下書きからも計上済みからも、取消済み・訂正済みからも作れる。</para>
-/// <para><b>写すのは取引の内容だけで、出来事の記録は 1 つも写さない</b>（ADR-0048 の決定 2）。
+/// <para><b>写すのは取引の内容だけで、出来事の記録は 1 つも写さない</b>（ADR-0048 の決定 1・2）。
 /// <b>「写さない」を既定にする</b>——写し忘れは利用者が入れ直せるが、
 /// <b>写しすぎは帳簿に嘘の記録を残す</b>。だから明細も <c>with</c> で複製せず、
 /// <b>写す欄だけを書き出して組み立てる</b>（欄が増えた日に、黙って写されないようにする。
@@ -95,11 +95,12 @@ public static class JournalDuplication
                     TaxTreatment = line.TaxTreatment,
 
                     // **課税仕入れの時点は写す。** 入っていなければ NULL のままで、
-                    // 計上時に取引日へ落ちる（<c>LedgerSnapshotWriter.TaxPointOf</c>）——
+                    // 登録番号を引く日が取引日になる（<c>LedgerSnapshotWriter.TaxPointOf</c>）——
                     // つまり**写しても、既定の伝票では取引日に従う**。
-                    // **入っている値は「取引の事実」である**（締め日基準・支払日起票。docs/11 §5）ので、
-                    // 落とすと同じ取引なのに課税仕入れの日が黙って変わる。
-                    // **画面にこの欄が無い**ので、落としたら利用者は入れ直せない（2026-09-09 の自己レビュー）。
+                    // **入っている値は「取引の事実」である**——支払日で起票した未払金の決済や
+                    // 締め日基準の一括計上では、取引日と課税仕入れの日がずれる（docs/13 の保留リスト）。
+                    // 落とすと同じ取引なのに課税仕入れの日が黙って変わり、
+                    // **画面にこの欄が無い**ので利用者は入れ直せない（2026-09-09 の自己レビュー）。
                     TaxPoint = line.TaxPoint,
                     ItemDescription = line.ItemDescription,
                     BookOnlyDeduction = line.BookOnlyDeduction,
@@ -112,9 +113,9 @@ public static class JournalDuplication
 /// <remarks>
 /// <para><b>違反が空かどうかで判定しない</b>（<see cref="ReversalResult"/> と同じ作法）。</para>
 /// <para><b>兄弟（<see cref="ReversalResult"/>・<c>CorrectionStartResult</c>）と同じ形にしてある。</b>
-/// 生成される複製コンストラクタは <c>GeneratedCopyConstructorTests</c> が理由つきで免除する
-/// （ADR-0012 §3 が認めた唯一の例外）——<b>同じ役目の型が 2 通りの形になるほうが読みにくい</b>
-/// （2026-09-09 の自己レビュー）。</para>
+/// 誰も呼ばない複製コンストラクタは <c>GeneratedCopyConstructorTests</c> が 1 行触って埋める
+/// （ADR-0012 §3 が「カバレッジを埋めるためのテストを書かない」に対して認めた、理由つきの例外）
+/// ——<b>同じ役目の型が 2 通りの形になるほうが読みにくい</b>（2026-09-09 の自己レビュー）。</para>
 /// </remarks>
 /// <param name="Violations">見つかった違反。</param>
 /// <param name="Draft">作れたときの下書き。作れなかったときは <c>null</c>。</param>

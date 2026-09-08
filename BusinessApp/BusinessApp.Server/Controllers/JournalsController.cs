@@ -34,7 +34,7 @@ namespace BusinessApp.Server.Controllers
         public async ValueTask DisposeAsync()
             => await _dataService.DisposeAsync();
 
-        /// <summary>この伝票にできること（取り消せるか・訂正できるか）を返す。**何も書かない。**</summary>
+        /// <summary>この伝票にできること (取り消せるか・訂正できるか・複製できるか) を返す。**何も書かない。**</summary>
         [HttpPost("availability")]
         public async Task<IActionResult> AvailabilityAsync(AmendRequest request)
             => Ok(await Endpoint().AvailabilityAsync(request?.OriginalEntryId));

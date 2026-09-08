@@ -49,7 +49,7 @@ public sealed class JournalAmendmentService(
     }
 
     /// <summary>
-    /// この伝票を取り消せるか・訂正できるかを調べる。<b>何も書かない。</b>
+    /// この伝票にできること（取消・訂正・複製）を調べる。<b>何も書かない。</b>
     /// </summary>
     /// <remarks>
     /// <para>画面がボタンを出すかどうかを決めるために使う。
@@ -231,10 +231,6 @@ public sealed class JournalAmendmentService(
         return (original, await masterLoader.LoadAsync(), DateOnly.FromDateTime(DatabaseTimeZone.ToWallClock(now)), now);
     }
 
-    /// <summary>
-    /// 取消の可否を決める材料。<b>会計年度は取消の計上日（今日）から引く</b>ので、
-    /// 該当する期間が無ければここで止める。
-    /// </summary>
     /// <summary>
     /// 今日の属する会計期間。<b>無ければ止める</b>（取消・訂正・複製で共通）。
     /// </summary>
