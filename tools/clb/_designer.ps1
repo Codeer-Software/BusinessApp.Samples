@@ -24,6 +24,43 @@ function Get-DesignerExePath {
     return $exe
 }
 
+function Invoke-DesignerSql {
+    <#
+    .SYNOPSIS
+        `sql` サブコマンドで SQL を 1 本流し、結果 JSON を解析して返す。失敗したら例外。
+
+    .DESCRIPTION
+        **migrate.ps1 と db_snapshot.ps1 が同じ処理を持たないための置き場**
+        （docs/20_実装の原則.md §4「重複定義を避ける」）。
+        素の出力をそのまま返す薄い口が要るときは sql.ps1 を使う——あちらは終了コードごと素通しする。
+
+        **失敗の理由は 1 行に畳んでから投げる。** exe の標準出力は JSON とは限らず、
+        接続に失敗した種類のエラーでは接続先の断片が載りうる（CLAUDE.md §5）。
+    #>
+    param(
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [Parameter(Mandatory)][string]$DataSource,
+        [Parameter(Mandatory)][string]$Sql
+    )
+
+    $exe = Get-DesignerExePath -RepoRoot $RepoRoot
+    $projectRoot = Join-Path $RepoRoot 'Designer/Design'
+    $result = Invoke-Designer -Exe $exe -Arguments @(
+        'sql', $projectRoot, '--datasource', $DataSource, '--query', $Sql)
+
+    # 終了コードの判定が先。失敗時の標準出力は JSON とは限らず、パース例外で本当の原因が隠れる。
+    if ($result.ExitCode -ne 0) {
+        $reason = $null
+        try { $reason = ($result.StandardOutput | ConvertFrom-Json).error } catch {}
+        if (-not $reason) {
+            $reason = (($result.StandardOutput -split "`r?`n") | Where-Object { $_.Trim() } |
+                Select-Object -First 1)
+        }
+        throw "SQL が失敗した: $reason"
+    }
+    return $result.StandardOutput | ConvertFrom-Json
+}
+
 function Invoke-Designer {
     <#
     .SYNOPSIS
