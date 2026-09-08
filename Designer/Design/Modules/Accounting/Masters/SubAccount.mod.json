@@ -96,9 +96,9 @@
       "DbColumn": "code",
       "IsMultiline": false,
       "IsAutoFitRows": false,
-      "Placeholder": "半角英数字と - _",
+      "Placeholder": "半角英数字と「-」「_」（20 文字以内）",
       "TextEditEmptyType": "StringEmpty",
-      "ShouldTrimAfterEdit": false,
+      "ShouldTrimAfterEdit": true,
       "AutoTab": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
@@ -113,8 +113,7 @@
       "IsFocusSkip": false,
       "NextFocusField": "",
       "OnFocusMoving": "",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign",
-      "MaxLength": 20
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
       "DbColumn": "name",

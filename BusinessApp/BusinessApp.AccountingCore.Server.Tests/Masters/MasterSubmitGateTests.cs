@@ -120,7 +120,7 @@ public class MasterSubmitGateTests
             Select("TaxationType", "out_of_scope"))));
 
         Assert.Contains("OUT", thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("大文字と小文字を区別しない", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("大文字と小文字を区別しないので", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>自分自身は重複に数えない（コード以外を直すだけの保存を止めない）。</summary>
@@ -168,7 +168,7 @@ public class MasterSubmitGateTests
     [Theory]
     [InlineData("11 00", "目に見えない文字")]
     [InlineData("１２００", "使えません")]
-    [InlineData("-1200", "最初と最後")]
+    [InlineData("-1200", "先頭に「-」「_」は置けません")]
     [InlineData("12--00", "続けて")]
     [InlineData("123456789012345678901", "20 文字以内")]
     public async Task 書式に反するコードは利用者の語で断る(string code, string expected)
@@ -258,7 +258,7 @@ public class MasterSubmitGateTests
             Select("TaxationType", "taxable_sales"),
             Select("RateKind", null))));
 
-        Assert.Contains("「税率区分」が要ります", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「税率区分」を選んでください", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -273,7 +273,7 @@ public class MasterSubmitGateTests
             Select("TaxationType", "out_of_scope"),
             Select("RateKind", "standard"))));
 
-        Assert.Contains("「税率区分」は付けられません", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「税率区分」は空にしてください", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -291,7 +291,7 @@ public class MasterSubmitGateTests
         var thrown = await Rejected(server, Updating("TaxCategory", Row(
             "TaxCategory", server.TaxCategoryOf("TS").Value, Select("RateKind", null))));
 
-        Assert.Contains("「税率区分」が要ります", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「税率区分」を選んでください", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>課税区分だけを触った更新も、保存されている税率区分と組んで判定する。</summary>
@@ -303,7 +303,7 @@ public class MasterSubmitGateTests
         var thrown = await Rejected(server, Updating("TaxCategory", Row(
             "TaxCategory", server.TaxCategoryOf("TS").Value, Select("TaxationType", "out_of_scope"))));
 
-        Assert.Contains("「税率区分」は付けられません", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「税率区分」は空にしてください", thrown.Message, StringComparison.Ordinal);
     }
 
     // --- 補助科目の 2 値（A-3 の残り） -------------------------------------------
@@ -325,7 +325,7 @@ public class MasterSubmitGateTests
             Text("Name", "検証"),
             ("Account", new LinkFieldData { Value = server.AccountOf("1100").Value.ToString(CultureInfo.InvariantCulture) }))));
 
-        Assert.Contains("補助科目を使わない設定です", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「補助科目を使う」がオフなので、補助科目を作れません", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -446,7 +446,7 @@ public class MasterSubmitGateTests
         var thrown = await Rejected(
             server, Updating("SubAccount", Row("SubAccount", target, Text("Name", "改名"))));
 
-        Assert.Contains("補助科目を使わない設定です", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「補助科目を使う」がオフなので、補助科目を作れません", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -469,7 +469,7 @@ public class MasterSubmitGateTests
             Text("Name", "検証"),
             ("Account", new IdFieldData { Value = cash }))));
 
-        Assert.Contains("補助科目を使わない設定です", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「補助科目を使う」がオフなので、補助科目を作れません", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -614,7 +614,7 @@ public class MasterSubmitGateTests
             Text("Name", "課税売上 3"),
             Select("TaxationType", "taxable_sales"))));
 
-        Assert.Contains("「税率区分」が要ります", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「税率区分」を選んでください", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>勘定科目を触っていない補助科目の保存は、2 値の規則を見ない。</summary>

@@ -35,8 +35,8 @@ public static class MasterCode
     /// 説明だけが古くなる（<c>CorporateNumber.FormatDescription</c> と同じ作法）。
     /// </remarks>
     public static readonly string FormatDescription =
-        $"コードは半角の英数字と「-」「_」で、{MaxLength.ToString(CultureInfo.InvariantCulture)} 文字以内です。"
-        + "「-」「_」は先頭と末尾には置けません。";
+        $"半角の英数字と「-」「_」で、{MaxLength.ToString(CultureInfo.InvariantCulture)} 文字以内です。"
+        + "「-」「_」は先頭と末尾に置けず、続けては使えません。";
 
     /// <summary>前後の空白を落とした姿。<b>保存するのはこの形</b>。</summary>
     /// <remarks>
@@ -51,6 +51,11 @@ public static class MasterCode
     /// <remarks>
     /// <para><b>最初に当たった 1 つだけを返す</b>（開発者の指示。2026-09-08。逐語「即エラー。次へ進まない」）。
     /// 1 つの欄に 4 つの断りを並べても、利用者は最初の 1 つしか直せない。</para>
+    /// <para><b>欄の名前を受け取って文に入れる</b>（docs/21 §2-6）。
+    /// <b>補助科目の画面には「勘定科目」と「補助科目コード」が並ぶ</b>ので、
+    /// 裸の「コード」で始めるとどちらを直せばよいか文から決まらない（2026-09-09 の自己レビュー）。</para>
+    /// <para><b>形の断りには書式の説明を添えない。</b> 同じ規則を語を変えて 2 度言うことになり、
+    /// トーストは改行できない（qa/01 D-12）ので 1 行が長くなりすぎる。</para>
     /// <para><b>空欄は呼ぶ側が先に落とす。</b>「必須かどうか」は欄ごとの話なので、ここでは決めない
     /// （<c>CorporateNumber</c> と同じ分担）。<b>空白だけの値は <see cref="Normalize"/> が空にする</b>ので、
     /// 呼ぶ側は正規化した値で必須を見ること。</para>
@@ -58,7 +63,7 @@ public static class MasterCode
     /// 長さの数え方（C# は UTF-16 の単位、SQLite の <c>LENGTH</c> はコードポイント）の食い違いが表に出る。
     /// <b>字種が面外を先に断つので、いまは食い違わない。</b></para>
     /// </remarks>
-    public static string? DescribeProblem(string? value)
+    public static string? DescribeProblem(string label, string? value)
     {
         var text = Normalize(value);
 
@@ -75,26 +80,31 @@ public static class MasterCode
             position++;
             if (!IsAllowed(rune))
             {
-                return Unusable(rune, position);
+                return Unusable(label, rune, position);
             }
         }
 
-        if (IsSeparator(text[0]) || IsSeparator(text[^1]))
+        if (IsSeparator(text[0]))
         {
-            return $"コードの最初と最後に「-」「_」は使えません。{FormatDescription}";
+            return $"「{label}」の先頭に「-」「_」は置けません。";
+        }
+
+        if (IsSeparator(text[^1]))
+        {
+            return $"「{label}」の末尾に「-」「_」は置けません。";
         }
 
         for (var i = 1; i < text.Length; i++)
         {
             if (IsSeparator(text[i]) && IsSeparator(text[i - 1]))
             {
-                return $"コードの「-」「_」は続けて使えません。{FormatDescription}";
+                return $"「{label}」の「-」「_」は続けて使えません。";
             }
         }
 
         // ここまで来た文字はすべて 1 コードポイント = 1 char なので、position が長さである。
         return position > MaxLength
-            ? $"コードは {MaxLength.ToString(CultureInfo.InvariantCulture)} 文字以内です。"
+            ? $"「{label}」は {MaxLength.ToString(CultureInfo.InvariantCulture)} 文字以内です。"
               + $"いまは {position.ToString(CultureInfo.InvariantCulture)} 文字あります。"
             : null;
     }
@@ -117,14 +127,14 @@ public static class MasterCode
     /// ゼロ幅空白や制御文字に「使えない文字があります」とだけ返すと、
     /// 画面には何も見えないので直しようがない。
     /// </remarks>
-    private static string Unusable(Rune rune, int position)
+    private static string Unusable(string label, Rune rune, int position)
     {
         var at = position.ToString(CultureInfo.InvariantCulture);
         var what = IsInvisible(rune)
             ? $"{at} 文字目に、目に見えない文字が入っています"
             : $"{at} 文字目の「{rune}」は使えません";
 
-        return $"コードの {what}。{FormatDescription}";
+        return $"「{label}」の {what}。{FormatDescription}";
     }
 
     /// <summary>画面で見分けの付かない字か（制御文字・空白・書式用の字）。</summary>

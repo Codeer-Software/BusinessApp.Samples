@@ -292,7 +292,7 @@ public class CompanyProfileSubmitGateTests
         var thrown = await Assert.ThrowsAsync<CompanyProfileRejectedException>(
             () => gate.SubmitAsync([Updating(Month((decimal)month))], save.SaveAsync));
 
-        Assert.Contains("「決算月」は 1 〜 12 の月で入れてください", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「決算月」は 1 から 12 までの整数で入れてください", thrown.Message, StringComparison.Ordinal);
         Assert.False(save.Called);
     }
 

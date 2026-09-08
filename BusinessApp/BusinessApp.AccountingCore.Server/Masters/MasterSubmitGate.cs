@@ -96,7 +96,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             throw new MasterRejectedException($"「{master.CodeLabel}」を入れてください。");
         }
 
-        if (MasterCode.DescribeProblem(normalized) is string problem)
+        if (MasterCode.DescribeProblem(master.CodeLabel, normalized) is string problem)
         {
             throw new MasterRejectedException(problem);
         }
@@ -116,12 +116,15 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         }
 
         // **ぶつかった相手の字を見せる。** 大小だけが違うとき、字を見比べないと理由が分からない。
-        var note = string.Equals(conflict, normalized, StringComparison.Ordinal)
-            ? string.Empty
-            : $"コードは大文字と小文字を区別しないので、「{conflict}」と同じものになります。";
+        // **補助科目だけは範囲が違う**（一意なのは勘定科目とコードの組）。範囲を言わないと、
+        // 利用者は「全社で一意」と読んで要らない採番規則を作る（2026-09-09 の自己レビュー）。
+        var scope = master.ParentColumn is null ? string.Empty : "この勘定科目の中では";
+        var reason = string.Equals(conflict, normalized, StringComparison.Ordinal)
+            ? $"{scope}既に使われています。"
+            : $"大文字と小文字を区別しないので、{scope}既にある「{conflict}」と同じコードになります。";
 
         throw new MasterRejectedException(
-            $"「{master.CodeLabel}」{normalized} は既に使われています。{note}別のコードを入れてください。");
+            $"「{master.CodeLabel}」の「{normalized}」は{reason}別のコードを入れてください。");
     }
 
     /// <summary>「全社共通」の部門は 1 つだけ（docs/10 §9-1）。</summary>
@@ -174,13 +177,13 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         if (taxable && !hasRate)
         {
             throw new MasterRejectedException(
-                "「課税区分」が課税のときは「税率区分」が要ります。標準税率か軽減税率かを選んでください。");
+                "「課税区分」が「課税売上」「課税仕入」のときは「税率区分」が要ります。「税率区分」を選んでください。");
         }
 
         if (!taxable && hasRate)
         {
             throw new MasterRejectedException(
-                "課税でない「課税区分」に「税率区分」は付けられません。「税率区分」を空にしてください。");
+                "「課税区分」が「課税売上」「課税仕入」でないので、「税率区分」は空にしてください。");
         }
     }
 
@@ -204,8 +207,8 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         if (await store.UsesSubAccountAsync(accountId) is false)
         {
             throw new MasterRejectedException(
-                "この「勘定科目」は補助科目を使わない設定です。"
-                + "補助科目を作るには、先に勘定科目の「補助科目を使う」をオンにしてください。");
+                "この勘定科目は「補助科目を使う」がオフなので、補助科目を作れません。"
+                + "先に勘定科目の「補助科目を使う」をオンにしてください。");
         }
     }
 

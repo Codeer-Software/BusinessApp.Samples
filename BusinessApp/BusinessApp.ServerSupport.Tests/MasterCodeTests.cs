@@ -14,6 +14,9 @@ using BusinessApp.ServerSupport;
 /// </remarks>
 public sealed class MasterCodeTests
 {
+    /// <summary>文言に入る欄の名前（呼ぶ側が画面のラベルを渡す。docs/21 §2-6）。</summary>
+    private const string Label = "科目コード";
+
     /// <summary>通る検体。<b>同値分割の各類から代表と境界を取る。</b></summary>
     public static TheoryData<string> Accepted => new()
     {
@@ -72,13 +75,13 @@ public sealed class MasterCodeTests
         // 字種——面外（サロゲートペア）
         { "A\U0001F642B", "使えません" },
         // 先頭・末尾の記号
-        { "-100", "最初と最後" },
-        { "100-", "最初と最後" },
-        { "_100", "最初と最後" },
-        { "100_", "最初と最後" },
-        { "-", "最初と最後" },
-        { "_", "最初と最後" },
-        { "-A-", "最初と最後" },
+        { "-100", "先頭に「-」「_」は置けません" },
+        { "100-", "末尾に「-」「_」は置けません" },
+        { "_100", "先頭に「-」「_」は置けません" },
+        { "100_", "末尾に「-」「_」は置けません" },
+        { "-", "先頭に「-」「_」は置けません" },
+        { "_", "先頭に「-」「_」は置けません" },
+        { "-A-", "先頭に「-」「_」は置けません" },
         // 記号の連続
         { "1--2", "続けて" },
         { "1__2", "続けて" },
@@ -91,13 +94,13 @@ public sealed class MasterCodeTests
     [Theory]
     [MemberData(nameof(Accepted))]
     public void 通る検体は理由を返さない(string code)
-        => Assert.Null(MasterCode.DescribeProblem(code));
+        => Assert.Null(MasterCode.DescribeProblem(Label, code));
 
     [Theory]
     [MemberData(nameof(Rejected))]
     public void 断る検体は利用者の語で理由を返す(string code, string expected)
     {
-        var problem = MasterCode.DescribeProblem(code);
+        var problem = MasterCode.DescribeProblem(Label, code);
 
         Assert.NotNull(problem);
         Assert.Contains(expected, problem, StringComparison.Ordinal);
@@ -138,7 +141,7 @@ public sealed class MasterCodeTests
     [InlineData("   ")]
     [InlineData("　")]
     public void 空は理由を返さない(string? value)
-        => Assert.Null(MasterCode.DescribeProblem(value));
+        => Assert.Null(MasterCode.DescribeProblem(Label, value));
 
     /// <summary>
     /// <b>位置はコードポイントで数える。</b>
@@ -154,7 +157,7 @@ public sealed class MasterCodeTests
     [InlineData("A\U0001F642.", "2 文字目")]           // 面外の字が 1 文字目の次
     [InlineData("\U0001F642\U0001F642.", "1 文字目")]  // 面外の字そのもの
     public void 使えない字の位置をコードポイントで数える(string code, string expected)
-        => Assert.Contains(expected, MasterCode.DescribeProblem(code), StringComparison.Ordinal);
+        => Assert.Contains(expected, MasterCode.DescribeProblem(Label, code), StringComparison.Ordinal);
 
     /// <summary>
     /// <b>1 つの欄については、最初に当たった 1 つだけを返す</b>（開発者の指示。2026-09-08）。
@@ -166,10 +169,10 @@ public sealed class MasterCodeTests
     /// </remarks>
     [Theory]
     [InlineData("-あ", "使えません")]                       // 字種が先頭末尾より先
-    [InlineData("-A--B", "最初と最後")]                     // 先頭末尾が連続より先
+    [InlineData("-A--B", "先頭に「-」「_」は置けません")]                     // 先頭末尾が連続より先
     [InlineData("1--234567890123456789012", "続けて")]      // 連続が長さより先
     public void 理由は最初に当たった1つだけを返す(string code, string expected)
-        => Assert.Contains(expected, MasterCode.DescribeProblem(code), StringComparison.Ordinal);
+        => Assert.Contains(expected, MasterCode.DescribeProblem(Label, code), StringComparison.Ordinal);
 
     /// <summary>
     /// 文言は<b>上限の定数から作る</b>ので、定数を変えれば文言も動く。
@@ -186,28 +189,44 @@ public sealed class MasterCodeTests
             StringComparison.Ordinal);
 
     /// <summary>
-    /// <b>字種・記号の位置・記号の連続</b>の断りには、書き方の説明を添える。
+    /// <b>字種</b>の断りには、書き方の説明を添える。
     /// </summary>
     /// <remarks>
-    /// <b>長さの断りには添えない</b>（下の表明）——上限は文言そのものが言っているので、
-    /// 書き方の説明を重ねても情報が増えない。<b>「必ず添える」と書くと嘘になる</b>
-    /// （2026-09-09 の自己レビュー。検体がその 1 ケースを避けて選ばれていた）。
+    /// <b>形（先頭末尾・連続）と長さの断りには添えない</b>——同じ規則を語を変えて 2 度言うことになり、
+    /// トーストは改行できない（qa/01 D-12）ので 1 行が長くなりすぎる
+    /// （2026-09-09 の自己レビュー。当初は「必ず添える」と書きながら、検体が反証の 1 ケースを避けていた）。
     /// </remarks>
     [Theory]
     [InlineData("1.2")]
-    [InlineData("-A")]
-    [InlineData("1--2")]
-    public void 字種と記号の断りには書き方の説明を添える(string code)
-        => Assert.Contains(MasterCode.FormatDescription, MasterCode.DescribeProblem(code), StringComparison.Ordinal);
+    [InlineData("あ")]
+    [InlineData("１")]
+    public void 字種の断りには書き方の説明を添える(string code)
+        => Assert.Contains(MasterCode.FormatDescription, MasterCode.DescribeProblem(Label, code), StringComparison.Ordinal);
 
     /// <summary>長さの断りは、上限と実際の文字数だけを言う。</summary>
     [Fact]
     public void 長さの断りには書き方の説明を添えない()
     {
-        var problem = MasterCode.DescribeProblem(new string('A', MasterCode.MaxLength + 1));
+        var problem = MasterCode.DescribeProblem(Label, new string('A', MasterCode.MaxLength + 1));
 
         Assert.Contains("20 文字以内です", problem, StringComparison.Ordinal);
         Assert.Contains("21 文字あります", problem, StringComparison.Ordinal);
-        Assert.DoesNotContain("「-」「_」は先頭と末尾には置けません", problem, StringComparison.Ordinal);
+        Assert.DoesNotContain(MasterCode.FormatDescription, problem, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// <b>断りは必ず欄の名前で始まる</b>（docs/21 §2-6）。
+    /// </summary>
+    /// <remarks>
+    /// <b>裸の「コード」で始めると、どの欄を直せばよいか文から決まらない</b>——
+    /// 補助科目の画面には「勘定科目」と「補助科目コード」が並ぶ（2026-09-09 の自己レビュー）。
+    /// </remarks>
+    [Theory]
+    [InlineData("1.2")]
+    [InlineData("-A")]
+    [InlineData("A--B")]
+    [InlineData("123456789012345678901")]
+    [InlineData("A B")]
+    public void 断りは欄の名前で始まる(string code)
+        => Assert.StartsWith($"「{Label}」", MasterCode.DescribeProblem(Label, code), StringComparison.Ordinal);
 }

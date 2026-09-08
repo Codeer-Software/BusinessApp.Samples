@@ -97,7 +97,7 @@ public sealed class CompanyProfileSubmitGate
         if (value != decimal.Truncate(value) || value < FirstMonth || value > LastMonth)
         {
             throw new CompanyProfileRejectedException(
-                $"「決算月」は {FirstMonth} 〜 {LastMonth} の月で入れてください。");
+                $"「決算月」は {FirstMonth} から {LastMonth} までの整数で入れてください。");
         }
     }
 

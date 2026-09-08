@@ -120,7 +120,7 @@ public class MasterCodeGuardTests
         var expected = new HashSet<int>(
             Enumerable.Range(1, char.MaxValue)
                 .Where(n => (n < 55296 || n > 57343)
-                            && MasterCode.DescribeProblem("A" + (char)n + "B") is null));
+                            && MasterCode.DescribeProblem("科目コード", "A" + (char)n + "B") is null));
 
         Assert.Equal(expected.OrderBy(n => n), accepted.OrderBy(n => n));
     }
@@ -158,7 +158,7 @@ public class MasterCodeGuardTests
             $"SELECT {WhenClause(db, "accounts").Replace("NEW.code", literal, StringComparison.Ordinal)}") == 1;
 
         // **空は関門では「必須」の側が扱う**ので、ここだけ期待値が違う（ADR-0047 の決定 10）。
-        var rejectedByGate = code.Length == 0 || MasterCode.DescribeProblem(code) is not null;
+        var rejectedByGate = code.Length == 0 || MasterCode.DescribeProblem("科目コード", code) is not null;
 
         Assert.Equal(rejectedByGate, rejectedByTrigger);
     }

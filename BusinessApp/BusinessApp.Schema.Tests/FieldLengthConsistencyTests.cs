@@ -34,13 +34,31 @@ public class FieldLengthConsistencyTests
         { "Partner", "partners" },
     };
 
+    /// <summary>
+    /// コードの上限は、<b>画面が文字で見せる</b>（docs/21 §1）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b><c>MaxLength</c> は使わない。</b> HTML の <c>maxlength</c> になるので、
+    /// 25 文字のコードを貼ると<b>黙って 20 文字に切って保存する</b>——
+    /// 21 §0 が「いちばん悪い」と名指しした形（qa/01 A-10 の <c>MaxFractionDigits</c>）で、
+    /// <b>識別子で起きると別の科目が生まれる</b>（2026-09-09 の自己レビュー）。
+    /// 切らずに関門が断り、上限はプレースホルダで先に見せる。</para>
+    /// <para><b>プレースホルダの数と C# の定数が離れないように、ここで突き合わせる。</b></para>
+    /// </remarks>
     [Theory]
     [MemberData(nameof(CodedModules))]
-    public void コードの上限は_CSharp_とデザインで一致する(string module, string table)
+    public void コードの上限は画面の文言と_CSharp_で一致する(string module, string table)
     {
         _ = table;
+        var code = FieldOf(module, "Code");
 
-        Assert.Equal(MasterCode.MaxLength, MaxLengthOf(module, "Code"));
+        Assert.False(
+            code.TryGetProperty("MaxLength", out var max) && max.ValueKind == JsonValueKind.Number,
+            $"{module}.Code に MaxLength がある。黙って切るので使わない（21 §0）");
+        Assert.Contains(
+            MasterCode.MaxLength.ToString(CultureInfo.InvariantCulture),
+            code.GetProperty("Placeholder").GetString(),
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -92,16 +110,29 @@ public class FieldLengthConsistencyTests
         }
     }
 
-    /// <summary>デザインの <c>MaxLength</c>。無ければ <c>null</c> を返さず落とす（無いこと自体が食い違いである）。</summary>
-    private static int MaxLengthOf(string module, string field)
+    /// <summary>デザインの 1 つの欄。</summary>
+    /// <remarks>
+    /// <b>JSON を読んだまま返す。</b> 呼ぶ側が見たい属性を選ぶ——
+    /// 「<c>MaxLength</c> があること」と「無いこと」の両方を表明したいので、
+    /// 値だけを返す口にすると片方が書けない。
+    /// </remarks>
+    private static JsonElement FieldOf(string module, string field)
     {
         var path = Directory
             .EnumerateFiles(TestDatabase.ModulesDirectory, $"{module}.mod.json", SearchOption.AllDirectories)
             .Single();
-        using var design = JsonDocument.Parse(File.ReadAllText(path));
 
-        var target = design.RootElement.GetProperty("Fields").EnumerateArray()
-            .Single(f => f.GetProperty("Name").GetString() == field);
+        // JsonDocument を using で閉じると要素が無効になるので、複製して返す。
+        using var design = JsonDocument.Parse(File.ReadAllText(path));
+        return design.RootElement.GetProperty("Fields").EnumerateArray()
+            .Single(f => f.GetProperty("Name").GetString() == field)
+            .Clone();
+    }
+
+    /// <summary>デザインの <c>MaxLength</c>。無ければ落とす（無いこと自体が食い違いである）。</summary>
+    private static int MaxLengthOf(string module, string field)
+    {
+        var target = FieldOf(module, field);
 
         Assert.True(
             target.TryGetProperty("MaxLength", out var max) && max.ValueKind == JsonValueKind.Number,

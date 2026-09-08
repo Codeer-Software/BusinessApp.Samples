@@ -88,7 +88,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
             throw new PartnerRejectedException("「取引先コード」を入れてください。");
         }
 
-        if (MasterCode.DescribeProblem(code) is string problem)
+        if (MasterCode.DescribeProblem("取引先コード", code) is string problem)
         {
             throw new PartnerRejectedException(problem);
         }
@@ -102,12 +102,12 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         }
 
         // **ぶつかった相手の字を見せる。** 大小だけが違うとき、字を見比べないと理由が分からない。
-        var note = string.Equals(conflict, code, StringComparison.Ordinal)
-            ? string.Empty
-            : $"コードは大文字と小文字を区別しないので、「{conflict}」と同じものになります。";
+        var reason = string.Equals(conflict, code, StringComparison.Ordinal)
+            ? "既に使われています。"
+            : $"大文字と小文字を区別しないので、既にある「{conflict}」と同じコードになります。";
 
         throw new PartnerRejectedException(
-            $"「取引先コード」{code} は既に使われています。{note}別のコードを入れてください。");
+            $"「取引先コード」の「{code}」は{reason}別のコードを入れてください。");
     }
 
     /// <summary>

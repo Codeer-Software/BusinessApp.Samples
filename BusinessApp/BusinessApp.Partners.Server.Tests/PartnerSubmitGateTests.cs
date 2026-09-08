@@ -928,7 +928,7 @@ public class PartnerSubmitGateTests
     [Theory]
     [InlineData("11 00", "目に見えない文字")]
     [InlineData("Ｐ００１", "使えません")]
-    [InlineData("-P001", "最初と最後")]
+    [InlineData("-P001", "先頭に「-」「_」は置けません")]
     [InlineData("P--001", "続けて")]
     [InlineData("123456789012345678901", "20 文字以内")]
     public async Task 書式に反するコードは利用者の語で断る(string code, string expected)
@@ -1001,7 +1001,7 @@ public class PartnerSubmitGateTests
 
         var rejected = await RejectedAsync(server, Adding(Partner(code: "P001")), save);
 
-        Assert.Contains("「取引先コード」P001 は既に使われています", rejected.Message, StringComparison.Ordinal);
+        Assert.Contains("「取引先コード」の「P001」は既に使われています", rejected.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("大文字と小文字", rejected.Message, StringComparison.Ordinal);
     }
 
