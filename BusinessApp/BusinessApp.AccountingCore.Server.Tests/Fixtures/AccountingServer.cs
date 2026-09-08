@@ -260,7 +260,8 @@ internal sealed class AccountingServer : IDisposable
         string entryType = "normal",
         JournalEntryId? originalEntryId = null,
         FiscalYearId? fiscalYearId = null,
-        string? description = DefaultDescription)
+        string? description = DefaultDescription,
+        long? partnerId = null)
     {
         // 訂正・取消は原仕訳が要る（I-06）。DDL の CHECK は INSERT の時点で効くので、
         // 後から UPDATE で足すことはできない。
@@ -270,9 +271,10 @@ internal sealed class AccountingServer : IDisposable
         Execute($"""
             insert into journal_entries
                 (fiscal_year_id, transaction_date, posting_date, status, entry_type,
-                 original_entry_id, description, entered_at)
+                 original_entry_id, description, entered_at, partner_id)
             values ({year}, {DateLiteral(transactionDate)}, {DateLiteral(postingDate)}, 'draft', '{entryType}',
-                    {original}, {TextLiteral(description)}, '2026-08-24 13:00:00')
+                    {original}, {TextLiteral(description)}, '2026-08-24 13:00:00',
+                    {(partnerId is long partner ? Text(partner) : "null")})
             """);
 
         return new JournalEntryId(Scalar<long>("select last_insert_rowid()"));

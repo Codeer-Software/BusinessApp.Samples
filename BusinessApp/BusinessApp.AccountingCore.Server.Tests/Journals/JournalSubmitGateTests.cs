@@ -288,6 +288,49 @@ public class JournalSubmitGateTests
     }
 
     [Fact]
+    public async Task 取引先を要する科目の明細は関門が止める()
+    {
+        // **関門が DDL のトリガより先に鳴ることを、通しで表明する**（docs/10 §6-2）。
+        // ここが無いと、利用者に届くのは生の `SQLite Error 19` になる——
+        // この製品は同じ形で 3 回踏んでいる（qa/03 L-16・L-28・L-30）。
+        using var server = new AccountingServer();
+        server.Execute("update accounts set requires_partner = 1 where code = '2200'");
+        // **取引先を 1 件作る**——1 件も無いと案内が「登録してから選んでください」に変わり、
+        // ここで見たい本筋の文言が出ない（その分岐は JournalEntryValidatorTests が持つ）。
+        server.InsertPartner();
+        var id = server.InsertDraft();
+        server.InsertLine(id, 1, "debit", "1100", 1000);
+        server.InsertLine(id, 2, "credit", "2200", 1000);
+
+        var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(() => PostSavedAsync(server, id));
+
+        Assert.Contains(JournalViolationCodes.PartnerRequired, thrown.Violations.Select(v => v.Code));
+        Assert.Contains("勘定科目「未払金」は「取引先を要する」がオンです。伝票か明細の「取引先」を選んでください。",
+            thrown.Message, StringComparison.Ordinal);
+        // **下書きのままである**（計上の巻き戻し。ADR-0004）。
+        Assert.Equal("draft", server.Scalar<string>($"select status from journal_entries where id = {id.Value}"));
+    }
+
+    [Fact]
+    public async Task 伝票の取引先で足りる()
+    {
+        // **実効値で見る**（JournalEntry.PartnerOf）。明細が空でも伝票のものが帳簿に載るので、
+        // ここで止めると**帳簿には取引先が載る行を関門が拒む**ことになる。
+        using var server = new AccountingServer();
+        server.Execute("update accounts set requires_partner = 1 where code = '2200'");
+        var partner = server.InsertPartner();
+        var id = server.InsertDraft(partnerId: partner);
+        server.InsertLine(id, 1, "debit", "1100", 1000);
+        server.InsertLine(id, 2, "credit", "2200", 1000);
+
+        await PostSavedAsync(server, id);
+
+        var posted = await server.EntryStore.LoadAsync(id);
+        Assert.Equal(EntryStatus.Posted, posted.Status);
+        Assert.Null(posted.Lines.Single(l => l.LineNo == 2).PartnerId);
+    }
+
+    [Fact]
     public async Task 違反は全件まとめて返す()
     {
         using var server = new AccountingServer();

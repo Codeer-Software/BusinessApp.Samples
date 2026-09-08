@@ -140,6 +140,8 @@ public class MasterMeaningGateTests
         using var server = new AccountingServer();
         PostPayment(server);
         // 売掛金は初期データで requires_partner = 1 だが、計上済みの明細は無い。
+        // **「使用中か」を先に見るので、一方通行の判定には入らない**（早期 return）。
+        // DDL の側で同じことを見るのは MasterMeaningGuardTests。
         var receivable = Id(server.AccountOf("1300").Value);
 
         Assert.True(await Submit(server,
@@ -273,13 +275,20 @@ public class MasterMeaningGateTests
     /// <b>読めない型で届いた欄は「変えた」と見なす</b>——フィールドの型が変わった日に関門ごと消えないため。
     /// 真偽の欄が空で届いた形も同じ（保存されている 0/1 のどちらとも一致しない）。
     /// </summary>
+    /// <remarks>
+    /// <b>一方通行の列（<c>RequiresPartner</c>）も同じ扱いである</b>——「1 以外はすべて緩めた」と見なす。
+    /// ここが素通りすると、<b>その規則だけが静かに消える</b>（自己レビューで指摘された。2026-09-08）。
+    /// </remarks>
     [Theory]
-    [InlineData("Category", "number")]
-    [InlineData("IsContra", "empty-boolean")]
-    public async Task 読めない値の欄は変えたと見なして止める(string field, string shape)
+    [InlineData("Category", "number", "は変えられません")]
+    [InlineData("IsContra", "empty-boolean", "は変えられません")]
+    [InlineData("RequiresPartner", "empty-boolean", "をオフにできません")]
+    [InlineData("RequiresPartner", "number", "をオフにできません")]
+    public async Task 読めない値の欄は変えたと見なして止める(string field, string shape, string expected)
     {
         using var server = new AccountingServer();
         PostPayment(server);
+        server.Execute("update accounts set requires_partner = 1 where code = '1100'");
         FieldDataBase value = shape == "number"
             ? new NumberFieldData { Value = 1 }
             : new BooleanFieldData { Value = null };
@@ -287,7 +296,30 @@ public class MasterMeaningGateTests
         var thrown = await Rejected(server,
             Updating("Account", Row("Account", Id(server.AccountOf("1100").Value), field, value)));
 
-        Assert.Contains("は変えられません", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains(expected, thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>意味を決める列と一方通行の列を同時に触ったら、意味のほうを断る。</b>
+    /// </summary>
+    /// <remarks>
+    /// マスタの関門は<b>理由を 1 つだけ返す</b>（docs/21 §2-6 の (a)）ので、どちらを見せるかを決めてある——
+    /// 意味を決める列は<b>直す手立てが無い</b>（新しい行を作るしかない）が、一方通行のほうは
+    /// <b>オンに戻せば通る</b>。<b>重いほうを先に見せる。</b>
+    /// </remarks>
+    [Fact]
+    public async Task 意味を決める列と一方通行の列を同時に変えたら意味のほうを断る()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        server.Execute("update accounts set requires_partner = 1 where code = '1100'");
+        var cash = Row("Account", Id(server.AccountOf("1100").Value), "Category", new SelectFieldData { Value = "expense" });
+        cash.Fields["RequiresPartner"] = new BooleanFieldData { Value = false };
+
+        var thrown = await Rejected(server, Updating("Account", cash));
+
+        Assert.Contains("「科目区分」は変えられません", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("取引先", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -499,7 +531,9 @@ public class MasterMeaningGateTests
 
             var fields = design.RootElement.GetProperty("Fields").EnumerateArray()
                 .ToDictionary(f => f.GetProperty("Name").GetString()!);
-            // **一方通行の列も同じ突き合わせに乗せる**（列名とラベルの写しはどちらも画面から取る）。
+            // **一方通行の列も、列名とラベルの写しは同じ突き合わせに乗せる。**
+            // **並びは見ない**——断りの文言に並べて出すのは意味を決める列だけで、
+            // 一方通行の列は 1 列だけを名指しするので、画面の順に依存しない。
             foreach (var column in master.Columns.Concat(master.OneWay.Select(o => o.Column)))
             {
                 Assert.True(fields.TryGetValue(column.FieldName, out var field),

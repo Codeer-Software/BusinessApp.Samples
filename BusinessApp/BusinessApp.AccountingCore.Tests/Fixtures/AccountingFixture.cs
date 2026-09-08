@@ -17,7 +17,12 @@ public static class AccountingFixture
     // 識別子（DB の主キー）と科目コードは別物である。
     // 前者はシステムが採番し、後者は利用者が見る自然キー。
     public static readonly AccountId Cash = new(1);
-    public static readonly AccountId AccountsPayable = new(2);
+    /// <summary>
+    /// 貸方の相手方に使う科目。<b>「取引先を要する」がオフの科目にしてある</b>——
+    /// 買掛金は初期データで<b>オン</b>なので（docs/10 §6-2）、それを相手方に使うと
+    /// <b>本番なら違反する伝票</b>を「通る」検体として書くことになる（qa/03 L-17 の型）。
+    /// </summary>
+    public static readonly AccountId OtherPayable = new(2);
     public static readonly AccountId Sales = new(3);
     public static readonly AccountId SuppliesExpense = new(4);
     public static readonly AccountId RetiredExpense = new(5);
@@ -41,13 +46,16 @@ public static class AccountingFixture
     public static readonly DepartmentId UnknownDepartment = new(999);
 
     public static readonly PartnerId Partner = new(1);
+
+    /// <summary>2 つ目の取引先。<b>1 つだと「明細が伝票より優先される」が縮退する</b>（qa/03 L-02）。</summary>
+    public static readonly PartnerId OtherPartner = new(2);
     public static readonly TaxCategoryId OutOfScope = new(1);
     public static readonly TaxCategoryId TaxablePurchase = new(2);
 
     public static IReadOnlyList<AccountDefinition> Accounts { get; } =
     [
         new(Cash, "1100", "現金", AccountCategory.Asset),
-        new(AccountsPayable, "2100", "買掛金", AccountCategory.Liability),
+        new(OtherPayable, "2200", "未払金", AccountCategory.Liability),
         new(Sales, "4000", "売上高", AccountCategory.Revenue),
         new(SuppliesExpense, "5200", "消耗品費", AccountCategory.Expense),
         new(RetiredExpense, "5900", "廃止した費用科目", AccountCategory.Expense, IsActive: false),

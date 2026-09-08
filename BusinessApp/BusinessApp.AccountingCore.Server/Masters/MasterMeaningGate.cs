@@ -127,22 +127,27 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
         }
 
         // **一方通行の列は、緩める向きだけを拒む**（docs/10 §6-2）。
-        // **先に見る**——同じ保存で意味を決める列も触られていたら、そちらの断りのほうが重い
-        // ……ではなく、**理由は 1 つだけ返す**（docs/21 §2-6 の (a)）ので、
-        // **どちらの断りになるかを決め打ちにしない**。ここでは「厳しいほうの規則から先に見る」
-        // という順にせず、**意味の凍結（下）を後に置く**——一方通行の列は 1 つしかなく、
-        // 混ぜて名指しすると「変えられません」が「オンにもできない」と読めてしまう。
-        if (master.OneWay.FirstOrDefault(o => changed.Contains(o.Column)) is OneWayColumn loosened
-            && Submitted(data.Fields[loosened.Column.FieldName]) == "0")
+        // **意味を決める列の断りを先に返す**（docs/21 §2-6 の (a)——マスタの関門は理由を 1 つだけ返す）。
+        // あちらは<b>直す手立てが無い</b>（新しい行を作るしかない）が、こちらは
+        // **オンに戻せば通る**ので、先に重いほうを見せる。両方を触った保存は 1 度で全部は言えない。
+        var frozen = changed.Where(c => !master.OneWay.Any(o => o.Column == c)).ToList();
+        if (frozen.Count == 0)
         {
-            throw new MasterRejectedException(Loosening(master, loosened, used));
-        }
+            // **ここに来る `changed` は一方通行の列だけである**（意味を決める列は上で抜いた）。
+            // **「1」以外はすべて緩めたと見なす**（fail-closed）。読めない型・空の真偽で
+            // 素通りすると、フィールドの型が変わった日にこの規則だけが静かに消える
+            // （Submitted の注記と同じ理由。qa/02 R26-03）。
+            // **変わった列を 1 つずつ見る**——1 度の保存で片方をオン・片方をオフにされても取りこぼさない。
+            if (changed.FirstOrDefault(c => Submitted(data.Fields[c.FieldName]) != "1") is GuardedColumn loosened)
+            {
+                throw new MasterRejectedException(
+                    Loosening(master, master.OneWay.Single(o => o.Column == loosened), used));
+            }
 
-        changed = [.. changed.Where(c => !master.OneWay.Any(o => o.Column == c))];
-        if (changed.Count == 0)
-        {
             return;
         }
+
+        changed = frozen;
 
         // 文言の形は ADR-0038 §4——**何件あるか**と**次に何をすればよいか**を入れる。
         // 理由と結果は「〜ので」で 1 文にする（取引先・仕訳の関門と同じ形）。
@@ -249,10 +254,10 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
     /// <para><b>「使用中は変えられない」（<see cref="GuardedMaster.Columns"/>）とは別の規則である。</b>
     /// あちらは<b>過去の記録の意味が変わる</b>から止めるが、こちらは意味を変えない——
     /// 止めるのは、<b>止めないと二層の守りをまとめて外せる</b>からである。</para>
-    /// <para><b>レコードにしない。</b> 値としての等価も <c>with</c> による複製も要らず、
-    /// レコードにすると<b>誰も呼ばない複製コンストラクタ</b>がカバレッジの穴として残る
-    /// （ADR-0012 は<b>カバレッジを埋めるためだけのテスト</b>を禁じているので、
-    /// 使わない機能を型に持たせないほうを採る）。</para>
+    /// <para><b>設定を束ねるだけの型なので、レコードにしない</b>——値としての等価も
+    /// <c>with</c> による複製も使わない。<b>使わない機能を型に持たせない</b>
+    /// （持たせると、誰も呼ばない複製コンストラクタがカバレッジの穴になり、
+    /// それを埋めるためだけのテストを書くことになる。ADR-0012 がそれを禁じている）。</para>
     /// </remarks>
     /// <param name="column">守る列（意味を決める列と同じ形で持つ）。</param>
     /// <param name="harm">オフにすると何が起きるかの 1 文（断りの中で「〜と、」に続けて読む）。</param>
