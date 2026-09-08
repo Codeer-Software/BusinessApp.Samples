@@ -41,7 +41,8 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
              new("UsesSubAccount", "uses_sub_account", "補助科目を使う"),
              new("IsContra", "is_contra", "評価勘定")],
             [new(new("RequiresPartner", "requires_partner", "取引先を要する"),
-                 "以後の明細から相手方が抜けて、取引先で絞った帳簿に穴が空きます")]),
+                 "オフにしている間に計上した明細は、取引先が空のまま帳簿に残ってしまいます",
+                 "この勘定科目を使う明細には「取引先」を選んでください")]),
         new("SubAccount", "補助科目", "sub_accounts", "sub_account_id",
             [new("Account", "account_id", "勘定科目"),
              new("Code", "code", "補助科目コード")]),
@@ -164,15 +165,17 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
     /// 一方通行の列を緩めようとしたときの断り。
     /// </summary>
     /// <remarks>
-    /// <b>「変えられません」とは言わない。</b> 厳しくする向き（オフ → オン）はいつでも通るので、
-    /// 両方できないと読まれると、規則を採り入れようとする利用者まで止めてしまう（docs/21 §2-3）。
+    /// <para><b>「変えられません」とは言わない。</b> 厳しくする向き（オフ → オン）はいつでも通るので、
+    /// 両方できないと読まれると、規則を採り入れようとする利用者まで止めてしまう（docs/21 §2-3）。</para>
+    /// <para><b>「オンにするのはいつでもできる」はここに書かない。</b> それを知りたいのは
+    /// <b>これからオンにする人</b>で、この断りに出会うのはオフを押した人である——
+    /// 置き場所は画面の注記のほう（勘定科目の詳細）。</para>
     /// </remarks>
     private static string Loosening(GuardedMaster master, OneWayColumn column, long used)
         => $"この{master.Label}は計上済みの仕訳明細 {used.ToString("N0", CultureInfo.InvariantCulture)} 行で使われているので、"
            + $"「{column.Column.Label}」をオフにできません。"
-           + $"オフにすると、{column.Harm}。"
-           + $"新しい{master.Label}を作って、以後の振替伝票ではそちらを選んでください。"
-           + $"（オンにするのは、いつでもできます。）";
+           + $"{column.Harm}。"
+           + $"{column.Instead}。";
 
     /// <summary>
     /// 差分に載った値を、保存されている値と比べられる字面にする。
@@ -260,13 +263,24 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
     /// それを埋めるためだけのテストを書くことになる。ADR-0012 がそれを禁じている）。</para>
     /// </remarks>
     /// <param name="column">守る列（意味を決める列と同じ形で持つ）。</param>
-    /// <param name="harm">オフにすると何が起きるかの 1 文（断りの中で「〜と、」に続けて読む）。</param>
-    public sealed class OneWayColumn(GuardedColumn column, string harm)
+    /// <param name="harm">オフにすると何が起きるかの 1 文。</param>
+    /// <param name="instead">代わりに何をすればよいかの 1 文（docs/21 §2-3）。</param>
+    public sealed class OneWayColumn(GuardedColumn column, string harm, string instead)
     {
         /// <summary>守る列。</summary>
         public GuardedColumn Column { get; } = column;
 
         /// <summary>オフにすると何が起きるか。</summary>
         public string Harm { get; } = harm;
+
+        /// <summary>
+        /// 代わりに何をすればよいか。
+        /// </summary>
+        /// <remarks>
+        /// <b>「新しい行を作ってそちらを使う」とは言えない</b>（意味の凍結の断りと違うところ）——
+        /// <b>新しい勘定科目は「取引先を要する」がオフなので、断りが述べた害がそのまま起きる</b>
+        /// （自己レビューで見つけた。2026-09-08）。
+        /// </remarks>
+        public string Instead { get; } = instead;
     }
 }

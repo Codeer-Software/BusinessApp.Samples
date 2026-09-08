@@ -305,7 +305,7 @@ public class JournalSubmitGateTests
         var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(() => PostSavedAsync(server, id));
 
         Assert.Contains(JournalViolationCodes.PartnerRequired, thrown.Violations.Select(v => v.Code));
-        Assert.Contains("勘定科目「未払金」は「取引先を要する」がオンです。伝票か明細の「取引先」を選んでください。",
+        Assert.Contains("勘定科目「未払金」は「取引先を要する」がオンです。伝票の「取引先」を選んでください。",
             thrown.Message, StringComparison.Ordinal);
         // **下書きのままである**（計上の巻き戻し。ADR-0004）。
         Assert.Equal("draft", server.Scalar<string>($"select status from journal_entries where id = {id.Value}"));

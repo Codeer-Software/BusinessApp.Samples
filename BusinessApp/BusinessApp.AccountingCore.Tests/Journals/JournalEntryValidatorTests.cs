@@ -437,7 +437,7 @@ public class JournalEntryValidatorTests
 
         Assert.Equal(1, violation.LineNo);
         Assert.Equal(
-            "勘定科目「売掛金」は「取引先を要する」がオンです。伝票か明細の「取引先」を選んでください。",
+            "勘定科目「売掛金」は「取引先を要する」がオンです。伝票の「取引先」を選んでください。",
             violation.Message);
     }
 
@@ -453,7 +453,7 @@ public class JournalEntryValidatorTests
 
         Assert.Equal(
             "勘定科目「売掛金」は「取引先を要する」がオンですが、選べる取引先がありません。"
-            + "取引先マスタに登録してから選んでください。",
+            + "取引先マスタに登録するか、無効にした取引先を有効に戻してから選んでください。",
             violation.Message);
     }
 
