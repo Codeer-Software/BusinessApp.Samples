@@ -520,6 +520,15 @@ internal sealed class AccountingServer : IDisposable
     {
         // 2100（買掛金）は初期データで「取引先を要する」が立っている（Designer/seed/004_accounts.sql）。
         // **フィクスチャで立て直さない**——初期データと規則が食い違ったらここで落ちてほしい。
+        // **その「落ちてほしい」を機械にする**——下でトリガを外して計上するので、
+        // 立っていなくても計上は成功してしまう（自己レビューで指摘された。2026-09-08）。
+        if (Scalar<long>("select requires_partner from accounts where code = '2100'") != 1)
+        {
+            throw new InvalidOperationException(
+                "初期データの 2100（買掛金）に requires_partner が立っていない。"
+                + "この検体は「規則より前に計上された伝票」を作るためのものなので、立っていないと意味が無い。");
+        }
+
         var id = InsertDraft(transactionDate: transactionDate, postingDate: transactionDate, description: "規則より前の伝票");
         InsertLine(id, 1, "debit", "1100", 1000);
         InsertLine(id, 2, "credit", "2100", 1000);

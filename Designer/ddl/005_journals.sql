@@ -564,6 +564,11 @@ END;
 -- COALESCE(l.partner_id, NEW.partner_id) で判定する（JournalEntry.PartnerOf と同じ規則）。
 -- **NEW.partner_id を使う**のは、いま計上しようとしている値が帳簿に載る値だからである。
 --
+-- **「無い」は NULL だけではない。** 外部キーを切った接続（取込・CLI・手打ちの SQL——**この層が守る相手**）からは
+-- 空文字や実在しない識別子が入りうる。**どちらも帳簿の取引先別には出てこない**（元帳の絞り込みは
+-- partners との結合で、空値検索は IS NULL しか拾わない）ので、**マスタに実在するか**で見る
+-- （自己レビューで見つけた。2026-09-08。金額に typeof を書いてあるのと同じ理由）。
+--
 -- **免除は補助科目の 2 値とまったく同じ形にしてある**（理由も同じ。上のトリガの注記）——
 -- 取消の、**計上済みの原仕訳を写しただけの明細**だけを外す。
 -- 規則より前に計上された取引先の無い明細が開発機に 10 行あり（売掛金 1・買掛金 7・外注費 2。
@@ -578,7 +583,8 @@ BEGIN
                      JOIN accounts a ON a.id = l.account_id
                     WHERE l.journal_entry_id = NEW.id
                       AND a.requires_partner = 1
-                      AND COALESCE(l.partner_id, NEW.partner_id) IS NULL
+                      AND NOT EXISTS (SELECT 1 FROM partners p
+                                       WHERE p.id = COALESCE(l.partner_id, NEW.partner_id))
                       AND NOT (NEW.entry_type = 'reversal'
                                AND EXISTS (SELECT 1 FROM journal_lines o
                                              JOIN journal_entries oe ON oe.id = o.journal_entry_id
@@ -588,13 +594,17 @@ BEGIN
                                               AND o.account_id = l.account_id
                                               AND o.amount = l.amount
                                               AND o.debit_credit <> l.debit_credit
-                                              AND COALESCE(o.partner_id, oe.partner_id) IS NULL)));
+                                              AND NOT EXISTS (SELECT 1 FROM partners q
+                                                               WHERE q.id = COALESCE(o.partner_id, oe.partner_id)))));
 END;
 
 -- 「取引先を要する」は、使用中の科目では**オフにできない**（docs/10 §6-2）。
 -- **オンにするのはいつでも通る**——規則を後から採り入れられなくなってはいけないからである。
 -- **オフを止めるのは、止めないと二層の守りをまとめて外せる**からである——
 -- 画面でオフにして計上し、また戻せば、関門もこのトリガも素通りする（自己レビューで見つけた。2026-09-08）。
+-- **ただし守れるのは「使用中になってから」だけである。** 計上済みの明細が 1 行も無い科目では
+-- オフにできるので、**使い始める前なら「オフ → 計上 → オン」で規則より前の行を作れる**
+-- （ADR-0038 §1 の「使用中」の線をそのまま使っているため。docs/10 §6-2 に残余として書いてある）。
 -- **意味の凍結（trg_accounts_meaning_frozen_when_posted）とは別の規則である。**
 -- あちらは過去の記録の意味が変わるから止めるが、こちらは意味を変えない。
 CREATE TRIGGER trg_accounts_requires_partner_not_loosened_when_posted

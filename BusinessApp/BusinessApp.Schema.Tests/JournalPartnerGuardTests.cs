@@ -30,12 +30,19 @@ public class JournalPartnerGuardTests
     /// </remarks>
     private const string RequiresPartner = """
         INSERT INTO accounts (code, name, category) VALUES ('1300', '売掛金', 'asset');
-        UPDATE accounts SET requires_partner = 1 WHERE code = '1300';
+        INSERT INTO accounts (code, name, category) VALUES ('2100', '買掛金', 'liability');
+        UPDATE accounts SET requires_partner = 1 WHERE code IN ('1300', '2100');
         INSERT INTO partners (code, name) VALUES ('P002', '別の取引先');
         """;
 
     /// <summary>取引先を要する科目の識別子（マスタの 2 件の後に採番される）。</summary>
     private const string ReceivableAccount = "3";
+
+    /// <summary>
+    /// <b>2 つ目の</b>取引先を要する科目。<b>写しの判定が科目まで見ていることを踏む</b>ために要る
+    /// （行番号が同じなら原仕訳の行は 1 行に決まるので、1 科目だけでは科目の一致を落としても鳴らない）。
+    /// </summary>
+    private const string PayableAccount = "4";
 
     /// <summary>上の <c>P002</c>。<b>1 件目（P001）を使わない</b>ので、識別子 1 での縮退を避けられる。</summary>
     private const string OtherPartner = "2";
@@ -197,6 +204,7 @@ public class JournalPartnerGuardTests
     [InlineData("amount")]
     [InlineData("line_no")]
     [InlineData("debit_credit")]
+    [InlineData("account_id")]
     public void 写しでない行は取消でも止める(string differs)
     {
         using var db = Draft(linePartnerId: null, entryType: "reversal");
@@ -204,11 +212,39 @@ public class JournalPartnerGuardTests
         {
             "amount" => "UPDATE journal_lines SET amount = 999 WHERE journal_entry_id = 1 AND line_no = 1",
             "line_no" => "UPDATE journal_lines SET line_no = 9 WHERE journal_entry_id = 1 AND line_no = 1",
+            // **行番号が同じでも科目が違えば写しではない**（UNIQUE (伝票, 行番号) があるので、
+            // 科目の一致を落としても行番号だけで 1 行に決まってしまう。自己レビューで指摘された）
+            "account_id" => $"UPDATE journal_lines SET account_id = {PayableAccount} WHERE journal_entry_id = 1 AND line_no = 1",
             _ => """
                 UPDATE journal_lines SET debit_credit = 'credit' WHERE journal_entry_id = 1 AND line_no = 1;
                 UPDATE journal_lines SET debit_credit = 'debit'  WHERE journal_entry_id = 1 AND line_no = 2;
                 """,
         });
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Post));
+
+        Assert.Contains("取引先を要する勘定科目の明細には取引先が要る", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("draft", StatusOf(db));
+    }
+
+    /// <summary>
+    /// <b>「無い」は NULL だけではない</b>——空文字も、マスタに実在しない識別子も「無い」である。
+    /// </summary>
+    /// <remarks>
+    /// <b>外部キーを切った接続からしか入らない値である</b>（取込・CLI・手打ちの SQL。
+    /// このトリガが守るのはその経路そのもの）。素通りさせると、
+    /// <b>取引先で絞った帳簿にも、取引先が空の検索にも出てこない行</b>が計上済みで固定される
+    /// （自己レビューで見つけた。2026-09-08）。
+    /// </remarks>
+    [Theory]
+    [InlineData("''")]
+    [InlineData("999")]
+    public void 空文字や実在しない取引先は無いものとして止める(string value)
+    {
+        using var db = Draft(linePartnerId: null);
+        TestDatabase.Execute(db, "PRAGMA foreign_keys = OFF");
+        TestDatabase.Execute(
+            db, $"UPDATE journal_lines SET partner_id = {value} WHERE journal_entry_id = 1 AND line_no = 1");
 
         var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Post));
 

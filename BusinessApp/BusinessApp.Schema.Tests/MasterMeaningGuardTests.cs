@@ -95,6 +95,40 @@ public class MasterMeaningGuardTests
     }
 
     /// <summary>
+    /// <b>守れるのは「使用中になってから」だけである</b>（この規則の残余。docs/10 §6-2）。
+    /// </summary>
+    /// <remarks>
+    /// <b>計上済みの明細が 1 行も無い科目ではオフにできる</b>ので、
+    /// <b>使い始める前なら「オフ → 計上 → オン」で規則より前の行を作れる</b>。
+    /// これは「使用中」の線（ADR-0038 §1）をそのまま使った結果であり、
+    /// <b>塞いだつもりで塞げていない、と読まれないように検体で書き留めておく</b>
+    /// （自己レビューで指摘された。2026-09-08。qa/03 L-22 の型）。
+    /// </remarks>
+    [Fact]
+    public void 使い始める前なら規則より前の行を作れる()
+    {
+        using var db = SchemaSeed.Create();
+        TestDatabase.Execute(db, "UPDATE accounts SET requires_partner = 1 WHERE id = 1");
+
+        // ① まだ計上済みの明細が無いので、オフに戻せる
+        TestDatabase.Execute(db, "UPDATE accounts SET requires_partner = 0 WHERE id = 1");
+
+        // ② 取引先の無い明細を計上できる
+        TestDatabase.Execute(db, SchemaSeed.PostedEntry);
+
+        // ③ オンに戻せる（ここまで関門もトリガも 1 度も鳴らない）
+        TestDatabase.Execute(db, "UPDATE accounts SET requires_partner = 1 WHERE id = 1");
+
+        Assert.Equal(1L, TestDatabase.ScalarOf<long>(db, """
+            SELECT COUNT(*) FROM journal_lines l
+              JOIN journal_entries e ON e.id = l.journal_entry_id
+              JOIN accounts a ON a.id = l.account_id
+             WHERE e.status = 'posted' AND a.requires_partner = 1
+               AND COALESCE(l.partner_id, e.partner_id) IS NULL
+            """));
+    }
+
+    /// <summary>
     /// 意味を決めない列（<c>Guarded</c> に無い列。一覧は docs/12 §2）は、使用中でも変えられる。
     /// </summary>
     [Theory]

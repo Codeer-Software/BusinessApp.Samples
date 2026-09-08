@@ -1,5 +1,7 @@
 namespace BusinessApp.AccountingCore.Server.Tests.Journals;
 
+using System.Text.Json;
+
 using BusinessApp.AccountingCore.Accounts;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
@@ -158,5 +160,36 @@ public class AccountingMasterLoaderTests
 
         Assert.Equal(PeriodStatus.Closed, context.Calendar.ResolvePeriod(new DateOnly(2026, 8, 24))!.Status);
         Assert.False(context.Calendar.IsPostable(new DateOnly(2026, 8, 24)));
+    }
+
+    /// <summary>
+    /// <b>「選べる」の広さが、画面の候補の絞りと同じであること。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>已むを得ない重複はデザイン JSON と突き合わせる</b>（docs/20 §4。
+    /// <c>MasterMeaningGateTests</c> の列の突き合わせと同じ作法）。
+    /// <c>AccountingMasterLoader</c> は <c>is_active = 1</c> で数え、画面は
+    /// <c>SearchCondition</c> で候補を絞る——**片方に条件が増えた日**に、
+    /// <b>候補が 0 件で開くのに「選んでください」と言う</b>状態になる（それを避けるための分岐なのに）。</para>
+    /// <para><b>取引先の欄は伝票と明細の 2 か所にある。</b> どちらも同じ 1 条件であることを見る。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData("JournalEntry")]
+    [InlineData("JournalLine")]
+    public void 取引先の候補の絞りは有効だけである(string module)
+    {
+        var path = Directory
+            .EnumerateFiles(TestSupport.TestDatabase.ModulesDirectory, $"{module}.mod.json", SearchOption.AllDirectories)
+            .Single();
+        using var design = JsonDocument.Parse(File.ReadAllText(path));
+
+        var partner = design.RootElement.GetProperty("Fields").EnumerateArray()
+            .Single(f => f.GetProperty("Name").GetString() == "Partner");
+        var children = partner.GetProperty("SearchCondition").GetProperty("Condition").GetProperty("Children");
+
+        var only = Assert.Single(children.EnumerateArray());
+        Assert.Equal("IsActive.Value", only.GetProperty("SearchTargetVariable").GetString());
+        Assert.Equal("Equal", only.GetProperty("Comparison").GetString());
+        Assert.True(only.GetProperty("Value").GetProperty("Value").GetBoolean());
     }
 }

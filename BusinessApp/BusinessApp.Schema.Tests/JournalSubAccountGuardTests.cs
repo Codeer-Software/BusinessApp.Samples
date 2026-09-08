@@ -34,6 +34,7 @@ public class JournalSubAccountGuardTests
         INSERT INTO sub_accounts (account_id, code, name) VALUES (2, 'T002', '通販');
         UPDATE accounts SET uses_sub_account = 1 WHERE id = 1;
         INSERT INTO sub_accounts (account_id, code, name) VALUES (1, 'S001', '本店');
+        INSERT INTO accounts (code, name, category, uses_sub_account) VALUES ('1210', '当座預金', 'asset', 1);
         """;
 
     /// <summary>科目 1 の補助科目だけ作る（科目 1 は「使わない」のまま）。</summary>
@@ -41,10 +42,19 @@ public class JournalSubAccountGuardTests
         INSERT INTO sub_accounts (account_id, code, name) VALUES (2, 'T001', '店頭');
         INSERT INTO sub_accounts (account_id, code, name) VALUES (2, 'T002', '通販');
         INSERT INTO sub_accounts (account_id, code, name) VALUES (1, 'S001', '本店');
+        INSERT INTO accounts (code, name, category) VALUES ('1210', '当座預金', 'asset');
         """;
 
     /// <summary>科目 1 の補助科目の識別子（上の 2 つの後に採番される）。</summary>
     private const string SubAccountOfAccount1 = "3";
+
+    /// <summary>
+    /// どちらの検体でも足してある<b>3 つ目の勘定科目</b>（当座預金）。分岐に合わせて
+    /// 「補助科目を使う」の値を変えてある。<b>写しの判定が科目まで見ていることを踏む</b>ために要る——
+    /// 行番号が同じなら原仕訳の行は 1 行に決まる（UNIQUE (伝票, 行番号)）ので、
+    /// <b>1 科目だけでは科目の一致を落としても鳴らない</b>（自己レビューで指摘された。2026-09-08）。
+    /// </summary>
+    private const string OtherAccount = "3";
 
     private const string Post =
         "UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-05-20 10:00:00' WHERE id = 1";
@@ -247,6 +257,8 @@ public class JournalSubAccountGuardTests
     [InlineData("line_no", false, "補助科目を使う勘定科目の明細には補助科目が要る")]
     [InlineData("debit_credit", true, "補助科目を使わない勘定科目の明細に補助科目は付けられない")]
     [InlineData("debit_credit", false, "補助科目を使う勘定科目の明細には補助科目が要る")]
+    [InlineData("account_id", true, "補助科目を使わない勘定科目の明細に補助科目は付けられない")]
+    [InlineData("account_id", false, "補助科目を使う勘定科目の明細には補助科目が要る")]
     public void 写しでない行は取消でも止める(string differs, bool subAccountOnUnusedAccount, string expected)
     {
         using var db = subAccountOnUnusedAccount
@@ -257,6 +269,7 @@ public class JournalSubAccountGuardTests
         {
             "amount" => "UPDATE journal_lines SET amount = 999 WHERE journal_entry_id = 1 AND line_no = 1",
             "line_no" => "UPDATE journal_lines SET line_no = 9 WHERE journal_entry_id = 1 AND line_no = 1",
+            "account_id" => $"UPDATE journal_lines SET account_id = {OtherAccount} WHERE journal_entry_id = 1 AND line_no = 1",
             _ => """
                 UPDATE journal_lines SET debit_credit = 'credit' WHERE journal_entry_id = 1 AND line_no = 1;
                 UPDATE journal_lines SET debit_credit = 'debit'  WHERE journal_entry_id = 1 AND line_no = 2;

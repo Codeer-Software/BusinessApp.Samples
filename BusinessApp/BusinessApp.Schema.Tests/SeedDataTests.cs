@@ -167,6 +167,40 @@ public class SeedDataTests
         Assert.Equal(4L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounts WHERE is_contra = 1"));
     }
 
+    /// <summary>
+    /// <b>「取引先を要する」が立っている科目</b>（docs/10 §6-2）。
+    /// </summary>
+    /// <remarks>
+    /// <b>この 6 行が、優良な電子帳簿の「相手方別に記載する」への当てはめの証跡そのものである</b>
+    /// （docs/40 §4-1 はこの初期データを根拠に状態を書いている）。
+    /// <b>コードを 1 つ落としても UPDATE は 0 行更新で黙って通る</b>ので、ここで数と顔ぶれを固定する。
+    /// </remarks>
+    [Theory]
+    [InlineData("1300")]  // 売掛金（別表二十四（四））
+    [InlineData("2100")]  // 買掛金（同（五））
+    [InlineData("4010")]  // 売上高（受託開発）（同（十一））
+    [InlineData("4020")]  // 売上高（SES）
+    [InlineData("4030")]  // 売上高（SaaS）
+    [InlineData("5010")]  // 外注費（同（十四）。外注工賃は（十四）の列挙にある）
+    public void 取引先を要する科目に印が付いている(string code)
+    {
+        using var db = TestDatabase.CreateWithSeed();
+
+        Assert.Equal(1L, TestDatabase.ScalarOf<long>(
+            db, $"SELECT requires_partner FROM accounts WHERE code = '{code}'"));
+    }
+
+    [Fact]
+    public void 取引先を要する科目はその6件だけである()
+    {
+        using var db = TestDatabase.CreateWithSeed();
+
+        // **広げるかどうかは開発者の判断**（docs/40 §6 の保留）。
+        // **増やすときはこの数と上の一覧を一緒に動かす**——動かさずに通ったら、それは事故である。
+        Assert.Equal(6L, TestDatabase.ScalarOf<long>(
+            db, "SELECT COUNT(*) FROM accounts WHERE requires_partner = 1"));
+    }
+
     /// <summary>引当金は負債と費用が対で無いと計上仕訳が組めない。</summary>
     [Theory]
     [InlineData("2400", "6035")]  // 賞与引当金 ↔ 賞与引当金繰入額
