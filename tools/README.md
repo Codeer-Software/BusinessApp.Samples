@@ -83,7 +83,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 | 段 | 中身 |
 |---|---|
 | 1 | `check_frozen.py`（**凍結されたファイルの変更・削除・改名**。適用済みマイグレーションと `baseline/`。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
-| 2 | 失うことを止める関門 2 つの自己検査（`guard_delete.py --selftest` と `trash.ps1 -SelfTest`。**正典は 1 つ**なので、両方がそれを読めているかもここで確かめる） |
+| 2 | 失うことを止める道具 3 つの自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる） |
 | 3 | `lint_secrets.py`（秘密・絶対パスの混入） |
 | 4 | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
 | 5 | `lint_design.py`（CLB デザインの静的検査） |

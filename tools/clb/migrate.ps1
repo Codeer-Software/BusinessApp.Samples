@@ -47,22 +47,14 @@ if ($selected.Count -ne 1) { throw '-Adopt / -Apply / -Status / -Verify のど�
 . (Join-Path $PSScriptRoot '_designer.ps1')
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$projectRoot = Join-Path $repoRoot 'Designer/Design'
-$exe = Get-DesignerExePath -RepoRoot $repoRoot
 $migrationsDir = Join-Path $repoRoot 'Designer/migrations'
 $baselineDir = Join-Path $migrationsDir 'baseline'
 
 function Invoke-SqlQuery {
     param([Parameter(Mandatory)][string]$Sql)
 
-    $result = Invoke-Designer -Exe $exe -Arguments @('sql', $projectRoot, '--datasource', $DataSource, '--query', $Sql)
-    # 終了コードの判定が先。失敗時の標準出力は JSON とは限らず、パース例外で本当の原因が隠れる。
-    if ($result.ExitCode -ne 0) {
-        $reason = $result.StandardOutput
-        try { $reason = ($result.StandardOutput | ConvertFrom-Json).error } catch {}
-        throw "SQL が失敗した: $reason"
-    }
-    return $result.StandardOutput | ConvertFrom-Json
+    # 中身は _designer.ps1 が持つ（db_snapshot.ps1 と同じ 1 つを使う。docs/20 §4）。
+    return Invoke-DesignerSql -RepoRoot $repoRoot -DataSource $DataSource -Sql $Sql
 }
 
 function Get-MigrationChecksum {

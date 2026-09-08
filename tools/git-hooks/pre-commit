@@ -20,15 +20,18 @@ echo "[pre-commit] 1/8 凍結ファイルの検査"
 python tools/clb/check_frozen.py --selftest
 python tools/clb/check_frozen.py
 
-# 削除の関門 2 つの自己検査。**守る道具にテストが無いと、書き換えたときに
-# 「止めているつもりで素通り」になる。** 2 つで 2 秒（実測）なので、
-# **壊れていたら最初に知りたい**——前に置く（1/8 と同じ理由）。
-# 前者はコマンド文字列を見るフック（.claude/settings.json の PreToolUse）、
-# 後者は実際に消す直前に絶対パスで見る関門。**守る対象の正典は 1 つ**
+# 失うことを止める道具 3 つの自己検査。**守る道具にテストが無いと、書き換えたときに
+# 「止めているつもりで素通り」になる。** 短いので、**壊れていたら最初に知りたい**——
+# 前に置く（1/8 と同じ理由）。
+# 1 つめはコマンド文字列を見るフック（.claude/settings.json の PreToolUse）、
+# 2 つめは実際に消す直前に絶対パスで見る関門。**守る対象の正典は 1 つ**
 # （tools/claude/protected_paths.json）で、両方がそれを読めているかもここで確かめている。
-echo "[pre-commit] 2/8 削除ガードの自己検査"
+# 3 つめは稼働 DB の退避と復元（ADR-0046）。**allow を出す根拠が
+# 「消さない・戻す前に必ず退避する」なので、それを機械で表明できないと allow の前提が立たない。**
+echo "[pre-commit] 2/8 失うことを止める道具の自己検査"
 python tools/claude/guard_delete.py --selftest
 pwsh -NoProfile -File tools/claude/trash.ps1 -SelfTest
+pwsh -NoProfile -File tools/clb/db_snapshot.ps1 -SelfTest
 
 echo "[pre-commit] 3/8 秘密の検査"
 python tools/docs/lint_secrets.py
