@@ -227,6 +227,7 @@ public static class JournalEntryValidator
                     line.LineNo));
             }
 
+            ValidatePartner(line, entry, account, context.HasSelectablePartner, violations);
             ValidateSubAccount(line, entry, account, context.SubAccounts, violations);
         }
     }
@@ -257,6 +258,38 @@ public static class JournalEntryValidator
                 line.LineNo,
                     InactiveSeverity(entry)));
         }
+    }
+
+    /// <summary>
+    /// 取引先を要する科目の明細に取引先があるか（<c>E-PARTNER-REQUIRED</c>。docs/10 §6-2）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>見るのは実効値である</b>（<see cref="JournalEntry.PartnerOf"/>）——
+    /// 明細が持っていなければ伝票のものが帳簿に載るので、伝票に 1 つ選んであれば足りる。
+    /// <b>明細だけを見ると、帳簿には取引先が載る行を関門が拒む</b>ことになる。</para>
+    /// <para><b>片側だけの規則である。</b> 補助科目の 2 値（ADR-0038 §3）と違い、
+    /// 要しない科目に取引先が付いていても止めない——<b>取引先は科目に属さない</b>ので、
+    /// どの科目の行にも意味のある相手方がありうる（現金の行の支払先など）。</para>
+    /// </remarks>
+    private static void ValidatePartner(
+        JournalLine line, JournalEntry entry, AccountDefinition account, bool hasSelectablePartner,
+        List<Violation> violations)
+    {
+        if (!account.RequiresPartner || entry.PartnerOf(line) is not null)
+        {
+            return;
+        }
+
+        // 補助科目と同じく、**踏めない案内をしない**（docs/21 §2-3。qa/02 R53-06）。
+        // 取引先マスタが空の DB では「選んでください」は 0 件のダイアログにしかならない。
+        violations.Add(new Violation(
+            JournalViolationCodes.PartnerRequired,
+            hasSelectablePartner
+                ? $"勘定科目「{account.Name}」は「取引先を要する」がオンです。伝票か明細の「取引先」を選んでください。"
+                : $"勘定科目「{account.Name}」は「取引先を要する」がオンですが、選べる取引先がありません。"
+                  + "取引先マスタに登録してから選んでください。",
+            line.LineNo,
+            ReversalOnlySeverity(entry)));
     }
 
     private static void ValidateSubAccount(
@@ -352,14 +385,16 @@ public static class JournalEntryValidator
             : ViolationSeverity.Error;
 
     /// <summary>
-    /// <b>取消でだけ止めない</b>ことの重さ（補助科目の 2 値。ADR-0038 §3）。
+    /// <b>取消でだけ止めない</b>ことの重さ。
+    /// <b>補助科目の 2 値</b>（ADR-0038 §3）と<b>取引先を要する科目</b>（docs/10 §6-2）が使う。
     /// </summary>
     /// <remarks>
     /// <para><b>外すのは取消だけである。</b> 取消の明細はサーバが原仕訳を反転して作り
     /// （<c>JournalReversalPosting</c>）、<b>利用者が直す手立てが無い</b>。
     /// Error にすると、規則より前に計上された伝票を<b>取り消せなくなる</b>——
-    /// 開発機に「補助科目を使わない科目に補助科目が付いた計上済み明細」が 1 行ある
-    /// （2026-09-08 実測。数え方は qa/04）。</para>
+    /// 開発機に「補助科目を使わない科目に補助科目が付いた計上済み明細」が 1 行、
+    /// 「取引先を要する科目に取引先の無い計上済み明細」が 10 行ある
+    /// （売掛金 1・買掛金 7・外注費 2。2026-09-08 実測。数え方は qa/04）。</para>
     /// <para><b>訂正（再計上）は外さない。</b> 再計上の中身は利用者が決め、サーバは一切書き換えない
     /// （<c>JournalCorrectionPosting</c> の注記）ので、<b>補助科目を空にすれば通る</b>——
     /// 行き止まりにならない。外すと、訂正を経由して<b>規則より後の違反を新しく帳簿へ入れられる</b>
@@ -369,7 +404,8 @@ public static class JournalEntryValidator
     /// （開発機では 0 行。2026-09-08 実測）。</para>
     /// <para><b>DDL のトリガはここより狭い</b>（docs/10 §4-2-1 の二層の広さ）——
     /// ここは取消をすべて外すが、トリガは<b>計上済みの原仕訳を写しただけの明細</b>だけを外す
-    /// （<c>trg_journal_entries_sub_account_presence_when_posted</c>）。
+    /// （<c>trg_journal_entries_sub_account_presence_when_posted</c>・
+    /// <c>trg_journal_entries_partner_presence_when_posted</c>）。
     /// <c>entry_type</c> は取込・CLI・手打ちの SQL が自由に書ける列だからである。
     /// <b>アプリからは差が出ない</b>——取消の明細は <c>JournalReversalPosting</c> が原仕訳から作るので、
     /// 必ず写しになる。<b>関門を通らない経路のためだけに、あちらを狭くしてある。</b></para>

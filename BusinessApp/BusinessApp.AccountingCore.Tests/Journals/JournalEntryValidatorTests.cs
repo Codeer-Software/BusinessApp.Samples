@@ -123,7 +123,8 @@ public class JournalEntryValidatorTests
             new AccountCatalog(AccountingFixture.Accounts),
             new SubAccountCatalog(AccountingFixture.SubAccounts),
             new DepartmentCatalog(AccountingFixture.Departments),
-            new FiscalCalendar([], [orphan]));
+            new FiscalCalendar([], [orphan]),
+            HasSelectablePartner: true);
 
         var violations = JournalEntryValidator.ValidateForPosting(AccountingFixture.CashSale(Ordinary), context);
 
@@ -424,6 +425,117 @@ public class JournalEntryValidatorTests
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
                 subAccountId: AccountingFixture.SubAccountOfCash),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+
+    [Fact]
+    public void 取引先を要する科目に取引先がなければ計上できない()
+    {
+        // **相手方を欠いた行は「相手方別」のどの帳簿にも載らない**（docs/40 §4-1。docs/04 §1 の A-4）。
+        var entry = ReceivableWithoutPartner();
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerRequired, Validate(entry));
+
+        Assert.Equal(1, violation.LineNo);
+        Assert.Equal(
+            "勘定科目「売掛金」は「取引先を要する」がオンです。伝票か明細の「取引先」を選んでください。",
+            violation.Message);
+    }
+
+    [Fact]
+    public void 選べる取引先が無ければ登録してからと言う()
+    {
+        // **踏めない案内をしない**（docs/21 §2-3。qa/02 R53-06 と同じ型）。
+        // 取引先マスタが空の DB では、「選んでください」は 0 件のダイアログにしかならない。
+        var violation = AssertViolation(
+            JournalViolationCodes.PartnerRequired,
+            JournalEntryValidator.ValidateForPosting(
+                ReceivableWithoutPartner(), AccountingFixture.Context(hasSelectablePartner: false)));
+
+        Assert.Equal(
+            "勘定科目「売掛金」は「取引先を要する」がオンですが、選べる取引先がありません。"
+            + "取引先マスタに登録してから選んでください。",
+            violation.Message);
+    }
+
+    [Fact]
+    public void 明細の取引先で足りる()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.AccountsReceivable, 1_000,
+                partner: AccountingFixture.Partner),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+
+        Assert.Empty(Validate(entry));
+    }
+
+    [Fact]
+    public void 伝票の取引先で足りる()
+    {
+        // **見るのは実効値である**（JournalEntry.PartnerOf）——明細が空なら伝票のものが帳簿に載るので、
+        // ここで止めると**帳簿には取引先が載る行を関門が拒む**ことになる。
+        var entry = ReceivableWithoutPartner() with { PartnerId = AccountingFixture.Partner };
+
+        Assert.Empty(Validate(entry));
+    }
+
+    [Fact]
+    public void 取引先を要しない科目に取引先が付いていても止めない()
+    {
+        // **片側だけの規則である**（補助科目の 2 値と違う）。取引先は科目に属さないので、
+        // どの科目の行にも意味のある相手方がありうる（現金の行の支払先など）。
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.Partner),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+
+        Assert.Empty(Validate(entry));
+    }
+
+    [Fact]
+    public void 取消では取引先が無くても止めない()
+    {
+        // **規則より前に計上された伝票を打ち消せなくなってはいけない**（docs/10 §5・ADR-0004）。
+        // 開発機に取引先の無い計上済み明細が 10 行ある（2026-09-08 実測）。
+        var entry = ReceivableWithoutPartner() with
+        {
+            EntryType = EntryType.Reversal,
+            OriginalEntryId = new JournalEntryId(9),
+        };
+
+        var violations = Validate(entry);
+
+        Assert.Equal(
+            ViolationSeverity.Warning,
+            AssertViolation(JournalViolationCodes.PartnerRequired, violations).Severity);
+        Assert.False(violations.HasError());
+    }
+
+    [Fact]
+    public void 訂正では取引先が無いと止める()
+    {
+        // **再計上の中身は利用者が決める**ので、取引先を選べば通る——行き止まりにならない。
+        // 外すと、訂正を経由して規則より後の違反を新しく帳簿へ入れられる（qa/02 R53-01）。
+        var entry = ReceivableWithoutPartner() with
+        {
+            EntryType = EntryType.Correction,
+            OriginalEntryId = new JournalEntryId(9),
+        };
+
+        var violations = Validate(entry);
+
+        Assert.Equal(
+            ViolationSeverity.Error,
+            AssertViolation(JournalViolationCodes.PartnerRequired, violations).Severity);
+        Assert.True(violations.HasError());
+    }
+
+    /// <summary>取引先を要する科目（売掛金）の明細に、取引先を付けていない伝票。</summary>
+    private static JournalEntry ReceivableWithoutPartner()
+        => AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.AccountsReceivable, 1_000),
             AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
 
     [Fact]

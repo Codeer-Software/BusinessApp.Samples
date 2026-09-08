@@ -23,7 +23,7 @@ public class JournalEntryStoreTests
         using var server = new AccountingServer();
         var id = server.InsertDraft(transactionDate: "2026-08-20", postingDate: "2026-08-24");
         server.InsertLine(id, 1, "debit", "1100", 1000);
-        server.InsertLine(id, 2, "credit", "2100", 1000);
+        server.InsertLine(id, 2, "credit", "2200", 1000);
 
         var entry = await server.EntryStore.LoadAsync(id);
 
@@ -285,7 +285,7 @@ public class JournalEntryStoreTests
     public async Task 計上済みの明細は入れ替えられない()
     {
         using var server = new AccountingServer();
-        var id = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 100), ("credit", "2100", 100));
+        var id = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 100), ("credit", "2200", 100));
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
             () => server.EntryStore.ReplaceLinesAsync(id, []));
@@ -298,7 +298,7 @@ public class JournalEntryStoreTests
     public async Task 計上済みの伝票には取消の内容を書き込めない()
     {
         using var server = new AccountingServer();
-        var id = server.InsertPosted(1, "原本", "2026-08-24", ("debit", "1100", 100), ("credit", "2100", 100));
+        var id = server.InsertPosted(1, "原本", "2026-08-24", ("debit", "1100", 100), ("credit", "2200", 100));
         var reversal = (await server.EntryStore.LoadAsync(id)) with { Description = "書き換え" };
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -320,7 +320,7 @@ public class JournalEntryStoreTests
     {
         using var server = new AccountingServer();
         var partner = server.InsertPartner();
-        var original = server.InsertPosted(1, null, "2026-05-20", ("debit", "1100", 10), ("credit", "2100", 10));
+        var original = server.InsertPosted(1, null, "2026-05-20", ("debit", "1100", 10), ("credit", "2200", 10));
 
         var draft = new JournalEntry
         {
@@ -336,7 +336,7 @@ public class JournalEntryStoreTests
             SourceDocumentId = "EXP-001",
             IdempotencyKey = "expense/EXP-001",
             EnteredAt = AccountingServer.Now,
-            Lines = [Line(server, 1, DebitCredit.Debit, "1100", 700), Line(server, 2, DebitCredit.Credit, "2100", 700)],
+            Lines = [Line(server, 1, DebitCredit.Debit, "1100", 700), Line(server, 2, DebitCredit.Credit, "2200", 700)],
         };
 
         var loaded = await server.EntryStore.LoadAsync(await server.EntryStore.InsertDraftAsync(draft));
@@ -398,7 +398,7 @@ public class JournalEntryStoreTests
     public async Task 種別だけを読める()
     {
         using var server = new AccountingServer();
-        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 10), ("credit", "2100", 10));
+        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 10), ("credit", "2200", 10));
 
         Assert.Equal(EntryType.Normal, await server.EntryStore.FindEntryTypeAsync(original));
         Assert.Equal(

@@ -23,7 +23,7 @@ public class JournalReversalPostingTests
         // **原仕訳と取消で取引日を変える。** 同じ日にすると、取引日が書き戻されていない
         // という欠陥がテストから見えなくなる（実際にそれで見逃した）。
         var original = server.InsertPosted(
-            1, null, "2026-05-20", ("debit", "1100", 1000), ("credit", "2100", 1000));
+            1, null, "2026-05-20", ("debit", "1100", 1000), ("credit", "2200", 1000));
         var reversal = server.InsertReversalDraft(original);
 
         await PostAsync(server, reversal);
@@ -42,7 +42,7 @@ public class JournalReversalPostingTests
         Assert.Equal([DebitCredit.Credit, DebitCredit.Debit], posted.Lines.Select(l => l.DebitCredit));
         Assert.Equal([Yen.From(1000), Yen.From(1000)], posted.Lines.Select(l => l.Amount));
         Assert.Equal(
-            [server.AccountOf("1100"), server.AccountOf("2100")],
+            [server.AccountOf("1100"), server.AccountOf("2200")],
             posted.Lines.Select(l => l.AccountId));
         Assert.True(posted.IsBalanced);
     }
@@ -71,10 +71,33 @@ public class JournalReversalPostingTests
     }
 
     [Fact]
+    public async Task 規則より前に計上された取引先の無い伝票も取り消せる()
+    {
+        // **これが「取消では止めない」の唯一の根拠である**（docs/10 §6-2。docs/04 §1 の A-4）。
+        // 取引先を要する科目に取引先の無い計上済みの明細が稼働 DB に 10 行あり（2026-09-08 実測）、
+        // **それらを取り消せなくなると ADR-0004 の「取消できない伝票を作らない」が破れる。**
+        // 関門（`JournalEntryValidator`）と DDL のトリガの<b>両方</b>を通す形で確かめる——
+        // 片方ずつの検査では配線を誰も見ない（qa/03 L-01 の型。qa/02 R53-05 と同じ処方）。
+        using var server = new AccountingServer();
+        var original = server.InsertPostedWithoutPartnerOnRequiringAccount(1, "2026-05-20");
+        var reversal = server.InsertReversalDraft(original);
+
+        await PostAsync(server, reversal);
+
+        var posted = await server.EntryStore.LoadAsync(reversal);
+        Assert.Equal(EntryStatus.Posted, posted.Status);
+
+        // **取消にも取引先が無いまま写っている。** 空欄を勝手に埋めると、
+        // 帳簿に原仕訳と食い違う相手方が載る（ADR-0018）。
+        Assert.Null(posted.PartnerId);
+        Assert.All(posted.Lines, l => Assert.Null(l.PartnerId));
+    }
+
+    [Fact]
     public async Task 画面から送られた明細は使わない()
     {
         using var server = new AccountingServer();
-        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 1000), ("credit", "2100", 1000));
+        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 1000), ("credit", "2200", 1000));
         var reversal = server.InsertReversalDraft(original);
 
         // でたらめな明細を入れておく。取消の中身は利用者が決められない。
@@ -98,7 +121,7 @@ public class JournalReversalPostingTests
         using var server = new AccountingServer();
         var partner = server.InsertPartner();
         var original = server.InsertPosted(
-            1, null, "2026-05-20", partner, ("debit", "1100", 300), ("credit", "2100", 300));
+            1, null, "2026-05-20", partner, ("debit", "1100", 300), ("credit", "2200", 300));
         var reversal = server.InsertReversalDraft(original);
 
         await PostAsync(server, reversal);
@@ -110,7 +133,7 @@ public class JournalReversalPostingTests
     public async Task 摘要に何の取消かが残る()
     {
         using var server = new AccountingServer();
-        var original = server.InsertPosted(1, "5 月分の売上", "2026-05-20", ("debit", "1100", 500), ("credit", "2100", 500));
+        var original = server.InsertPosted(1, "5 月分の売上", "2026-05-20", ("debit", "1100", 500), ("credit", "2200", 500));
         var reversal = server.InsertReversalDraft(original);
 
         await PostAsync(server, reversal);
@@ -122,7 +145,7 @@ public class JournalReversalPostingTests
     public async Task 二重取消はできず_伝票も採番も残らない()
     {
         using var server = new AccountingServer();
-        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 1000), ("credit", "2100", 1000));
+        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 1000), ("credit", "2200", 1000));
         await PostAsync(server, server.InsertReversalDraft(original));
 
         var second = server.InsertReversalDraft(original);

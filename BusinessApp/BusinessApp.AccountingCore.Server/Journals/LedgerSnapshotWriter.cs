@@ -69,18 +69,13 @@ public sealed class LedgerSnapshotWriter(IDbAccessor dbAccessor, string dataSour
 
         foreach (var line in draft.Lines)
         {
-            var snapshot = PartnerOf(draft, line) is PartnerId partnerId
+            var snapshot = draft.PartnerOf(line) is PartnerId partnerId
                 ? await CachedAsync(cache, partnerId)
                 : PartnerSnapshot.None;
 
             await WriteAsync(id, line.LineNo, snapshot.Name, RegistrationNoAt(snapshot, TaxPointOf(draft, line)));
         }
     }
-
-    /// <summary>
-    /// この行の取引先。<b>明細が持っていなければ伝票のものを使う</b>（docs/10 §4-1）。
-    /// </summary>
-    private static PartnerId? PartnerOf(JournalEntry entry, JournalLine line) => line.PartnerId ?? entry.PartnerId;
 
     /// <summary>
     /// この行の課税仕入れの時点。<b>入っていなければ伝票の取引日を使う</b>。

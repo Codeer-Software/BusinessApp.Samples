@@ -36,6 +36,27 @@ public class AccountingMasterLoaderTests
         Assert.True(deposit.UsesSubAccount);
         Assert.True(allowance.IsContra);
         Assert.Equal(DebitCredit.Credit, allowance.NormalBalance);
+
+        // 取引先を要するのは相手方別の帳簿が要る科目だけである（docs/10 §6-2）。
+        Assert.False(cash.RequiresPartner);
+        Assert.True(context.Accounts.Find(server.AccountOf("1300"))!.RequiresPartner);
+    }
+
+    [Fact]
+    public async Task 選べる取引先の有無を読む()
+    {
+        // **「選んでください」と言ってよいか**の判定に使う（docs/21 §2-3）。
+        // 一覧ではなく有無だけを持つ理由は PostingContext の注記。
+        using var server = new AccountingServer();
+        Assert.False((await server.MasterLoader.LoadAsync()).HasSelectablePartner);
+
+        var partner = server.InsertPartner();
+        Assert.True((await server.MasterLoader.LoadAsync()).HasSelectablePartner);
+
+        // **無効な取引先は「選べる」に数えない。** 明細の候補ダイアログが is_active で絞っているので、
+        // ここを揃えないと 0 件のダイアログに向けて「選んでください」と言うことになる。
+        server.Execute($"update partners set is_active = 0 where id = {partner}");
+        Assert.False((await server.MasterLoader.LoadAsync()).HasSelectablePartner);
     }
 
     [Fact]

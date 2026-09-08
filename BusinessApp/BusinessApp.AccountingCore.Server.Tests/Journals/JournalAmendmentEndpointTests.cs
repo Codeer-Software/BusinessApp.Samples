@@ -20,10 +20,10 @@ using BusinessApp.AccountingCore.Shared;
 /// </remarks>
 public class JournalAmendmentEndpointTests
 {
-    /// <summary>取り消される側の仕訳（借方 現金 1000 / 貸方 買掛金 1000）。</summary>
+    /// <summary>取り消される側の仕訳（借方 現金 1000 / 貸方 未払金 1000）。</summary>
     private static JournalEntryId Original(AccountingServer server)
         => server.InsertPosted(
-            1, "5 月分の仕入", "2026-05-20", ("debit", "1100", 1000), ("credit", "2100", 1000));
+            1, "5 月分の仕入", "2026-05-20", ("debit", "1100", 1000), ("credit", "2200", 1000));
 
     // --- 識別子の解釈 ---
 

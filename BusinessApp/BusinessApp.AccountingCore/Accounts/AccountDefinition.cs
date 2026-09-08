@@ -18,6 +18,11 @@ using BusinessApp.AccountingCore.Shared;
 /// 補助科目を使う科目か。<b>2 値である</b>——使う科目では補助科目が必須で、
 /// 使わない科目は補助科目を<b>持てない</b>（ADR-0038 §3）。
 /// </param>
+/// <param name="RequiresPartner">
+/// 取引先を要する科目か（docs/10 §6-2。docs/04 §1 の A-4）。
+/// <b>片側だけの規則である</b>——要する科目では取引先が必須だが、
+/// 要しない科目でも取引先は付けてよい（補助科目の 2 値と違う。理由は docs/10 §6-2）。
+/// </param>
 /// <param name="IsContra">
 /// 評価勘定（控除科目）か。減価償却累計額・貸倒引当金・売上値引戻り高・期末棚卸高のように、
 /// <b>通常残高が科目区分と逆</b>の科目がある。
@@ -30,6 +35,7 @@ public sealed record AccountDefinition(
     AccountCategory Category,
     TaxCategoryId? DefaultTaxCategoryId = null,
     bool UsesSubAccount = false,
+    bool RequiresPartner = false,
     bool IsContra = false,
     bool IsActive = true)
 {

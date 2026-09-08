@@ -21,7 +21,7 @@ public class JournalSubmitGateTests
     private const string TemporaryId = "@temporary:0f0a";
 
     private static readonly (string DebitCredit, string AccountCode, long Amount)[] Balanced =
-        [("debit", "1100", 1000), ("credit", "2100", 1000)];
+        [("debit", "1100", 1000), ("credit", "2200", 1000)];
 
     [Fact]
     public async Task 計上として送られた伝票は_番号と計上日時が付いて計上済みになる()
@@ -236,7 +236,7 @@ public class JournalSubmitGateTests
         {
             var id = server.InsertDraft();
             server.InsertLine(id, 1, "debit", "1100", 100);
-            server.InsertLine(id, 2, "credit", "2100", 100);
+            server.InsertLine(id, 2, "credit", "2200", 100);
             await PostSavedAsync(server, id);
             numbers.Add((await server.EntryStore.LoadAsync(id)).EntryNo);
         }
@@ -252,13 +252,13 @@ public class JournalSubmitGateTests
 
         var first = server.InsertDraft();
         server.InsertLine(first, 1, "debit", "1100", 100);
-        server.InsertLine(first, 2, "credit", "2100", 100);
+        server.InsertLine(first, 2, "credit", "2200", 100);
         await PostSavedAsync(server, first);
 
         var second = server.InsertDraft(
             transactionDate: "2027-04-01", postingDate: "2027-04-01", fiscalYearId: next);
         server.InsertLine(second, 1, "debit", "1100", 200);
-        server.InsertLine(second, 2, "credit", "2100", 200);
+        server.InsertLine(second, 2, "credit", "2200", 200);
         await PostSavedAsync(server, second);
 
         // I-17。年度をまたいでも通し番号にすると、年度ごとの一連番号ではなくなる。
@@ -280,7 +280,7 @@ public class JournalSubmitGateTests
         await Assert.ThrowsAsync<JournalPostingRejectedException>(
             () => server.SubmitAsync(
                 [SubmitData.Adding(entry)],
-                server.Saving(entry, [("debit", "1100", 1000), ("credit", "2100", 900)])));
+                server.Saving(entry, [("debit", "1100", 1000), ("credit", "2200", 900)])));
 
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_lines"));
@@ -296,7 +296,7 @@ public class JournalSubmitGateTests
         // 独立した違反を 2 件出す。貸借不一致（伝票）と、損益科目の部門欠落（明細）。
         // 1 件だけ見せると、直しては弾かれを繰り返すことになる。
         server.InsertLine(id, 1, "debit", "6110", 1000, taxCategoryCode: "TP");
-        server.InsertLine(id, 2, "credit", "2100", 900);
+        server.InsertLine(id, 2, "credit", "2200", 900);
 
         var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
             () => PostSavedAsync(server, id));
@@ -466,7 +466,7 @@ public class JournalSubmitGateTests
     public async Task 種別の違反と必須項目の違反は一度にまとめて返す()
     {
         using var server = new AccountingServer();
-        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 100), ("credit", "2100", 100));
+        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 100), ("credit", "2200", 100));
         var correction = server.InsertCorrectionDraft(original);
 
         var entry = SubmitData.Entry(server.Text(correction.Value), status: "draft");
@@ -498,7 +498,7 @@ public class JournalSubmitGateTests
         using var server = new AccountingServer();
         var draft = server.InsertDraft(entryType: entryType);
         server.InsertLine(draft, 1, "debit", "1100", 100);
-        server.InsertLine(draft, 2, "credit", "2100", 100);
+        server.InsertLine(draft, 2, "credit", "2200", 100);
 
         var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
             () => PostSavedAsync(server, draft));
@@ -520,7 +520,7 @@ public class JournalSubmitGateTests
     public async Task 既にある伝票の種別は変えられない()
     {
         using var server = new AccountingServer();
-        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 100), ("credit", "2100", 100));
+        var original = server.InsertPosted(1, null, "2026-08-24", ("debit", "1100", 100), ("credit", "2200", 100));
         var correction = server.InsertCorrectionDraft(original);
 
         var entry = SubmitData.Entry(server.Text(correction.Value), status: "draft");
@@ -599,7 +599,7 @@ public class JournalSubmitGateTests
         server.StartEntryNumbersAt(101);
         var id = server.InsertDraft();
         server.InsertLine(id, 1, "debit", "1100", 1000);
-        server.InsertLine(id, 2, "credit", "2100", 1000);
+        server.InsertLine(id, 2, "credit", "2200", 1000);
         await PostSavedAsync(server, id);
 
         var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
@@ -659,7 +659,7 @@ public class JournalSubmitGateTests
         using var server = new AccountingServer();
         var id = server.InsertDraft();
         server.InsertLine(id, 1, "debit", "1100", 1000);
-        server.InsertLine(id, 2, "credit", "2100", 1000);
+        server.InsertLine(id, 2, "credit", "2200", 1000);
 
         await server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value))], server.Deleting(id));
 

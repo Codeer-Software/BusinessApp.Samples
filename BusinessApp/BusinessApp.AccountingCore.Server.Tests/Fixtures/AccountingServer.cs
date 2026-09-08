@@ -486,11 +486,45 @@ internal sealed class AccountingServer : IDisposable
                     1000,
                     (select id from tax_categories where code = 'OUT'))
             """);
-        InsertLine(id, 2, "credit", "2100", 1000);
+        InsertLine(id, 2, "credit", "2200", 1000);
 
         TestDatabase.WithoutTrigger(
             connection,
             "trg_journal_entries_sub_account_presence_when_posted",
+            $"""
+            update journal_entries
+               set status = 'posted', entry_no = {entryNo}, posted_at = '2026-08-24 13:00:00'
+             where id = {id.Value}
+            """);
+
+        Execute($"""
+            update journal_entry_sequences set next_entry_no = {entryNo + 1}
+             where fiscal_year_id = {FiscalYear.Value} and next_entry_no <= {entryNo}
+            """);
+
+        return id;
+    }
+
+    /// <summary>
+    /// <b>取引先を要する科目に取引先の無い計上済みの伝票</b>を 1 件作る（docs/10 §6-2）。
+    /// </summary>
+    /// <remarks>
+    /// <b>いまの製品では作れない形である。</b> 規則より前に計上された行が稼働 DB に 10 行あり
+    /// （売掛金 1・買掛金 7・外注費 2。2026-09-08 実測）、
+    /// <b>それらを取り消せることがこの規則の免除の根拠</b>なので、検体が要る。
+    /// そのときだけ計上のトリガを外す（<see cref="TestDatabase.WithoutTrigger"/>）。
+    /// </remarks>
+    public JournalEntryId InsertPostedWithoutPartnerOnRequiringAccount(int entryNo, string transactionDate)
+    {
+        // 2100（買掛金）は初期データで「取引先を要する」が立っている（Designer/seed/004_accounts.sql）。
+        // **フィクスチャで立て直さない**——初期データと規則が食い違ったらここで落ちてほしい。
+        var id = InsertDraft(transactionDate: transactionDate, postingDate: transactionDate, description: "規則より前の伝票");
+        InsertLine(id, 1, "debit", "1100", 1000);
+        InsertLine(id, 2, "credit", "2100", 1000);
+
+        TestDatabase.WithoutTrigger(
+            connection,
+            "trg_journal_entries_partner_presence_when_posted",
             $"""
             update journal_entries
                set status = 'posted', entry_no = {entryNo}, posted_at = '2026-08-24 13:00:00'

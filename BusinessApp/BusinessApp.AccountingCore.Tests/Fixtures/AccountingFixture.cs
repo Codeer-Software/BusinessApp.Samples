@@ -25,6 +25,9 @@ public static class AccountingFixture
 
     /// <summary>補助科目を使うが、<b>選べる補助科目が 1 つも無い</b>科目（無効なものだけがある）。</summary>
     public static readonly AccountId CurrentAccount = new(7);
+
+    /// <summary><b>取引先を要する</b>科目（docs/10 §6-2）。</summary>
+    public static readonly AccountId AccountsReceivable = new(8);
     public static readonly AccountId UnknownAccount = new(999);
 
     public static readonly SubAccountId MainBank = new(1);
@@ -50,6 +53,7 @@ public static class AccountingFixture
         new(RetiredExpense, "5900", "廃止した費用科目", AccountCategory.Expense, IsActive: false),
         new(BankAccount, "1200", "普通預金", AccountCategory.Asset, UsesSubAccount: true),
         new(CurrentAccount, "1210", "当座預金", AccountCategory.Asset, UsesSubAccount: true),
+        new(AccountsReceivable, "1300", "売掛金", AccountCategory.Asset, RequiresPartner: true),
     ];
 
     public static IReadOnlyList<SubAccountDefinition> SubAccounts { get; } =
@@ -66,13 +70,19 @@ public static class AccountingFixture
         new(RetiredDepartment, "99", "廃止した部門", IsActive: false),
     ];
 
+    /// <param name="hasSelectablePartner">
+    /// 取引先マスタに選べる取引先があるか。<b>既定は「ある」</b>——
+    /// 無い側は取引先マスタが空の DB でしか起きず、文言だけが変わる（docs/21 §2-3）。
+    /// </param>
     public static PostingContext Context(
         PeriodStatus septemberStatus = PeriodStatus.Open,
-        PeriodStatus fiscalYearStatus = PeriodStatus.Open)
+        PeriodStatus fiscalYearStatus = PeriodStatus.Open,
+        bool hasSelectablePartner = true)
         => new(new AccountCatalog(Accounts),
                new SubAccountCatalog(SubAccounts),
                new DepartmentCatalog(Departments),
-               Calendar(septemberStatus, fiscalYearStatus));
+               Calendar(septemberStatus, fiscalYearStatus),
+               hasSelectablePartner);
 
     public static FiscalCalendar Calendar(
         PeriodStatus septemberStatus = PeriodStatus.Open,
@@ -144,7 +154,8 @@ public static class AccountingFixture
         long amount,
         DepartmentId? department = null,
         TaxCategoryId? taxCategoryId = null,
-        SubAccountId? subAccountId = null)
+        SubAccountId? subAccountId = null,
+        PartnerId? partner = null)
         => new()
         {
             LineNo = lineNo,
@@ -152,6 +163,7 @@ public static class AccountingFixture
             AccountId = accountId,
             SubAccountId = subAccountId,
             DepartmentId = department,
+            PartnerId = partner,
             Amount = Yen.From(amount),
             TaxCategoryId = taxCategoryId ?? OutOfScope,
         };

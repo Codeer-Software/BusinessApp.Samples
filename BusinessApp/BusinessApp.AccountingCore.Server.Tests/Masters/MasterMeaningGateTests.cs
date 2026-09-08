@@ -61,9 +61,9 @@ public class MasterMeaningGateTests
         return thrown;
     }
 
-    /// <summary>買掛金 1,000 ／ 現金 1,000（買掛金を現金で払う）を計上する。<b>現金・買掛金・対象外の税区分が「使用中」になる。</b></summary>
+    /// <summary>未払金 1,000 ／ 現金 1,000（未払金を現金で払う）を計上する。<b>現金・未払金・対象外の税区分が「使用中」になる。</b></summary>
     private static void PostPayment(AccountingServer server, int entryNo = 1)
-        => server.InsertPosted(entryNo, "支払", "2026-08-24", ("debit", "2100", 1000), ("credit", "1100", 1000));
+        => server.InsertPosted(entryNo, "支払", "2026-08-24", ("debit", "2200", 1000), ("credit", "1100", 1000));
 
     // --- 止める -------------------------------------------------------------------
 
@@ -96,7 +96,7 @@ public class MasterMeaningGateTests
     {
         using var server = new AccountingServer();
         server.InsertPosted(1, "分けて払う", "2026-08-24",
-            ("debit", "2100", 1000), ("credit", "1100", 600), ("credit", "1100", 400));
+            ("debit", "2200", 1000), ("credit", "1100", 600), ("credit", "1100", 400));
         var cash = Id(server.AccountOf("1100").Value);
 
         var thrown = await Rejected(server,
@@ -175,7 +175,7 @@ public class MasterMeaningGateTests
             insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, sub_account_id, department_id, amount, tax_category_id)
             values ((select max(id) from journal_entries), 1, 'debit', (select id from accounts where code = '1200'), {sub}, {dept}, 500, 1);
             insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
-            values ((select max(id) from journal_entries), 2, 'credit', (select id from accounts where code = '2100'), {dept}, 500, 1);
+            values ((select max(id) from journal_entries), 2, 'credit', (select id from accounts where code = '2200'), {dept}, 500, 1);
             update journal_entries set status = 'posted', entry_no = 1, posted_at = '2026-08-24 11:00:00'
              where id = (select max(id) from journal_entries);
             """);
@@ -188,7 +188,7 @@ public class MasterMeaningGateTests
             department.Message);
 
         var subAccount = await Rejected(server,
-            Updating("SubAccount", Row("SubAccount", Id(sub), "Account", new LinkFieldData { Value = Id(server.AccountOf("2100").Value) })));
+            Updating("SubAccount", Row("SubAccount", Id(sub), "Account", new LinkFieldData { Value = Id(server.AccountOf("2200").Value) })));
         Assert.Equal(
             "登録できません。この補助科目は計上済みの仕訳明細 1 行で使われているので、「勘定科目」は変えられません。"
             + "新しい補助科目を作って、以後の振替伝票ではそちらを選んでください。",
