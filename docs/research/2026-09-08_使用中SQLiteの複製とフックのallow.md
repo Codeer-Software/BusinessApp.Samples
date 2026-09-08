@@ -1,5 +1,5 @@
 ---
-title: 使用中 SQLite の複製と、フックの allow の効き方（2026-09-08 時点）
+title: 使用中 SQLite の複製と、フックの allow の効き方（2026-09-08 作成）
 status: current
 scope: 全体
 audience: [開発]
