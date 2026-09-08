@@ -3,7 +3,7 @@ title: ddl — スキーマ定義
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-09-08
+updated: 2026-09-09
 supersedes: []
 related: [../Project.md, ../../docs/10_会計ドメイン設計.md, ../../docs/12_マスタ台帳.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---
@@ -58,6 +58,7 @@ dotnet test BusinessApp.slnx
 | 005 | [`005_journals.sql`](005_journals.sql) | 仕訳・仕訳明細・伝票番号の採番（マスタではなくデータ） |
 | 006 | [`006_partner_registrations.sql`](006_partner_registrations.sql) | 適格請求書発行事業者の登録（有効期間つき。**公表情報の写し**。取引先部品のもの） |
 | 007 | [`007_auth.sql`](007_auth.sql) | 利用者アカウント（**認証部品のテーブル**。本体は CLB のもので、役割の列だけを間借りする——[ADR-0032](../../docs/decisions/0032-認証部品のapp_usersを正典に迎え入れる.md)） |
+| 008 | [`008_master_code_format.sql`](008_master_code_format.sql) | **マスタのコードの書式**（6 つの表に同じ規則。docs/12 §2-1・[ADR-0047](../../docs/decisions/0047-マスタのコードは空白を落とす以外書き換えず字種で断る.md)）。**1 ファイルにまとめてあるのはトリガの作られる順のため**——表の定義の隣に置くと、既存 DB へ配る側で 005 のトリガより後になり、正典と順が食い違う |
 
 各テーブルの扱い（所有・誰が編集するか・版と削除）は [docs/12_マスタ台帳](../../docs/12_マスタ台帳.md) が持つ。
 
@@ -114,6 +115,7 @@ dotnet test BusinessApp.slnx
 | 補助科目が明細の勘定科目に属する（[10 §6](../../docs/10_会計ドメイン設計.md)） | **無い。関門だけが見ている**——取込・CLI・SQL の直打ちからは素通りする（塞ぐのは取込と投入 API を作る回。[04 §3](../../docs/04_実装計画と現在地.md) のフェーズ 6） | `E-SUBACCOUNT-MISMATCH` |
 | 使用中のマスタは意味を変えられない（[ADR-0038](../../docs/decisions/0038-使用中のマスタは意味を変えられない.md)） | 4 マスタの `BEFORE UPDATE OF <意味を決める列>` トリガ ＋ REPLACE で id を乗っ取る経路を止める `BEFORE INSERT` / `BEFORE UPDATE OF id` トリガ | `MasterMeaningGate` |
 | 使用中の科目で「取引先を要する」をオフにできない（[10 §6-2](../../docs/10_会計ドメイン設計.md)。**一方通行**。オンはいつでも通る。**使用中になるまでは働かない**——残余は 10 §6-2） | `BEFORE UPDATE OF requires_partner` のトリガ（`OLD = 1 AND NEW = 0` のときだけ鳴る） | `MasterMeaningGate` の一方通行の列 |
+| マスタのコードの書式（[docs/12 §2-1](../../docs/12_マスタ台帳.md)・[ADR-0047](../../docs/decisions/0047-マスタのコードは空白を落とす以外書き換えず字種で断る.md)） | 6 表の `BEFORE INSERT` / `BEFORE UPDATE OF code` トリガ（**`CHECK` ではない**——後から足すには表の作り直しが要る）。**大小を無視した重複は `UNIQUE ... COLLATE NOCASE` の索引** | `MasterCode`（**前後の空白を落とすのはこちらだけ**。トリガは落とした後の姿を見る） |
 | 単一法人（[ADR-0005](../../docs/decisions/0005-単一法人に徹する.md)） | `CHECK (id = 1)` | — |
 
 **摘要の「空白」の範囲を、関門とトリガで同じにしてある理由は

@@ -3,7 +3,7 @@ title: migrations — 既存 DB への配達物
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-09-08
+updated: 2026-09-09
 supersedes: []
 related: [../ddl/README.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---
@@ -27,7 +27,11 @@ pwsh -NoProfile -File tools/clb/migrate.ps1 -Verify   # 稼働 DB と ddl/ の�
 2. **同じ変更を `NNNN_名前.sql` としてここに書く**（単一連番・小文字スネークケース。
    例: `0001_add_posted_by.sql`）。DDL と DML（制度ルールの行）を混在させてよい。
    ただし**データ行の同値の網はフェーズ 3 で入る**（[ADR-0020](../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md) 帰結）。
-   それまで DML マイグレーションは書かない
+   それまで**データ行を配る** DML マイグレーションは書かない。
+   **既存行を直す移行はこれに当たらない**（2026-09-09 に 0023 で初めて書いた）——
+   **消した行・NULL にした値は、再生した DB には最初から存在しない**ので、同値の網が無くても比べるものが無い。
+   **書くときは、対象を 1 行ずつ特定できる条件で書くこと**（`WHERE code = ... AND name = ...`）。
+   広い条件で書くと、別の環境で意図しない行に当たる
 3. `dotnet test` — 同値テスト（`MigrationEquivalenceTests`）が
    「baseline ＋ migrations の再生 ≡ ddl/」を検査する
 4. `migrate.ps1 -Apply` で稼働 DB に当て、`-Verify` で確かめてからコミットする
