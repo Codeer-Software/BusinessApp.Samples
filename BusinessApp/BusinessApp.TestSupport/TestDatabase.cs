@@ -62,11 +62,11 @@ public static class TestDatabase
     /// <para><b>貼り直したトリガは、その表の中で最後に作られた状態になる。</b>
     /// 発火順は SQLite の仕様上 undefined で、実測では後に作ったものから鳴るので、
     /// <b>複数のトリガが同時に当たる検体では、鳴る順が本番と変わりうる。</b>
-    /// <b>外せるトリガは 2 本とも <c>journal_entries</c> の同じ <c>BEFORE UPDATE</c>（下書き → 計上）に張ってある</b>ので、
+    /// <b>外せるトリガは 3 本とも <c>journal_entries</c> の同じ <c>BEFORE UPDATE</c>（下書き → 計上）に張ってある</b>ので、
     /// 片方を外して貼り直すと、その接続では<b>その 1 本が最後に作られたトリガになる</b>——
-    /// 両方に当たる検体（摘要が空で、かつ補助科目の規則も破っている伝票）を作ると、
-    /// <b>どちらの断りが返るかが本番と入れ替わりうる</b>。
-    /// いまの検体はどちらか一方しか破っていないので、この差は出ていない。</para>
+    /// 複数に当たる検体（摘要が空で、かつ補助科目や取引先の規則も破っている伝票）を作ると、
+    /// <b>どの断りが返るかが本番と入れ替わりうる</b>。
+    /// いまの検体はどれか 1 つしか破っていないので、この差は出ていない。</para>
     /// </remarks>
     public static void WithoutTrigger(SqliteConnection connection, string triggerName, string sql)
     {
@@ -125,6 +125,11 @@ public static class TestDatabase
         // **規則より前に計上された行が稼働 DB に 1 行あり**（伝票 36。qa/04 の 2026-09-08）、
         // **その伝票を取り消せることがこの規則の免除の根拠**なので、検体が要る（ADR-0038 §3）。
         "trg_journal_entries_sub_account_presence_when_posted",
+
+        // 取引先を要する科目に取引先の無い計上済みの明細も、いまは作れない。
+        // **規則より前に計上された行が稼働 DB に実在し**（件数と数え方は qa/04）、
+        // **それらを取り消せることが免除の根拠**なので、検体が要る（docs/10 §6-2）。
+        "trg_journal_entries_partner_presence_when_posted",
     ];
 
     /// <summary>

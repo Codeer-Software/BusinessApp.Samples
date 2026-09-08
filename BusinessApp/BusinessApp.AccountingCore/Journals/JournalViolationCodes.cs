@@ -131,6 +131,16 @@ public static class JournalViolationCodes
     /// <summary>補助科目を使わない科目なのに補助科目が付いている（ADR-0038 §3）。</summary>
     public const string SubAccountNotAllowed = "E-SUBACCOUNT-NOT-ALLOWED";
 
+    /// <summary>
+    /// 取引先を要する科目なのに、伝票にも明細にも取引先が無い（docs/10 §6-2。docs/04 §1 の A-4）。
+    /// </summary>
+    /// <remarks>
+    /// <b>相手方を欠いた行は「相手方別」のどの帳簿にも載らない</b>——売掛金・買掛金は
+    /// 相手方別に記載する帳簿が要る（電帳規則 5 ① の括弧書き。docs/40 §4-1）。
+    /// <b>摘要と違って書いて救えない</b>（絞り込みの軸であって記載欄ではない）ので、計上の前に止める。
+    /// </remarks>
+    public const string PartnerRequired = "E-PARTNER-REQUIRED";
+
     /// <summary>部門がマスタに無い。</summary>
     public const string DepartmentUnknown = "E-DEPARTMENT-UNKNOWN";
 

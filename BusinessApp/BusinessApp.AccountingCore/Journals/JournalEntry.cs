@@ -77,6 +77,20 @@ public sealed record JournalEntry
     /// <summary>借方合計と貸方合計が一致しているか（I-01）。</summary>
     public bool IsBalanced => DebitTotal == CreditTotal;
 
+    /// <summary>
+    /// この明細の取引先。<b>明細が持っていなければ伝票のものを使う</b>（docs/10 §4-1）。
+    /// </summary>
+    /// <remarks>
+    /// <b>帳簿に載る取引先はこの値である。</b> 写しを書く <c>LedgerSnapshotWriter</c> と
+    /// 計上の関門（<c>E-PARTNER-REQUIRED</c>）が同じ値を見るように、ここ 1 か所に置いてある——
+    /// 別々に書くと、<b>関門が通した行が帳簿では取引先なしになる</b>ずれを作れてしまう。
+    /// </remarks>
+    public PartnerId? PartnerOf(JournalLine line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        return line.PartnerId ?? PartnerId;
+    }
+
     private Yen Total(DebitCredit side)
         => Lines.Where(l => l.DebitCredit == side).Select(l => l.Amount).Sum();
 }

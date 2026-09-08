@@ -16,7 +16,7 @@ public class JournalEntryTests
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 30_000,
                 department: AccountingFixture.SalesDepartment),
             AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 20_000),
-            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.AccountsPayable, 50_000));
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.OtherPayable, 50_000));
 
         Assert.Equal(Yen.From(50_000), entry.DebitTotal);
         Assert.Equal(Yen.From(50_000), entry.CreditTotal);
@@ -29,7 +29,7 @@ public class JournalEntryTests
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 50_000),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 49_999));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 49_999));
 
         Assert.False(entry.IsBalanced);
         Assert.Equal(Yen.From(1), entry.DebitTotal - entry.CreditTotal);
@@ -52,7 +52,7 @@ public class JournalEntryTests
         {
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 10_000),
             AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 20_000),
-            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.AccountsPayable, 30_000),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.OtherPayable, 30_000),
         };
 
         var forward = AccountingFixture.Entry(Ordinary, lines);
@@ -60,5 +60,34 @@ public class JournalEntryTests
 
         Assert.Equal(forward.DebitTotal, reversed.DebitTotal);
         Assert.Equal(forward.CreditTotal, reversed.CreditTotal);
+    }
+
+    [Fact]
+    public void 明細の取引先が伝票のものより優先される()
+    {
+        // **帳簿に載る取引先はこの値である**（docs/10 §4-1）。写しを書く LedgerSnapshotWriter と
+        // 計上の関門（E-PARTNER-REQUIRED）が同じ規則を見るために、ここ 1 か所に置いてある。
+        var line = AccountingFixture.Line(
+            1, DebitCredit.Debit, AccountingFixture.Cash, 1_000, partner: AccountingFixture.Partner);
+        var entry = AccountingFixture.Entry(Ordinary, line) with { PartnerId = AccountingFixture.OtherPartner };
+
+        Assert.Equal(AccountingFixture.Partner, entry.PartnerOf(line));
+    }
+
+    [Fact]
+    public void 明細が取引先を持たなければ伝票のものを使う()
+    {
+        var line = AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000);
+        var entry = AccountingFixture.Entry(Ordinary, line) with { PartnerId = AccountingFixture.OtherPartner };
+
+        Assert.Equal(AccountingFixture.OtherPartner, entry.PartnerOf(line));
+    }
+
+    [Fact]
+    public void どちらも持たなければ取引先は無い()
+    {
+        var line = AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000);
+
+        Assert.Null(AccountingFixture.Entry(Ordinary, line).PartnerOf(line));
     }
 }

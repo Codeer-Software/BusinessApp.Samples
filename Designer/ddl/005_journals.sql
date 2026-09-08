@@ -508,7 +508,10 @@ END;
 -- **外すのは取消の、原仕訳を写しただけの明細だけ**である——取消の明細はサーバが原仕訳を反転して作り、
 -- 利用者に直す手立てが無いので、止めると規則より前の伝票を打ち消せなくなる（docs/10 §5・ADR-0004）。
 -- **種別だけを見て外さない**——entry_type は取込・CLI・手打ちの SQL が自由に書ける列なので、
--- 「取消だ」と名乗るだけで規則を外せてしまう。**計上済みの原仕訳に同じ組み合わせの明細があること**まで見る。
+-- 「取消だ」と名乗るだけで規則を外せてしまう。**計上済みの原仕訳の同じ行を、貸借だけ入れ替えて写したこと**まで見る
+-- （行番号・勘定科目・金額が同じで、貸借が逆。JournalReversal が作る形そのもの）。
+-- **科目の一致だけでは足りない**——規則より前の伝票を 1 本指せば、
+-- **取引先の無い明細を何行でも・任意の金額で**新しく計上できてしまう（自己レビューで見つけた。2026-09-08）。
 -- **「計上済み」まで見るのは、下書きをおとりに立てられるから**である——原仕訳が計上済みであることを
 -- 保証する制約は journal_entries に無いので、違反する下書きを 1 件作って指せば外せてしまう。
 -- **訂正（再計上）は外さない**——中身は利用者が決めるので、補助科目を空にすれば通る。
@@ -529,7 +532,10 @@ BEGIN
                                              JOIN journal_entries oe ON oe.id = o.journal_entry_id
                                             WHERE o.journal_entry_id = NEW.original_entry_id
                                               AND oe.status = 'posted'
+                                              AND o.line_no = l.line_no
                                               AND o.account_id = l.account_id
+                                              AND o.amount = l.amount
+                                              AND o.debit_credit <> l.debit_credit
                                               AND o.sub_account_id IS l.sub_account_id)));
 
     SELECT RAISE(ABORT, '補助科目を使わない勘定科目の明細に補助科目は付けられない。')
@@ -542,6 +548,71 @@ BEGIN
                                              JOIN journal_entries oe ON oe.id = o.journal_entry_id
                                             WHERE o.journal_entry_id = NEW.original_entry_id
                                               AND oe.status = 'posted'
+                                              AND o.line_no = l.line_no
                                               AND o.account_id = l.account_id
+                                              AND o.amount = l.amount
+                                              AND o.debit_credit <> l.debit_credit
                                               AND o.sub_account_id IS l.sub_account_id)));
+END;
+
+-- 取引先を要する科目の明細を、取引先の無いまま計上させない（docs/10 §6-2。docs/04 §1 の A-4）。
+-- **相手方を欠いた行は「相手方別」のどの帳簿にも載らない**（電帳規則 5 ① の括弧書き。docs/40 §4-1）。
+-- 上の 2 本と同じく**下書き → 計上の UPDATE だけを見る**（status = 'posted' の INSERT は
+-- trg_journal_entries_no_posted_insert が拒む）。
+--
+-- **見るのは実効値である**——明細の取引先が空なら伝票のものが帳簿に載るので、
+-- COALESCE(l.partner_id, NEW.partner_id) で判定する（JournalEntry.PartnerOf と同じ規則）。
+-- **NEW.partner_id を使う**のは、いま計上しようとしている値が帳簿に載る値だからである。
+--
+-- **「無い」は NULL だけではない。** 外部キーを切った接続（取込・CLI・手打ちの SQL——**この層が守る相手**）からは
+-- 空文字や実在しない識別子が入りうる。**どちらも帳簿の取引先別には出てこない**（元帳の絞り込みは
+-- partners との結合で、空値検索は IS NULL しか拾わない）ので、**マスタに実在するか**で見る
+-- （自己レビューで見つけた。2026-09-08。金額に typeof を書いてあるのと同じ理由）。
+--
+-- **免除は補助科目の 2 値とまったく同じ形にしてある**（理由も同じ。上のトリガの注記）——
+-- 取消の、**計上済みの原仕訳を写しただけの明細**だけを外す。
+-- 規則より前に計上された取引先の無い明細が開発機に実在し（件数と数え方は docs/qa/04）、
+-- 外さないとそれらを**永久に取り消せなくなる**（ADR-0004）。
+-- **写しの判定も実効値で行う**——原仕訳の側も COALESCE(o.partner_id, oe.partner_id) で見る。
+CREATE TRIGGER trg_journal_entries_partner_presence_when_posted
+BEFORE UPDATE ON journal_entries
+FOR EACH ROW WHEN NEW.status = 'posted' AND OLD.status <> 'posted'
+BEGIN
+    SELECT RAISE(ABORT, '取引先を要する勘定科目の明細には取引先が要る。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN accounts a ON a.id = l.account_id
+                    WHERE l.journal_entry_id = NEW.id
+                      AND a.requires_partner = 1
+                      AND NOT EXISTS (SELECT 1 FROM partners p
+                                       WHERE p.id = COALESCE(l.partner_id, NEW.partner_id))
+                      AND NOT (NEW.entry_type = 'reversal'
+                               AND EXISTS (SELECT 1 FROM journal_lines o
+                                             JOIN journal_entries oe ON oe.id = o.journal_entry_id
+                                            WHERE o.journal_entry_id = NEW.original_entry_id
+                                              AND oe.status = 'posted'
+                                              AND o.line_no = l.line_no
+                                              AND o.account_id = l.account_id
+                                              AND o.amount = l.amount
+                                              AND o.debit_credit <> l.debit_credit
+                                              AND NOT EXISTS (SELECT 1 FROM partners q
+                                                               WHERE q.id = COALESCE(o.partner_id, oe.partner_id)))));
+END;
+
+-- 「取引先を要する」は、使用中の科目では**オフにできない**（docs/10 §6-2）。
+-- **オンにするのはいつでも通る**——規則を後から採り入れられなくなってはいけないからである。
+-- **オフを止めるのは、止めないと二層の守りをまとめて外せる**からである——
+-- 画面でオフにして計上し、また戻せば、関門もこのトリガも素通りする（自己レビューで見つけた。2026-09-08）。
+-- **ただし守れるのは「使用中になってから」だけである。** 計上済みの明細が 1 行も無い科目では
+-- オフにできるので、**使い始める前なら「オフ → 計上 → オン」で規則より前の行を作れる**
+-- （ADR-0038 §1 の「使用中」の線をそのまま使っているため。docs/10 §6-2 に残余として書いてある）。
+-- **意味の凍結（trg_accounts_meaning_frozen_when_posted）とは別の規則である。**
+-- あちらは過去の記録の意味が変わるから止めるが、こちらは意味を変えない。
+CREATE TRIGGER trg_accounts_requires_partner_not_loosened_when_posted
+BEFORE UPDATE OF requires_partner ON accounts
+FOR EACH ROW WHEN OLD.requires_partner = 1 AND NEW.requires_partner = 0
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている勘定科目で、取引先を必須から外すことはできない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.account_id = OLD.id AND e.status = 'posted');
 END;

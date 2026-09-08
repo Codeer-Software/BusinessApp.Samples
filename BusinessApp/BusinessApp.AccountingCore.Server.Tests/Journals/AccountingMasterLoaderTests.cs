@@ -1,5 +1,7 @@
 namespace BusinessApp.AccountingCore.Server.Tests.Journals;
 
+using System.Text.Json;
+
 using BusinessApp.AccountingCore.Accounts;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
@@ -36,6 +38,27 @@ public class AccountingMasterLoaderTests
         Assert.True(deposit.UsesSubAccount);
         Assert.True(allowance.IsContra);
         Assert.Equal(DebitCredit.Credit, allowance.NormalBalance);
+
+        // 取引先を要するのは相手方別の帳簿が要る科目だけである（docs/10 §6-2）。
+        Assert.False(cash.RequiresPartner);
+        Assert.True(context.Accounts.Find(server.AccountOf("1300"))!.RequiresPartner);
+    }
+
+    [Fact]
+    public async Task 選べる取引先の有無を読む()
+    {
+        // **「選んでください」と言ってよいか**の判定に使う（docs/21 §2-3）。
+        // 一覧ではなく有無だけを持つ理由は PostingContext の注記。
+        using var server = new AccountingServer();
+        Assert.False((await server.MasterLoader.LoadAsync()).HasSelectablePartner);
+
+        var partner = server.InsertPartner();
+        Assert.True((await server.MasterLoader.LoadAsync()).HasSelectablePartner);
+
+        // **無効な取引先は「選べる」に数えない。** 明細の候補ダイアログが is_active で絞っているので、
+        // ここを揃えないと 0 件のダイアログに向けて「選んでください」と言うことになる。
+        server.Execute($"update partners set is_active = 0 where id = {partner}");
+        Assert.False((await server.MasterLoader.LoadAsync()).HasSelectablePartner);
     }
 
     [Fact]
@@ -137,5 +160,36 @@ public class AccountingMasterLoaderTests
 
         Assert.Equal(PeriodStatus.Closed, context.Calendar.ResolvePeriod(new DateOnly(2026, 8, 24))!.Status);
         Assert.False(context.Calendar.IsPostable(new DateOnly(2026, 8, 24)));
+    }
+
+    /// <summary>
+    /// <b>「選べる」の広さが、画面の候補の絞りと同じであること。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>已むを得ない重複はデザイン JSON と突き合わせる</b>（docs/20 §4。
+    /// <c>MasterMeaningGateTests</c> の列の突き合わせと同じ作法）。
+    /// <c>AccountingMasterLoader</c> は <c>is_active = 1</c> で数え、画面は
+    /// <c>SearchCondition</c> で候補を絞る——**片方に条件が増えた日**に、
+    /// <b>候補が 0 件で開くのに「選んでください」と言う</b>状態になる（それを避けるための分岐なのに）。</para>
+    /// <para><b>取引先の欄は伝票と明細の 2 か所にある。</b> どちらも同じ 1 条件であることを見る。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData("JournalEntry")]
+    [InlineData("JournalLine")]
+    public void 取引先の候補の絞りは有効だけである(string module)
+    {
+        var path = Directory
+            .EnumerateFiles(TestSupport.TestDatabase.ModulesDirectory, $"{module}.mod.json", SearchOption.AllDirectories)
+            .Single();
+        using var design = JsonDocument.Parse(File.ReadAllText(path));
+
+        var partner = design.RootElement.GetProperty("Fields").EnumerateArray()
+            .Single(f => f.GetProperty("Name").GetString() == "Partner");
+        var children = partner.GetProperty("SearchCondition").GetProperty("Condition").GetProperty("Children");
+
+        var only = Assert.Single(children.EnumerateArray());
+        Assert.Equal("IsActive.Value", only.GetProperty("SearchTargetVariable").GetString());
+        Assert.Equal("Equal", only.GetProperty("Comparison").GetString());
+        Assert.True(only.GetProperty("Value").GetProperty("Value").GetBoolean());
     }
 }

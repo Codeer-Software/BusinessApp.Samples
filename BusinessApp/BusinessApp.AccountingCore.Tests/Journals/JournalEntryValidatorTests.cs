@@ -123,7 +123,8 @@ public class JournalEntryValidatorTests
             new AccountCatalog(AccountingFixture.Accounts),
             new SubAccountCatalog(AccountingFixture.SubAccounts),
             new DepartmentCatalog(AccountingFixture.Departments),
-            new FiscalCalendar([], [orphan]));
+            new FiscalCalendar([], [orphan]),
+            HasSelectablePartner: true);
 
         var violations = JournalEntryValidator.ValidateForPosting(AccountingFixture.CashSale(Ordinary), context);
 
@@ -187,7 +188,7 @@ public class JournalEntryValidatorTests
             Ordinary,
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
         Assert.False(Validate(entry).HasError());
     }
@@ -228,7 +229,7 @@ public class JournalEntryValidatorTests
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(lineNo, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
-            AccountingFixture.Line(9, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+            AccountingFixture.Line(9, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
         var violation = Assert.Single(
             Validate(entry).Where(v => v.Code == JournalViolationCodes.LineNoInvalid));
@@ -271,7 +272,7 @@ public class JournalEntryValidatorTests
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
         var violation = AssertViolation(JournalViolationCodes.SubAccountRequired, Validate(entry));
 
@@ -288,7 +289,7 @@ public class JournalEntryValidatorTests
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.CurrentAccount, 1_000),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
         var violation = AssertViolation(JournalViolationCodes.SubAccountRequired, Validate(entry));
 
@@ -307,7 +308,7 @@ public class JournalEntryValidatorTests
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000,
                 subAccountId: AccountingFixture.SubAccountOfCash),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
         AssertViolation(JournalViolationCodes.SubAccountMismatch, Validate(entry));
     }
@@ -319,7 +320,7 @@ public class JournalEntryValidatorTests
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000,
                 subAccountId: AccountingFixture.UnknownSubAccount),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
         AssertViolation(JournalViolationCodes.SubAccountUnknown, Validate(entry));
     }
@@ -331,7 +332,7 @@ public class JournalEntryValidatorTests
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000,
                 subAccountId: AccountingFixture.RetiredBank),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
         AssertViolation(JournalViolationCodes.SubAccountInactive, Validate(entry));
     }
@@ -384,7 +385,7 @@ public class JournalEntryValidatorTests
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000)) with
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000)) with
         {
             EntryType = EntryType.Reversal,
             OriginalEntryId = new JournalEntryId(9),
@@ -424,7 +425,118 @@ public class JournalEntryValidatorTests
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
                 subAccountId: AccountingFixture.SubAccountOfCash),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
+
+    [Fact]
+    public void 取引先を要する科目に取引先がなければ計上できない()
+    {
+        // **相手方を欠いた行は「相手方別」のどの帳簿にも載らない**（docs/40 §4-1。docs/04 §1 の A-4）。
+        var entry = ReceivableWithoutPartner();
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerRequired, Validate(entry));
+
+        Assert.Equal(1, violation.LineNo);
+        Assert.Equal(
+            "勘定科目「売掛金」は「取引先を要する」がオンです。伝票の「取引先」を選んでください。",
+            violation.Message);
+    }
+
+    [Fact]
+    public void 選べる取引先が無ければ登録してからと言う()
+    {
+        // **踏めない案内をしない**（docs/21 §2-3。qa/02 R53-06 と同じ型）。
+        // 取引先マスタが空の DB では、「選んでください」は 0 件のダイアログにしかならない。
+        var violation = AssertViolation(
+            JournalViolationCodes.PartnerRequired,
+            JournalEntryValidator.ValidateForPosting(
+                ReceivableWithoutPartner(), AccountingFixture.Context(hasSelectablePartner: false)));
+
+        Assert.Equal(
+            "勘定科目「売掛金」は「取引先を要する」がオンですが、選べる取引先がありません。"
+            + "取引先マスタに登録するか、無効にした取引先を有効に戻してから選んでください。",
+            violation.Message);
+    }
+
+    [Fact]
+    public void 明細の取引先で足りる()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.AccountsReceivable, 1_000,
+                partner: AccountingFixture.Partner),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
+
+        Assert.Empty(Validate(entry));
+    }
+
+    [Fact]
+    public void 伝票の取引先で足りる()
+    {
+        // **見るのは実効値である**（JournalEntry.PartnerOf）——明細が空なら伝票のものが帳簿に載るので、
+        // ここで止めると**帳簿には取引先が載る行を関門が拒む**ことになる。
+        var entry = ReceivableWithoutPartner() with { PartnerId = AccountingFixture.Partner };
+
+        Assert.Empty(Validate(entry));
+    }
+
+    [Fact]
+    public void 取引先を要しない科目に取引先が付いていても止めない()
+    {
+        // **片側だけの規則である**（補助科目の 2 値と違う）。取引先は科目に属さないので、
+        // どの科目の行にも意味のある相手方がありうる（現金の行の支払先など）。
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.Partner),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
+
+        Assert.Empty(Validate(entry));
+    }
+
+    [Fact]
+    public void 取消では取引先が無くても止めない()
+    {
+        // **規則より前に計上された伝票を打ち消せなくなってはいけない**（docs/10 §5・ADR-0004）。
+        // 開発機に取引先の無い計上済み明細が実在する（件数と数え方は qa/04）。
+        var entry = ReceivableWithoutPartner() with
+        {
+            EntryType = EntryType.Reversal,
+            OriginalEntryId = new JournalEntryId(9),
+        };
+
+        var violations = Validate(entry);
+
+        Assert.Equal(
+            ViolationSeverity.Warning,
+            AssertViolation(JournalViolationCodes.PartnerRequired, violations).Severity);
+        Assert.False(violations.HasError());
+    }
+
+    [Fact]
+    public void 訂正では取引先が無いと止める()
+    {
+        // **再計上の中身は利用者が決める**ので、取引先を選べば通る——行き止まりにならない。
+        // 外すと、訂正を経由して規則より後の違反を新しく帳簿へ入れられる（qa/02 R53-01）。
+        var entry = ReceivableWithoutPartner() with
+        {
+            EntryType = EntryType.Correction,
+            OriginalEntryId = new JournalEntryId(9),
+        };
+
+        var violations = Validate(entry);
+
+        Assert.Equal(
+            ViolationSeverity.Error,
+            AssertViolation(JournalViolationCodes.PartnerRequired, violations).Severity);
+        Assert.True(violations.HasError());
+    }
+
+    /// <summary>取引先を要する科目（売掛金）の明細に、取引先を付けていない伝票。</summary>
+    private static JournalEntry ReceivableWithoutPartner()
+        => AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.AccountsReceivable, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
     [Fact]
     public void 親の勘定科目に属する補助科目は使える()
@@ -433,7 +545,7 @@ public class JournalEntryValidatorTests
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000,
                 subAccountId: AccountingFixture.MainBank),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
         Assert.Empty(Validate(entry));
     }
@@ -450,7 +562,7 @@ public class JournalEntryValidatorTests
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, side, AccountingFixture.Cash, 1_000),
-            AccountingFixture.Line(2, side, AccountingFixture.AccountsPayable, 2_000));
+            AccountingFixture.Line(2, side, AccountingFixture.OtherPayable, 2_000));
 
         AssertViolation(JournalViolationCodes.Unbalanced, Validate(entry));
     }
@@ -461,7 +573,7 @@ public class JournalEntryValidatorTests
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 50_000),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 50_000));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 50_000));
 
         Assert.Empty(Validate(entry));
     }
@@ -494,7 +606,7 @@ public class JournalEntryValidatorTests
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 0),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 0));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 0));
 
         AssertViolation(JournalViolationCodes.AmountNotPositive, Validate(entry));
     }
@@ -505,7 +617,7 @@ public class JournalEntryValidatorTests
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000, taxCategoryId: default(TaxCategoryId)),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
         AssertViolation(JournalViolationCodes.TaxCategoryMissing, Validate(entry));
     }
@@ -580,7 +692,7 @@ public class JournalEntryValidatorTests
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
-            AccountingFixture.Line(1, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+            AccountingFixture.Line(1, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
         Assert.Equal(1, AssertViolation(JournalViolationCodes.LineNoInvalid, Validate(entry)).LineNo);
     }
@@ -613,7 +725,7 @@ public class JournalEntryValidatorTests
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000) with
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000) with
             {
                 IsTaxLine = true,
                 ParentLineNo = 99,
@@ -628,7 +740,7 @@ public class JournalEntryValidatorTests
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000) with
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000) with
             {
                 IsTaxLine = true,
             });
@@ -647,7 +759,7 @@ public class JournalEntryValidatorTests
                 IsTaxLine = true,
                 ParentLineNo = 1,
             },
-            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_100) with
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_100) with
             {
                 IsTaxLine = true,
                 ParentLineNo = 2,
@@ -671,7 +783,7 @@ public class JournalEntryValidatorTests
                 IsTaxLine = true,
                 ParentLineNo = 1,
             },
-            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_100));
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_100));
 
         Assert.Empty(Validate(entry));
     }
@@ -708,7 +820,7 @@ public class JournalEntryValidatorTests
                 department: AccountingFixture.SalesDepartment,
                 taxCategoryId: AccountingFixture.TaxablePurchase),
             taxLine,
-            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_100));
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_100));
 
         AssertViolation(JournalViolationCodes.TaxLineNotInherited, Validate(entry));
     }
@@ -719,7 +831,7 @@ public class JournalEntryValidatorTests
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000) with { ParentLineNo = 2 },
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
         AssertViolation(JournalViolationCodes.TaxLineParentInvalid, Validate(entry));
     }

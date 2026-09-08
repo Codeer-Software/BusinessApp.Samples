@@ -34,6 +34,7 @@ public class JournalSubAccountGuardTests
         INSERT INTO sub_accounts (account_id, code, name) VALUES (2, 'T002', '通販');
         UPDATE accounts SET uses_sub_account = 1 WHERE id = 1;
         INSERT INTO sub_accounts (account_id, code, name) VALUES (1, 'S001', '本店');
+        INSERT INTO accounts (code, name, category, uses_sub_account) VALUES ('1210', '当座預金', 'asset', 1);
         """;
 
     /// <summary>科目 1 の補助科目だけ作る（科目 1 は「使わない」のまま）。</summary>
@@ -41,10 +42,19 @@ public class JournalSubAccountGuardTests
         INSERT INTO sub_accounts (account_id, code, name) VALUES (2, 'T001', '店頭');
         INSERT INTO sub_accounts (account_id, code, name) VALUES (2, 'T002', '通販');
         INSERT INTO sub_accounts (account_id, code, name) VALUES (1, 'S001', '本店');
+        INSERT INTO accounts (code, name, category) VALUES ('1210', '当座預金', 'asset');
         """;
 
     /// <summary>科目 1 の補助科目の識別子（上の 2 つの後に採番される）。</summary>
     private const string SubAccountOfAccount1 = "3";
+
+    /// <summary>
+    /// どちらの検体でも足してある<b>3 つ目の勘定科目</b>（当座預金）。分岐に合わせて
+    /// 「補助科目を使う」の値を変えてある。<b>写しの判定が科目まで見ていることを踏む</b>ために要る——
+    /// 行番号が同じなら原仕訳の行は 1 行に決まる（UNIQUE (伝票, 行番号)）ので、
+    /// <b>1 科目だけでは科目の一致を落としても鳴らない</b>（自己レビューで指摘された。2026-09-08）。
+    /// </summary>
+    private const string OtherAccount = "3";
 
     private const string Post =
         "UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-05-20 10:00:00' WHERE id = 1";
@@ -58,8 +68,9 @@ public class JournalSubAccountGuardTests
         TestDatabase.Execute(db, setup);
         if (entryType != "normal")
         {
-            // **原仕訳は計上済みで、同じ組み合わせの明細を持つ**（本番の形）。
-            // トリガが外すのは「計上済みの原仕訳を写しただけの明細」だけなので、この明細が要る。
+            // **原仕訳は計上済みで、取消がその行を写した形になっている**（本番の形）。
+            // トリガが外すのは「計上済みの原仕訳の同じ行を、貸借だけ入れ替えて写した明細」だけなので、
+            // **原仕訳の貸借は取消と逆**にする（JournalReversal が作る形。qa/02 の 2026-09-08）。
             // **原仕訳の側も規則を破っている**（規則より前に計上された伝票の再現）ので、
             // 計上済みにするときはこのトリガを外す——許可表に理由を書いてある。
             TestDatabase.Execute(db, $"""
@@ -67,9 +78,9 @@ public class JournalSubAccountGuardTests
                                              description, entered_at)
                     VALUES (99, 1, '2026-05-19', '2026-05-19', 'draft', 'normal', '原仕訳', '2026-05-19 10:00:00');
                 INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, sub_account_id, amount, tax_category_id)
-                    VALUES (99, 1, 'debit', 1, {subAccountId ?? "NULL"}, 100000, 1);
+                    VALUES (99, 1, 'credit', 1, {subAccountId ?? "NULL"}, 100000, 1);
                 INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
-                    VALUES (99, 2, 'credit', 2, 2, 100000, 1);
+                    VALUES (99, 2, 'debit', 2, 2, 100000, 1);
                 """);
 
             if (mirrorPosted)
@@ -230,6 +241,47 @@ public class JournalSubAccountGuardTests
         Assert.Equal("draft", StatusOf(db));
     }
 
+    /// <summary>
+    /// <b>写しの 3 条件（行番号・金額・貸借）を、2 つの分岐それぞれで踏む。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>規則より前の伝票を踏み台にできない</b>——原仕訳に「科目の同じ明細」が 1 行でもあればよい、
+    /// という判定だと、違反する明細を<b>何行でも・任意の金額で</b>新しく計上できてしまう
+    /// （自己レビューで見つけた。2026-09-08）。<b>条件を 1 つ落としたら必ずどれかが赤くなる</b>ように、
+    /// 6 通りを並べる（qa/03 L-33 の「分岐ごとに違う字を期待する」）。
+    /// </remarks>
+    [Theory]
+    [InlineData("amount", true, "補助科目を使わない勘定科目の明細に補助科目は付けられない")]
+    [InlineData("amount", false, "補助科目を使う勘定科目の明細には補助科目が要る")]
+    [InlineData("line_no", true, "補助科目を使わない勘定科目の明細に補助科目は付けられない")]
+    [InlineData("line_no", false, "補助科目を使う勘定科目の明細には補助科目が要る")]
+    [InlineData("debit_credit", true, "補助科目を使わない勘定科目の明細に補助科目は付けられない")]
+    [InlineData("debit_credit", false, "補助科目を使う勘定科目の明細には補助科目が要る")]
+    [InlineData("account_id", true, "補助科目を使わない勘定科目の明細に補助科目は付けられない")]
+    [InlineData("account_id", false, "補助科目を使う勘定科目の明細には補助科目が要る")]
+    public void 写しでない行は取消でも止める(string differs, bool subAccountOnUnusedAccount, string expected)
+    {
+        using var db = subAccountOnUnusedAccount
+            ? Draft(SubAccountOfUnusedAccount, SubAccountOfAccount1, "reversal")
+            : Draft(UsesSubAccount, subAccountId: null, "reversal");
+
+        TestDatabase.Execute(db, differs switch
+        {
+            "amount" => "UPDATE journal_lines SET amount = 999 WHERE journal_entry_id = 1 AND line_no = 1",
+            "line_no" => "UPDATE journal_lines SET line_no = 9 WHERE journal_entry_id = 1 AND line_no = 1",
+            "account_id" => $"UPDATE journal_lines SET account_id = {OtherAccount} WHERE journal_entry_id = 1 AND line_no = 1",
+            _ => """
+                UPDATE journal_lines SET debit_credit = 'credit' WHERE journal_entry_id = 1 AND line_no = 1;
+                UPDATE journal_lines SET debit_credit = 'debit'  WHERE journal_entry_id = 1 AND line_no = 2;
+                """,
+        });
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Post));
+
+        Assert.Contains(expected, thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("draft", StatusOf(db));
+    }
+
     [Fact]
     public void 下書きの原仕訳をおとりにしても外れない()
     {
@@ -249,8 +301,10 @@ public class JournalSubAccountGuardTests
     {
         // **OLD.status を見ていないと、規則より前に計上された伝票を触ったときにこのトリガが鳴り、**
         // **本来出るべき「計上済みの仕訳は変更できない」を隠す**（0015 が摘要で直したのと同じ型）。
-        using var db = Draft(SubAccountOfUnusedAccount, SubAccountOfAccount1, "reversal");
-        TestDatabase.Execute(db, Post);
+        // **免除に当たらない伝票で踏む**——取消は写しとして外れるので、条件を消しても鳴らない
+        // （自己レビューで指摘された。2026-09-08）。**規則より前の計上済み**をトリガを外して作る。
+        using var db = Draft(SubAccountOfUnusedAccount, SubAccountOfAccount1);
+        TestDatabase.WithoutTrigger(db, "trg_journal_entries_sub_account_presence_when_posted", Post);
 
         var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(
             db, "UPDATE journal_entries SET description = '触った' WHERE id = 1"));

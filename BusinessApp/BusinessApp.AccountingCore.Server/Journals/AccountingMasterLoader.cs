@@ -24,12 +24,14 @@ public sealed class AccountingMasterLoader(IDbAccessor dbAccessor, string dataSo
         => new(await LoadAccountsAsync(),
                await LoadSubAccountsAsync(),
                await LoadDepartmentsAsync(),
-               await LoadCalendarAsync());
+               await LoadCalendarAsync(),
+               await HasSelectablePartnerAsync());
 
     private async Task<AccountCatalog> LoadAccountsAsync()
     {
         var rows = await QueryAsync(
-            "select id, code, name, category, default_tax_category_id, uses_sub_account, is_contra, is_active from accounts");
+            "select id, code, name, category, default_tax_category_id, uses_sub_account, requires_partner, "
+            + "is_contra, is_active from accounts");
 
         return new AccountCatalog(rows.Select(r => new AccountDefinition(
             new AccountId(DbValue.ToLong(r["id"])),
@@ -38,6 +40,7 @@ public sealed class AccountingMasterLoader(IDbAccessor dbAccessor, string dataSo
             DbValue.ToEnum<AccountCategory>(r["category"]),
             DbValue.IsNull(r["default_tax_category_id"]) ? null : new TaxCategoryId(DbValue.ToLong(r["default_tax_category_id"])),
             DbValue.ToBool(r["uses_sub_account"]),
+            DbValue.ToBool(r["requires_partner"]),
             DbValue.ToBool(r["is_contra"]),
             DbValue.ToBool(r["is_active"]))));
     }
@@ -88,6 +91,21 @@ public sealed class AccountingMasterLoader(IDbAccessor dbAccessor, string dataSo
             DbValue.ToEnum<PeriodStatus>(r["status"])));
 
         return new FiscalCalendar(years, periods);
+    }
+
+    /// <summary>
+    /// 選べる（有効な）取引先が 1 件でもあるか。
+    /// </summary>
+    /// <remarks>
+    /// <b>取引先だけは全件を読まない</b>——数千件になりうるからである（<see cref="PostingContext"/>）。
+    /// <b>「有効」の広さは明細の候補ダイアログに揃えてある</b>（JournalLine の Partner フィールドの
+    /// 検索条件が <c>IsActive = true</c>）——揃っていないと、
+    /// <b>候補が 0 件のまま「選んでください」と言う</b>ことになる。
+    /// </remarks>
+    private async Task<bool> HasSelectablePartnerAsync()
+    {
+        var rows = await QueryAsync("select 1 from partners where is_active = 1 limit 1");
+        return rows.Count > 0;
     }
 
     private async Task<IReadOnlyList<IDictionary<string, object>>> QueryAsync(string sql)

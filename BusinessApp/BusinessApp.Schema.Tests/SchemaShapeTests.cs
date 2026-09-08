@@ -139,6 +139,10 @@ public class SchemaShapeTests
         Assert.Contains("trg_journal_lines_no_replace_posted_update", triggers);
         // 摘要のない仕訳を計上させない（docs/10 §4-2-1）
         Assert.Contains("trg_journal_entries_description_required_when_posted", triggers);
+        // 補助科目の 2 値（ADR-0038 §3）と、取引先を要する科目（docs/10 §6-2）
+        Assert.Contains("trg_journal_entries_sub_account_presence_when_posted", triggers);
+        Assert.Contains("trg_journal_entries_partner_presence_when_posted", triggers);
+        Assert.Contains("trg_accounts_requires_partner_not_loosened_when_posted", triggers);
         // 使用中のマスタの意味を守る 4 本（ADR-0038）
         Assert.Contains("trg_accounts_meaning_frozen_when_posted", triggers);
         Assert.Contains("trg_sub_accounts_meaning_frozen_when_posted", triggers);

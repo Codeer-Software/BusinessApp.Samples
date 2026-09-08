@@ -17,9 +17,9 @@ using Codeer.LowCode.Blazor.DataIO;
 /// </remarks>
 public class JournalCorrectionPostingTests
 {
-    /// <summary>原仕訳（借方 現金 1000 / 貸方 買掛金 1000）を計上する。</summary>
+    /// <summary>原仕訳（借方 現金 1000 / 貸方 未払金 1000）を計上する。</summary>
     private static JournalEntryId Original(AccountingServer server)
-        => server.InsertPosted(1, "5 月分の仕入", "2026-05-20", ("debit", "1100", 1000), ("credit", "2100", 1000));
+        => server.InsertPosted(1, "5 月分の仕入", "2026-05-20", ("debit", "1100", 1000), ("credit", "2200", 1000));
 
     /// <summary>再計上の下書きを作り、利用者が入れたつもりの明細を入れる。</summary>
     private static JournalEntryId CorrectionDraft(
@@ -27,7 +27,7 @@ public class JournalCorrectionPostingTests
     {
         var draft = server.InsertCorrectionDraft(original, postingDate: postingDate, transactionDate: "2026-05-20");
         server.InsertLine(draft, 1, "debit", "1100", amount);
-        server.InsertLine(draft, 2, "credit", "2100", amount);
+        server.InsertLine(draft, 2, "credit", "2200", amount);
         return draft;
     }
 
@@ -120,7 +120,7 @@ public class JournalCorrectionPostingTests
         var original = Original(server);
         var started = await server.AmendAsync(s => s.CorrectAsync(original));
         server.InsertLine(started.CorrectionId, 3, "debit", "1100", 200);
-        server.InsertLine(started.CorrectionId, 4, "credit", "2100", 200);
+        server.InsertLine(started.CorrectionId, 4, "credit", "2200", 200);
 
         await PostAsync(server, started.CorrectionId);
 

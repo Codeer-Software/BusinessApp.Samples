@@ -16,10 +16,10 @@ using Codeer.LowCode.Blazor.DataIO;
 /// </remarks>
 public class JournalAmendmentServiceTests
 {
-    /// <summary>取り消される側の仕訳（借方 現金 1000 / 貸方 買掛金 1000）。</summary>
+    /// <summary>取り消される側の仕訳（借方 現金 1000 / 貸方 未払金 1000）。</summary>
     private static JournalEntryId Original(AccountingServer server, string transactionDate = "2026-05-20")
         => server.InsertPosted(
-            1, "5 月分の仕入", transactionDate, ("debit", "1100", 1000), ("credit", "2100", 1000));
+            1, "5 月分の仕入", transactionDate, ("debit", "1100", 1000), ("credit", "2200", 1000));
 
     // --- 取り消す ---
 
@@ -381,7 +381,7 @@ public class JournalAmendmentServiceTests
         Assert.Equal([DebitCredit.Debit, DebitCredit.Credit], correction.Lines.Select(l => l.DebitCredit));
         Assert.Equal([Yen.From(1000), Yen.From(1000)], correction.Lines.Select(l => l.Amount));
         Assert.Equal(
-            [server.AccountOf("1100"), server.AccountOf("2100")],
+            [server.AccountOf("1100"), server.AccountOf("2200")],
             correction.Lines.Select(l => l.AccountId));
 
         Assert.Equal(new DateOnly(2026, 5, 20), correction.TransactionDate);
@@ -466,7 +466,7 @@ public class JournalAmendmentServiceTests
         using var server = new AccountingServer();
         var partner = server.InsertPartner();
         var original = server.InsertPosted(
-            1, "5 月分の仕入", "2026-05-20", partner, ("debit", "1100", 1000), ("credit", "2100", 1000));
+            1, "5 月分の仕入", "2026-05-20", partner, ("debit", "1100", 1000), ("credit", "2200", 1000));
 
         var started = await server.AmendAsync(s => s.CorrectAsync(original));
 

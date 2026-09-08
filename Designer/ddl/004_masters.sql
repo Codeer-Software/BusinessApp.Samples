@@ -38,7 +38,16 @@ CREATE TABLE accounts (
     -- 会計コアが認証部品なしでは立ち上がらなくなる。CLB の予約名として値は自動で入る。
     creator                     INTEGER,
     updater                     INTEGER,
-    optimistic_locking          INTEGER NOT NULL DEFAULT 0
+    optimistic_locking          INTEGER NOT NULL DEFAULT 0,
+
+    -- 取引先を要する科目か（docs/10 §6-2。docs/04 §1 の A-4）。売掛金・買掛金・売上げのように、
+    -- **相手方別に記載する帳簿が要る**科目では、取引先の無い行を計上させない
+    -- （電帳規則 5 ① の括弧書き。docs/40 §4-1）。守るのは
+    -- trg_journal_entries_partner_presence_when_posted と計上の関門（E-PARTNER-REQUIRED）。
+    --
+    -- **列の追加は正典でも列リストの末尾に置く**（理由は Designer/migrations/README.md）——
+    -- SQLite の ADD COLUMN がここに足すので、意味の並びより同値を優先する。
+    requires_partner            INTEGER NOT NULL DEFAULT 0 CHECK (requires_partner IN (0, 1))
 );
 
 CREATE TABLE sub_accounts (

@@ -41,7 +41,7 @@ public class JournalPostingTests
         var unbalanced = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 100),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 99));
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 99));
 
         var result = JournalPosting.Post(unbalanced, AccountingFixture.Context(), Sequence, PostedAt);
 

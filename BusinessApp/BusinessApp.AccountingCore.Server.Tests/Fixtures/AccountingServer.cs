@@ -260,7 +260,8 @@ internal sealed class AccountingServer : IDisposable
         string entryType = "normal",
         JournalEntryId? originalEntryId = null,
         FiscalYearId? fiscalYearId = null,
-        string? description = DefaultDescription)
+        string? description = DefaultDescription,
+        long? partnerId = null)
     {
         // 訂正・取消は原仕訳が要る（I-06）。DDL の CHECK は INSERT の時点で効くので、
         // 後から UPDATE で足すことはできない。
@@ -270,9 +271,10 @@ internal sealed class AccountingServer : IDisposable
         Execute($"""
             insert into journal_entries
                 (fiscal_year_id, transaction_date, posting_date, status, entry_type,
-                 original_entry_id, description, entered_at)
+                 original_entry_id, description, entered_at, partner_id)
             values ({year}, {DateLiteral(transactionDate)}, {DateLiteral(postingDate)}, 'draft', '{entryType}',
-                    {original}, {TextLiteral(description)}, '2026-08-24 13:00:00')
+                    {original}, {TextLiteral(description)}, '2026-08-24 13:00:00',
+                    {(partnerId is long partner ? Text(partner) : "null")})
             """);
 
         return new JournalEntryId(Scalar<long>("select last_insert_rowid()"));
@@ -486,11 +488,54 @@ internal sealed class AccountingServer : IDisposable
                     1000,
                     (select id from tax_categories where code = 'OUT'))
             """);
-        InsertLine(id, 2, "credit", "2100", 1000);
+        InsertLine(id, 2, "credit", "2200", 1000);
 
         TestDatabase.WithoutTrigger(
             connection,
             "trg_journal_entries_sub_account_presence_when_posted",
+            $"""
+            update journal_entries
+               set status = 'posted', entry_no = {entryNo}, posted_at = '2026-08-24 13:00:00'
+             where id = {id.Value}
+            """);
+
+        Execute($"""
+            update journal_entry_sequences set next_entry_no = {entryNo + 1}
+             where fiscal_year_id = {FiscalYear.Value} and next_entry_no <= {entryNo}
+            """);
+
+        return id;
+    }
+
+    /// <summary>
+    /// <b>取引先を要する科目に取引先の無い計上済みの伝票</b>を 1 件作る（docs/10 §6-2）。
+    /// </summary>
+    /// <remarks>
+    /// <b>いまの製品では作れない形である。</b> 規則より前に計上された行が稼働 DB に実在し
+    /// （件数と数え方は qa/04）、
+    /// <b>それらを取り消せることがこの規則の免除の根拠</b>なので、検体が要る。
+    /// そのときだけ計上のトリガを外す（<see cref="TestDatabase.WithoutTrigger"/>）。
+    /// </remarks>
+    public JournalEntryId InsertPostedWithoutPartnerOnRequiringAccount(int entryNo, string transactionDate)
+    {
+        // 2100（買掛金）は初期データで「取引先を要する」が立っている（Designer/seed/004_accounts.sql）。
+        // **フィクスチャで立て直さない**——初期データと規則が食い違ったらここで落ちてほしい。
+        // **その「落ちてほしい」を機械にする**——下でトリガを外して計上するので、
+        // 立っていなくても計上は成功してしまう（自己レビューで指摘された。2026-09-08）。
+        if (Scalar<long>("select requires_partner from accounts where code = '2100'") != 1)
+        {
+            throw new InvalidOperationException(
+                "初期データの 2100（買掛金）に requires_partner が立っていない。"
+                + "この検体は「規則より前に計上された伝票」を作るためのものなので、立っていないと意味が無い。");
+        }
+
+        var id = InsertDraft(transactionDate: transactionDate, postingDate: transactionDate, description: "規則より前の伝票");
+        InsertLine(id, 1, "debit", "1100", 1000);
+        InsertLine(id, 2, "credit", "2100", 1000);
+
+        TestDatabase.WithoutTrigger(
+            connection,
+            "trg_journal_entries_partner_presence_when_posted",
             $"""
             update journal_entries
                set status = 'posted', entry_no = {entryNo}, posted_at = '2026-08-24 13:00:00'

@@ -61,9 +61,9 @@ public class MasterMeaningGateTests
         return thrown;
     }
 
-    /// <summary>買掛金 1,000 ／ 現金 1,000（買掛金を現金で払う）を計上する。<b>現金・買掛金・対象外の税区分が「使用中」になる。</b></summary>
+    /// <summary>未払金 1,000 ／ 現金 1,000（未払金を現金で払う）を計上する。<b>現金・未払金・対象外の税区分が「使用中」になる。</b></summary>
     private static void PostPayment(AccountingServer server, int entryNo = 1)
-        => server.InsertPosted(entryNo, "支払", "2026-08-24", ("debit", "2100", 1000), ("credit", "1100", 1000));
+        => server.InsertPosted(entryNo, "支払", "2026-08-24", ("debit", "2200", 1000), ("credit", "1100", 1000));
 
     // --- 止める -------------------------------------------------------------------
 
@@ -88,6 +88,67 @@ public class MasterMeaningGateTests
     }
 
     /// <summary>
+    /// <b>「取引先を要する」をオフにすると差し戻される</b>（docs/10 §6-2。<b>一方通行の列</b>）。
+    /// </summary>
+    /// <remarks>
+    /// <b>止めないと、二層の守りをまとめて外せる</b>——オフにして計上し、また戻せば、
+    /// 計上の関門も DDL のトリガも素通りする（自己レビューで見つけた。2026-09-08。qa/03 L-08 の型）。
+    /// <b>文言は「変えられません」ではない</b>——オンにするのはいつでも通るからである。
+    /// </remarks>
+    [Fact]
+    public async Task 使用中の科目の取引先の必須は外せない()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var payable = Id(server.AccountOf("2200").Value);
+        server.Execute("update accounts set requires_partner = 1 where code = '2200'");
+
+        var thrown = await Rejected(server,
+            Updating("Account", Row("Account", payable, "RequiresPartner", new BooleanFieldData { Value = false })));
+
+        Assert.Equal(
+            "登録できません。この勘定科目は計上済みの仕訳明細 1 行で使われているので、「取引先を要する」をオフにできません。"
+            + "オフにしている間に計上した明細は、取引先が空のまま帳簿に残ってしまいます。"
+            + "この勘定科目を使う明細には「取引先」を選んでください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>厳しくする向き（オフ → オン）は、使用中でも通る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>ここが赤くなったら、規則を後から採り入れられなくしている</b>——
+    /// 立てたいのは計上済みの明細がある科目（売掛金・買掛金）である（docs/10 §6-2）。
+    /// </remarks>
+    [Fact]
+    public async Task 使用中の科目でも取引先を必須にはできる()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var payable = Id(server.AccountOf("2200").Value);
+
+        Assert.True(await Submit(server,
+            Updating("Account", Row("Account", payable, "RequiresPartner", new BooleanFieldData { Value = true }))));
+    }
+
+    /// <summary>
+    /// <b>使っていない科目なら、オフにできる</b>（「使用中」の線は ADR-0038 §1 と同じ）。
+    /// </summary>
+    [Fact]
+    public async Task 使っていない科目なら取引先の必須を外せる()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        // 売掛金は初期データで requires_partner = 1 だが、計上済みの明細は無い。
+        // **「使用中か」を先に見るので、一方通行の判定には入らない**（早期 return）。
+        // DDL の側で同じことを見るのは MasterMeaningGuardTests。
+        var receivable = Id(server.AccountOf("1300").Value);
+
+        Assert.True(await Submit(server,
+            Updating("Account", Row("Account", receivable, "RequiresPartner", new BooleanFieldData { Value = false }))));
+    }
+
+    /// <summary>
     /// 明細の数は伝票ではなく<b>明細</b>で数える（ADR-0017）。
     /// <b>1 伝票に現金の明細が 2 行</b>——伝票で数えると 1、明細で数えると 2 になる形で撃ち分ける。
     /// </summary>
@@ -96,7 +157,7 @@ public class MasterMeaningGateTests
     {
         using var server = new AccountingServer();
         server.InsertPosted(1, "分けて払う", "2026-08-24",
-            ("debit", "2100", 1000), ("credit", "1100", 600), ("credit", "1100", 400));
+            ("debit", "2200", 1000), ("credit", "1100", 600), ("credit", "1100", 400));
         var cash = Id(server.AccountOf("1100").Value);
 
         var thrown = await Rejected(server,
@@ -175,7 +236,7 @@ public class MasterMeaningGateTests
             insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, sub_account_id, department_id, amount, tax_category_id)
             values ((select max(id) from journal_entries), 1, 'debit', (select id from accounts where code = '1200'), {sub}, {dept}, 500, 1);
             insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
-            values ((select max(id) from journal_entries), 2, 'credit', (select id from accounts where code = '2100'), {dept}, 500, 1);
+            values ((select max(id) from journal_entries), 2, 'credit', (select id from accounts where code = '2200'), {dept}, 500, 1);
             update journal_entries set status = 'posted', entry_no = 1, posted_at = '2026-08-24 11:00:00'
              where id = (select max(id) from journal_entries);
             """);
@@ -188,7 +249,7 @@ public class MasterMeaningGateTests
             department.Message);
 
         var subAccount = await Rejected(server,
-            Updating("SubAccount", Row("SubAccount", Id(sub), "Account", new LinkFieldData { Value = Id(server.AccountOf("2100").Value) })));
+            Updating("SubAccount", Row("SubAccount", Id(sub), "Account", new LinkFieldData { Value = Id(server.AccountOf("2200").Value) })));
         Assert.Equal(
             "登録できません。この補助科目は計上済みの仕訳明細 1 行で使われているので、「勘定科目」は変えられません。"
             + "新しい補助科目を作って、以後の振替伝票ではそちらを選んでください。",
@@ -214,13 +275,20 @@ public class MasterMeaningGateTests
     /// <b>読めない型で届いた欄は「変えた」と見なす</b>——フィールドの型が変わった日に関門ごと消えないため。
     /// 真偽の欄が空で届いた形も同じ（保存されている 0/1 のどちらとも一致しない）。
     /// </summary>
+    /// <remarks>
+    /// <b>一方通行の列（<c>RequiresPartner</c>）も同じ扱いである</b>——「1 以外はすべて緩めた」と見なす。
+    /// ここが素通りすると、<b>その規則だけが静かに消える</b>（自己レビューで指摘された。2026-09-08）。
+    /// </remarks>
     [Theory]
-    [InlineData("Category", "number")]
-    [InlineData("IsContra", "empty-boolean")]
-    public async Task 読めない値の欄は変えたと見なして止める(string field, string shape)
+    [InlineData("Category", "number", "は変えられません")]
+    [InlineData("IsContra", "empty-boolean", "は変えられません")]
+    [InlineData("RequiresPartner", "empty-boolean", "をオフにできません")]
+    [InlineData("RequiresPartner", "number", "をオフにできません")]
+    public async Task 読めない値の欄は変えたと見なして止める(string field, string shape, string expected)
     {
         using var server = new AccountingServer();
         PostPayment(server);
+        server.Execute("update accounts set requires_partner = 1 where code = '1100'");
         FieldDataBase value = shape == "number"
             ? new NumberFieldData { Value = 1 }
             : new BooleanFieldData { Value = null };
@@ -228,7 +296,30 @@ public class MasterMeaningGateTests
         var thrown = await Rejected(server,
             Updating("Account", Row("Account", Id(server.AccountOf("1100").Value), field, value)));
 
-        Assert.Contains("は変えられません", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains(expected, thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>意味を決める列と一方通行の列を同時に触ったら、意味のほうを断る。</b>
+    /// </summary>
+    /// <remarks>
+    /// マスタの関門は<b>理由を 1 つだけ返す</b>（docs/21 §2-6 の (a)）ので、どちらを見せるかを決めてある——
+    /// 意味を決める列は<b>直す手立てが無い</b>（新しい行を作るしかない）が、一方通行のほうは
+    /// <b>オンに戻せば通る</b>。<b>重いほうを先に見せる。</b>
+    /// </remarks>
+    [Fact]
+    public async Task 意味を決める列と一方通行の列を同時に変えたら意味のほうを断る()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        server.Execute("update accounts set requires_partner = 1 where code = '1100'");
+        var cash = Row("Account", Id(server.AccountOf("1100").Value), "Category", new SelectFieldData { Value = "expense" });
+        cash.Fields["RequiresPartner"] = new BooleanFieldData { Value = false };
+
+        var thrown = await Rejected(server, Updating("Account", cash));
+
+        Assert.Contains("「科目区分」は変えられません", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("取引先", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -440,7 +531,10 @@ public class MasterMeaningGateTests
 
             var fields = design.RootElement.GetProperty("Fields").EnumerateArray()
                 .ToDictionary(f => f.GetProperty("Name").GetString()!);
-            foreach (var column in master.Columns)
+            // **一方通行の列も、列名とラベルの写しは同じ突き合わせに乗せる。**
+            // **並びは見ない**——断りの文言に並べて出すのは意味を決める列だけで、
+            // 一方通行の列は 1 列だけを名指しするので、画面の順に依存しない。
+            foreach (var column in master.Columns.Concat(master.OneWay.Select(o => o.Column)))
             {
                 Assert.True(fields.TryGetValue(column.FieldName, out var field),
                     $"{master.ModuleName}.{column.FieldName} がデザインに無い");
@@ -511,6 +605,16 @@ public class MasterMeaningGateTests
                 master.Columns.Select(c => c.Column).Order(),
                 guarded.Groups["columns"].Value.Split(',').Select(c => c.Trim()).Order());
             Assert.Contains($"l.{master.LineColumn} = OLD.id", frozen, StringComparison.Ordinal);
+
+            // **一方通行の列は、緩める向きだけを見る別のトリガが守る**（docs/10 §6-2）。
+            // 意味の凍結のトリガに混ぜると、オンにする向きまで止まる。
+            foreach (var column in master.OneWay.Select(o => o.Column))
+            {
+                var oneWay = TriggerSql(server, $"trg_{master.Table}_{column.Column}_not_loosened_when_posted");
+                Assert.Contains($"UPDATE OF {column.Column} ON {master.Table}", oneWay, StringComparison.Ordinal);
+                Assert.Contains($"OLD.{column.Column} = 1 AND NEW.{column.Column} = 0", oneWay, StringComparison.Ordinal);
+                Assert.Contains($"l.{master.LineColumn} = OLD.id", oneWay, StringComparison.Ordinal);
+            }
 
             Assert.Contains($"l.{master.LineColumn} = NEW.id",
                 TriggerSql(server, $"trg_{master.Table}_no_replace_used_insert"), StringComparison.Ordinal);
