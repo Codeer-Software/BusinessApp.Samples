@@ -62,7 +62,11 @@ public static class TestDatabase
     /// <para><b>貼り直したトリガは、その表の中で最後に作られた状態になる。</b>
     /// 発火順は SQLite の仕様上 undefined で、実測では後に作ったものから鳴るので、
     /// <b>複数のトリガが同時に当たる検体では、鳴る順が本番と変わりうる。</b>
-    /// いまの使い道（摘要のない計上済みを作る）では他のトリガと重ならない。</para>
+    /// <b>外せるトリガは 2 本とも <c>journal_entries</c> の同じ <c>BEFORE UPDATE</c>（下書き → 計上）に張ってある</b>ので、
+    /// 片方を外して貼り直すと、その接続では<b>その 1 本が最後に作られたトリガになる</b>——
+    /// 両方に当たる検体（摘要が空で、かつ補助科目の規則も破っている伝票）を作ると、
+    /// <b>どちらの断りが返るかが本番と入れ替わりうる</b>。
+    /// いまの検体はどちらか一方しか破っていないので、この差は出ていない。</para>
     /// </remarks>
     public static void WithoutTrigger(SqliteConnection connection, string triggerName, string sql)
     {

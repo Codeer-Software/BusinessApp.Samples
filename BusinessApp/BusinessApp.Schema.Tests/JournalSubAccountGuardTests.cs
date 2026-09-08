@@ -11,10 +11,12 @@ using Microsoft.Data.Sqlite;
 /// <para><b>使う科目では補助科目が要り、使わない科目は持てない。</b>
 /// 関門（<c>JournalEntryValidator</c>）が本体で、ここは<b>関門が走らない経路</b>
 /// （CSV 取込・<c>sql</c> CLI・手作業の SQL）への最後の守りである。</para>
-/// <para><b>広さは関門に揃えてある</b>（docs/10 §4-2-1 の二層の広さ）——
-/// <b>外すのは取消だけ</b>で、両方向とも同じ線である。取消の明細はサーバが原仕訳から作り、
-/// 利用者に直す手立てが無いので、止めると規則より前の伝票を打ち消せなくなる（docs/10 §5・ADR-0004）。
-/// <b>訂正（再計上）は外さない</b>——中身は利用者が決めるので、補助科目を空にすれば通る。</para>
+/// <para><b>ここは関門より狭い</b>（docs/10 §4-2-1 の二層の広さ）——関門は取消をすべて外すが、
+/// トリガは<b>計上済みの原仕訳を写しただけの明細</b>だけを外す。entry_type は取込・CLI・手打ちの SQL が
+/// 自由に書ける列なので、「取消だ」と名乗るだけで外せないようにしてある。
+/// <b>アプリからは差が出ない</b>——取消の明細はサーバが原仕訳から作るので必ず写しになる。</para>
+/// <para>取消を外す理由は、その明細を<b>利用者が直せない</b>からである。止めると規則より前の伝票を
+/// 打ち消せなくなる（docs/10 §5・ADR-0004）。<b>訂正（再計上）は外さない</b>——中身は利用者が決める。</para>
 /// <para><b>下書きには求めない。</b> 摘要（<see cref="JournalDescriptionGuardTests"/>）と同じく、
 /// 見るのは<b>下書き → 計上の UPDATE</b> だけである。</para>
 /// </remarks>
@@ -57,9 +59,9 @@ public class JournalSubAccountGuardTests
         if (entryType != "normal")
         {
             // **原仕訳は計上済みで、同じ組み合わせの明細を持つ**（本番の形）。
-            // トリガが外すのは「原仕訳を写しただけの明細」だけなので、この明細が要る。
-            // 計上済みにするのはこのトリガが見ない INSERT ではなく UPDATE なので、
-            // **原仕訳の側でも規則を満たしている必要がある**——だから補助科目は付けない。
+            // トリガが外すのは「計上済みの原仕訳を写しただけの明細」だけなので、この明細が要る。
+            // **原仕訳の側も規則を破っている**（規則より前に計上された伝票の再現）ので、
+            // 計上済みにするときはこのトリガを外す——許可表に理由を書いてある。
             TestDatabase.Execute(db, $"""
                 INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type,
                                              description, entered_at)
@@ -221,6 +223,20 @@ public class JournalSubAccountGuardTests
         using var db = Draft(SubAccountOfUnusedAccount, subAccountId: null, "reversal");
         TestDatabase.Execute(
             db, $"UPDATE journal_lines SET sub_account_id = {SubAccountOfAccount1} WHERE journal_entry_id = 1 AND line_no = 1");
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Post));
+
+        Assert.Contains("補助科目を使わない勘定科目の明細に補助科目は付けられない", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("draft", StatusOf(db));
+    }
+
+    [Fact]
+    public void 下書きの原仕訳をおとりにしても外れない()
+    {
+        // **原仕訳が計上済みであることまで見る。** journal_entries には
+        // 「取消の原仕訳は計上済み」という制約が無いので、違反する下書きを 1 件立てて指せば
+        // 規則を外せてしまう（自己レビューで見つけた。2026-09-08）。
+        using var db = Draft(SubAccountOfUnusedAccount, SubAccountOfAccount1, "reversal", mirrorPosted: false);
 
         var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Post));
 

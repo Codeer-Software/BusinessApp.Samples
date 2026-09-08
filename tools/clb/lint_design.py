@@ -420,6 +420,16 @@ def _check_required_columns(path, doc, findings):
                 if key == "DbColumn":
                     by_column[value] = field
 
+    # **逆向きも見る**（2026-09-08 に足した。ADR-0038 §3 の列の改名で気づいた）。
+    # 上の検査は DDL から引くだけなので、**デザインが実在しない列を指していても鳴らない**——
+    # 列を改名して JSON の `DbColumn` を直し忘れると、リポジトリの中では何も鳴らず、
+    # 網は稼働 DB に繋がる `designcheck` だけになる（qa/01 X-06）。
+    for column in sorted(mentioned):
+        if column not in DDL_TABLES[table]:
+            findings.append((SEV_ERROR, "D-25", relative(path),
+                             f"{module}: {table}.{column} を指すフィールドがあるが、"
+                             "その列は DDL に無い（改名したら DbColumn も直す）"))
+
     for column in sorted(columns_the_user_must_fill(table)):
         if (module, column) in REQUIRED_EXEMPTIONS:
             continue

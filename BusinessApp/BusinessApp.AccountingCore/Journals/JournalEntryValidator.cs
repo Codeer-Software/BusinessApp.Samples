@@ -361,9 +361,12 @@ public static class JournalEntryValidator
     /// <para><b>「要る」側にも同じ線を引く。</b> 使う科目に変えられた後の過去の明細は
     /// 補助科目を持たないので、Error のままだと同じく取り消せなくなる
     /// （開発機では 0 行。2026-09-08 実測）。</para>
-    /// <para><b>DDL のトリガも同じ広さにしてある</b>（docs/10 §4-2-1 の二層の広さ。
-    /// <c>trg_journal_entries_sub_account_presence_when_posted</c> が
-    /// <c>entry_type &lt;&gt; 'reversal'</c> で同じ線を引く）。</para>
+    /// <para><b>DDL のトリガはここより狭い</b>（docs/10 §4-2-1 の二層の広さ）——
+    /// ここは取消をすべて外すが、トリガは<b>計上済みの原仕訳を写しただけの明細</b>だけを外す
+    /// （<c>trg_journal_entries_sub_account_presence_when_posted</c>）。
+    /// <c>entry_type</c> は取込・CLI・手打ちの SQL が自由に書ける列だからである。
+    /// <b>アプリからは差が出ない</b>——取消の明細は <c>JournalReversalPosting</c> が原仕訳から作るので、
+    /// 必ず写しになる。<b>関門を通らない経路のためだけに、あちらを狭くしてある。</b></para>
     /// </remarks>
     private static ViolationSeverity ReversalOnlySeverity(JournalEntry entry)
         => entry.EntryType is EntryType.Reversal ? ViolationSeverity.Warning : ViolationSeverity.Error;
