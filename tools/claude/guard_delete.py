@@ -44,8 +44,15 @@ Claude Code の Bash 権限は**コマンド文字列の前方一致**で判定�
 `allow` を返すときの制約
 ------------------------
 **`allow` は確認のプロンプトを飛ばす。** そのあと `settings.json` の `deny`・`ask` が
-**まだ評価されるのかは、公式ドキュメントに明記が無い**（2026-09-08 に Claude が
-「Hooks reference」を確認。**以前ここには「評価される」と書いてあったが、その根拠は文面に無かった**）。
+**まだ評価されるのかは分かっていない。**
+
+- **見たもの**: 公式ドキュメントの「Hooks reference」（`code.claude.com/docs/en/hooks`。2026-09-08）。
+  `permissionDecision: "deny"` と「無言は承認ではない」は書かれているが、
+  **`"allow"` を返したときに権限規則がどうなるかは書かれていない。**
+- **見ていないもの**: 以前ここが根拠にしていた「Configure permissions」のページ。
+  **その記述を読み直していないので、「評価される」が誤りだとまでは言えない**——
+  **どちらとも確かめられていない**、が正確なところである。
+
 **だから危ないほう——`allow` を返した時点で他の守りは何も残らない——を前提に設計する。**
 
 返すのは、**コマンド全体が `RECOVERABLE_SCRIPTS` の 1 本を呼ぶだけ**のときに限る。
@@ -56,8 +63,12 @@ Claude Code の Bash 権限は**コマンド文字列の前方一致**で判定�
 - `CHAINED`——連結（`;` `&` `|` 改行 `` ` `` `$(`）と**リダイレクト（`<` `>`）**が 1 つも無いこと
 - `OVERWRITE`——上書きの語が 1 つも無いこと（`-OutFile` のような引数の形を落とすため）
 
-**`>` と上書きの語を数え落として、関門そのものへ書き込める形が `allow` を取っていた**
-（2026-09-08 の自己レビューが実測。`| tee log.txt` は落ちるのに `> out.txt` は通った）。
+**実測したのは「このフックが `allow` を返した」までである**（2026-09-08 の自己レビュー）——
+`pwsh … db_snapshot.ps1 -Save -Name x > tools/claude/guard_delete.py` が `allow`、
+`| tee log.txt` は落ちるのに `> out.txt` は通る、という非対称があった。
+**そこから先どこまで守りが外れるかは、上の未確認に掛かっている。**
+`allow` が権限規則を飛ばすなら関門そのものへ書き込めるし、飛ばさないなら
+`Bash(pwsh:*)` の白紙の許可が同じ結果を出す。**どちらでも塞ぐべきなので塞いだ。**
 
 限界（承知のうえで残す）
 ------------------------
@@ -171,7 +182,7 @@ REDIRECT = r"(?<![-=<>!])>{1,2}\s*(?![&=])(?!/dev/null\b)(?!\$null\b)(?!\d+(?![\
 
 # **中身を置き換える語。** これ単体では拒まない——**保護対象の名前が出たときだけ**拒む
 # （`Write` ツール以外にも上書きの道はいくらでもあり、全部を止めると作業が成り立たない）。
-# **`Tee-Object`・`Rename-Item`・`Add-Content`・`ren` は 2026-09-08 に足した**——
+# **`ren`・`rename`・`Rename-Item`・`Tee-Object`・`Add-Content` の 5 語は 2026-09-08 に足した**——
 # 自己レビューが「保護対象の名前を出しても通る形」として実測で挙げたものである。
 OVERWRITE_WORDS = (
     "cp", "copy", "Copy-Item", "mv", "move", "Move-Item", "ren", "rename", "Rename-Item",
@@ -195,13 +206,13 @@ OVERWRITE = re.compile(
 )
 
 # **戻せる道具。** ごみ箱送り（前の中身を残す）と、稼働 DB の退避・復元
-# （消さず、上書きの前に必ず退避する）。**規則は docs/30_作業のルール.md §10。**
-# **足してよいのは「取り返しがつく」ことをスクリプト自身が保証している道具だけ**である——
-# allow は権限判定そのものを飛ばすので、1 本増やすたびに確認の外へ出る面積が広がる。
+# （消さず、上書きの前に必ず退避する）。**打ち方は docs/30_作業のルール.md §10、
+# ここに足してよい基準は ADR-0046 の帰結が持つ。**
 # **第 2 要素は「当たり先をパスで受け取るか」。** `trash.ps1` は受け取るので、
-# 同じコマンドに保護対象の名前が出たら拒む必要がある。`db_snapshot.ps1` は `-Name` しか
-# 受け取らない——**名前でしか呼べない道具に、保護対象の名前の検査をかけると、
-# 同じコマンドで LocalData を読んだだけで拒まれる**（2026-09-08 に実測）。
+# 同じコマンドに保護対象の名前が出たら拒む必要がある。`db_snapshot.ps1` は
+# **パスを受け取る引数を持たない**——名前でしか当たり先を指せない道具に保護対象の名前の
+# 検査をかけると、**同じコマンドで LocalData を読んだだけで拒まれる**（2026-09-08 に実測）。
+# **この第 2 要素が正典である**（散文で「どの引数を取るか」を写さない）。
 RECOVERABLE_SCRIPTS = (
     (TRASH_SCRIPT, True),
     ("tools/clb/db_snapshot.ps1", False),
@@ -408,9 +419,9 @@ def decide(command: str):
     overwrite = bool(OVERWRITE.search(command))
     mentions_recoverable = bool(RECOVERABLE_MENTION.search(command))
 
-    # **保護対象の名前を探すのは、当たり先をパスで受け取る形のときだけ**である。
-    # `db_snapshot.ps1` は `-Name` しか受け取らないので、同じコマンドに `LocalData` が出ても
-    # それはこの道具の当たり先ではない（読んだだけかもしれない）。
+    # **保護対象の名前を探すのは、当たり先をパスで受け取る形のときだけ**である
+    # （どの道具がそうかは `RECOVERABLE_SCRIPTS` の第 2 要素が持つ）。
+    # パスを取らない道具なら、同じコマンドに `LocalData` が出てもこの道具の当たり先ではない。
     names_a_target = (raw_deletion or git_destructive or overwrite
                       or bool(PATH_TAKING_MENTION.search(command)))
     if not (names_a_target or mentions_recoverable):
@@ -452,9 +463,9 @@ def decide(command: str):
         return None, None  # 保護対象に触れない上書きは、このフックの仕事ではない
 
     if CHAINED.search(command) or overwrite or not RECOVERABLE_ONLY.match(command):
-        # **戻せる道具を 1 本呼ぶだけ**の形にしか出さない。`RECOVERABLE_ONLY` は先頭しか見ないので、
-        # **後ろに何か付いている印を 2 通りで見る**——`CHAINED`（連結とリダイレクト）と、
-        # **上書きの語が 1 つでも出ていないこと**。片方だけだと `-OutFile` のような
+        # **戻せる道具を 1 本呼ぶだけ**の形にしか出さない（3 つの条件は docstring が持つ）。
+        # `RECOVERABLE_ONLY` は先頭しか見ないので、**後ろに何か付いている印**を
+        # `CHAINED` と `OVERWRITE` の 2 つで数える。片方だけだと `-OutFile` のような
         # 引数の形が素通りする（2026-09-08 の自己レビュー）。
         return None, None
 
@@ -508,7 +519,7 @@ SELFTEST = [
     # --- 上書き。**保護対象の名前が出たときだけ**拒む。
     # **語ごとに 1 つずつ置く**——`_check_vocabulary` が「その語を消すと、この検体が当たらなくなる」
     # ことを機械で確かめる。**検体があるだけでは足りない**（他の語が同じ検体に当たっていると、
-    # 消しても鳴らない。上書きの 18 語のうち 11 語がその状態だった。2026-09-08）
+    # 消しても鳴らない。**測った時点の上書きの語彙 13 語のうち 11 語**がその状態だった。2026-09-08）
     ("cp x LocalData/db/x.db", "deny"),
     ("copy x LocalData/db/x.db", "deny"),
     ("Copy-Item -Force x LocalData/db/x.db", "deny"),
@@ -585,8 +596,7 @@ SELFTEST = [
     (f"{S} -Save && rm -rf b", "deny"),   # 連結の先が削除なら拒む
     (f"{S} -List | tee log.txt", None),   # 連結は allow にせず通常の判定へ降ろす
     ("pwsh -NoProfile -File work/scratch/db_snapshot.ps1 -Restore -Name x", None),
-    # **`-Name` しか受け取らない道具に、保護対象の名前の検査をかけない**——
-    # かけると、同じコマンドで LocalData を読んだだけで拒まれる（2026-09-08 に実測）
+    # **パスを取らない道具に、保護対象の名前の検査をかけない**（`RECOVERABLE_SCRIPTS` の第 2 要素）
     (f"cat LocalData/README.md\n{S} -Save", None),
     (f"{S} -Save -Name LocalData", "allow"),
     # **パスを受け取る道具は、従来どおり保護対象を拒む**
@@ -638,8 +648,9 @@ def _check_vocabulary(failed: int) -> int:
     """**語彙の 1 つずつに、それを消したら鳴る検体があるか。**
 
     **表に検体が「ある」だけでは足りない。** 別の語が同じ検体に当たっていれば、
-    その語を消しても表は緑のままである——**上書きの 18 語のうち 11 語と `send2trash` が
-    その状態だった**（自己レビューが実測。2026-09-08。型は docs/qa/03 の「消しても鳴らない死んだ条件」）。
+    その語を消しても表は緑のままである——**測った時点の上書きの語彙 13 語のうち 11 語と、
+    `send2trash` がその状態だった**（自己レビューが実測。2026-09-08。
+    型は docs/qa/03 の「消しても鳴らない死んだ条件」）。
 
     そこで**プロセスの中で語を 1 つ抜いた正規表現を作り**、deny を期待する検体のうち
     どれかが「当たらなくなる」ことを見る。抜いても全部が当たったままなら、その語は死んでいる。
@@ -725,9 +736,8 @@ def _check_wiring(failed: int) -> int:
 
     フックの登録や deny を消しても検査が緑のままなら、関門は配線ごと外せてしまう。
 
-    **保証していないもの**: フックが**本番の形で**起動すること（`shell: "bash"` から
-    `python "$CLAUDE_PROJECT_DIR/..."` が解決されるか。`_check_entrypoint` は
-    `sys.executable` と絶対パスで起こしており、本番とは別物である）、`defaultMode` の設定。
+    **本番の形での起動は `_check_production_entrypoint` が見る**（`settings.json` の
+    `command` と `shell` をそのまま使う）。**ここが保証していないのは `defaultMode` の設定である。**
     """
     try:
         settings = json.loads(SETTINGS.read_text(encoding="utf-8"))
