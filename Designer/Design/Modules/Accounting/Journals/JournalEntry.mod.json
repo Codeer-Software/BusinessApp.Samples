@@ -818,6 +818,30 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
+      "Text": "複製",
+      "ImageResourcePath": "",
+      "ImageResourceSet": {
+        "Default": "",
+        "Focus": "",
+        "Active": "",
+        "Hover": "",
+        "Disabled": ""
+      },
+      "Icon": "",
+      "Variant": "Primary",
+      "OnClick": "DuplicateButton_OnClick",
+      "ShowTextInToolTip": false,
+      "IsHtml": false,
+      "Name": "DuplicateButton",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ButtonFieldDesign",
+      "IsBlock": false
+    },
+    {
       "Text": "訂正する",
       "ImageResourcePath": "",
       "ImageResourceSet": {
@@ -2111,6 +2135,31 @@
             "IsProportionalScale": false,
             "IsRowMarginRemoved": false,
             "Columns": [
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None",
+                "Layout": {
+                  "FieldName": "DuplicateButton",
+                  "ContextMenu": "",
+                  "ClassName": "",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "HorizontalAlignment": "End"
+              },
               {
                 "IgnoreContentWidth": false,
                 "Padding": {},

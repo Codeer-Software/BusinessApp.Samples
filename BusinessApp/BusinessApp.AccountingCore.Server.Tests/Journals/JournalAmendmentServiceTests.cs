@@ -2,6 +2,7 @@ namespace BusinessApp.AccountingCore.Server.Tests.Journals;
 
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Server.Journals;
+using BusinessApp.AccountingCore.Server.Shared;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 using BusinessApp.AccountingCore.Shared;
 using Codeer.LowCode.Blazor.DataIO;
@@ -20,6 +21,86 @@ public class JournalAmendmentServiceTests
     private static JournalEntryId Original(AccountingServer server, string transactionDate = "2026-05-20")
         => server.InsertPosted(
             1, "5 月分の仕入", transactionDate, ("debit", "1100", 1000), ("credit", "2200", 1000));
+
+    // --- 複製する（ADR-0048） ---
+
+    /// <summary>
+    /// <b>複製した下書きは、DB へ書いて読み戻しても同じ内容である</b>（往復。qa/03 L-14 の処方）。
+    /// </summary>
+    /// <remarks>
+    /// <b>純粋関数が正しくても、書く経路が落とせば意味が無い。</b> 逆に、
+    /// 写してはいけない欄を書く経路が拾ってしまうこともある——どちらもここで捕まえる。
+    /// </remarks>
+    [Fact]
+    public async Task 複製した下書きは読み戻しても同じ内容である()
+    {
+        using var server = new AccountingServer();
+
+        // **写しと制度の版は下書きのうちに入れる。** 計上済みの明細は書き換えられない（I-05）ので、
+        // 「写しが付いた計上済み」はこの順でしか作れない。
+        var original = server.InsertDraft(
+            transactionDate: "2026-05-20", postingDate: "2026-05-20", description: "5 月分の仕入");
+        server.InsertLine(original, 1, "debit", "1100", 1000);
+        server.InsertLine(original, 2, "credit", "2200", 1000);
+        server.Execute($"""
+            update journal_lines
+               set partner_name_snapshot = '株式会社取引先',
+                   registration_no_snapshot = 'T1234567890123',
+                   applied_rule_version = '2023-10-01',
+                   tax_point = '2026-05-20'
+             where journal_entry_id = {original.Value};
+            update journal_entries
+               set status = 'posted', entry_no = 1, posted_at = '2026-05-20 10:00:00'
+             where id = {original.Value};
+            """);
+
+        var duplicateId = await server.AmendAsync(s => s.DuplicateAsync(original));
+        var copy = await server.EntryStore.LoadAsync(duplicateId);
+
+        Assert.Equal(EntryStatus.Draft, copy.Status);
+        Assert.Equal(EntryType.Normal, copy.EntryType);
+        Assert.Null(copy.EntryNo);
+        Assert.Null(copy.OriginalEntryId);
+        Assert.Null(copy.PostedAt);
+
+        // 取引日は原仕訳のまま。計上日は「複製した日」＝今日。
+        Assert.Equal(new DateOnly(2026, 5, 20), copy.TransactionDate);
+        Assert.Equal(new DateOnly(2026, 8, 24), copy.PostingDate);
+        Assert.Equal("5 月分の仕入", copy.Description);
+
+        // 内容はそのまま（貸借は入れ替えない。取消とはここが違う）。
+        Assert.Equal([DebitCredit.Debit, DebitCredit.Credit], copy.Lines.Select(l => l.DebitCredit));
+        Assert.Equal([Yen.From(1000), Yen.From(1000)], copy.Lines.Select(l => l.Amount));
+        Assert.Equal([1, 2], copy.Lines.Select(l => l.LineNo));
+
+        // **計上時点の写しと制度の版は、書く経路でも落ちている。**
+        Assert.All(copy.Lines, l => Assert.Null(l.PartnerNameSnapshot));
+        Assert.All(copy.Lines, l => Assert.Null(l.RegistrationNoSnapshot));
+        Assert.All(copy.Lines, l => Assert.Null(l.AppliedRuleVersion));
+        Assert.All(copy.Lines, l => Assert.Null(l.TaxPoint));
+    }
+
+    /// <summary>複製した下書きは、そのまま計上できる（作った下書きが計上の関門を通る）。</summary>
+    /// <remarks>
+    /// <b>「作れた」と「使える」は別である。</b> 年度や期間の取り違えは、
+    /// 計上しようとした瞬間に初めて出る（qa/03 L-30 の型）。
+    /// </remarks>
+    [Fact]
+    public async Task 複製した下書きはそのまま計上できる()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        var duplicateId = await server.AmendAsync(s => s.DuplicateAsync(original));
+
+        var draft = await server.EntryStore.LoadAsync(duplicateId);
+        var context = await server.MasterLoader.LoadAsync();
+        var posted = await DbTransactionScope.RunAsync(
+            server.Accessor, () => server.Poster.PostAsync(draft, context));
+
+        Assert.Equal(EntryStatus.Posted, posted.Status);
+        Assert.Equal(2, posted.EntryNo);
+    }
 
     // --- 取り消す ---
 

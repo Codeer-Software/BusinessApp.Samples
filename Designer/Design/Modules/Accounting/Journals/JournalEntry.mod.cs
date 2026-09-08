@@ -73,6 +73,11 @@ void ApplyPostedLock()
     CorrectButton.IsVisible = false;
     ReverseButton.IsVisible = false;
 
+    // **複製は保存済みなら常に出す**（ADR-0048 の決定 6）。下書きからも計上済みからも、
+    // 取消済み・訂正済みからも押せる——**複製は新しい記帳**で、原仕訳の状態に依らない。
+    // **新規（まだ保存していない）伝票には出さない**——写す元がまだ無い。
+    DuplicateButton.IsVisible = !IsNewData;
+
     // **削除は下書きにだけ出す。** 計上済みは不変（ADR-0004）で、取消か訂正で表す。
     // 新規（まだ保存していない）伝票にも出さない——消すものがまだ無い。
     DeleteButton.IsVisible = !posted && !IsNewData;
@@ -86,6 +91,7 @@ void ApplyPostedLock()
     // そのままだとボタンが残ったまま無反応になる（qa/01 D-01・F-14）。
     CorrectButton.IsViewOnly = false;
     ReverseButton.IsViewOnly = false;
+    DuplicateButton.IsViewOnly = false;
 
     if (posted) ApplyAmendmentAvailability();
 }
@@ -359,6 +365,39 @@ void ReverseButton_OnClick()
 {
     Amend("reverse", "取消",
         "この伝票を取り消します。取消は帳簿に残り、あとから消せません。よろしいですか？");
+}
+
+// 複製する。サーバが同じ内容の下書きを作って返す（ADR-0048）。
+//
+// **確認を出さない。** 帳簿は 1 行も動かず、できるのは下書き 1 本なので、
+// 間違えても削除すれば済む（docs/21 §2-5「戻せる操作に確認を挟まない」）。
+// **何を写して何を写さないかはサーバが決める**——ここは頼んで開くだけである（ADR-0008）。
+void DuplicateButton_OnClick()
+{
+    var body = new JsonObject();
+    body.OriginalEntryId = $"{Id.Value}";
+
+    var result = WebApiService.Post("/api/journals/duplicate", body);
+
+    // **業務の差し戻しも 200 で返ってくる**（qa/01 K-01）。
+    if (result.StatusCode != 200)
+    {
+        Toaster.Error($"複製できませんでした。しばらくしてからもう一度お試しください（サーバ応答 {result.StatusCode}）。");
+        return;
+    }
+
+    if ($"{result.JsonObject.status}" != "ok")
+    {
+        Toaster.Error($"{result.JsonObject.message}");
+        return;
+    }
+
+    // **開いた先が複製であることを言う。** 見た目は原仕訳と同じなので、
+    // 言わないと「保存されなかった」と読まれる（docs/21 §2-4）。
+    Toaster.Success("複製しました。内容を確かめて計上してください。");
+
+    NavigationService.NavigateTo(
+        NavigationService.GetModuleDataUrl("JournalEntry", $"{result.JsonObject.openEntryId}"));
 }
 
 // 確認 → サーバに依頼 → 返ってきた伝票を開く。

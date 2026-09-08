@@ -269,6 +269,91 @@ public class JournalAmendmentEndpointTests
         Assert.Equal(before, server.Scalar<long>("select count(*) from journal_entries"));
     }
 
+    // --- 複製する（ADR-0048） ---
+
+    /// <summary>
+    /// 複製すると、開くのは<b>新しい下書き</b>で、取消は 1 本も作らない。
+    /// </summary>
+    /// <remarks>
+    /// <b>複製は計上済みを 1 行も動かさない。</b> ここで取消が 1 本でもできていたら、
+    /// 「複製したつもりが取り消されていた」という取り返しのつかない失敗になる。
+    /// </remarks>
+    [Fact]
+    public async Task 複製すると新しい下書きが開く()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        var before = server.Scalar<long>("select count(*) from journal_entries");
+
+        var result = await server.Amendment.DuplicateAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.Succeeded, result.Status);
+        Assert.Equal("draft", server.StatusOf(new JournalEntryId(result.OpenEntryId)));
+        Assert.NotEqual(original.Value, result.OpenEntryId);
+
+        // **取消は作っていない**（<see cref="AmendResult.Opened"/> は 0 を返す）。
+        Assert.Equal(0, result.ReversalId);
+        Assert.Equal(0, server.CountAmendments(original, "reversal"));
+
+        // 増えたのは 1 本だけ。原仕訳は計上済みのまま。
+        Assert.Equal(before + 1, server.Scalar<long>("select count(*) from journal_entries"));
+        Assert.Equal("posted", server.StatusOf(original));
+    }
+
+    /// <summary>
+    /// 取り消された伝票も複製できる（<b>新しい記帳だから</b>。ADR-0048 の決定 6）。
+    /// </summary>
+    /// <remarks>
+    /// <b>訂正の下書きを消したあとの受け皿がこれである</b>（qa/04 の 2026-09-04）。
+    /// ここを取消・訂正と同じ条件で閉じると、いちばん要る場面で使えない。
+    /// </remarks>
+    [Fact]
+    public async Task 取り消された伝票も複製できる()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        await server.Amendment.ReverseAsync(server.Text(original.Value));
+
+        var result = await server.Amendment.DuplicateAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.Succeeded, result.Status);
+        Assert.Equal("draft", server.StatusOf(new JournalEntryId(result.OpenEntryId)));
+
+        // **できるのは通常の伝票**（取消を複製しても取消にはならない）。
+        Assert.Equal(
+            "normal",
+            server.Scalar<string>($"select entry_type from journal_entries where id = {result.OpenEntryId}"));
+    }
+
+    /// <summary>会計の役割が無ければ複製もできない（入口が 1 つなので、経路ごとに開かない）。</summary>
+    [Fact]
+    public async Task 会計の役割が無ければ複製できない()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        server.SetAccountingRole(null);
+
+        var result = await server.Amendment.DuplicateAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.RejectedStatus, result.Status);
+        Assert.Equal(JournalAmendmentEndpoint.NotAuthorized, result.Message);
+    }
+
+    /// <summary>複製の差し戻しは「複製できません」で始まる（押したボタンの言葉。qa/02 R24-23）。</summary>
+    [Fact]
+    public async Task 会計期間が無ければ複製できませんと断る()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        server.Execute("delete from accounting_periods");
+
+        var result = await server.Amendment.DuplicateAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.RejectedStatus, result.Status);
+        Assert.StartsWith("複製できません", result.Message, StringComparison.Ordinal);
+        Assert.Equal([JournalViolationCodes.PeriodNotFound], result.Violations.Select(v => v.Code));
+    }
+
     // --- 訂正する ---
 
     [Fact]

@@ -9,7 +9,7 @@ using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
 /// <summary>
-/// 「取り消す」「訂正する」の入口のうち、<b>HTTP でない部分</b>（ADR-0016）。
+/// 「取り消す」「訂正する」「複製する」の入口のうち、<b>HTTP でない部分</b>（ADR-0016）。
 /// </summary>
 /// <remarks>
 /// <para>コントローラ（<c>BusinessApp.Server</c>）に残るのは認証・経路・データソース名の解決だけで、
@@ -69,6 +69,20 @@ public sealed class JournalAmendmentEndpoint(
         });
 
     /// <summary>
+    /// 複製する。原仕訳と同じ内容の下書きを作り、<b>その下書きの識別子</b>を返す（ADR-0048）。
+    /// </summary>
+    /// <remarks>
+    /// <b>複製は取消・訂正ではない</b>が、同じ入口に置いてある——理由は
+    /// <see cref="JournalAmendmentService.DuplicateAsync"/> が持つ（権限の関門を 1 か所に保つ）。
+    /// </remarks>
+    public Task<AmendResult> DuplicateAsync(string? originalEntryId)
+        => RunAsync(originalEntryId, async originalId =>
+        {
+            var id = await service.DuplicateAsync(originalId);
+            return AmendResult.Opened(id.Value);
+        });
+
+    /// <summary>
     /// 識別子を解釈し、トランザクションを張って操作を 1 つ実行する。
     /// </summary>
     /// <remarks>
@@ -125,9 +139,10 @@ public record AmendRequest([property: JsonPropertyName("originalEntryId")] strin
 /// </remarks>
 /// <param name="Status">"ok" か "rejected"。</param>
 /// <param name="OpenEntryId">
-/// 画面が開くべき伝票。取消では計上した反対仕訳、訂正では利用者が直す再計上の下書き。
+/// 画面が開くべき伝票。取消では計上した反対仕訳、訂正では利用者が直す再計上の下書き、
+/// 複製では作った下書き。
 /// </param>
-/// <param name="ReversalId">計上した取消の伝票。</param>
+/// <param name="ReversalId">計上した取消の伝票。<b>複製では 0</b>（取消を作っていない）。</param>
 /// <param name="Message">差し戻しの文言。そのまま画面に出せる。</param>
 /// <param name="Violations">差し戻しの内訳。画面はコードで分岐できる。</param>
 /// <param name="CanReverse">取り消せるか（<see cref="Available"/> のときだけ意味を持つ）。</param>
@@ -158,6 +173,16 @@ public record AmendResult(
 
     public static AmendResult Ok(long reversalId, long openEntryId)
         => new(Succeeded, openEntryId, reversalId, string.Empty, []);
+
+    /// <summary>
+    /// 伝票を 1 本作っただけのとき（複製）。<b>取消は 1 本も作っていない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Ok"/> に 0 を渡す形にしない——<b>「取消の識別子は 0」と
+    /// 「取消を作っていない」は別のこと</b>で、読む側が見分けられなくなる。
+    /// </remarks>
+    public static AmendResult Opened(long openEntryId)
+        => new(Succeeded, openEntryId, 0, string.Empty, []);
 
     public static AmendResult Rejected(string message, IReadOnlyList<AmendViolation> violations)
         => new(RejectedStatus, 0, 0, message, violations);

@@ -87,6 +87,32 @@ internal static class AmendmentRules
     }
 
     /// <summary>
+    /// 複製の摘要（ADR-0048）。<b>原仕訳が取消・訂正なら、接頭辞を落として本文だけを引き継ぐ。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>複製でできるのは通常の伝票である。</b> 接頭辞をそのまま写すと、
+    /// <b>「伝票番号 44 の取消」と名乗る通常の伝票</b>ができる——摘要は帳簿の記載事項
+    /// （法税規則 55 ① の「内容」）なので、<b>していない取消を帳簿に書くことになる</b>
+    /// （2026-09-09 の実機確認で見つけた）。</para>
+    /// <para><b>本文が空になるなら NULL にする。</b> 「伝票番号 44 の取消」のように
+    /// 本文を持たない摘要を複製すると、引き継ぐものが無い——空文字を残すと
+    /// 空値検索が取りこぼす（docs/04 §1 の A-5）。<b>計上には摘要が要る</b>ので、
+    /// 利用者はここで何の取引かを書くことになる（それが正しい）。</para>
+    /// </remarks>
+    public static string? Copy(JournalEntry original)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+
+        if (!original.EntryType.RequiresOriginalEntry())
+        {
+            return original.Description;
+        }
+
+        var body = StripPrefixes(original.Description);
+        return body.Length == 0 ? null : body;
+    }
+
+    /// <summary>
     /// 自分で付けた接頭辞（「伝票番号 N の取消: 」等）を、無くなるまで落とす。
     /// </summary>
     /// <remarks>

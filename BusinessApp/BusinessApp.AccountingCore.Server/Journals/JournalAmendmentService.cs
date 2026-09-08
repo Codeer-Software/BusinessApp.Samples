@@ -145,6 +145,41 @@ public sealed class JournalAmendmentService(
     }
 
     /// <summary>
+    /// 原仕訳と同じ内容の下書きを 1 本作る（ADR-0048）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>複製は取消・訂正ではない。</b> 原仕訳の状態を何も見ないし、計上済みを 1 行も動かさない。
+    /// それでも<b>同じ入口に置いてある</b>のは、<b>権限の関門を 1 か所に保つため</b>である——
+    /// この経路は CLB のモジュール条件を 1 つも通らないので、
+    /// 入口を分けると<b>片方に関門を書き忘れる</b>（[qa/03 L-22] がその実例）。</para>
+    /// <para><b>会計の判断は <see cref="JournalDuplication"/> が持つ。</b> ここがするのは、
+    /// 原仕訳を読むこと・今日の年度を引くこと・下書きを入れることだけである。</para>
+    /// </remarks>
+    /// <returns>できた下書きの識別子。画面はそれを開く。</returns>
+    public Task<JournalEntryId> DuplicateAsync(JournalEntryId originalId)
+        => WithHeadlineAsync(
+            JournalPostingRejectedException.DuplicationHeadline, () => DuplicateCoreAsync(originalId));
+
+    private async Task<JournalEntryId> DuplicateCoreAsync(JournalEntryId originalId)
+    {
+        var (original, context, today, now) = await PrepareAsync(originalId);
+
+        // **年度は今日から引く。** 原仕訳の年度を写すと、閉じた期間へ新しい伝票を落とせる（I-03）。
+        if (context.Calendar.ResolvePeriod(today) is not AccountingPeriod period)
+        {
+            throw new JournalPostingRejectedException(
+            [
+                new Violation(
+                    JournalViolationCodes.PeriodNotFound,
+                    $"今日（{today:yyyy/MM/dd}）に対応する会計期間がありません。"),
+            ]);
+        }
+
+        return await entryStore.InsertDraftAsync(
+            JournalDuplication.Duplicate(original, today, now, period.FiscalYearId));
+    }
+
+    /// <summary>
     /// 差し戻しの見出しを、<b>押されたボタンの言葉</b>に付け替える。
     /// </summary>
     /// <remarks>
