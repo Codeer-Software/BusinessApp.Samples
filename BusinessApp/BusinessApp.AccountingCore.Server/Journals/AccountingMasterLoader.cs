@@ -29,7 +29,7 @@ public sealed class AccountingMasterLoader(IDbAccessor dbAccessor, string dataSo
     private async Task<AccountCatalog> LoadAccountsAsync()
     {
         var rows = await QueryAsync(
-            "select id, code, name, category, default_tax_category_id, requires_sub_account, is_contra, is_active from accounts");
+            "select id, code, name, category, default_tax_category_id, uses_sub_account, is_contra, is_active from accounts");
 
         return new AccountCatalog(rows.Select(r => new AccountDefinition(
             new AccountId(DbValue.ToLong(r["id"])),
@@ -37,7 +37,7 @@ public sealed class AccountingMasterLoader(IDbAccessor dbAccessor, string dataSo
             DbValue.ToText(r["name"]),
             DbValue.ToEnum<AccountCategory>(r["category"]),
             DbValue.IsNull(r["default_tax_category_id"]) ? null : new TaxCategoryId(DbValue.ToLong(r["default_tax_category_id"])),
-            DbValue.ToBool(r["requires_sub_account"]),
+            DbValue.ToBool(r["uses_sub_account"]),
             DbValue.ToBool(r["is_contra"]),
             DbValue.ToBool(r["is_active"]))));
     }

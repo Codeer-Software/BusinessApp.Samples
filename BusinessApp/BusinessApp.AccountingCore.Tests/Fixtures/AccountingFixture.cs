@@ -44,7 +44,7 @@ public static class AccountingFixture
         new(Sales, "4000", "売上高", AccountCategory.Revenue),
         new(SuppliesExpense, "5200", "消耗品費", AccountCategory.Expense),
         new(RetiredExpense, "5900", "廃止した費用科目", AccountCategory.Expense, IsActive: false),
-        new(BankAccount, "1200", "普通預金", AccountCategory.Asset, RequiresSubAccount: true),
+        new(BankAccount, "1200", "普通預金", AccountCategory.Asset, UsesSubAccount: true),
     ];
 
     public static IReadOnlyList<SubAccountDefinition> SubAccounts { get; } =

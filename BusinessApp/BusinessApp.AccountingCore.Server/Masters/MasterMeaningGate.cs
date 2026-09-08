@@ -38,7 +38,7 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
         new("Account", "勘定科目", "accounts", "account_id",
             [new("Code", "code", "科目コード"),
              new("Category", "category", "科目区分"),
-             new("RequiresSubAccount", "requires_sub_account", "補助科目を使う"),
+             new("UsesSubAccount", "uses_sub_account", "補助科目を使う"),
              new("IsContra", "is_contra", "評価勘定")]),
         new("SubAccount", "補助科目", "sub_accounts", "sub_account_id",
             [new("Account", "account_id", "勘定科目"),

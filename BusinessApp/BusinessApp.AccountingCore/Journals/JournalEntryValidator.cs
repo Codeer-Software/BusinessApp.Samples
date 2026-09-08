@@ -216,7 +216,7 @@ public static class JournalEntryValidator
                     JournalViolationCodes.AccountInactive,
                     $"勘定科目「{account.Name}」は無効なので、新しい計上には使えません。",
                     line.LineNo,
-                    InactiveSeverity(entry)));
+                    AmendmentSeverity(entry)));
             }
 
             if (account.Category.IsProfitAndLoss() && line.DepartmentId is null)
@@ -255,7 +255,7 @@ public static class JournalEntryValidator
                 JournalViolationCodes.DepartmentInactive,
                 $"部門「{department.Name}」は無効なので、新しい計上には使えません。",
                 line.LineNo,
-                    InactiveSeverity(entry)));
+                    AmendmentSeverity(entry)));
         }
     }
 
@@ -265,13 +265,28 @@ public static class JournalEntryValidator
     {
         if (line.SubAccountId is not SubAccountId subAccountId)
         {
-            if (account.RequiresSubAccount)
+            if (account.UsesSubAccount)
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.SubAccountRequired,
                     $"勘定科目「{account.Name}」は補助科目を使います。補助科目を選んでください。",
                     line.LineNo));
             }
+            return;
+        }
+
+        // **補助科目は 2 値である**（ADR-0038 §3）。使わない科目は補助科目を持てない——
+        // 持てると「全補助科目の合計＝科目の残高」が崩れ、補助元帳に載らない残高ができる。
+        // **実在と親の一致より先に見る。** どちらも「その補助科目でよいか」の話だが、
+        // ここで断られる利用者に必要なのは「この科目では補助科目を使わない」であって、
+        // 別の補助科目を選び直せという案内ではない。
+        if (!account.UsesSubAccount)
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.SubAccountNotAllowed,
+                $"勘定科目「{account.Name}」は補助科目を使いません。補助科目を空にしてください。",
+                line.LineNo,
+                AmendmentSeverity(entry)));
             return;
         }
 
@@ -302,24 +317,32 @@ public static class JournalEntryValidator
                 JournalViolationCodes.SubAccountInactive,
                 $"補助科目「{subAccount.Name}」は無効なので、新しい計上には使えません。",
                 line.LineNo,
-                    InactiveSeverity(entry)));
+                    AmendmentSeverity(entry)));
         }
     }
 
     /// <summary>
-    /// 無効にしたマスタを使っていることの重さ。
+    /// <b>過去の計上を打ち消す・直す操作では止めない</b>ことの重さ。
     /// </summary>
     /// <remarks>
     /// <para><b>取消と訂正では止めない。</b> 新たな計上には使えないが、どちらも
-    /// 「過去に計上したものを打ち消す・直す」操作なので、後からマスタを無効にしたせいで
+    /// 「過去に計上したものを打ち消す・直す」操作なので、あとから規則やマスタが変わったせいで
     /// <b>訂正も取消もできない仕訳が帳簿に残る</b>という最悪の状態を作ってはいけない
     /// （docs/10 §6・ADR-0004）。</para>
     /// <para><b>訂正を含めるのは 2026-08-25 の自己レビューで直した。</b> 訂正は取消を先に計上してから
     /// 再計上の下書きを開く（ADR-0015）。ここが Error のままだと、原仕訳が無効なマスタを使っていた場合に
     /// <b>取消だけが確定して再計上は永久に計上できない</b>——利用者から見れば、訂正しようとしたら
     /// 取り消されただけで詰む。ADR-0015 の「誤って取り消したときの復旧」も同じ理由で塞がれていた。</para>
+    /// <para><b>使うのは 2 か所</b>——無効にしたマスタ（勘定科目・補助科目・部門）と、
+    /// <b>補助科目を使わない科目に補助科目が付いている</b>形（ADR-0038 §3。docs/04 §1 の A-3）。
+    /// 後者は<b>規則より前に計上された伝票が実際に持っている</b>（開発機に 1 行。2026-09-08 実測）ので、
+    /// Error にすると<b>その伝票を取り消せなくなる</b>。取消の明細はシステムが原仕訳から作り、
+    /// 利用者に直す手立てが無い（<c>JournalReversalPosting</c>）。</para>
+    /// <para><b>DDL のトリガも同じ広さにしてある</b>（docs/10 §4-2-1 の二層の広さ。
+    /// <c>trg_journal_entries_sub_account_matches_account_when_posted</c> が
+    /// <c>entry_type NOT IN ('reversal', 'correction')</c> で同じ線を引く）。</para>
     /// </remarks>
-    private static ViolationSeverity InactiveSeverity(JournalEntry entry)
+    private static ViolationSeverity AmendmentSeverity(JournalEntry entry)
         => entry.EntryType is EntryType.Reversal or EntryType.Correction
             ? ViolationSeverity.Warning
             : ViolationSeverity.Error;

@@ -28,12 +28,12 @@ public class AccountingMasterLoaderTests
         Assert.Equal("現金", cash.Name);
         Assert.Equal("1100", cash.Code);
         Assert.Equal(AccountCategory.Asset, cash.Category);
-        Assert.False(cash.RequiresSubAccount);
+        Assert.False(cash.UsesSubAccount);
         Assert.False(cash.IsContra);
         Assert.True(cash.IsActive);
 
         // 預金は補助科目（口座）を持つ。評価勘定は残高が増える側が科目区分と逆になる。
-        Assert.True(deposit.RequiresSubAccount);
+        Assert.True(deposit.UsesSubAccount);
         Assert.True(allowance.IsContra);
         Assert.Equal(DebitCredit.Credit, allowance.NormalBalance);
     }
