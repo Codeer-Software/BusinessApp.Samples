@@ -496,17 +496,21 @@ BEGIN
     SELECT RAISE(ABORT, '摘要のない仕訳は計上できない。帳簿の記載事項「内容」を欠くため。');
 END;
 
--- 補助科目を使わない勘定科目の明細に、補助科目を付けたまま計上させない（ADR-0038 §3。docs/04 §1 の A-3）。
--- **2 値である**——オンの科目は補助科目が要り、オフの科目は持てない。
+-- 補助科目の 2 値を、計上のときに守る（ADR-0038 §3。docs/04 §1 の A-3）。
+-- **使う科目では補助科目が要り、使わない科目は持てない。**
 -- 上の摘要のトリガと同じく**下書き → 計上の UPDATE だけを見る**（status = 'posted' の INSERT は
 -- trg_journal_entries_no_posted_insert が拒む）。
 --
 -- **広さは計上の関門（JournalEntryValidator）に揃えてある**（docs/10 §4-2-1 の二層の広さ）。
--- 取消と訂正で「持てない」側を見ないのは関門と同じ理由である——規則より前に計上された伝票を
--- 打ち消せなくなるから（docs/10 §5・ADR-0004）。**「要る」側は全種別で止める。**
-CREATE TRIGGER trg_journal_entries_sub_account_matches_account_when_posted
+-- **外すのは取消だけ**である——取消の明細はサーバが原仕訳から作り、利用者に直す手立てが無いので、
+-- 止めると規則より前の伝票を打ち消せなくなる（docs/10 §5・ADR-0004）。
+-- **訂正（再計上）は外さない**——中身は利用者が決めるので、補助科目を空にすれば通る。
+--
+-- **見るのは補助科目の有無だけである。** 「その補助科目が明細の勘定科目に属しているか」は
+-- 計上の関門（E-SUBACCOUNT-MISMATCH）だけが見ており、DB の層は無い（ddl/README の二重防御の表）。
+CREATE TRIGGER trg_journal_entries_sub_account_presence_when_posted
 BEFORE UPDATE ON journal_entries
-FOR EACH ROW WHEN NEW.status = 'posted' AND OLD.status <> 'posted'
+FOR EACH ROW WHEN NEW.status = 'posted' AND OLD.status <> 'posted' AND NEW.entry_type <> 'reversal'
 BEGIN
     SELECT RAISE(ABORT, '補助科目を使う勘定科目の明細には補助科目が要る。')
      WHERE EXISTS (SELECT 1 FROM journal_lines l
@@ -515,8 +519,7 @@ BEGIN
                       AND a.uses_sub_account = 1 AND l.sub_account_id IS NULL);
 
     SELECT RAISE(ABORT, '補助科目を使わない勘定科目の明細に補助科目は付けられない。')
-     WHERE NEW.entry_type NOT IN ('reversal', 'correction')
-       AND EXISTS (SELECT 1 FROM journal_lines l
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
                      JOIN accounts a ON a.id = l.account_id
                     WHERE l.journal_entry_id = NEW.id
                       AND a.uses_sub_account = 0 AND l.sub_account_id IS NOT NULL);

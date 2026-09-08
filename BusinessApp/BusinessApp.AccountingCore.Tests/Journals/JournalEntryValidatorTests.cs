@@ -319,11 +319,7 @@ public class JournalEntryValidatorTests
         // **補助科目は 2 値**（ADR-0038 §3。docs/04 §1 の A-3）。
         // 現金は「補助科目を使う」がオフなので、補助科目を付けたまま計上できない。
         // **この形は開発機に実在する**（規則より前に計上された明細 1 行。伝票 36）。
-        var entry = AccountingFixture.Entry(
-            Ordinary,
-            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
-                subAccountId: AccountingFixture.SubAccountOfCash),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
+        var entry = SubAccountOnUnusedAccount();
 
         var violation = AssertViolation(JournalViolationCodes.SubAccountNotAllowed, Validate(entry));
 
@@ -337,20 +333,17 @@ public class JournalEntryValidatorTests
         Assert.DoesNotContain(Validate(entry), v => v.Code == JournalViolationCodes.SubAccountMismatch);
     }
 
-    [Theory]
-    [InlineData(EntryType.Reversal)]
-    [InlineData(EntryType.Correction)]
-    public void 取消と訂正では補助科目の付いた明細でも止めない(EntryType entryType)
+    [Fact]
+    public void 取消では補助科目の付いた明細でも止めない()
     {
         // **規則より前に計上された伝票を打ち消せなくなってはいけない**（docs/10 §5・ADR-0004）。
-        // 取消の明細はシステムが原仕訳から作るので、利用者に直す手立てが無い。
-        // **DDL のトリガも同じ広さ**（entry_type NOT IN ('reversal', 'correction')）。
-        var ordinary = AccountingFixture.Entry(
-            Ordinary,
-            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
-                subAccountId: AccountingFixture.SubAccountOfCash),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
-        var entry = ordinary with { EntryType = entryType, OriginalEntryId = new JournalEntryId(9) };
+        // 取消の明細はサーバが原仕訳から作るので、利用者に直す手立てが無い。
+        // **DDL のトリガも同じ広さ**（entry_type <> 'reversal'）。
+        var entry = SubAccountOnUnusedAccount() with
+        {
+            EntryType = EntryType.Reversal,
+            OriginalEntryId = new JournalEntryId(9),
+        };
 
         var violations = Validate(entry);
 
@@ -359,6 +352,55 @@ public class JournalEntryValidatorTests
             AssertViolation(JournalViolationCodes.SubAccountNotAllowed, violations).Severity);
         Assert.False(violations.HasError());
     }
+
+    [Fact]
+    public void 取消では補助科目が無くても止めない()
+    {
+        // 「要る」側も同じ線である（使う科目に変えられた後の過去の明細は補助科目を持たない）。
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000)) with
+        {
+            EntryType = EntryType.Reversal,
+            OriginalEntryId = new JournalEntryId(9),
+        };
+
+        var violations = Validate(entry);
+
+        Assert.Equal(
+            ViolationSeverity.Warning,
+            AssertViolation(JournalViolationCodes.SubAccountRequired, violations).Severity);
+        Assert.False(violations.HasError());
+    }
+
+    [Fact]
+    public void 訂正では補助科目の付いた明細を止める()
+    {
+        // **再計上の中身は利用者が決める**（JournalCorrectionPosting は明細を書き換えない）ので、
+        // 補助科目を空にすれば通る——止めても行き止まりにならない。
+        // **外すと、訂正を経由して規則より後の違反を新しく帳簿へ入れられる**（自己レビューで見つけた）。
+        var entry = SubAccountOnUnusedAccount() with
+        {
+            EntryType = EntryType.Correction,
+            OriginalEntryId = new JournalEntryId(9),
+        };
+
+        var violations = Validate(entry);
+
+        Assert.Equal(
+            ViolationSeverity.Error,
+            AssertViolation(JournalViolationCodes.SubAccountNotAllowed, violations).Severity);
+        Assert.True(violations.HasError());
+    }
+
+    /// <summary>補助科目を使わない科目（現金）の明細に補助科目を付けた伝票。</summary>
+    private static JournalEntry SubAccountOnUnusedAccount()
+        => AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                subAccountId: AccountingFixture.SubAccountOfCash),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.AccountsPayable, 1_000));
 
     [Fact]
     public void 親の勘定科目に属する補助科目は使える()

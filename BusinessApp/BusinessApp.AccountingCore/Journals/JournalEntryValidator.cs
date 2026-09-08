@@ -216,7 +216,7 @@ public static class JournalEntryValidator
                     JournalViolationCodes.AccountInactive,
                     $"勘定科目「{account.Name}」は無効なので、新しい計上には使えません。",
                     line.LineNo,
-                    AmendmentSeverity(entry)));
+                    InactiveSeverity(entry)));
             }
 
             if (account.Category.IsProfitAndLoss() && line.DepartmentId is null)
@@ -255,7 +255,7 @@ public static class JournalEntryValidator
                 JournalViolationCodes.DepartmentInactive,
                 $"部門「{department.Name}」は無効なので、新しい計上には使えません。",
                 line.LineNo,
-                    AmendmentSeverity(entry)));
+                    InactiveSeverity(entry)));
         }
     }
 
@@ -270,7 +270,8 @@ public static class JournalEntryValidator
                 violations.Add(new Violation(
                     JournalViolationCodes.SubAccountRequired,
                     $"勘定科目「{account.Name}」は補助科目を使います。補助科目を選んでください。",
-                    line.LineNo));
+                    line.LineNo,
+                    SystemAuthoredSeverity(entry)));
             }
             return;
         }
@@ -286,7 +287,7 @@ public static class JournalEntryValidator
                 JournalViolationCodes.SubAccountNotAllowed,
                 $"勘定科目「{account.Name}」は補助科目を使いません。補助科目を空にしてください。",
                 line.LineNo,
-                AmendmentSeverity(entry)));
+                SystemAuthoredSeverity(entry)));
             return;
         }
 
@@ -317,35 +318,53 @@ public static class JournalEntryValidator
                 JournalViolationCodes.SubAccountInactive,
                 $"補助科目「{subAccount.Name}」は無効なので、新しい計上には使えません。",
                 line.LineNo,
-                    AmendmentSeverity(entry)));
+                    InactiveSeverity(entry)));
         }
     }
 
     /// <summary>
-    /// <b>過去の計上を打ち消す・直す操作では止めない</b>ことの重さ。
+    /// 無効にしたマスタを使っていることの重さ。
     /// </summary>
     /// <remarks>
     /// <para><b>取消と訂正では止めない。</b> 新たな計上には使えないが、どちらも
-    /// 「過去に計上したものを打ち消す・直す」操作なので、あとから規則やマスタが変わったせいで
+    /// 「過去に計上したものを打ち消す・直す」操作なので、後からマスタを無効にしたせいで
     /// <b>訂正も取消もできない仕訳が帳簿に残る</b>という最悪の状態を作ってはいけない
     /// （docs/10 §6・ADR-0004）。</para>
     /// <para><b>訂正を含めるのは 2026-08-25 の自己レビューで直した。</b> 訂正は取消を先に計上してから
     /// 再計上の下書きを開く（ADR-0015）。ここが Error のままだと、原仕訳が無効なマスタを使っていた場合に
     /// <b>取消だけが確定して再計上は永久に計上できない</b>——利用者から見れば、訂正しようとしたら
     /// 取り消されただけで詰む。ADR-0015 の「誤って取り消したときの復旧」も同じ理由で塞がれていた。</para>
-    /// <para><b>使うのは 2 か所</b>——無効にしたマスタ（勘定科目・補助科目・部門）と、
-    /// <b>補助科目を使わない科目に補助科目が付いている</b>形（ADR-0038 §3。docs/04 §1 の A-3）。
-    /// 後者は<b>規則より前に計上された伝票が実際に持っている</b>（開発機に 1 行。2026-09-08 実測）ので、
-    /// Error にすると<b>その伝票を取り消せなくなる</b>。取消の明細はシステムが原仕訳から作り、
-    /// 利用者に直す手立てが無い（<c>JournalReversalPosting</c>）。</para>
-    /// <para><b>DDL のトリガも同じ広さにしてある</b>（docs/10 §4-2-1 の二層の広さ。
-    /// <c>trg_journal_entries_sub_account_matches_account_when_posted</c> が
-    /// <c>entry_type NOT IN ('reversal', 'correction')</c> で同じ線を引く）。</para>
+    /// <para><b>補助科目の 2 値（ADR-0038 §3）には、この重さを使わない。</b>
+    /// あちらは<b>取消だけ</b>を外す（<see cref="SystemAuthoredSeverity"/>）——
+    /// 訂正の再計上は利用者が補助科目を空にできるので、止めても行き止まりにならない。</para>
     /// </remarks>
-    private static ViolationSeverity AmendmentSeverity(JournalEntry entry)
+    private static ViolationSeverity InactiveSeverity(JournalEntry entry)
         => entry.EntryType is EntryType.Reversal or EntryType.Correction
             ? ViolationSeverity.Warning
             : ViolationSeverity.Error;
+
+    /// <summary>
+    /// <b>中身をシステムが決める伝票</b>でだけ止めないことの重さ（補助科目の 2 値。ADR-0038 §3）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>外すのは取消だけである。</b> 取消の明細はサーバが原仕訳を反転して作り
+    /// （<c>JournalReversalPosting</c>）、<b>利用者が直す手立てが無い</b>。
+    /// Error にすると、規則より前に計上された伝票を<b>取り消せなくなる</b>——
+    /// 開発機に「補助科目を使わない科目に補助科目が付いた計上済み明細」が 1 行ある
+    /// （2026-09-08 実測。数え方は qa/04）。</para>
+    /// <para><b>訂正（再計上）は外さない。</b> 再計上の中身は利用者が決め、サーバは一切書き換えない
+    /// （<c>JournalCorrectionPosting</c> の注記）ので、<b>補助科目を空にすれば通る</b>——
+    /// 行き止まりにならない。外すと、訂正を経由して<b>規則より後の違反を新しく帳簿へ入れられる</b>
+    /// （自己レビューで見つけた。2026-09-08）。</para>
+    /// <para><b>「要る」側にも同じ線を引く。</b> 使う科目に変えられた後の過去の明細は
+    /// 補助科目を持たないので、Error のままだと同じく取り消せなくなる
+    /// （開発機では 0 行。2026-09-08 実測）。</para>
+    /// <para><b>DDL のトリガも同じ広さにしてある</b>（docs/10 §4-2-1 の二層の広さ。
+    /// <c>trg_journal_entries_sub_account_presence_when_posted</c> が
+    /// <c>entry_type &lt;&gt; 'reversal'</c> で同じ線を引く）。</para>
+    /// </remarks>
+    private static ViolationSeverity SystemAuthoredSeverity(JournalEntry entry)
+        => entry.EntryType is EntryType.Reversal ? ViolationSeverity.Warning : ViolationSeverity.Error;
 
     private static void ValidateTaxLine(JournalLine line, JournalEntry entry, List<Violation> violations)
     {

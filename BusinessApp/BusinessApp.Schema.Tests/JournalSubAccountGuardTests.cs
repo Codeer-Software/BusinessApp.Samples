@@ -12,9 +12,9 @@ using Microsoft.Data.Sqlite;
 /// 関門（<c>JournalEntryValidator</c>）が本体で、ここは<b>関門が走らない経路</b>
 /// （CSV 取込・<c>sql</c> CLI・手作業の SQL）への最後の守りである。</para>
 /// <para><b>広さは関門に揃えてある</b>（docs/10 §4-2-1 の二層の広さ）——
-/// 「持てない」側は<b>取消と訂正では止めない</b>。規則より前に計上された伝票を
-/// 打ち消せなくなるからで、取消の明細はシステムが原仕訳から作る（docs/10 §5・ADR-0004）。
-/// <b>「要る」側は全種別で止める</b>（そちらは関門も Error である）。</para>
+/// <b>外すのは取消だけ</b>で、両方向とも同じ線である。取消の明細はサーバが原仕訳から作り、
+/// 利用者に直す手立てが無いので、止めると規則より前の伝票を打ち消せなくなる（docs/10 §5・ADR-0004）。
+/// <b>訂正（再計上）は外さない</b>——中身は利用者が決めるので、補助科目を空にすれば通る。</para>
 /// <para><b>下書きには求めない。</b> 摘要（<see cref="JournalDescriptionGuardTests"/>）と同じく、
 /// 見るのは<b>下書き → 計上の UPDATE</b> だけである。</para>
 /// </remarks>
@@ -108,28 +108,46 @@ public class JournalSubAccountGuardTests
         Assert.Equal("posted", StatusOf(db));
     }
 
-    [Theory]
-    [InlineData("reversal")]
-    [InlineData("correction")]
-    public void 取消と訂正は補助科目が付いていても計上できる(string entryType)
+    [Fact]
+    public void 取消は補助科目が付いていても計上できる()
     {
         // **規則より前に計上された伝票を打ち消せなくなってはいけない**（docs/10 §5・ADR-0004）。
-        // 関門も同じ広さで、こちらは警告に留める。
-        using var db = Draft(SubAccountOfUnusedAccount, "1", entryType);
+        // 取消の明細はサーバが原仕訳から作るので、利用者に直す手立てが無い。
+        using var db = Draft(SubAccountOfUnusedAccount, "1", "reversal");
 
         TestDatabase.Execute(db, Post);
 
         Assert.Equal("posted", StatusOf(db));
     }
 
-    [Theory]
-    [InlineData("reversal")]
-    [InlineData("correction")]
-    public void 取消と訂正でも補助科目が要る側は止める(string entryType)
+    [Fact]
+    public void 取消は補助科目が無くても計上できる()
     {
-        // **「要る」側は全種別で止める。** 原仕訳が補助科目を持っていれば取消にも写るので、
-        // ここが鳴るのは原仕訳の側が壊れている場合だけである。
-        using var db = Draft(UsesSubAccount, subAccountId: null, entryType);
+        // 「要る」側も同じ線である。使う科目に変えられた後の過去の明細は補助科目を持たない。
+        using var db = Draft(UsesSubAccount, subAccountId: null, "reversal");
+
+        TestDatabase.Execute(db, Post);
+
+        Assert.Equal("posted", StatusOf(db));
+    }
+
+    [Fact]
+    public void 訂正は補助科目が付いていると計上できない()
+    {
+        // **訂正の再計上は利用者が直せる**ので止める（JournalCorrectionPosting は明細を書き換えない）。
+        // ここを外すと、訂正を経由して規則より後の違反を新しく帳簿へ入れられる。
+        using var db = Draft(SubAccountOfUnusedAccount, "1", "correction");
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Post));
+
+        Assert.Contains("補助科目を使わない勘定科目の明細に補助科目は付けられない", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("draft", StatusOf(db));
+    }
+
+    [Fact]
+    public void 訂正は補助科目が無いと計上できない()
+    {
+        using var db = Draft(UsesSubAccount, subAccountId: null, "correction");
 
         var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Post));
 
