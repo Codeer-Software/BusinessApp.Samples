@@ -53,6 +53,11 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
             [new("Code", "code", "税区分コード"),
              new("TaxationType", "taxation_type", "課税区分"),
              new("RateKind", "rate_kind", "税率区分")]),
+        new("Partner", "取引先", "partners", "partner_id",
+            [new("Code", "code", "取引先コード")],
+            EntryColumn: "partner_id",
+            UsageUnit: "振替伝票",
+            UsageCounter: "枚"),
     ];
 
     /// <summary>部品の組み立て。</summary>
@@ -156,7 +161,7 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
         // 締めは「以後の振替伝票ではそちらを選ぶ」と言う——部門・税区分は「記帳する先」ではなく明細で選ぶものなので、
         // 4 マスタで成り立つ動詞にする。
         throw new MasterRejectedException(
-            $"この{master.Label}は計上済みの仕訳明細 {used.ToString("N0", CultureInfo.InvariantCulture)} 行で使われているので、"
+            $"この{master.Label}は計上済みの{master.UsageUnit} {used.ToString("N0", CultureInfo.InvariantCulture)} {master.UsageCounter}で使われているので、"
             + $"{string.Join("・", changed.Select(c => $"「{c.Label}」"))}は変えられません。"
             + $"新しい{master.Label}を作って、以後の振替伝票ではそちらを選んでください。");
     }
@@ -172,7 +177,7 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
     /// 置き場所は画面の注記のほう（勘定科目の詳細）。</para>
     /// </remarks>
     private static string Loosening(GuardedMaster master, OneWayColumn column, long used)
-        => $"この{master.Label}は計上済みの仕訳明細 {used.ToString("N0", CultureInfo.InvariantCulture)} 行で使われているので、"
+        => $"この{master.Label}は計上済みの{master.UsageUnit} {used.ToString("N0", CultureInfo.InvariantCulture)} {master.UsageCounter}で使われているので、"
            + $"「{column.Column.Label}」をオフにできません。"
            + $"{column.Harm}。"
            + $"{column.Instead}。";
@@ -232,13 +237,23 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
     /// <param name="OneWayColumns">
     /// <b>緩める向きだけを拒む列</b>（真偽値。オフ → オンは通し、オン → オフを拒む）。
     /// </param>
+    /// <param name="UsageUnit">断りで数える単位の呼び名（既定は仕訳明細）。</param>
+    /// <param name="UsageCounter">その単位の助数詞（既定は行）。</param>
+    /// <param name="EntryColumn">
+    /// <b>伝票（<c>journal_entries</c>）の側でもこのマスタを指す列</b>（取引先だけ）。
+    /// <b>明細が空なら伝票の値が実効値になる</b>ので、明細だけを数えると
+    /// 「伝票にだけ取引先を入れた計上済みの伝票」を取りこぼす（docs/10 §6-2 の実効値）。
+    /// </param>
     public sealed record GuardedMaster(
         string ModuleName,
         string Label,
         string Table,
         string LineColumn,
         IReadOnlyList<GuardedColumn> Columns,
-        IReadOnlyList<OneWayColumn>? OneWayColumns = null)
+        IReadOnlyList<OneWayColumn>? OneWayColumns = null,
+        string? EntryColumn = null,
+        string UsageUnit = "仕訳明細",
+        string UsageCounter = "行")
     {
         /// <summary>緩める向きだけを拒む列（未指定なら空）。</summary>
         public IReadOnlyList<OneWayColumn> OneWay => OneWayColumns ?? [];

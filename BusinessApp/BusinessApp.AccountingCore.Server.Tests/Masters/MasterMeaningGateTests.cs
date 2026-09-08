@@ -27,10 +27,17 @@ public class MasterMeaningGateTests
         => new() { ModuleName = module, Add = [data] };
 
     private static ModuleData Row(string module, string id, string field, FieldDataBase value)
+        => Row(module, id, (field, value));
+
+    private static ModuleData Row(string module, string id, params (string Field, FieldDataBase Value)[] fields)
     {
         var data = new ModuleData { Name = module };
         data.Fields["Id"] = new IdFieldData { Value = id };
-        data.Fields[field] = value;
+        foreach (var (field, value) in fields)
+        {
+            data.Fields[field] = value;
+        }
+
         return data;
     }
 
@@ -435,14 +442,22 @@ public class MasterMeaningGateTests
     }
 
     /// <summary>新規の行は見ない（仮の識別子。計上済みの明細から参照されえない）。</summary>
+    /// <remarks>
+    /// <b>追加はコードと名前も伴う。</b> 画面が送ってくる形に揃えてある——
+    /// 値の関門（<c>MasterSubmitGate</c>）が<b>追加にコードを要求する</b>ので、
+    /// 欠けた検体は意味の凍結に届く前に断られる（2026-09-09）。
+    /// </remarks>
     [Fact]
     public async Task 新規の科目は見ない()
     {
         using var server = new AccountingServer();
         PostPayment(server);
 
-        Assert.True(await Submit(server,
-            Adding("Account", Row("Account", "@temporary:1", "Category", new SelectFieldData { Value = "asset" }))));
+        Assert.True(await Submit(server, Adding("Account", Row(
+            "Account", "@temporary:1",
+            ("Category", new SelectFieldData { Value = "asset" }),
+            ("Code", new TextFieldData { Value = "9101" }),
+            ("Name", new TextFieldData { Value = "検証" })))));
     }
 
     /// <summary>更新の側に仮の識別子の行が混ざった形も、新規の行として通す（識別子が読めない更新の唯一の例外）。</summary>
@@ -606,6 +621,14 @@ public class MasterMeaningGateTests
                 guarded.Groups["columns"].Value.Split(',').Select(c => c.Trim()).Order());
             Assert.Contains($"l.{master.LineColumn} = OLD.id", frozen, StringComparison.Ordinal);
 
+            // **伝票にも入る列は、伝票の側も数える**（取引先だけ。docs/10 §6-2）。
+            // 明細しか見ないトリガは、伝票にだけ取引先を入れた計上済みの伝票を取りこぼす
+            // ——関門は数えるので、画面は断るのに DB は通す（守りが 1 層に落ちる。2026-09-09 の自己レビュー）。
+            if (master.EntryColumn is string entryColumn)
+            {
+                Assert.Contains($"e.{entryColumn} = OLD.id", frozen, StringComparison.Ordinal);
+            }
+
             // **一方通行の列は、緩める向きだけを見る別のトリガが守る**（docs/10 §6-2）。
             // 意味の凍結のトリガに混ぜると、オンにする向きまで止まる。
             foreach (var column in master.OneWay.Select(o => o.Column))
@@ -616,12 +639,56 @@ public class MasterMeaningGateTests
                 Assert.Contains($"l.{master.LineColumn} = OLD.id", oneWay, StringComparison.Ordinal);
             }
 
-            Assert.Contains($"l.{master.LineColumn} = NEW.id",
-                TriggerSql(server, $"trg_{master.Table}_no_replace_used_insert"), StringComparison.Ordinal);
-            Assert.Contains($"l.{master.LineColumn} IN (OLD.id, NEW.id)",
-                TriggerSql(server, $"trg_{master.Table}_no_replace_used_update"), StringComparison.Ordinal);
+            var replaceInsert = TriggerSql(server, $"trg_{master.Table}_no_replace_used_insert");
+            var replaceUpdate = TriggerSql(server, $"trg_{master.Table}_no_replace_used_update");
+            Assert.Contains($"l.{master.LineColumn} = NEW.id", replaceInsert, StringComparison.Ordinal);
+            Assert.Contains($"l.{master.LineColumn} IN (OLD.id, NEW.id)", replaceUpdate, StringComparison.Ordinal);
+            if (master.EntryColumn is string replaceColumn)
+            {
+                Assert.Contains($"e.{replaceColumn} = NEW.id", replaceInsert, StringComparison.Ordinal);
+                Assert.Contains($"e.{replaceColumn} IN (OLD.id, NEW.id)", replaceUpdate, StringComparison.Ordinal);
+            }
+
+            // **id が動いたときだけ鳴らす。** `UPDATE OF id` は SET 句に id が並べば
+            // 値が同じでも発火するので、この条件が無いと**使用中の行は名前すら直せない**
+            // （取引先へ写したときに落ちていた。2026-09-09 の自己レビュー）。
+            Assert.Contains("WHEN NEW.id IS NOT OLD.id", replaceUpdate, StringComparison.Ordinal);
         }
     }
+
+    /// <summary>
+    /// <b>置き換えの守りは、表と列の名前を除いて 4 マスタで 1 字も違わない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>断片一致では、写しから 1 行落ちたことを捕まえられない</b>——
+    /// <c>WHEN</c> 節の脱落を実際に見逃した（qa/03 L-37）。
+    /// <c>MasterCodeGuardTests.トリガ12本は同じ条件を持つ</c> と同じ形で、<b>全文で突き合わせる</b>。</para>
+    /// <para><b>取引先だけは外す。</b> 明細だけでなく伝票の側も数えるので、
+    /// EXISTS が 1 つ多い（docs/10 §6-2）。その差は
+    /// <see cref="関門とトリガは同じ列を守る"/> と <c>MasterMeaningGuardTests</c> の振る舞いの検体が見る。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData("insert")]
+    [InlineData("update")]
+    public void 置き換えの守りは4マスタで同じ全文である(string kind)
+    {
+        using var server = new AccountingServer();
+
+        var normalized = MasterMeaningGate.Guarded
+            .Where(m => m.EntryColumn is null)
+            .Select(m => Normalize(TriggerSql(server, $"trg_{m.Table}_no_replace_used_{kind}"), m))
+            .ToList();
+
+        Assert.Equal(4, normalized.Count);
+        Assert.All(normalized, sql => Assert.Equal(normalized[0], sql));
+    }
+
+    /// <summary>表・列・トリガ・呼び名を伏せる（残るのは条件の形だけ）。</summary>
+    private static string Normalize(string sql, MasterMeaningGate.GuardedMaster master)
+        => sql.Replace($"l.{master.LineColumn}", "l.@column", StringComparison.Ordinal)
+              .Replace($"trg_{master.Table}_", "trg_@table_", StringComparison.Ordinal)
+              .Replace($"ON {master.Table}", "ON @table", StringComparison.Ordinal)
+              .Replace(master.Label, "@label", StringComparison.Ordinal);
 
     private static string TriggerSql(AccountingServer server, string name)
         => server.Scalar<string>($"select sql from sqlite_master where type = 'trigger' and name = '{name}'");
@@ -633,5 +700,73 @@ public class MasterMeaningGateTests
             .EnumerateFiles(TestSupport.TestDatabase.ModulesDirectory, $"{module}.mod.json", SearchOption.AllDirectories)
             .Single();
         return JsonDocument.Parse(File.ReadAllText(path));
+    }
+
+    // --- 取引先（ADR-0047 の決定 9。2026-09-09 に 4 マスタと揃えた） ----------------
+
+    /// <summary>
+    /// 計上済みの明細が使っている取引先は、コードを変えられない。
+    /// </summary>
+    /// <remarks>
+    /// <b>帳簿には取引先の名称と登録番号を焼き込んでいる</b>（ADR-0018）ので、
+    /// コードを変えても過去の記載は動かない。それでも揃えるのは、利用者から見て
+    /// 「科目コードは変えられないのに取引先コードは変えられる」を説明できないからである。
+    /// </remarks>
+    [Fact]
+    public async Task 計上済みの明細が使っている取引先のコードは変えられない()
+    {
+        using var server = new AccountingServer();
+        var partner = server.InsertPartner();
+
+        // **計上する前に入れる。** 計上済みの明細は DDL のトリガが変更を拒む（I-05）。
+        var entry = server.InsertDraft(
+            transactionDate: "2026-08-24", postingDate: "2026-08-24", description: "支払");
+        server.InsertLine(entry, 1, "debit", "2200", 1000);
+        server.InsertLine(entry, 2, "credit", "1100", 1000);
+        server.Execute($"update journal_lines set partner_id = {partner} where journal_entry_id = {entry.Value} and line_no = 1");
+        server.Execute(
+            $"update journal_entries set status = 'posted', entry_no = 1, posted_at = '2026-08-24 13:00:00' where id = {entry.Value}");
+
+        var thrown = await Rejected(
+            server,
+            Updating("Partner", Row("Partner", Id(partner), "Code", new TextFieldData { Value = "P999" })));
+
+        Assert.Contains("この取引先は計上済みの振替伝票 1 枚で使われている", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「取引先コード」は変えられません", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>伝票にだけ入れた取引先も数える</b>（明細が空なら伝票の値が実効値になる。docs/10 §6-2）。
+    /// </summary>
+    /// <remarks>
+    /// <b>明細だけを数えると、この経路を取りこぼす。</b> 取引先は伝票にも明細にも入るので、
+    /// 数える単位も「振替伝票の枚数」にしてある——行で数えると同じ伝票を何度も数える。
+    /// </remarks>
+    [Fact]
+    public async Task 伝票にだけ入れた取引先も使用中に数える()
+    {
+        using var server = new AccountingServer();
+        var partner = server.InsertPartner();
+        server.InsertPosted(1, "支払", "2026-08-24", partner, ("debit", "2200", 1000), ("credit", "1100", 1000));
+
+        var thrown = await Rejected(
+            server,
+            Updating("Partner", Row("Partner", Id(partner), "Code", new TextFieldData { Value = "P999" })));
+
+        Assert.Contains("振替伝票 1 枚", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>下書きだけが使っている取引先は変えられる（使用中は計上済みだけ。ADR-0038 §1）。</summary>
+    [Fact]
+    public async Task 下書きだけが使う取引先のコードは変えられる()
+    {
+        using var server = new AccountingServer();
+        var partner = server.InsertPartner();
+        var draft = server.InsertDraft();
+        server.Execute($"update journal_entries set partner_id = {partner} where id = {draft.Value}");
+
+        Assert.True(await Submit(
+            server,
+            Updating("Partner", Row("Partner", Id(partner), "Code", new TextFieldData { Value = "P999" }))));
     }
 }

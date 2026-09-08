@@ -82,6 +82,23 @@ public sealed class PartnerStore(IDbAccessor dbAccessor, string dataSourceName)
     }
 
     /// <summary>
+    /// 同じコードの取引先が既にあれば、<b>その行に保存されている字</b>を返す（<b>大小を無視して探す</b>。自分自身は除く）。
+    /// </summary>
+    /// <remarks>
+    /// <b>大小の畳み方は DB の <c>COLLATE NOCASE</c> に任せる</b>——C# 側で畳むと、
+    /// DDL の一意索引と畳み方がずれたときに気づけない（docs/20 §4）。
+    /// </remarks>
+    public async Task<string?> FindConflictingCodeAsync(string code, PartnerId? id)
+    {
+        var rows = await dbAccessor.QueryAsync(
+            dataSourceName,
+            "select code from partners where code = @p1 collate nocase and (@p2 is null or id <> @p2) limit 1",
+            new() { { "@p1", Param(code) }, { "@p2", Param(id?.Value) } });
+
+        return rows.Count == 0 ? null : DbValue.ToText(rows[0]["code"]);
+    }
+
+    /// <summary>
     /// 問い合わせ用のパラメータに包む。
     /// </summary>
     /// <remarks>

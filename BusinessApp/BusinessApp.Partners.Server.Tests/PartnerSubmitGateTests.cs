@@ -4,6 +4,8 @@ using System.Globalization;
 
 using BusinessApp.Partners.Server;
 using BusinessApp.Partners.Server.Tests.Fixtures;
+using BusinessApp.ServerSupport;
+using BusinessApp.TestSupport;
 
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
@@ -32,10 +34,24 @@ public class PartnerSubmitGateTests
         => new() { ModuleName = PartnerSubmitGate.ModuleName, Update = [.. data] };
 
     /// <summary>CLB は<b>変更されたフィールドしか送ってこない</b>ので、渡された項目だけ載せる。</summary>
+    /// <summary>
+    /// 検体の取引先。<b>コードは既定で入れる</b>（追加はコードを必ず伴う。ADR-0047 の決定 10）。
+    /// </summary>
+    /// <remarks>
+    /// <b>既定を「入っている」側にする。</b> 入っていない検体を既定にすると、
+    /// <b>本番では起きない形</b>（画面は必ずコードを送る）で他の規則を検査することになる。
+    /// コードを差分に載せない検体は <paramref name="code"/> に <c>null</c> を渡す。
+    /// </remarks>
     private static ModuleData Partner(
-        long? id = null, string? corporateNumber = null, string? entityType = null, string? parentId = null)
+        long? id = null, string? corporateNumber = null, string? entityType = null, string? parentId = null,
+        string? code = "P900")
     {
         var data = new ModuleData { Name = PartnerSubmitGate.ModuleName };
+
+        if (code is not null)
+        {
+            data.Fields["Code"] = new TextFieldData { Value = code };
+        }
 
         if (id is long rowId)
         {
@@ -438,7 +454,7 @@ public class PartnerSubmitGateTests
     public async Task 新規作成の親指定は通す()
     {
         using var server = new PartnerServer();
-        var parent = InsertPartner(server);
+        var parent = InsertPartner(server, "P800");
         var data = Partner(parentId: parent.ToString(CultureInfo.InvariantCulture));
         data.Fields["Id"] = new IdFieldData { Value = "@temporary:0f0a" };
         var save = new SaveSpy();
@@ -689,13 +705,15 @@ public class PartnerSubmitGateTests
         await RejectedAsync(server, Adding(row), new SaveSpy());
     }
 
-    /// <summary>想定していない型で親が来たら、突き合わせの対象にしない。</summary>
+    /// <summary>想定していない型で親が来たら、素通しではなく止める。</summary>
     /// <remarks>
-    /// CLB は宣言した型でしか送らないので、ここに来るのは API を直に叩いた経路だけである。
-    /// 例外にせず素通しするのは、外部キーが最後に受け止めるからである。
+    /// <b><c>null</c> に落とすと、自己親・種別の食い違い・深さ 1 の 3 本がまとめて素通しになる</b>
+    /// ——<c>Reference</c> 自身がその戒めを書いていたのに、この検体がそれを「正しい」と固定していた
+    /// （2026-09-09 の自己レビュー）。<b>外部キーは親の実在しか見ない</b>ので、
+    /// 深さや種別の規則の受け皿にはならない。
     /// </remarks>
     [Fact]
-    public async Task 想定していない型の親は突き合わせに使わない()
+    public async Task 想定していない型の親なら止める()
     {
         using var server = new PartnerServer();
         var root = InsertPartner(server, "P800");
@@ -705,9 +723,11 @@ public class PartnerSubmitGateTests
         var row = Partner();
         row.Fields["ParentPartner"] = new NumberFieldData { Value = root };
 
-        await Gate(server).SubmitAsync([Adding(row)], save.SaveAsync);
+        var thrown = await Assert.ThrowsAsync<UnreadableFieldException>(
+            () => Gate(server).SubmitAsync([Adding(row)], save.SaveAsync));
 
-        Assert.True(save.Called);
+        Assert.Equal("ParentPartner", thrown.Field);
+        Assert.False(save.Called);
     }
 
     /// <summary>自分が誰かの親になっているなら、自分に親は付けられない（同上）。</summary>
@@ -915,5 +935,205 @@ public class PartnerSubmitGateTests
             """);
 
         return server.Scalar<long>("select last_insert_rowid()");
+    }
+
+    // --- コードの書式と重複（ADR-0047。docs/04 §1 の B-1・B-2） -------------------
+
+    [Theory]
+    [InlineData("11 00", "目に見えない文字")]
+    [InlineData("Ｐ００１", "使えません")]
+    [InlineData("-P001", "先頭に「-」「_」は置けません")]
+    [InlineData("P--001", "続けて")]
+    [InlineData("123456789012345678901", "20 文字以内")]
+    public async Task 書式に反するコードは利用者の語で断る(string code, string expected)
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        var rejected = await RejectedAsync(server, Adding(Partner(code: code)), save);
+
+        Assert.Contains(expected, rejected.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>関門が読む欄の型が、デザインで変わったらここで赤くなる。</b>
+    /// </summary>
+    /// <remarks>
+    /// 関門は読めない型で止まるが、<b>止まるのは本番で保存された瞬間</b>である。
+    /// デザインに <c>TypeFullName</c> が入っているので、<b>型を変えた瞬間にコミット前で赤くする</b>
+    /// （会計コア側の <c>MasterSubmitGateTests</c> と同じ形。2026-09-09 の自己レビュー）。
+    /// </remarks>
+    [Theory]
+    [InlineData("Code", "TextFieldDesign")]
+    [InlineData("CorporateNumber", "TextFieldDesign")]
+    [InlineData("EntityType", "SelectFieldDesign")]
+    [InlineData("ParentPartner", "LinkFieldDesign")]
+    public void 関門が読む欄の型はデザインと一致する(string field, string designType)
+    {
+        var path = Directory
+            .EnumerateFiles(TestDatabase.ModulesDirectory, "Partner.mod.json", SearchOption.AllDirectories)
+            .Single();
+        using var design = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+
+        var found = design.RootElement.GetProperty("Fields").EnumerateArray()
+            .Single(f => f.GetProperty("Name").GetString() == field);
+
+        Assert.Equal(
+            $"Codeer.LowCode.Blazor.Repository.Design.{designType}",
+            found.GetProperty("TypeFullName").GetString());
+    }
+
+    /// <summary>
+    /// <b>コードの無い追加は断る。</b>
+    /// </summary>
+    /// <remarks>
+    /// 画面は必ずコードを送るが、<b>取込は列ごと落とせる</b>（`code` の無い CSV）——
+    /// <b>取込こそこの関門が守る経路である</b>。素通しにすると DB の <c>NOT NULL</c> に当たり、
+    /// 利用者には定型文が出る（qa/03 L-28 に戻る）。
+    /// <b>会計コアの 5 マスタには入れたのに、取引先だけ抜けていた</b>（2026-09-09 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task コードの無い追加は断る()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        var rejected = await RejectedAsync(server, Adding(Partner(code: null)), save);
+
+        Assert.EndsWith("「取引先コード」を入れてください。", rejected.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>コードを触らない更新は通る（更新は差分しか届かない。qa/01 F-12）。</summary>
+    [Fact]
+    public async Task コードを触らない更新は通る()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+        var id = InsertPartner(server, "P001");
+
+        await Gate(server).SubmitAsync(
+            [Updating(Partner(id: id, code: null, corporateNumber: ValidNumber))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>欄が読めない型で届いたら、素通しではなく止める。</b>
+    /// </summary>
+    /// <remarks>
+    /// <c>as T</c> で <c>null</c> に落として帰る形だと、<b>デザインで欄の型を変えた日に
+    /// 書式も重複も丸ごと素通しになる</b>のに、フィクスチャが自分で <c>TextFieldData</c> を
+    /// 組むのでテストは緑のままである（2026-09-09 の自己レビュー）。
+    /// <b>利用者向けの断りではない</b>（<c>UnreadableFieldException</c>）——
+    /// 直すのは利用者ではなく、デザインを変えた側だからである。
+    /// <b>会計コアのホストでは、入口が定型文へ差し替えて原文をログへ回す</b>
+    /// （<c>AccountingSubmitPipeline</c>。<c>MasterSubmitGateTests.AssertUnreadable</c> が見る）。
+    /// <b>取引先だけを載せるホストを作るときは、その差し替えもここへ持ってくる</b>——
+    /// <c>SaveFailureMessage</c> と同じ宿題である（<c>PartnerSubmitPipeline</c> の注記）。
+    /// </remarks>
+    [Fact]
+    public async Task 読めない型で届いた欄は素通ししないで止める()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+        var partner = Partner();
+        partner.Fields["Code"] = new NumberFieldData { Value = 1 };
+
+        var thrown = await Assert.ThrowsAsync<UnreadableFieldException>(
+            () => Gate(server).SubmitAsync([Adding(partner)], save.SaveAsync));
+
+        Assert.Equal("Code", thrown.Field);
+        Assert.Equal("NumberFieldData", thrown.TypeName);
+        Assert.False(save.Called);
+    }
+
+    [Fact]
+    public async Task コードが空なら必須として断る()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        var rejected = await RejectedAsync(server, Adding(Partner(code: "   ")), save);
+
+        Assert.Contains("「取引先コード」を入れてください", rejected.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary><b>前後の空白は落として差分に書き戻す</b>（ADR-0047 の決定 5）。</summary>
+    [Fact]
+    public async Task 前後の空白は落として差分に書き戻す()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+        var row = Partner(code: "  P001  ");
+
+        await Gate(server).SubmitAsync([Adding(row)], save.SaveAsync);
+
+        Assert.True(save.Called);
+        Assert.Equal("P001", ((TextFieldData)row.Fields["Code"]).Value);
+    }
+
+    /// <summary>
+    /// 大小だけが違うコードも断り、ぶつかった相手の字を見せる。
+    /// </summary>
+    /// <remarks>
+    /// 字を見せないと、利用者は「そのコードは入っていないのに」と思う。
+    /// </remarks>
+    [Fact]
+    public async Task 大小だけが違うコードは相手の字を見せて断る()
+    {
+        using var server = new PartnerServer();
+        server.Execute("insert into partners (code, name) values ('P001', '株式会社アルタイル')");
+        var save = new SaveSpy();
+
+        var rejected = await RejectedAsync(server, Adding(Partner(code: "p001")), save);
+
+        Assert.Contains("P001", rejected.Message, StringComparison.Ordinal);
+        Assert.Contains("大文字と小文字を区別しない", rejected.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 同じ字のコードは、大小の注記を付けずに断る。
+    /// </summary>
+    /// <remarks>
+    /// <b>注記は「見比べても分からない」ときにだけ要る。</b> 同じ字なら、
+    /// 「大文字と小文字を区別しない」と言われても利用者には無関係な情報である。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ字のコードは注記なしで断る()
+    {
+        using var server = new PartnerServer();
+        server.Execute("insert into partners (code, name) values ('P001', '株式会社アルタイル')");
+        var save = new SaveSpy();
+
+        var rejected = await RejectedAsync(server, Adding(Partner(code: "P001")), save);
+
+        Assert.Contains("「取引先コード」の「P001」は既に使われています", rejected.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("大文字と小文字", rejected.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>自分自身は重複に数えない。</summary>
+    [Fact]
+    public async Task 自分と同じコードは重複に数えない()
+    {
+        using var server = new PartnerServer();
+        server.Execute("insert into partners (code, name) values ('P001', '株式会社アルタイル')");
+        var id = server.Scalar<long>("select id from partners where code = 'P001'");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync([Updating(Partner(id: id, code: "P001"))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>コードを触っていない保存は、コードを見ない（差分に載らない欄は「変えていない」）。</summary>
+    [Fact]
+    public async Task コードを触っていなければ見ない()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync([Adding(Partner(corporateNumber: ValidNumber))], save.SaveAsync);
+
+        Assert.True(save.Called);
     }
 }

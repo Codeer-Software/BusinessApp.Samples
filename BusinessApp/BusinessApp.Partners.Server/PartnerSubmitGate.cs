@@ -34,9 +34,9 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         ArgumentNullException.ThrowIfNull(transactionData);
         ArgumentNullException.ThrowIfNull(save);
 
-        foreach (var data in PartnersIn(transactionData))
+        foreach (var (data, adding) in PartnersIn(transactionData))
         {
-            await RejectAsync(data);
+            await RejectAsync(data, adding);
         }
 
         return await save();
@@ -49,19 +49,88 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// <b>更新を見落とすと、正しい番号で作ってから壊した番号に直せる。</b>
     /// 追加だけを守る関門は、守っていないのと同じである。
     /// </remarks>
-    private static IEnumerable<ModuleData> PartnersIn(IReadOnlyList<ModuleSubmitData> transactionData)
+    /// <summary>
+    /// この保存に混ざっている取引先の行。<b>追加か更新かも一緒に返す。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>追加だけに掛ける規則があるので、どちらの箱に入っていたかを落とさない</b>
+    /// （コードの必須。<c>MasterSubmitGate</c> と同じ形。2026-09-09 の自己レビュー）。
+    /// </remarks>
+    private static IEnumerable<(ModuleData Data, bool Adding)> PartnersIn(
+        IReadOnlyList<ModuleSubmitData> transactionData)
         => transactionData
-            .SelectMany(d => d.Add.Concat(d.Update))
-            .Where(d => d.Name == ModuleName);
+            .SelectMany(d => d.Add.Select(r => (Data: r, Adding: true))
+                              .Concat(d.Update.Select(r => (Data: r, Adding: false))))
+            .Where(x => x.Data.Name == ModuleName);
 
-    private async Task RejectAsync(ModuleData data)
+    private async Task RejectAsync(ModuleData data, bool adding)
     {
         RejectSelfParent(data);
+
+        // **追加はコードを必ず伴う。** 画面は必ず送ってくるが、**取込は列ごと落とせる**
+        // （`code` の無い CSV）。素通しにすると DB の NOT NULL に当たり、
+        // 利用者には定型文が出る（qa/03 L-28 に戻る。2026-09-09 の自己レビュー）。
+        if (adding && !data.Fields.ContainsKey("Code"))
+        {
+            throw new PartnerRejectedException("「取引先コード」を入れてください。");
+        }
+
+        await RejectBadCodeAsync(data);
         RejectMalformedCorporateNumber(data);
         await RejectSoleProprietorWithCorporateNumberAsync(data);
         await RejectMismatchedParentAsync(data);
         await RejectMismatchedChildrenAsync(data);
         await RejectDeepParentAsync(data);
+    }
+
+    /// <summary>
+    /// コードの書式と、大小を無視した重複（ADR-0047）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>書式の判定は <see cref="MasterCode"/> が持つ。</b> 会計コアのマスタと同じ規則で、
+    /// 同じ実装を両方が参照する（docs/12 §2-1）。<b>取引先だけを載せるホストでも効く</b>——
+    /// <c>BusinessApp.ServerSupport</c> は依存ゼロで、この部品が既に参照している。</para>
+    /// <para><b>正規化した姿を差分に書き戻す。</b> 比べるときだけ落とすと、関門が「同じ」と通した値を
+    /// DDL のトリガが「違う」と拒む（関門の受理集合が DB より広い。qa/03 L-14 の型）。</para>
+    /// <para><b>型を決め打ちして黙って抜けない。</b> <c>is not TextFieldData</c> で帰る形にすると、
+    /// <b>欄の型が変わった日に書式も重複も丸ごと素通しに落ちる</b>——しかもフィクスチャが自分で
+    /// <see cref="TextFieldData"/> を組むのでテストは緑のままである。<see cref="Reference"/> が
+    /// 同じ戒めを書いているのに、こちらに残っていた（2026-09-09 の自己レビュー）。
+    /// <b>届いているのに読めないなら、素通しではなく止める</b>——その判定は <see cref="Field{T}"/> が持つ。</para>
+    /// </remarks>
+    private async Task RejectBadCodeAsync(ModuleData data)
+    {
+        if (Field<TextFieldData>(data, "Code") is not TextFieldData field)
+        {
+            return;
+        }
+
+        var code = MasterCode.Normalize(field.Value);
+        if (code.Length == 0)
+        {
+            throw new PartnerRejectedException("「取引先コード」を入れてください。");
+        }
+
+        if (MasterCode.DescribeProblem("取引先コード", code) is string problem)
+        {
+            throw new PartnerRejectedException(problem);
+        }
+
+        field.Value = code;
+
+        var conflict = await store.FindConflictingCodeAsync(code, Id(data) is long id ? new PartnerId(id) : null);
+        if (conflict is null)
+        {
+            return;
+        }
+
+        // **ぶつかった相手の字を見せる。** 大小だけが違うとき、字を見比べないと理由が分からない。
+        var reason = string.Equals(conflict, code, StringComparison.Ordinal)
+            ? "既に使われています。"
+            : $"大文字と小文字を区別しないので、既にある「{conflict}」と同じコードになります。";
+
+        throw new PartnerRejectedException(
+            $"「取引先コード」の「{code}」は{reason}別のコードを入れてください。");
     }
 
     /// <summary>
@@ -309,7 +378,9 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// しかもフィクスチャが自分で <see cref="LinkFieldData"/> を組むのでテストは緑のまま。
     /// 登録の関門で同じ穴を同じ日に直したのに、こちらに残っていた
     /// （2026-08-31 の自己レビュー）。</para>
-    /// <para><b>新規作成の相手を指しているときは仮の識別子</b>なので数値として読めず、null になる。</para>
+    /// <para><b>新規作成の相手を指しているときは仮の識別子</b>なので数値として読めず、null になる。
+    /// <b>それと「読めない型」は別</b>——後者は <see cref="UnreadableFieldException"/> で止める
+    /// （<c>null</c> に落とすと、この doc が名指しした 3 本がまとめて素通しになる。2026-09-09）。</para>
     /// </remarks>
     private static long? Reference(ModuleData data, string name)
     {
@@ -318,7 +389,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
             {
                 LinkFieldData link => link.Value,
                 IdFieldData id => id.Value,
-                _ => null,
+                _ => throw UnreadableFieldException.For(data.Name, name, field),
             }
             : null;
 
@@ -331,8 +402,20 @@ public sealed class PartnerSubmitGate(PartnerStore store)
             : null;
     }
 
+    /// <summary>
+    /// 触られた欄。<b>載っていなければ <c>null</c></b>（更新は差分しか届かない。qa/01 F-12）。
+    /// </summary>
+    /// <remarks>
+    /// <b>載っているのに型が違うときは止める。</b> <c>as T</c> のまま <c>null</c> を返すと
+    /// 「触られていない」と見分けがつかず、<b>欄の型が変わった日に、その欄を見る検査が
+    /// まとめて素通しへ落ちる</b>——しかもフィクスチャが自分で正しい型を組むので
+    /// テストは緑のままである（<see cref="Reference"/> が名指しする形。2026-09-09 の自己レビュー）。
+    /// <b>文言はホストが定型文へ差し替える</b>（<see cref="UnreadableFieldException"/>）。
+    /// </remarks>
     private static T? Field<T>(ModuleData data, string name) where T : FieldDataBase
-        => data.Fields.TryGetValue(name, out var field) ? field as T : null;
+        => data.Fields.TryGetValue(name, out var field)
+            ? field as T ?? throw UnreadableFieldException.For(data.Name, name, field)
+            : null;
 
     /// <summary>
     /// その項目が差分に載っているか。<b>型を問わない。</b>

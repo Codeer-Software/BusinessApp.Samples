@@ -4,6 +4,7 @@ using BusinessApp.AccountingCore.Server.Journals;
 using BusinessApp.AccountingCore.Server.Masters;
 using BusinessApp.AccountingCore.Server.Settings;
 using BusinessApp.Partners.Server;
+using BusinessApp.ServerSupport;
 
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
@@ -30,11 +31,16 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 /// 1 つ足りないまま通る——しかもテストは緑のままである（ADR-0025 §6 の「持ち出し忘れ」の型）。</para>
 /// <para><b>マスタの関門（<see cref="MasterMeaningGate"/>。ADR-0038）も保存の前に検査するだけ</b>なので内側でよい。
 /// 2026-09-07 に足した（docs/04 §1 の A-1）。</para>
+/// <para><b>値の関門（<see cref="MasterSubmitGate"/>。docs/04 §1 の B-1・B-2）は、意味の凍結の内側に置く。</b>
+/// <b>先に返すべきは意味の凍結のほう</b>——あちらは直す手立てが無い（新しい行を作るしかない）が、
+/// こちらは値を直せば通るからである（<c>MasterMeaningGate</c> が同じ理由で
+/// 意味を決める列の断りを一方通行の列より先に返している）。2026-09-09 に足した。</para>
 /// </remarks>
 public sealed class AccountingSubmitPipeline(
     JournalSubmitGate journals,
     CompanyProfileSubmitGate companyProfile,
     MasterMeaningGate masters,
+    MasterSubmitGate masterValues,
     PartnerSubmitPipeline partners,
     Action<string>? onSaveFailure = null)
 {
@@ -50,6 +56,7 @@ public sealed class AccountingSubmitPipeline(
         => new(JournalSubmitGate.Create(dbAccessor, dataSourceName, timeProvider, authenticationContext),
                new CompanyProfileSubmitGate(),
                MasterMeaningGate.Create(dbAccessor, dataSourceName),
+               MasterSubmitGate.Create(dbAccessor, dataSourceName),
                PartnerSubmitPipeline.Create(dbAccessor, dataSourceName),
                onSaveFailure);
 
@@ -63,15 +70,38 @@ public sealed class AccountingSubmitPipeline(
         IReadOnlyList<ModuleSubmitData> transactionData,
         Func<Task<List<ModuleSubmitResult>>> save)
     {
+        ArgumentNullException.ThrowIfNull(transactionData);
         ArgumentNullException.ThrowIfNull(save);
 
-        var results = await journals.SubmitAsync(
-            transactionData,
-            () => companyProfile.SubmitAsync(
+        // **いちばん先に、空白だけの文字の欄を NULL へ寄せる**（docs/04 §1 の A-5）。
+        // 関門より後ろに置くと、関門が「触った値」と「保存されている値」を比べるときに
+        // 片方が空文字・片方が NULL で「変わった」と読んでしまう。
+        BlankTextNormalizer.ToNull(transactionData);
+
+        List<ModuleSubmitResult> results;
+        try
+        {
+            results = await journals.SubmitAsync(
                 transactionData,
-                () => masters.SubmitAsync(
+                () => companyProfile.SubmitAsync(
                     transactionData,
-                    () => partners.SubmitAsync(transactionData, save))));
+                    () => masters.SubmitAsync(
+                        transactionData,
+                        () => masterValues.SubmitAsync(
+                            transactionData,
+                            () => partners.SubmitAsync(transactionData, save)))));
+        }
+        catch (UnreadableFieldException unreadable)
+        {
+            // **欄の型が読めないのは利用者の誤りではない**ので、利用者には定型文だけを見せ、
+            // 中身はホストのログへ回す（<see cref="SaveFailureMessage"/> と同じ分担）。
+            // **投げ直す例外に内側を残さない**——ホストの例外ハンドラは
+            // InnerException の文言まで連ねて返すので、残すと結局そのまま画面に出る。
+            // **スタックまで渡す。** 内側を捨てた例外を投げ直すので、
+            // ホスト側の例外ログには「どの関門で読めなかったか」が残らない。
+            onSaveFailure?.Invoke(unreadable.ToString());
+            throw new InvalidOperationException(SaveFailureMessage.Text);
+        }
 
         return SaveFailureMessage.ToUserLanguage(results, onSaveFailure);
     }

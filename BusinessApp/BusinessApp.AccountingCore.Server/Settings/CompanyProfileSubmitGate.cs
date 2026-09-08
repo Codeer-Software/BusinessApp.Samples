@@ -25,6 +25,12 @@ public sealed class CompanyProfileSubmitGate
     /// <summary>自社情報のモジュール名。</summary>
     public const string ModuleName = "CompanyProfile";
 
+    /// <summary>決算月の下限（1 月）。</summary>
+    private const int FirstMonth = 1;
+
+    /// <summary>決算月の上限（12 月）。</summary>
+    private const int LastMonth = 12;
+
     /// <summary>保存を包む。<paramref name="save"/> は CLB 本来の保存処理。</summary>
     public async Task<List<ModuleSubmitResult>> SubmitAsync(
         IReadOnlyList<ModuleSubmitData> transactionData,
@@ -56,6 +62,46 @@ public sealed class CompanyProfileSubmitGate
             .Where(d => d.Name == ModuleName);
 
     private static void Reject(ModuleData data)
+    {
+        RejectBadFiscalYearEndMonth(data);
+        RejectBadCorporateNumber(data);
+    }
+
+    /// <summary>
+    /// 決算月は 1〜12 の月である（DDL の <c>CHECK (fiscal_year_end_month BETWEEN 1 AND 12)</c>）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>13 を入れると定型文になっていた</b>（qa/03 L-28。2026-09-04 の探索的テストで実測）。
+    /// 画面の <c>Min</c> / <c>Max</c> で止める手もあるが、<b>そちらは CLB 自身の文言が出る</b>
+    /// （qa/01 A-10。docs/04 §1 の B-3）ので、利用者の語で断るにはここが要る。</para>
+    /// <para><b>小数も断る。</b> 「1.5 月」は月ではない。CLB の数値欄は小数を受け取れるので、
+    /// ここで見ないと DB の <c>CHECK</c>（<c>BETWEEN</c> は 1.5 を通す）も素通りする。</para>
+    /// <para><b>空も断る。</b> DB の <c>NOT NULL</c> に投げると定型文になり、
+    /// 「13 は利用者の語で断るのに、空は枠組みの言葉」という食い違いが同じ欄で起きる。</para>
+    /// </remarks>
+    private static void RejectBadFiscalYearEndMonth(ModuleData data)
+    {
+        if (!data.Fields.TryGetValue("FiscalYearEndMonth", out var field))
+        {
+            return;
+        }
+
+        // **空にした保存も断る**（2026-09-09 の自己レビュー）。DB の NOT NULL に投げると定型文になり、
+        // 「13 は利用者の語で断るのに、空は枠組みの言葉」という食い違いが同じ欄で起きる。
+        // **読めない型も断る**——検査できない値を通すのは fail-open である。
+        if (field is not NumberFieldData month || month.Value is not decimal value)
+        {
+            throw new CompanyProfileRejectedException("「決算月」を入れてください。");
+        }
+
+        if (value != decimal.Truncate(value) || value < FirstMonth || value > LastMonth)
+        {
+            throw new CompanyProfileRejectedException(
+                $"「決算月」は {FirstMonth} から {LastMonth} までの整数で入れてください。");
+        }
+    }
+
+    private static void RejectBadCorporateNumber(ModuleData data)
     {
         // CLB は変更されたフィールドしか送ってこない（qa/01 F-11）。
         // 送られていない項目は「変えていない」なので、検査しない。

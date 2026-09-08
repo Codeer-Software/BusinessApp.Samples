@@ -64,6 +64,9 @@ internal sealed class AccountingServer : IDisposable
         Gate = JournalSubmitGate.Create(
             Accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
         Pipeline = AccountingSubmitPipeline.Create(
+            Accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication,
+            SaveFailureLog.Add);
+        PipelineWithoutLog = AccountingSubmitPipeline.Create(
             Accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
         AmendmentService = JournalAmendmentService.Create(
             Accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(Now), authentication);
@@ -122,6 +125,25 @@ internal sealed class AccountingServer : IDisposable
 
     /// <summary>保存の関門を本番と同じ順につないだもの（<see cref="AccountingSubmitPipeline.Create"/>）。</summary>
     public AccountingSubmitPipeline Pipeline { get; }
+
+    /// <summary>
+    /// 利用者の語へ差し替えた<b>原文</b>（本番ではホストがログへ出すもの）。
+    /// </summary>
+    /// <remarks>
+    /// <b>本番の配線と同じ口を繋いでおく。</b> 繋がないと、
+    /// 「定型文を見せて中身はログへ」という分担が<b>片側しか検査できない</b>——
+    /// 利用者に出ないことは見えても、直すべき側に届いていることが見えない（2026-09-09 の自己レビュー）。
+    /// </remarks>
+    public List<string> SaveFailureLog { get; } = [];
+
+    /// <summary>
+    /// 原文の受け皿を繋がない配線。
+    /// </summary>
+    /// <remarks>
+    /// <b>受け皿は任意である</b>（<c>AccountingSubmitPipeline.Create</c> の既定は「何もしない」）。
+    /// 繋がない配線でも<b>利用者への文言は同じ</b>であることを、この器で確かめる。
+    /// </remarks>
+    public AccountingSubmitPipeline PipelineWithoutLog { get; }
 
     /// <summary>「訂正する」「取り消す」の会計側（識別子は型、トランザクションは呼び出し側）。</summary>
     public JournalAmendmentService AmendmentService { get; }

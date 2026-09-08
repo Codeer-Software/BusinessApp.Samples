@@ -30,14 +30,32 @@ internal static class SchemaSeed
     /// <b>摘要を入れてある。</b> 空だと計上のトリガが止める（docs/10 §4-2-1）——
     /// そちらは <see cref="JournalDescriptionGuardTests"/> が専門に見る。
     /// </remarks>
-    public const string PostedEntry = """
+    public const string PostedEntry = Draft + Post;
+
+    /// <summary>
+    /// 下書きまで（明細つき）。<b>計上の前に何かを差し込みたいテストが使う</b>——
+    /// 計上済みの伝票も明細も、後からは書き換えられない（I-05）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>伝票の識別子を直に書かない。</b> 先に別の伝票を入れてから呼ぶテストがあるので、
+    /// 明細は <c>MAX(id)</c> で親を指す（<see cref="Post"/> も同じ）。</para>
+    /// <para><b>同じ DB で 2 回呼べない。</b> <see cref="Post"/> が <c>entry_no = 1</c> を固定で書くので、
+    /// 2 本目は <c>UNIQUE (fiscal_year_id, entry_no)</c> に当たる。
+    /// 2 本目が要るテストは、番号を自分で決めて計上する。</para>
+    /// </remarks>
+    public const string Draft = """
         INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
             VALUES (1, '2026-05-20', '2026-05-20', 'draft', 'normal', '5 月分の現金売上', '2026-05-20 10:00:00');
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
-            VALUES (1, 1, 'debit', 1, 100000, 1);
+            SELECT MAX(id), 1, 'debit', 1, 100000, 1 FROM journal_entries;
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
-            VALUES (1, 2, 'credit', 2, 2, 100000, 1);
-        UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-05-20 10:00:00' WHERE id = 1;
+            SELECT MAX(id), 2, 'credit', 2, 2, 100000, 1 FROM journal_entries;
+        """;
+
+    /// <summary><see cref="Draft"/> で作った伝票を計上する。</summary>
+    public const string Post = """
+        UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-05-20 10:00:00'
+         WHERE id = (SELECT MAX(id) FROM journal_entries);
         UPDATE journal_entry_sequences SET next_entry_no = next_entry_no + 1 WHERE fiscal_year_id = 1;
         """;
 

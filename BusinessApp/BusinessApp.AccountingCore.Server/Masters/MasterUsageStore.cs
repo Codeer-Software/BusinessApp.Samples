@@ -41,18 +41,38 @@ public sealed class MasterUsageStore(IDbAccessor accessor, string dataSourceName
         return columns.ToDictionary(c => c.Column, c => (object?)rows[0][c.Column]);
     }
 
-    /// <summary>この行を参照している<b>計上済みの</b>仕訳明細の数。</summary>
+    /// <summary>
+    /// この行が<b>計上済みで使われている数</b>。0 なら意味を変えてよい。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>数える単位はマスタで違う</b>（<see cref="GuardedMaster.UsageUnit"/>）。
+    /// 会計コアの 4 マスタは<b>仕訳明細の行</b>を数える——明細でしか選べないからである。</para>
+    /// <para><b>取引先だけは振替伝票の枚数を数える。</b> 取引先は伝票にも明細にも入り、
+    /// <b>明細が空なら伝票の値が実効値になる</b>（docs/10 §6-2）。
+    /// 明細だけを数えると「伝票にだけ取引先を入れた計上済みの伝票」を取りこぼし、
+    /// 行を数えると同じ伝票を何度も数えて「3 行で使われています」と言ってしまう。</para>
+    /// </remarks>
     public async Task<long> CountPostedLinesAsync(GuardedMaster master, long id)
     {
-        var rows = await accessor.QueryAsync(
-            dataSourceName,
-            $"""
-            select count(*) as n
-              from journal_lines l
-              join journal_entries e on e.id = l.journal_entry_id
-             where l.{master.LineColumn} = @p1 and e.status = 'posted'
-            """,
-            new() { { "@p1", Param(id) } });
+        ArgumentNullException.ThrowIfNull(master);
+
+        var sql = master.EntryColumn is null
+            ? $"""
+              select count(*) as n
+                from journal_lines l
+                join journal_entries e on e.id = l.journal_entry_id
+               where l.{master.LineColumn} = @p1 and e.status = 'posted'
+              """
+            : $"""
+              select count(*) as n
+                from journal_entries e
+               where e.status = 'posted'
+                 and (e.{master.EntryColumn} = @p1
+                      or exists (select 1 from journal_lines l
+                                  where l.journal_entry_id = e.id and l.{master.LineColumn} = @p1))
+              """;
+
+        var rows = await accessor.QueryAsync(dataSourceName, sql, new() { { "@p1", Param(id) } });
 
         // count(*) は必ず 1 行返す
         return Convert.ToInt64(rows[0]["n"], CultureInfo.InvariantCulture);

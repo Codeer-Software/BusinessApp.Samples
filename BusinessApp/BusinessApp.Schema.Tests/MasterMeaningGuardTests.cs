@@ -286,6 +286,203 @@ public class MasterMeaningGuardTests
         Assert.Equal(3L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounts"));
     }
 
+    // --- 取引先（009。ADR-0047 の決定 9 で 4 マスタと揃えた） ----------------------
+
+    /// <summary>
+    /// 計上済みの伝票が使っている取引先は、コードを変えられない。
+    /// </summary>
+    /// <remarks>
+    /// <b>取引先だけは「使用中」の数え方が違う</b>——明細（<c>journal_lines.partner_id</c>）と
+    /// <b>伝票（<c>journal_entries.partner_id</c>）の両方</b>を見る。明細が空なら伝票の値が
+    /// 実効値になるからで、明細だけを見ると<b>伝票にだけ取引先を入れた計上済みの伝票を取りこぼす</b>。
+    /// </remarks>
+    [Theory]
+    [InlineData(UsedByLine)]
+    [InlineData(UsedByEntry)]
+    public void 使用中の取引先のコードは変えられない(string use)
+    {
+        using var db = WithPostedPartner(use);
+
+        var thrown = Assert.Throws<SqliteException>(
+            () => TestDatabase.Execute(db, $"UPDATE partners SET code = 'P999' WHERE id = {TargetPartner}"));
+
+        Assert.Contains("取引先のコードは変更できない", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("P004", TestDatabase.ScalarOf<string>(db, $"SELECT code FROM partners WHERE id = {TargetPartner}"));
+    }
+
+    /// <summary>下書きだけが使う取引先のコードは変えられる（使用中は計上済みだけ。ADR-0038 §1）。</summary>
+    [Theory]
+    [InlineData(UsedByLine)]
+    [InlineData(UsedByEntry)]
+    public void 下書きだけが使う取引先のコードは変えられる(string use)
+    {
+        using var db = WithDraftPartner(use);
+
+        TestDatabase.Execute(db, $"UPDATE partners SET code = 'P999' WHERE id = {TargetPartner}");
+
+        Assert.Equal("P999", TestDatabase.ScalarOf<string>(db, $"SELECT code FROM partners WHERE id = {TargetPartner}"));
+    }
+
+    /// <summary>
+    /// 使用中の取引先の id は、<c>REPLACE</c> でも <c>UPDATE</c> でも乗っ取れない（qa/03 L-26 の型）。
+    /// </summary>
+    /// <remarks>
+    /// <b>UPDATE のトリガを通らずに意味が変わる経路</b>を塞ぐ。
+    /// <c>INSERT OR REPLACE</c> は行ごと差し替えるので、コードの凍結だけでは足りない。
+    /// <b>明細と伝票の両方で撃つ</b>——片方だけだと、トリガの `EXISTS` を 1 つ消しても緑になる。
+    /// </remarks>
+    [Theory]
+    [InlineData(UsedByLine, ReplaceByInsert)]
+    [InlineData(UsedByLine, ReplaceByUpdate)]
+    [InlineData(UsedByEntry, ReplaceByInsert)]
+    [InlineData(UsedByEntry, ReplaceByUpdate)]
+    public void 使用中の取引先は置き換えられない(string use, string sql)
+    {
+        using var db = WithPostedPartner(use);
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, sql));
+
+        Assert.Contains("取引先は置き換えられない", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "株式会社取引先",
+            TestDatabase.ScalarOf<string>(db, $"SELECT name FROM partners WHERE id = {TargetPartner}"));
+    }
+
+    /// <summary>
+    /// <b>使用中の id へ、別の取引先を動かすこともできない</b>（トリガの <c>NEW.id</c> の側）。
+    /// </summary>
+    /// <remarks>
+    /// <b>OLD.id だけを見ると、この向きが素通しになる</b>——空いている取引先を
+    /// 使用中の id へ移すと、計上済みの明細が指す相手がすり替わる。
+    /// <b>主キーの衝突より先にトリガが鳴る</b>ので、断りは利用者の語で出る（2026-09-09 に実測）。
+    /// <c>IN (OLD.id, NEW.id)</c> を <c>= OLD.id</c> に縮めると、この 1 本だけが赤くなる。
+    /// </remarks>
+    [Theory]
+    [InlineData(UsedByLine)]
+    [InlineData(UsedByEntry)]
+    public void 使用中のidへ別の取引先を動かせない(string use)
+    {
+        using var db = WithPostedPartner(use);
+
+        var thrown = Assert.Throws<SqliteException>(
+            () => TestDatabase.Execute(db, MoveOntoTarget));
+
+        Assert.Contains("取引先は置き換えられない", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "識別子をずらすための取引先",
+            TestDatabase.ScalarOf<string>(db, "SELECT name FROM partners WHERE id = 3"));
+    }
+
+    /// <summary>
+    /// 下書きだけが使う取引先は置き換えられる（<c>status = 'posted'</c> の条件が効いていること）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>明細と伝票の両方で撃つ</b>ので、<c>INSERT</c> 側の
+    /// <c>AND e.status = 'posted'</c> をどちらか落とすとここが赤くなる。</para>
+    /// <para><b><c>UPDATE</c> 側の <c>status</c> は、通る側を書けない。</b>
+    /// 参照されている取引先の id を動かすと<b>外部キーが先に断る</b>ので
+    /// （2026-09-09 に実測）、下書きでも計上済みでも結果が変わらない。
+    /// <b>条件を落としても赤くならない</b>ことは分かったうえで残している——
+    /// 4 マスタと同じ全文であること（<c>置き換えの守りは4マスタで同じ全文である</c>）を優先する。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData(UsedByLine)]
+    [InlineData(UsedByEntry)]
+    public void 下書きだけが使う取引先は置き換えられる(string use)
+    {
+        using var db = WithDraftPartner(use);
+
+        TestDatabase.Execute(db, ReplaceByInsert);
+
+        Assert.Equal(
+            "別の会社",
+            TestDatabase.ScalarOf<string>(db, $"SELECT name FROM partners WHERE id = {TargetPartner}"));
+    }
+
+    /// <summary>
+    /// <b>id が動かない更新は、SET 句に id が並んでいても通る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <c>UPDATE OF id</c> は<b>値が同じでも SET 句に列があれば発火する</b>ので、
+    /// <c>WHEN NEW.id IS NOT OLD.id</c> が無いと<b>使用中の取引先は名称も住所も一切直せない</b>
+    /// ——しかも断りは「置き換えられない」なので、利用者には理由が分からない。
+    /// 会計コアの 4 マスタは持っていた条件が、取引先へ写したときに落ちていた（2026-09-09 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public void 使用中の取引先でもidが動かない更新は通る()
+    {
+        using var db = WithPostedPartner(UsedByLine);
+
+        TestDatabase.Execute(
+            db, $"UPDATE partners SET id = id, name = '株式会社取引先（新）' WHERE id = {TargetPartner}");
+
+        Assert.Equal(
+            "株式会社取引先（新）",
+            TestDatabase.ScalarOf<string>(db, $"SELECT name FROM partners WHERE id = {TargetPartner}"));
+    }
+
+    /// <summary>
+    /// 守る取引先の識別子。
+    /// </summary>
+    /// <remarks>
+    /// <b>4 にしてあるのは、他のどの識別子とも違う値にするためである</b>
+    /// （勘定科目 1・2、税区分 1、部門 2、会計年度 1、伝票 2、明細 1・2）。
+    /// 全部が 1 の検体だと、トリガの <c>l.partner_id</c> を <c>l.account_id</c> にも
+    /// <c>l.journal_entry_id</c> にも書き換えられるのにテストが緑のままになる
+    /// （qa/03 L-02 の縮退。2026-09-09 の自己レビューで指摘された）。
+    /// </remarks>
+    private const int TargetPartner = 4;
+
+    private const string UsedByLine =
+        "UPDATE journal_lines SET partner_id = 4 WHERE line_no = 1 AND journal_entry_id = (SELECT MAX(id) FROM journal_entries)";
+
+    private const string UsedByEntry =
+        "UPDATE journal_entries SET partner_id = 4 WHERE id = (SELECT MAX(id) FROM journal_entries)";
+
+    private const string ReplaceByInsert =
+        "INSERT OR REPLACE INTO partners (id, code, name) VALUES (4, 'P999', '別の会社')";
+
+    private const string ReplaceByUpdate = "UPDATE partners SET id = 9 WHERE id = 4";
+
+    /// <summary>空いている取引先を、守る取引先の id へ動かす（トリガの <c>NEW.id</c> の側）。</summary>
+    private const string MoveOntoTarget = "UPDATE partners SET id = 4 WHERE id = 3";
+
+    /// <summary>計上済みの伝票が取引先 4 を使っている DB。</summary>
+    private static SqliteConnection WithPostedPartner(string use)
+        => WithPartner(use, SchemaSeed.Post);
+
+    /// <summary>下書きだけが取引先 4 を使っている DB。</summary>
+    private static SqliteConnection WithDraftPartner(string use)
+        => WithPartner(use, string.Empty);
+
+    /// <summary>
+    /// 取引先 4 を伝票か明細に付けた DB。<paramref name="post"/> が空なら下書きのまま残す。
+    /// </summary>
+    /// <remarks>
+    /// <b>取引先を付けるのは計上の前である。</b> 計上済みの明細も伝票も、後からは書き換えられない（I-05）。
+    /// <b>識別子をずらすために、先に捨て伝票と取引先を入れる</b>（上の <see cref="TargetPartner"/>）。
+    /// </remarks>
+    private static SqliteConnection WithPartner(string use, string post)
+    {
+        var db = TestDatabase.Create();
+        TestDatabase.Execute(db, SchemaSeed.Masters);
+        TestDatabase.Execute(db, """
+            INSERT INTO partners (code, name) VALUES ('P002', '識別子をずらすための取引先');
+            INSERT INTO partners (code, name) VALUES ('P003', '識別子をずらすための取引先');
+            INSERT INTO partners (code, name) VALUES ('P004', '株式会社取引先');
+            INSERT INTO journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+                VALUES (1, '2026-05-19', '2026-05-19', 'draft', 'normal', '識別子をずらすための伝票', '2026-05-19 10:00:00');
+            """);
+        TestDatabase.Execute(db, SchemaSeed.Draft);
+        TestDatabase.Execute(db, use);
+        if (post.Length > 0)
+        {
+            TestDatabase.Execute(db, post);
+        }
+
+        return db;
+    }
+
     private static SqliteConnection WithPostedSubAccountLine()
     {
         var db = SchemaSeed.Create();

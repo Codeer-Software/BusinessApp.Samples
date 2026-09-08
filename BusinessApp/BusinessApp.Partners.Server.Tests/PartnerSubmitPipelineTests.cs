@@ -40,9 +40,11 @@ public class PartnerSubmitPipelineTests
         return data;
     }
 
+    /// <summary>検体の取引先。<b>コードも入れる</b>（追加はコードを必ず伴う。ADR-0047 の決定 10）。</summary>
     private static ModuleData Partner(string corporateNumber)
     {
         var data = new ModuleData { Name = PartnerSubmitGate.ModuleName };
+        data.Fields["Code"] = new TextFieldData { Value = "P900" };
         data.Fields["CorporateNumber"] = new TextFieldData { Value = corporateNumber };
         return data;
     }
