@@ -180,8 +180,11 @@ public record AmendResult(
     /// 伝票を 1 本作っただけのとき（複製）。<b>取消は 1 本も作っていない。</b>
     /// </summary>
     /// <remarks>
-    /// <see cref="Ok"/> に 0 を渡す形にしない——<b>「取消の識別子は 0」と
-    /// 「取消を作っていない」は別のこと</b>で、読む側が見分けられなくなる。
+    /// <b>返す JSON は <c>Ok(0, id)</c> と 1 バイトも違わない</b>（<c>reversalId</c> は 0）。
+    /// 名前を分けてあるのは<b>呼ぶ側のため</b>で、
+    /// 「取消を作っていない」ことを <c>0</c> の綴りに頼らずに書けるようにしている。
+    /// <b>画面はこの違いを読めない</b>——読む必要も無い（複製の画面は <c>reversalId</c> を見ない）。
+    /// 読ませる必要が出たら、そのとき項目を分ける（2026-09-09 の自己レビュー）。
     /// </remarks>
     public static AmendResult Opened(long openEntryId)
         => new(Succeeded, openEntryId, 0, string.Empty, []);

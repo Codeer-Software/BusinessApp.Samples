@@ -286,6 +286,7 @@ public class JournalAmendmentEndpointTests
 
         var available = await server.Amendment.AvailabilityAsync(server.Text(original.Value));
 
+        Assert.Equal(AmendResult.Succeeded, available.Status);
         Assert.True(available.CanDuplicate);
         Assert.True(available.CanReverse);
     }
@@ -320,7 +321,18 @@ public class JournalAmendmentEndpointTests
 
         var available = await server.Amendment.AvailabilityAsync(server.Text(id));
 
+        // **「答えが false」と「呼び出しが失敗」を分ける**（qa/03 L-03）。
+        // `CanDuplicate` は差し戻しでも既定の false になるので、Status も見る。
+        Assert.Equal(AmendResult.Succeeded, available.Status);
         Assert.False(available.CanDuplicate);
+        Assert.False(available.CanReverse);
+
+        // 下書きなので、取消・訂正できない理由も返る（画面は計上済みのときだけ出す）。
+        Assert.Equal(
+            "この伝票はまだ計上されていません。下書きは削除してください。"
+            + "元の伝票を特定できません（保存されていないか、伝票番号がありません）。"
+            + "種別が「決算振替」の伝票は対象にできません。対象にできるのは通常の伝票と訂正だけです。",
+            available.Message);
     }
 
 
@@ -376,6 +388,28 @@ public class JournalAmendmentEndpointTests
         Assert.Equal(
             "normal",
             server.Scalar<string>($"select entry_type from journal_entries where id = {result.OpenEntryId}"));
+    }
+
+    /// <summary>
+    /// <b>2 回押せば下書きが 2 本できる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>冪等ではない</b>（複製に冪等キーは無い。ADR-0048 の決定 2）。
+    /// 確認ダイアログを出さないので<b>連打を抑えるものが 1 つも無い</b>——
+    /// 取消・訂正では確認が事実上の二重送信よけになっていた（2026-09-09 の自己レビュー）。
+    /// <b>意図としてここに固定する</b>：できるのは下書きなので、要らないほうは削除すればよい。
+    /// </remarks>
+    [Fact]
+    public async Task 続けて2回複製すれば下書きが2本できる()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        var first = await server.Amendment.DuplicateAsync(server.Text(original.Value));
+        var second = await server.Amendment.DuplicateAsync(server.Text(original.Value));
+
+        Assert.NotEqual(first.OpenEntryId, second.OpenEntryId);
+        Assert.Equal(2, server.Scalar<long>("select count(*) from journal_entries where status = 'draft'"));
     }
 
     /// <summary>会計の役割が無ければ複製もできない（入口が 1 つなので、経路ごとに開かない）。</summary>

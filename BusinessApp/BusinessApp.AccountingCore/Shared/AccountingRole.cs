@@ -31,12 +31,16 @@ public enum AccountingRole
 public static class AccountingRoleExtensions
 {
     /// <summary>
-    /// 計上済みの伝票を動かしてよい役割か（取消・訂正）。
+    /// 伝票に対する操作をしてよい役割か（取消・訂正・複製）。
     /// </summary>
     /// <remarks>
-    /// <b>担当と責任者。</b> 取消・訂正は「伝票を起こす」のと同じ人の仕事で、
+    /// <para><b>担当と責任者。</b> 取消・訂正は「伝票を起こす」のと同じ人の仕事で、
     /// 画面でも同じ役割に開いてある（<c>JournalEntry</c> の書き込み条件）。
-    /// <b>帳簿閲覧は含めない</b>——読むための役割である。
+    /// <b>帳簿閲覧は含めない</b>——読むための役割である。</para>
+    /// <para><b>複製もここで見る。</b> ただし<b>理由が違う</b>——
+    /// 複製は計上済みを 1 行も動かさないので、「起票できるか」で決まる（ADR-0048 の決定 9）。
+    /// <b>集合が一致しているのはいまだけ</b>なので、役割を増やす日はここを分ける
+    /// （2026-09-09 の自己レビュー）。</para>
     /// </remarks>
     public static bool CanAmendJournals(this AccountingRole role)
         => role is AccountingRole.Staff or AccountingRole.Manager;

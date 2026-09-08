@@ -63,8 +63,8 @@ public static class JournalDuplication
             EntryType = EntryType.Normal,
 
             // **取消・訂正の接頭辞は落とす。** 写すと「伝票番号 44 の取消」と名乗る
-            // 通常の伝票ができ、**していない取消を帳簿に書く**ことになる（AmendmentRules.Copy）。
-            Description = AmendmentRules.Copy(original),
+            // 通常の伝票ができ、**していない取消を帳簿に書く**ことになる（AmendmentRules.DescriptionForDuplicate）。
+            Description = AmendmentRules.DescriptionForDuplicate(original),
             PartnerId = original.PartnerId,
             EnteredAt = enteredAt,
             Lines = [.. Copy(original.Lines)],
@@ -111,19 +111,15 @@ public static class JournalDuplication
 /// </summary>
 /// <remarks>
 /// <para><b>違反が空かどうかで判定しない</b>（<see cref="ReversalResult"/> と同じ作法）。</para>
-/// <para><b>レコードにしない</b>——値としての等価も <c>with</c> による複製も使わないので、
-/// 誰も呼ばない生成メンバがカバレッジの穴になる（ADR-0012 がそれを埋めるためだけのテストを禁じている）。</para>
+/// <para><b>兄弟（<see cref="ReversalResult"/>・<c>CorrectionStartResult</c>）と同じ形にしてある。</b>
+/// 生成される複製コンストラクタは <c>GeneratedCopyConstructorTests</c> が理由つきで免除する
+/// （ADR-0012 §3 が認めた唯一の例外）——<b>同じ役目の型が 2 通りの形になるほうが読みにくい</b>
+/// （2026-09-09 の自己レビュー）。</para>
 /// </remarks>
-/// <param name="violations">見つかった違反。</param>
-/// <param name="draft">作れたときの下書き。作れなかったときは <c>null</c>。</param>
-public sealed class DuplicationResult(IReadOnlyList<Violation> violations, JournalEntry? draft = null)
+/// <param name="Violations">見つかった違反。</param>
+/// <param name="Draft">作れたときの下書き。作れなかったときは <c>null</c>。</param>
+public sealed record DuplicationResult(IReadOnlyList<Violation> Violations, JournalEntry? Draft = null)
 {
-    /// <summary>見つかった違反。</summary>
-    public IReadOnlyList<Violation> Violations { get; } = violations;
-
-    /// <summary>作れたときの下書き。作れなかったときは <c>null</c>。</summary>
-    public JournalEntry? Draft { get; } = draft;
-
     /// <summary>作れたか。</summary>
     public bool Created => Draft is not null;
 }

@@ -147,6 +147,12 @@ void ApplyAmendmentAvailability()
     var noticed = ShowAmendmentNotice(
         $"{result.JsonObject.reversalEntryNo}", $"{result.JsonObject.correctionEntryNo}");
 
+    // **理由を出すのは計上済みのときだけ。** 下書きでは「まだ計上されていません。下書きは削除してください」
+    // が必ず返る——**これから書く人に削除を勧める**ことになるし、明細を 1 行直すと
+    // UpdateTotals が本文を組み直して消えるので、出たり消えたりする
+    // （複製の可否を聞くために下書きでも問い合わせるようにした回の巻き添え。2026-09-09 の自己レビュー）。
+    if (Status.Value != EntryStatuses.Posted) return;
+
     // 両方できないなら、その理由を出す。押せないボタンを探させない。
     //
     // **ただし、上の断りが同じことを言っているときは繰り返さない**（同じ画面に同じ文言を 2 度出さない——本モジュールの判断）。

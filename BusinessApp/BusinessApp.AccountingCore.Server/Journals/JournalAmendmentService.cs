@@ -8,9 +8,16 @@ using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
 /// <summary>
-/// 計上済みの伝票を「取り消す」「訂正する」（docs/10 §5・ADR-0015）。
+/// 伝票に対する操作（「取り消す」「訂正する」「複製する」）。docs/10 §5・ADR-0015・ADR-0048。
 /// </summary>
 /// <remarks>
+/// <para><b>型の名前は取消・訂正の用途で付いたが、いまは複製も持つ</b>
+/// （<c>JournalPostingRejectedException</c> と同じ形で、名前より持ち物が広がった）。
+/// <b>複製は取消・訂正ではない</b>——帳簿を 1 行も動かさず、原仕訳の状態も見ない。
+/// それでも同居させているのは、<b>権限の関門が
+/// <see cref="JournalAmendmentEndpoint"/> の 1 メソッドにあるから</b>である
+/// （この経路は CLB のモジュール条件を 1 つも通らない。qa/03 L-22）。
+/// <b>入口を分けるなら、関門を先に共有部品へ括り出す</b>（2026-09-09 の自己レビュー）。</para>
 /// <para>画面のボタンから Web API 経由で呼ばれる（ADR-0016）。<b>会計の判断は 1 行も
 /// スクリプトに置かない</b>ので、画面がするのは「この伝票を訂正して」と頼んで、
 /// 返ってきた下書きを開くことだけである（ADR-0008）。</para>
@@ -169,16 +176,7 @@ public sealed class JournalAmendmentService(
         var (original, context, today, now) = await PrepareAsync(originalId);
 
         // **年度は今日から引く。** 原仕訳の年度を写すと、閉じた期間へ新しい伝票を落とせる（I-03）。
-        if (context.Calendar.ResolvePeriod(today) is not AccountingPeriod period)
-        {
-            throw new JournalPostingRejectedException(
-            [
-                new Violation(
-                    JournalViolationCodes.PeriodNotFound,
-                    $"今日（{today:yyyy/MM/dd}）に対応する会計期間がありません。"),
-            ]);
-        }
-
+        var period = TodayPeriod(context, today);
         var result = JournalDuplication.Duplicate(original, today, now, period.FiscalYearId);
         if (!result.Created)
         {
@@ -237,18 +235,28 @@ public sealed class JournalAmendmentService(
     /// 取消の可否を決める材料。<b>会計年度は取消の計上日（今日）から引く</b>ので、
     /// 該当する期間が無ければここで止める。
     /// </summary>
-    private async Task<ReversalContext> ResolveReversalContextAsync(
-        JournalEntry original, PostingContext context, DateOnly today)
-    {
-        if (context.Calendar.ResolvePeriod(today) is not AccountingPeriod period)
-        {
-            throw new JournalPostingRejectedException(
+    /// <summary>
+    /// 今日の属する会計期間。<b>無ければ止める</b>（取消・訂正・複製で共通）。
+    /// </summary>
+    /// <remarks>
+    /// <b>同じ文言を 2 か所に組み立てない</b>——片方だけ直したときに、
+    /// 見出しの網（<c>ViolationHeadlineTests</c>）は見出しの語を含まないので鳴らない
+    /// （2026-09-09 の自己レビュー）。
+    /// </remarks>
+    private static AccountingPeriod TodayPeriod(PostingContext context, DateOnly today)
+        => context.Calendar.ResolvePeriod(today) is AccountingPeriod period
+            ? period
+            : throw new JournalPostingRejectedException(
             [
                 new Violation(
                     JournalViolationCodes.PeriodNotFound,
                     $"今日（{today:yyyy/MM/dd}）に対応する会計期間がありません。"),
             ]);
-        }
+
+    private async Task<ReversalContext> ResolveReversalContextAsync(
+        JournalEntry original, PostingContext context, DateOnly today)
+    {
+        var period = TodayPeriod(context, today);
 
         // 原仕訳の識別子は FindAsync が返した以上必ずある。
         var reversedOn = await entryStore.FindReversedOnAsync(original.Id!.Value);

@@ -1,5 +1,6 @@
 namespace BusinessApp.AccountingCore.Server.Tests.Journals;
 
+using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Server.Journals;
 using BusinessApp.AccountingCore.Server.Shared;
@@ -18,9 +19,10 @@ using Codeer.LowCode.Blazor.DataIO;
 public class JournalAmendmentServiceTests
 {
     /// <summary>取り消される側の仕訳（借方 現金 1000 / 貸方 未払金 1000）。</summary>
-    private static JournalEntryId Original(AccountingServer server, string transactionDate = "2026-05-20")
+    private static JournalEntryId Original(
+        AccountingServer server, string transactionDate = "2026-05-20", int entryNo = 1)
         => server.InsertPosted(
-            1, "5 月分の仕入", transactionDate, ("debit", "1100", 1000), ("credit", "2200", 1000));
+            entryNo, "5 月分の仕入", transactionDate, ("debit", "1100", 1000), ("credit", "2200", 1000));
 
     // --- 複製する（ADR-0048） ---
 
@@ -42,15 +44,24 @@ public class JournalAmendmentServiceTests
             transactionDate: "2026-05-20", postingDate: "2026-05-20", description: "5 月分の仕入");
         server.InsertLine(original, 1, "debit", "1100", 1000);
         server.InsertLine(original, 2, "credit", "2200", 1000);
+        var partner = server.InsertPartner();
+        // **写す欄を全部非 NULL にする**（qa/03 L-04 の処方）。
+        // NULL のまま往復させると、書く経路が落としていても読み戻しは NULL で一致する。
         server.Execute($"""
             update journal_lines
                set partner_name_snapshot = '株式会社取引先',
                    registration_no_snapshot = 'T1234567890123',
                    applied_rule_version = '2023-10-01',
-                   tax_point = '2026-05-20'
+                   tax_point = '2026-05-20',
+                   department_id = (select id from departments where code = '10'),
+                   partner_id = {partner},
+                   tax_treatment = 'common',
+                   item_description = '文房具',
+                   book_only_deduction = 'public_transport'
              where journal_entry_id = {original.Value};
             update journal_entries
-               set status = 'posted', entry_no = 1, posted_at = '2026-05-20 10:00:00'
+               set status = 'posted', entry_no = 1, posted_at = '2026-05-20 10:00:00',
+                   partner_id = {partner}
              where id = {original.Value};
             """);
 
@@ -72,6 +83,14 @@ public class JournalAmendmentServiceTests
         Assert.Equal([DebitCredit.Debit, DebitCredit.Credit], copy.Lines.Select(l => l.DebitCredit));
         Assert.Equal([Yen.From(1000), Yen.From(1000)], copy.Lines.Select(l => l.Amount));
         Assert.Equal([1, 2], copy.Lines.Select(l => l.LineNo));
+
+        // **非 NULL の欄が、書いて読み戻しても入っている。**
+        Assert.NotNull(copy.PartnerId);
+        Assert.All(copy.Lines, l => Assert.NotNull(l.DepartmentId));
+        Assert.All(copy.Lines, l => Assert.NotNull(l.PartnerId));
+        Assert.All(copy.Lines, l => Assert.Equal(TaxTreatment.Common, l.TaxTreatment));
+        Assert.All(copy.Lines, l => Assert.Equal("文房具", l.ItemDescription));
+        Assert.All(copy.Lines, l => Assert.Equal("public_transport", l.BookOnlyDeduction));
 
         // **計上時点の写しと制度の版は、書く経路でも落ちている。**
         Assert.All(copy.Lines, l => Assert.Null(l.PartnerNameSnapshot));
@@ -118,7 +137,11 @@ public class JournalAmendmentServiceTests
     public async Task 複製した下書きはそのまま計上できる()
     {
         using var server = new AccountingServer();
-        var original = Original(server);
+
+        // **伝票番号と識別子をずらす**（既定では両方 1 から並ぶので、
+        // 番号を出しているつもりで識別子を出している実装と区別が付かない）。
+        server.StartEntryNumbersAt(41);
+        var original = Original(server, entryNo: 41);
 
         var duplicateId = await server.AmendAsync(s => s.DuplicateAsync(original));
 
@@ -128,7 +151,7 @@ public class JournalAmendmentServiceTests
             server.Accessor, () => server.Poster.PostAsync(draft, context));
 
         Assert.Equal(EntryStatus.Posted, posted.Status);
-        Assert.Equal(2, posted.EntryNo);
+        Assert.Equal(42, posted.EntryNo);
     }
 
     // --- 取り消す ---

@@ -73,13 +73,7 @@ internal static class AmendmentRules
     /// </remarks>
     public static string Describe(JournalEntry original, AmendmentKind kind)
     {
-        // **剥がすのは、原仕訳が取消・訂正のときだけ。**
-        // 通常の仕訳の摘要は利用者が書いた文であって、たまたま同じ形をしていることがある
-        // （「伝票番号 12 の取消について」と書いた通常の仕訳など）。
-        // 無条件に剥がすと、その本文を落として計上してしまい、計上済みは二度と直せない（I-05）。
-        var body = original.EntryType.RequiresOriginalEntry()
-            ? StripPrefixes(original.Description)
-            : (original.Description ?? string.Empty).Trim();
+        var body = Body(original);
 
         return body.Length == 0
             ? $"伝票番号 {original.EntryNo} の{kind.Noun}"
@@ -99,20 +93,32 @@ internal static class AmendmentRules
     /// 空値検索が取りこぼす（docs/04 §1 の A-5）。<b>計上には摘要が要る</b>ので、
     /// 利用者はここで何の取引かを書くことになる（それが正しい）。</para>
     /// </remarks>
-    public static string? Copy(JournalEntry original)
+    public static string? DescriptionForDuplicate(JournalEntry original)
     {
         ArgumentNullException.ThrowIfNull(original);
 
-        // **前後の空白を落とし、空になったら NULL にするのは種別によらない。**
-        // 通常の伝票だけ素通しにすると、空白だけの摘要が**見た目は入っているのに
-        // 計上のときだけ断られる**（10 §4-2-1 の二層は空白だけを空とみなす。
-        // 2026-09-09 の自己レビュー）。
-        var body = original.EntryType.RequiresOriginalEntry()
-            ? StripPrefixes(original.Description)
-            : (original.Description ?? string.Empty).Trim();
-
+        var body = Body(original);
         return body.Length == 0 ? null : body;
     }
+
+    /// <summary>
+    /// 摘要の<b>本文</b>（接頭辞を落とし、前後の空白も落とした姿）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>剥がすのは、原仕訳が取消・訂正のときだけ。</b>
+    /// 通常の仕訳の摘要は利用者が書いた文であって、たまたま同じ形をしていることがある
+    /// （「伝票番号 12 の取消について」と書いた通常の仕訳など）。
+    /// 無条件に剥がすと、その本文を落として計上してしまい、計上済みは二度と直せない（I-05）。</para>
+    /// <para><b>前後の空白を落とすのは種別によらない。</b> 通常の伝票だけ素通しにすると、
+    /// 空白だけの摘要が<b>見た目は入っているのに計上のときだけ断られる</b>
+    /// （10 §4-2-1 の二層は空白だけを空とみなす。2026-09-09 の自己レビュー）。</para>
+    /// <para><b>取消・訂正と複製が同じ 1 本を呼ぶ。</b> 写して 2 か所に置くと、
+    /// 剥がし方を直したときに片方だけ古くなる（qa/03 L-20 の型。同じ日の自己レビュー）。</para>
+    /// </remarks>
+    private static string Body(JournalEntry original)
+        => original.EntryType.RequiresOriginalEntry()
+            ? StripPrefixes(original.Description)
+            : (original.Description ?? string.Empty).Trim();
 
     /// <summary>
     /// 自分で付けた接頭辞（「伝票番号 N の取消: 」等）を、無くなるまで落とす。

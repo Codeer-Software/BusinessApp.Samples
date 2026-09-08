@@ -81,6 +81,7 @@ public class JournalDuplicationTests
                 1, DebitCredit.Debit, AccountingFixture.BankAccount, 100_000,
                 subAccountId: AccountingFixture.MainBank,
                 department: AccountingFixture.SalesDepartment,
+                taxCategoryId: AccountingFixture.TaxablePurchase,
                 partner: AccountingFixture.Partner) with
             {
                 TaxTreatment = TaxTreatment.ForTaxableSales,
@@ -90,7 +91,7 @@ public class JournalDuplicationTests
             AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Sales, 100_000,
                 department: AccountingFixture.SalesDepartment));
 
-        var line = Assert.IsType<JournalLine>(Duplicate(original).Lines[0]);
+        var line = Duplicate(original).Lines[0];
 
         Assert.Equal(DebitCredit.Debit, line.DebitCredit);
         Assert.Equal(AccountingFixture.BankAccount, line.AccountId);
@@ -98,7 +99,7 @@ public class JournalDuplicationTests
         Assert.Equal(AccountingFixture.SalesDepartment, line.DepartmentId);
         Assert.Equal(AccountingFixture.Partner, line.PartnerId);
         Assert.Equal(Yen.From(100_000), line.Amount);
-        Assert.Equal(original.Lines[0].TaxCategoryId, line.TaxCategoryId);
+        Assert.Equal(AccountingFixture.TaxablePurchase, line.TaxCategoryId);
         Assert.Equal(TaxTreatment.ForTaxableSales, line.TaxTreatment);
         Assert.Equal("文房具", line.ItemDescription);
         Assert.Equal("public_transport", line.BookOnlyDeduction);
@@ -440,62 +441,120 @@ public class JournalDuplicationTests
             computed: []);
 
     /// <summary>
-    /// <b>「写す」に並べた明細の欄が、本当に写っている。</b>
+    /// <b>「写す」に並べた欄は本当に写り、「写さない」に並べた欄は本当に落ちる。</b>
     /// </summary>
     /// <remarks>
-    /// <para><b>一覧に足しただけで実装を直し忘れると、上の網羅テストは緑のまま</b>である
-    /// （和が一致することしか見ていない。2026-09-09 の自己レビュー）。
-    /// ここは<b>既定値と違う値を入れた明細</b>を 1 本作り、写した結果を欄ごとに読み比べる。</para>
-    /// <para><b>伝票の側は欄ごとに型が違う</b>ので、上の個別の検体が見る（3 つしかない）。</para>
+    /// <para><b>一覧と実装を結ぶのはここである。</b> 上の網羅テストは
+    /// 「4 つの一覧の和が型の欄と一致する」ことしか見ないので、
+    /// <b>一覧に足して実装を直し忘れても緑</b>だった（2026-09-09 の自己レビューで、
+    /// 3 通りの壊し方が全部すり抜けることを実測された）。</para>
+    /// <para><b>一覧を回して、欄ごとに読む。</b> 手で書き写した別の一覧を並べると、
+    /// 欄が増えた日にそちらを直し忘れる。</para>
+    /// <para><b>検体が縮退していないことも同時に見る</b>——
+    /// 原仕訳の側が既定値なら、写していなくても一致してしまう（qa/03 L-02）。</para>
     /// </remarks>
     [Fact]
-    public void 写すと決めた明細の欄は本当に写る()
+    public void 明細は写す欄が写り写さない欄が落ちる()
     {
-        var original = AccountingFixture.Entry(
-            TransactionDate,
-            AccountingFixture.Line(
-                7, DebitCredit.Credit, AccountingFixture.BankAccount, 12_345,
-                subAccountId: AccountingFixture.MainBank,
-                department: AccountingFixture.SalesDepartment,
-                taxCategoryId: AccountingFixture.TaxablePurchase,
-                partner: AccountingFixture.Partner) with
-            {
-                TaxTreatment = TaxTreatment.Common,
-                TaxPoint = new DateOnly(2026, 4, 30),
-                ItemDescription = "文房具",
-                BookOnlyDeduction = "public_transport",
-            });
+        var original = AccountingFixture.Entry(TransactionDate, SentinelLine());
 
-        var line = Duplicate(original).Lines[0];
-        var source = original.Lines[0];
-
-        // **1 つずつ読み比べる。** まとめて Equals で見ると、
-        // 写さない欄まで一致することを要求してしまう。
-        Assert.Equal(source.DebitCredit, line.DebitCredit);
-        Assert.Equal(source.AccountId, line.AccountId);
-        Assert.Equal(source.SubAccountId, line.SubAccountId);
-        Assert.Equal(source.DepartmentId, line.DepartmentId);
-        Assert.Equal(source.PartnerId, line.PartnerId);
-        Assert.Equal(source.Amount, line.Amount);
-        Assert.Equal(source.TaxCategoryId, line.TaxCategoryId);
-        Assert.Equal(source.TaxTreatment, line.TaxTreatment);
-        Assert.Equal(source.TaxPoint, line.TaxPoint);
-        Assert.Equal(source.ItemDescription, line.ItemDescription);
-        Assert.Equal(source.BookOnlyDeduction, line.BookOnlyDeduction);
-
-        // **どれも既定値ではない**（縮退していたら、写していなくても一致する。qa/03 L-02）。
-        Assert.NotEqual(default, line.SubAccountId);
-        Assert.NotEqual(default, line.DepartmentId);
-        Assert.NotEqual(default, line.PartnerId);
-        Assert.NotNull(line.TaxTreatment);
-        Assert.NotNull(line.TaxPoint);
-        Assert.NotNull(line.ItemDescription);
-        Assert.NotNull(line.BookOnlyDeduction);
-
-        // **行番号だけは振り直す**（写さない側）。
-        Assert.Equal(1, line.LineNo);
-        Assert.NotEqual(source.LineNo, line.LineNo);
+        AssertCopiedAndDropped(
+            original.Lines[0],
+            Duplicate(original).Lines[0],
+            copied:
+            [
+                "DebitCredit", "AccountId", "SubAccountId", "DepartmentId", "PartnerId",
+                "Amount", "TaxCategoryId", "TaxTreatment", "TaxPoint",
+                "ItemDescription", "BookOnlyDeduction",
+            ],
+            notCopied: ["PartnerNameSnapshot", "RegistrationNoSnapshot", "AppliedRuleVersion", "EvidenceRef", "ParentLineNo"]);
     }
+
+    /// <summary>
+    /// 伝票の側も同じように読む。
+    /// </summary>
+    /// <remarks>
+    /// <b>摘要はここで見ない。</b> 写し方が種別で変わる（取消・訂正は接頭辞を落とす。決定 4）ので、
+    /// <b>「非既定の種別」と「摘要をそのまま写す」を同時に満たす検体が作れない</b>
+    /// ——複製できて接頭辞を落とさない種別は「通常」だけで、それは種別の既定値である。
+    /// 摘要は上の 4 本が種別ごとに見る。
+    /// </remarks>
+    [Fact]
+    public void 伝票は写す欄が写り写さない欄が落ちる()
+    {
+        var original = Posted();
+
+        AssertCopiedAndDropped(
+            original,
+            Duplicate(original),
+            copied: ["TransactionDate", "PartnerId"],
+            notCopied:
+            [
+                "Id", "EntryNo", "Status", "EntryType", "OriginalEntryId",
+                "SourceComponent", "SourceDocumentId", "IdempotencyKey", "PostedAt", "PostedBy",
+            ]);
+    }
+
+    /// <summary>
+    /// 写す欄と写さない欄を、名前の一覧から読み比べる。
+    /// </summary>
+    /// <remarks>
+    /// <b>「写さない」の期待値は型の既定値</b>（<c>null</c>・<c>false</c>・列挙の 0）である。
+    /// 複製は写す欄だけを書き出して組み立てるので、写さない欄は既定値のまま残る。
+    /// </remarks>
+    private static void AssertCopiedAndDropped(
+        object source, object copy, string[] copied, string[] notCopied)
+    {
+        foreach (var name in copied)
+        {
+            var property = source.GetType().GetProperty(name)!;
+            var value = property.GetValue(source);
+
+            Assert.NotEqual(Default(property.PropertyType), value);
+            Assert.Equal(value, property.GetValue(copy));
+        }
+
+        foreach (var name in notCopied)
+        {
+            var property = source.GetType().GetProperty(name)!;
+
+            Assert.NotEqual(Default(property.PropertyType), property.GetValue(source));
+            Assert.Equal(Default(property.PropertyType), property.GetValue(copy));
+        }
+    }
+
+    /// <summary>型の既定値。</summary>
+    private static object? Default(Type type)
+        => type.IsValueType && Nullable.GetUnderlyingType(type) is null
+            ? Activator.CreateInstance(type)
+            : null;
+
+    /// <summary>
+    /// 欄という欄に<b>既定値でない値</b>を入れた明細。
+    /// </summary>
+    /// <remarks>
+    /// <b><c>IsTaxLine</c> だけは立てない</b>——立てると行ごと落ちる（決定 3）ので、
+    /// 「写らない」ことをこの検体では見られない。税行は
+    /// <see cref="消費税行を落として行番号を振り直す"/> が専門に見る。
+    /// </remarks>
+    private static JournalLine SentinelLine()
+        => AccountingFixture.Line(
+            7, DebitCredit.Credit, AccountingFixture.BankAccount, 12_345,
+            subAccountId: AccountingFixture.MainBank,
+            department: AccountingFixture.SalesDepartment,
+            taxCategoryId: AccountingFixture.TaxablePurchase,
+            partner: AccountingFixture.Partner) with
+        {
+            TaxTreatment = TaxTreatment.Common,
+            TaxPoint = new DateOnly(2026, 4, 30),
+            ItemDescription = "文房具",
+            BookOnlyDeduction = "public_transport",
+            PartnerNameSnapshot = "株式会社取引先",
+            RegistrationNoSnapshot = "T1234567890123",
+            AppliedRuleVersion = new RuleVersion("2023-10-01"),
+            EvidenceRef = "EV-001",
+            ParentLineNo = 3,
+        };
 
     /// <summary>型の欄が、4 つの区分のどれかに 1 度だけ現れることを確かめる。</summary>
     private static void AssertCovered(
