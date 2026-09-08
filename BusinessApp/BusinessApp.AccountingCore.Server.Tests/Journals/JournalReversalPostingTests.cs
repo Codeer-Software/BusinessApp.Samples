@@ -48,6 +48,29 @@ public class JournalReversalPostingTests
     }
 
     [Fact]
+    public async Task 規則より前に計上された補助科目つきの伝票も取り消せる()
+    {
+        // **これが「取消では止めない」の唯一の根拠である**（ADR-0038 §3。docs/10 §6）。
+        // 補助科目を使わない科目に補助科目が付いた計上済みの伝票が稼働 DB に 1 行あり（伝票 36）、
+        // **それを取り消せなくなると ADR-0004 の「取消できない伝票を作らない」が破れる。**
+        // 関門（`JournalEntryValidator`）と DDL のトリガの<b>両方</b>を通す形で確かめる——
+        // 片方ずつの検査は済んでいるが、配線は誰も見ていなかった（qa/03 L-01 の型。自己レビューで指摘）。
+        using var server = new AccountingServer();
+        var original = server.InsertPostedWithSubAccountOnUnusedAccount(1, "2026-05-20");
+        var reversal = server.InsertReversalDraft(original);
+
+        await PostAsync(server, reversal);
+
+        var posted = await server.EntryStore.LoadAsync(reversal);
+        Assert.Equal(EntryStatus.Posted, posted.Status);
+
+        // **取消にも補助科目が写っている。** 原仕訳の写しなので、ここが空になるのは誤りである。
+        Assert.Equal(
+            server.SubAccountOf("1100", "X001"),
+            posted.Lines.Single(l => l.LineNo == 1).SubAccountId);
+    }
+
+    [Fact]
     public async Task 画面から送られた明細は使わない()
     {
         using var server = new AccountingServer();

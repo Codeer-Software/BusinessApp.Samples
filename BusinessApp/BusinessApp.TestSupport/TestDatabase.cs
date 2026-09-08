@@ -116,6 +116,11 @@ public static class TestDatabase
         // 摘要のない計上済みは、いまは作れない。**規則より前に計上された行が稼働 DB に 2 件あり、
         // 帳簿はその行も探せなければならない**（電帳通達 8-13。docs/10 §4-2-1）。
         "trg_journal_entries_description_required_when_posted",
+
+        // 補助科目を使わない科目に補助科目が付いた計上済みの明細も、いまは作れない。
+        // **規則より前に計上された行が稼働 DB に 1 行あり**（伝票 36。qa/04 の 2026-09-08）、
+        // **その伝票を取り消せることがこの規則の免除の根拠**なので、検体が要る（ADR-0038 §3）。
+        "trg_journal_entries_sub_account_presence_when_posted",
     ];
 
     /// <summary>

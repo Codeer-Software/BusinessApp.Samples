@@ -271,14 +271,26 @@ public static class JournalEntryValidator
                     JournalViolationCodes.SubAccountRequired,
                     $"勘定科目「{account.Name}」は補助科目を使います。補助科目を選んでください。",
                     line.LineNo,
-                    SystemAuthoredSeverity(entry)));
+                    ReversalOnlySeverity(entry)));
             }
+            return;
+        }
+
+        // **実在は先に見る。** ここを 2 値の検査より後ろに置くと、取消では 2 値が警告なので
+        // **マスタに無い補助科目が関門を素通りし、DB の外部キーで落ちる**（qa/03 L-14 の型）。
+        var subAccount = subAccounts.Find(subAccountId);
+        if (subAccount is null)
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.SubAccountUnknown,
+                "補助科目が補助科目マスタにありません。",
+                line.LineNo));
             return;
         }
 
         // **補助科目は 2 値である**（ADR-0038 §3）。使わない科目は補助科目を持てない——
         // 持てると「全補助科目の合計＝科目の残高」が崩れ、補助元帳に載らない残高ができる。
-        // **実在と親の一致より先に見る。** どちらも「その補助科目でよいか」の話だが、
+        // **親の一致より先に見る。** どちらも「その補助科目でよいか」の話だが、
         // ここで断られる利用者に必要なのは「この科目では補助科目を使わない」であって、
         // 別の補助科目を選び直せという案内ではない。
         if (!account.UsesSubAccount)
@@ -287,17 +299,7 @@ public static class JournalEntryValidator
                 JournalViolationCodes.SubAccountNotAllowed,
                 $"勘定科目「{account.Name}」は補助科目を使いません。補助科目を空にしてください。",
                 line.LineNo,
-                SystemAuthoredSeverity(entry)));
-            return;
-        }
-
-        var subAccount = subAccounts.Find(subAccountId);
-        if (subAccount is null)
-        {
-            violations.Add(new Violation(
-                JournalViolationCodes.SubAccountUnknown,
-                "補助科目が補助科目マスタにありません。",
-                line.LineNo));
+                ReversalOnlySeverity(entry)));
             return;
         }
 
@@ -335,7 +337,7 @@ public static class JournalEntryValidator
     /// <b>取消だけが確定して再計上は永久に計上できない</b>——利用者から見れば、訂正しようとしたら
     /// 取り消されただけで詰む。ADR-0015 の「誤って取り消したときの復旧」も同じ理由で塞がれていた。</para>
     /// <para><b>補助科目の 2 値（ADR-0038 §3）には、この重さを使わない。</b>
-    /// あちらは<b>取消だけ</b>を外す（<see cref="SystemAuthoredSeverity"/>）——
+    /// あちらは<b>取消だけ</b>を外す（<see cref="ReversalOnlySeverity"/>）——
     /// 訂正の再計上は利用者が補助科目を空にできるので、止めても行き止まりにならない。</para>
     /// </remarks>
     private static ViolationSeverity InactiveSeverity(JournalEntry entry)
@@ -344,7 +346,7 @@ public static class JournalEntryValidator
             : ViolationSeverity.Error;
 
     /// <summary>
-    /// <b>中身をシステムが決める伝票</b>でだけ止めないことの重さ（補助科目の 2 値。ADR-0038 §3）。
+    /// <b>取消でだけ止めない</b>ことの重さ（補助科目の 2 値。ADR-0038 §3）。
     /// </summary>
     /// <remarks>
     /// <para><b>外すのは取消だけである。</b> 取消の明細はサーバが原仕訳を反転して作り
@@ -363,7 +365,7 @@ public static class JournalEntryValidator
     /// <c>trg_journal_entries_sub_account_presence_when_posted</c> が
     /// <c>entry_type &lt;&gt; 'reversal'</c> で同じ線を引く）。</para>
     /// </remarks>
-    private static ViolationSeverity SystemAuthoredSeverity(JournalEntry entry)
+    private static ViolationSeverity ReversalOnlySeverity(JournalEntry entry)
         => entry.EntryType is EntryType.Reversal ? ViolationSeverity.Warning : ViolationSeverity.Error;
 
     private static void ValidateTaxLine(JournalLine line, JournalEntry entry, List<Violation> violations)

@@ -202,7 +202,7 @@ public class MasterMeaningGuardTests
         var db = SchemaSeed.Create();
         TestDatabase.Execute(db, """
             -- **補助科目を使う科目にしてから付ける**（ADR-0038 §3。使わない科目の明細に
-            -- 補助科目を付けたままでは計上できない——trg_journal_entries_sub_account_matches_account_when_posted）。
+            -- 補助科目を付けたままでは計上できない——trg_journal_entries_sub_account_presence_when_posted）。
             -- 計上済みの明細がまだ無いので、意味の凍結のトリガには当たらない。
             UPDATE accounts SET uses_sub_account = 1 WHERE id = 1;
             INSERT INTO sub_accounts (account_id, code, name) VALUES (1, 'S001', '本店');

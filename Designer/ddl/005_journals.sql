@@ -502,25 +502,37 @@ END;
 -- trg_journal_entries_no_posted_insert が拒む）。
 --
 -- **広さは計上の関門（JournalEntryValidator）に揃えてある**（docs/10 §4-2-1 の二層の広さ）。
--- **外すのは取消だけ**である——取消の明細はサーバが原仕訳から作り、利用者に直す手立てが無いので、
--- 止めると規則より前の伝票を打ち消せなくなる（docs/10 §5・ADR-0004）。
+-- **外すのは取消の、原仕訳を写しただけの明細だけ**である——取消の明細はサーバが原仕訳を反転して作り、
+-- 利用者に直す手立てが無いので、止めると規則より前の伝票を打ち消せなくなる（docs/10 §5・ADR-0004）。
+-- **種別だけを見て外さない**——entry_type は取込・CLI・手打ちの SQL が自由に書ける列なので、
+-- 「取消だ」と名乗るだけで規則を外せてしまう。**原仕訳に同じ組み合わせの明細があること**まで見る。
 -- **訂正（再計上）は外さない**——中身は利用者が決めるので、補助科目を空にすれば通る。
 --
 -- **見るのは補助科目の有無だけである。** 「その補助科目が明細の勘定科目に属しているか」は
 -- 計上の関門（E-SUBACCOUNT-MISMATCH）だけが見ており、DB の層は無い（ddl/README の二重防御の表）。
 CREATE TRIGGER trg_journal_entries_sub_account_presence_when_posted
 BEFORE UPDATE ON journal_entries
-FOR EACH ROW WHEN NEW.status = 'posted' AND OLD.status <> 'posted' AND NEW.entry_type <> 'reversal'
+FOR EACH ROW WHEN NEW.status = 'posted' AND OLD.status <> 'posted'
 BEGIN
     SELECT RAISE(ABORT, '補助科目を使う勘定科目の明細には補助科目が要る。')
      WHERE EXISTS (SELECT 1 FROM journal_lines l
                      JOIN accounts a ON a.id = l.account_id
                     WHERE l.journal_entry_id = NEW.id
-                      AND a.uses_sub_account = 1 AND l.sub_account_id IS NULL);
+                      AND a.uses_sub_account = 1 AND l.sub_account_id IS NULL
+                      AND NOT (NEW.entry_type = 'reversal'
+                               AND EXISTS (SELECT 1 FROM journal_lines o
+                                            WHERE o.journal_entry_id = NEW.original_entry_id
+                                              AND o.account_id = l.account_id
+                                              AND o.sub_account_id IS l.sub_account_id)));
 
     SELECT RAISE(ABORT, '補助科目を使わない勘定科目の明細に補助科目は付けられない。')
      WHERE EXISTS (SELECT 1 FROM journal_lines l
                      JOIN accounts a ON a.id = l.account_id
                     WHERE l.journal_entry_id = NEW.id
-                      AND a.uses_sub_account = 0 AND l.sub_account_id IS NOT NULL);
+                      AND a.uses_sub_account = 0 AND l.sub_account_id IS NOT NULL
+                      AND NOT (NEW.entry_type = 'reversal'
+                               AND EXISTS (SELECT 1 FROM journal_lines o
+                                            WHERE o.journal_entry_id = NEW.original_entry_id
+                                              AND o.account_id = l.account_id
+                                              AND o.sub_account_id IS l.sub_account_id)));
 END;
