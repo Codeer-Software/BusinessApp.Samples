@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace BusinessApp.Server.Controllers
 {
     /// <summary>
-    /// 計上済みの伝票に対する操作（取り消す・訂正する）。ADR-0016 の Web API。
+    /// 伝票に対する操作 (取り消す・訂正する・複製する)。ADR-0016 の Web API。
     /// </summary>
     /// <remarks>
     /// <para><b>ここは HTTP の殻である。</b> 会計の判断も、識別子の解釈も、トランザクションも
@@ -34,7 +34,7 @@ namespace BusinessApp.Server.Controllers
         public async ValueTask DisposeAsync()
             => await _dataService.DisposeAsync();
 
-        /// <summary>この伝票にできること（取り消せるか・訂正できるか）を返す。**何も書かない。**</summary>
+        /// <summary>この伝票にできること (取り消せるか・訂正できるか・複製できるか) を返す。**何も書かない。**</summary>
         [HttpPost("availability")]
         public async Task<IActionResult> AvailabilityAsync(AmendRequest request)
             => Ok(await Endpoint().AvailabilityAsync(request?.OriginalEntryId));
@@ -48,6 +48,11 @@ namespace BusinessApp.Server.Controllers
         [HttpPost("correct")]
         public async Task<IActionResult> CorrectAsync(AmendRequest request)
             => Ok(await Endpoint().CorrectAsync(request?.OriginalEntryId));
+
+        /// <summary>複製する (ADR-0048)。</summary>
+        [HttpPost("duplicate")]
+        public async Task<IActionResult> DuplicateAsync(AmendRequest request)
+            => Ok(await Endpoint().DuplicateAsync(request?.OriginalEntryId));
 
         /// <summary>
         /// 入口を組み立てる。

@@ -30,6 +30,7 @@ public class ViolationHeadlineTests
         JournalPostingRejectedException.ReversalHeadline,
         JournalPostingRejectedException.CorrectionHeadline,
         JournalPostingRejectedException.DeletionHeadline,
+        JournalPostingRejectedException.DuplicationHeadline,
     ];
 
     /// <summary>見出しの語を字面に持ってよいファイルと、その理由。</summary>

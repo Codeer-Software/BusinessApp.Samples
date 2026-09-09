@@ -269,6 +269,179 @@ public class JournalAmendmentEndpointTests
         Assert.Equal(before, server.Scalar<long>("select count(*) from journal_entries"));
     }
 
+    // --- 複製する（ADR-0048） ---
+
+    /// <summary>
+    /// <b>できることに「複製できるか」も返す。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>複製は原仕訳の状態には依らないが、種別には依る</b>（ADR-0048 の決定 6）。
+    /// 返さないと画面は<b>押せるのに必ず断られるボタン</b>を出す（docs/21 §1。2026-09-09 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 複製できるかも返す()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        var available = await server.Amendment.AvailabilityAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.Succeeded, available.Status);
+        Assert.True(available.CanDuplicate);
+        Assert.True(available.CanReverse);
+    }
+
+    /// <summary>取消の伝票は「取り消せない・訂正できない」が「複製できる」。</summary>
+    /// <remarks><b>3 つの可否が同じ値で動かないことを見る</b>（縮退。qa/03 L-02）。</remarks>
+    [Fact]
+    public async Task 取消の伝票は複製だけできる()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        var reversalId = (await server.Amendment.ReverseAsync(server.Text(original.Value))).OpenEntryId;
+
+        var available = await server.Amendment.AvailabilityAsync(server.Text(reversalId));
+
+        Assert.True(available.CanDuplicate);
+        Assert.False(available.CanReverse);
+        Assert.False(available.CanCorrect);
+    }
+
+    /// <summary>複製できない種別は、可否でも false を返す（画面がボタンを出さない）。</summary>
+    [Fact]
+    public async Task 決算振替は複製もできないと返す()
+    {
+        using var server = new AccountingServer();
+        server.Execute("""
+            insert into journal_entries
+                (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+            values (1, '2026-05-20', '2026-05-20', 'draft', 'closing', '決算振替', '2026-05-20 10:00:00')
+            """);
+        var id = server.Scalar<long>("select max(id) from journal_entries");
+
+        var available = await server.Amendment.AvailabilityAsync(server.Text(id));
+
+        // **「答えが false」と「呼び出しが失敗」を分ける**（qa/03 L-03）。
+        // `CanDuplicate` は差し戻しでも既定の false になるので、Status も見る。
+        Assert.Equal(AmendResult.Succeeded, available.Status);
+        Assert.False(available.CanDuplicate);
+        Assert.False(available.CanReverse);
+
+        // 下書きなので、取消・訂正できない理由も返る（画面は計上済みのときだけ出す）。
+        Assert.Equal(
+            "この伝票はまだ計上されていません。下書きは削除してください。"
+            + "元の伝票を特定できません（保存されていないか、伝票番号がありません）。"
+            + "種別が「決算振替」の伝票は対象にできません。対象にできるのは通常の伝票と訂正だけです。",
+            available.Message);
+    }
+
+
+    /// <summary>
+    /// 複製すると、開くのは<b>新しい下書き</b>で、取消は 1 本も作らない。
+    /// </summary>
+    /// <remarks>
+    /// <b>複製は計上済みを 1 行も動かさない。</b> ここで取消が 1 本でもできていたら、
+    /// 「複製したつもりが取り消されていた」という取り返しのつかない失敗になる。
+    /// </remarks>
+    [Fact]
+    public async Task 複製すると新しい下書きが開く()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        var before = server.Scalar<long>("select count(*) from journal_entries");
+
+        var result = await server.Amendment.DuplicateAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.Succeeded, result.Status);
+        Assert.Equal("draft", server.StatusOf(new JournalEntryId(result.OpenEntryId)));
+        Assert.NotEqual(original.Value, result.OpenEntryId);
+
+        // **取消は作っていない**（<see cref="AmendResult.Opened"/> は 0 を返す）。
+        Assert.Equal(0, result.ReversalId);
+        Assert.Equal(0, server.CountAmendments(original, "reversal"));
+
+        // 増えたのは 1 本だけ。原仕訳は計上済みのまま。
+        Assert.Equal(before + 1, server.Scalar<long>("select count(*) from journal_entries"));
+        Assert.Equal("posted", server.StatusOf(original));
+    }
+
+    /// <summary>
+    /// 取り消された伝票も複製できる（<b>新しい記帳だから</b>。ADR-0048 の決定 6）。
+    /// </summary>
+    /// <remarks>
+    /// <b>訂正の下書きを消したあとの受け皿がこれである</b>（qa/04 の 2026-09-04）。
+    /// ここを取消・訂正と同じ条件で閉じると、いちばん要る場面で使えない。
+    /// </remarks>
+    [Fact]
+    public async Task 取り消された伝票も複製できる()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        await server.Amendment.ReverseAsync(server.Text(original.Value));
+
+        var result = await server.Amendment.DuplicateAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.Succeeded, result.Status);
+        Assert.Equal("draft", server.StatusOf(new JournalEntryId(result.OpenEntryId)));
+
+        // **できるのは通常の伝票**（取消を複製しても取消にはならない）。
+        Assert.Equal(
+            "normal",
+            server.Scalar<string>($"select entry_type from journal_entries where id = {result.OpenEntryId}"));
+    }
+
+    /// <summary>
+    /// <b>2 回押せば下書きが 2 本できる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>冪等ではない</b>（複製に冪等キーは無い。ADR-0048 の決定 2）。
+    /// 確認ダイアログを出さないので<b>連打を抑えるものが 1 つも無い</b>——
+    /// 取消・訂正では確認が事実上の二重送信よけになっていた（2026-09-09 の自己レビュー）。
+    /// <b>意図としてここに固定する</b>：できるのは下書きなので、要らないほうは削除すればよい。
+    /// </remarks>
+    [Fact]
+    public async Task 続けて2回複製すれば下書きが2本できる()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        var first = await server.Amendment.DuplicateAsync(server.Text(original.Value));
+        var second = await server.Amendment.DuplicateAsync(server.Text(original.Value));
+
+        Assert.NotEqual(first.OpenEntryId, second.OpenEntryId);
+        Assert.Equal(2, server.Scalar<long>("select count(*) from journal_entries where status = 'draft'"));
+    }
+
+    /// <summary>会計の役割が無ければ複製もできない（入口が 1 つなので、経路ごとに開かない）。</summary>
+    [Fact]
+    public async Task 会計の役割が無ければ複製できない()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        server.SetAccountingRole(null);
+
+        var result = await server.Amendment.DuplicateAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.RejectedStatus, result.Status);
+        Assert.Equal(JournalAmendmentEndpoint.NotAuthorized, result.Message);
+    }
+
+    /// <summary>複製の差し戻しは「複製できません」で始まる（押したボタンの言葉。qa/02 R24-23）。</summary>
+    [Fact]
+    public async Task 会計期間が無ければ複製できませんと断る()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        server.Execute("delete from accounting_periods");
+
+        var result = await server.Amendment.DuplicateAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.RejectedStatus, result.Status);
+        Assert.Equal(
+            $"複製できません。①今日（2026/08/24）に対応する会計期間がありません。", result.Message);
+        Assert.Equal([JournalViolationCodes.PeriodNotFound], result.Violations.Select(v => v.Code));
+    }
+
     // --- 訂正する ---
 
     [Fact]
@@ -373,7 +546,7 @@ public class JournalAmendmentEndpointTests
         // 1 つ落ちても改名されてもコンパイルは通り、画面が黙って値を読めなくなる。
         Assert.Equal(
             ["status", "openEntryId", "reversalId", "message", "violations", "canReverse", "canCorrect",
-             "reversalEntryNo", "correctionEntryNo"],
+             "canDuplicate", "reversalEntryNo", "correctionEntryNo"],
             root.EnumerateObject().Select(property => property.Name));
         Assert.Equal(
             ["code", "message", "lineNo"],

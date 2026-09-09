@@ -8,9 +8,16 @@ using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
 /// <summary>
-/// 計上済みの伝票を「取り消す」「訂正する」（docs/10 §5・ADR-0015）。
+/// 伝票に対する操作（「取り消す」「訂正する」「複製する」）。docs/10 §5・ADR-0015・ADR-0048。
 /// </summary>
 /// <remarks>
+/// <para><b>型の名前は取消・訂正の用途で付いたが、いまは複製も持つ</b>
+/// （<c>JournalPostingRejectedException</c> と同じ形で、名前より持ち物が広がった）。
+/// <b>複製は取消・訂正ではない</b>——帳簿を 1 行も動かさず、原仕訳の状態も見ない。
+/// それでも同居させているのは、<b>権限の関門が
+/// <see cref="JournalAmendmentEndpoint"/> の 1 メソッドにあるから</b>である
+/// （この経路は CLB のモジュール条件を 1 つも通らない。qa/03 L-22）。
+/// <b>入口を分けるなら、関門を先に共有部品へ括り出す</b>（2026-09-09 の自己レビュー）。</para>
 /// <para>画面のボタンから Web API 経由で呼ばれる（ADR-0016）。<b>会計の判断は 1 行も
 /// スクリプトに置かない</b>ので、画面がするのは「この伝票を訂正して」と頼んで、
 /// 返ってきた下書きを開くことだけである（ADR-0008）。</para>
@@ -42,7 +49,7 @@ public sealed class JournalAmendmentService(
     }
 
     /// <summary>
-    /// この伝票を取り消せるか・訂正できるかを調べる。<b>何も書かない。</b>
+    /// この伝票にできること（取消・訂正・複製）を調べる。<b>何も書かない。</b>
     /// </summary>
     /// <remarks>
     /// <para>画面がボタンを出すかどうかを決めるために使う。
@@ -84,9 +91,13 @@ public sealed class JournalAmendmentService(
         // 「既に訂正されている」を別に見る必要は無い——訂正があるなら必ず取消もあるので、
         // 取消の判定（既に取り消されている）で先に落ちる。
         // 2 つの値に分けてあるのは、片方だけできる状態が将来生まれうるからである。
+        // **複製は原仕訳の状態を見ない**（ADR-0048 の決定 6）ので、種別だけで決まる。
+        // **ここで返さないと、画面は押せるボタンを出して必ず断られる**（docs/21 §1。
+        // 2026-09-09 の自己レビュー）。
         return new AmendmentAvailability(
             reversal.Created, reversal.Created, Describe(reversal),
-            amendments.ReversalEntryNo, amendments.CorrectionEntryNo);
+            amendments.ReversalEntryNo, amendments.CorrectionEntryNo,
+            original.EntryType.IsDuplicable());
     }
 
     /// <summary>できない理由。<b>できるときは空</b>にして、画面が出し分けなくてよいようにする。</summary>
@@ -145,6 +156,37 @@ public sealed class JournalAmendmentService(
     }
 
     /// <summary>
+    /// 原仕訳と同じ内容の下書きを 1 本作る（ADR-0048）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>複製は取消・訂正ではない。</b> 原仕訳の状態を何も見ないし、計上済みを 1 行も動かさない。
+    /// それでも<b>同じ入口に置いてある</b>のは、<b>権限の関門を 1 か所に保つため</b>である——
+    /// この経路は CLB のモジュール条件を 1 つも通らないので、
+    /// 入口を分けると<b>片方に関門を書き忘れる</b>（[qa/03 L-22] がその実例）。</para>
+    /// <para><b>会計の判断は <see cref="JournalDuplication"/> が持つ。</b> ここがするのは、
+    /// 原仕訳を読むこと・今日の年度を引くこと・下書きを入れることだけである。</para>
+    /// </remarks>
+    /// <returns>できた下書きの識別子。画面はそれを開く。</returns>
+    public Task<JournalEntryId> DuplicateAsync(JournalEntryId originalId)
+        => WithHeadlineAsync(
+            JournalPostingRejectedException.DuplicationHeadline, () => DuplicateCoreAsync(originalId));
+
+    private async Task<JournalEntryId> DuplicateCoreAsync(JournalEntryId originalId)
+    {
+        var (original, context, today, now) = await PrepareAsync(originalId);
+
+        // **年度は今日から引く。** 原仕訳の年度を写すと、閉じた期間へ新しい伝票を落とせる（I-03）。
+        var period = TodayPeriod(context, today);
+        var result = JournalDuplication.Duplicate(original, today, now, period.FiscalYearId);
+        if (!result.Created)
+        {
+            throw new JournalPostingRejectedException(result.Violations);
+        }
+
+        return await entryStore.InsertDraftAsync(result.Draft!);
+    }
+
+    /// <summary>
     /// 差し戻しの見出しを、<b>押されたボタンの言葉</b>に付け替える。
     /// </summary>
     /// <remarks>
@@ -190,21 +232,27 @@ public sealed class JournalAmendmentService(
     }
 
     /// <summary>
-    /// 取消の可否を決める材料。<b>会計年度は取消の計上日（今日）から引く</b>ので、
-    /// 該当する期間が無ければここで止める。
+    /// 今日の属する会計期間。<b>無ければ止める</b>（取消・訂正・複製で共通）。
     /// </summary>
-    private async Task<ReversalContext> ResolveReversalContextAsync(
-        JournalEntry original, PostingContext context, DateOnly today)
-    {
-        if (context.Calendar.ResolvePeriod(today) is not AccountingPeriod period)
-        {
-            throw new JournalPostingRejectedException(
+    /// <remarks>
+    /// <b>同じ文言を 2 か所に組み立てない</b>——片方だけ直したときに、
+    /// 見出しの網（<c>ViolationHeadlineTests</c>）は見出しの語を含まないので鳴らない
+    /// （2026-09-09 の自己レビュー）。
+    /// </remarks>
+    private static AccountingPeriod TodayPeriod(PostingContext context, DateOnly today)
+        => context.Calendar.ResolvePeriod(today) is AccountingPeriod period
+            ? period
+            : throw new JournalPostingRejectedException(
             [
                 new Violation(
                     JournalViolationCodes.PeriodNotFound,
                     $"今日（{today:yyyy/MM/dd}）に対応する会計期間がありません。"),
             ]);
-        }
+
+    private async Task<ReversalContext> ResolveReversalContextAsync(
+        JournalEntry original, PostingContext context, DateOnly today)
+    {
+        var period = TodayPeriod(context, today);
 
         // 原仕訳の識別子は FindAsync が返した以上必ずある。
         var reversedOn = await entryStore.FindReversedOnAsync(original.Id!.Value);
@@ -226,12 +274,13 @@ public sealed class JournalAmendmentService(
 /// </summary>
 /// <param name="CanReverse">取り消せるか。</param>
 /// <param name="CanCorrect">訂正できるか。</param>
+/// <param name="CanDuplicate">複製できるか。</param>
 /// <param name="Reason">できない理由。できるときは空文字。</param>
 /// <param name="ReversalEntryNo">既に取り消されているなら、その取消伝票の伝票番号。</param>
 /// <param name="CorrectionEntryNo">既に訂正されているなら、その再計上の伝票番号。</param>
 public readonly record struct AmendmentAvailability(
     bool CanReverse, bool CanCorrect, string Reason,
-    int? ReversalEntryNo = null, int? CorrectionEntryNo = null)
+    int? ReversalEntryNo = null, int? CorrectionEntryNo = null, bool CanDuplicate = false)
 {
     /// <summary>
     /// どちらもできない。<b>取消・訂正の番号は、分かっているなら落とさずに返す。</b>

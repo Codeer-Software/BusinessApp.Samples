@@ -73,6 +73,12 @@ void ApplyPostedLock()
     CorrectButton.IsVisible = false;
     ReverseButton.IsVisible = false;
 
+    // **複製の可否はサーバに聞く**（下の ApplyAmendmentAvailability）。
+    // 原仕訳の状態には依らないが**種別には依る**（期首残高・決算振替・繰越は複製できない。
+    // ADR-0048 の決定 6）ので、**押せるのに必ず断られるボタンを出さない**（docs/21 §1。
+    // 2026-09-09 の自己レビュー）。**新規（まだ保存していない）伝票には出さない**——写す元がまだ無い。
+    DuplicateButton.IsVisible = false;
+
     // **削除は下書きにだけ出す。** 計上済みは不変（ADR-0004）で、取消か訂正で表す。
     // 新規（まだ保存していない）伝票にも出さない——消すものがまだ無い。
     DeleteButton.IsVisible = !posted && !IsNewData;
@@ -86,8 +92,11 @@ void ApplyPostedLock()
     // そのままだとボタンが残ったまま無反応になる（qa/01 D-01・F-14）。
     CorrectButton.IsViewOnly = false;
     ReverseButton.IsViewOnly = false;
+    DuplicateButton.IsViewOnly = false;
 
-    if (posted) ApplyAmendmentAvailability();
+    // **下書きでも聞く。** 複製は下書きからも押せるので、
+    // 計上済みのときだけ聞くと下書きの画面に複製が出ない。
+    if (!IsNewData) ApplyAmendmentAvailability();
 }
 
 // 計上済みの伝票は、取引先も計上時の姿で見せる（ADR-0037）。
@@ -133,9 +142,16 @@ void ApplyAmendmentAvailability()
 
     CorrectButton.IsVisible = $"{result.JsonObject.canCorrect}".ToLower() == "true";
     ReverseButton.IsVisible = $"{result.JsonObject.canReverse}".ToLower() == "true";
+    DuplicateButton.IsVisible = $"{result.JsonObject.canDuplicate}".ToLower() == "true";
 
     var noticed = ShowAmendmentNotice(
         $"{result.JsonObject.reversalEntryNo}", $"{result.JsonObject.correctionEntryNo}");
+
+    // **理由を出すのは計上済みのときだけ。** 下書きでは「まだ計上されていません。下書きは削除してください」
+    // が必ず返る——**これから書く人に削除を勧める**ことになるし、明細を 1 行直すと
+    // UpdateTotals が本文を組み直して消えるので、出たり消えたりする
+    // （複製の可否を聞くために下書きでも問い合わせるようにした回の巻き添え。2026-09-09 の自己レビュー）。
+    if (Status.Value != EntryStatuses.Posted) return;
 
     // 両方できないなら、その理由を出す。押せないボタンを探させない。
     //
@@ -145,8 +161,14 @@ void ApplyAmendmentAvailability()
     // 会計期間が無い・種別が取消の対象外、といった場合である。
     if (!CorrectButton.IsVisible && !ReverseButton.IsVisible && !noticed)
     {
+        // **操作を名乗る。** 関門の文は「見出しが結果を言う」前提で書いてあるので
+        // （docs/21 §2-6）、見出しの無いここに置くと**何の対象か**が読めない。
+        // **複製が押せる画面では「取消・訂正はできない」と読めることが要る**（2026-09-09 の自己レビュー）。
         var reason = $"{result.JsonObject.message}";
-        if (!string.IsNullOrEmpty(reason)) TotalsLabel.Text = $"{TotalsLabel.Text}　（{reason}）";
+        if (!string.IsNullOrEmpty(reason))
+        {
+            TotalsLabel.Text = $"{TotalsLabel.Text}　（取消・訂正はできません: {reason}）";
+        }
     }
 }
 
@@ -361,13 +383,35 @@ void ReverseButton_OnClick()
         "この伝票を取り消します。取消は帳簿に残り、あとから消せません。よろしいですか？");
 }
 
+// 複製する。サーバが同じ内容の下書きを作って返す（ADR-0048）。
+//
+// **何を写して何を写さないかはサーバが決める**——ここは頼んで開くだけである（ADR-0008）。
+//
+// **確認は「保存していない変更があるとき」だけ出す。** 複製そのものは帳簿を 1 行も動かさず、
+// できるのは下書き 1 本なので、間違えても削除すればよい（ADR-0048 の決定 7）。
+// **ただし写るのは保存済みの内容**なので、直しかけたまま押すと、
+// その変更は複製にも入らず、離脱で消える（2026-09-09 の自己レビュー）。
+void DuplicateButton_OnClick()
+{
+    var message = IsModified
+        ? "保存していない変更があります。複製に写るのは保存済みの内容で、変更は失われます。よろしいですか？"
+        : "";
+
+    Amend("duplicate", "複製", message,
+        "複製しました。いま開いているのは新しい下書きです。内容を確かめて計上してください。");
+}
+
 // 確認 → サーバに依頼 → 返ってきた伝票を開く。
 //
 // 取消は「計上済みの反対仕訳」、訂正は「これから直す下書き」を開く。
 // どちらを開くかはサーバが決めて openEntryId で返すので、ここでは分岐しない。
-void Amend(string operation, string noun, string message)
+// **入口を 1 本にしてある。** サーバ側が「入口を分けると片方に関門を書き忘れる」と言って
+// 1 本にしたのと同じ理由で、画面も 1 本にする——文言を直す日に片方だけ直るのを避ける。
+// **message が空なら確認を出さない**（複製。上の理由）。
+// **done が空なら成功のトーストを出さない**（取消・訂正は開いた先の画面がそれを語る）。
+void Amend(string operation, string noun, string message, string done = "")
 {
-    if (MessageBox.ShowWithTitle($"{noun}の確認", message, "はい", "いいえ") != "はい") return;
+    if (message != "" && MessageBox.ShowWithTitle($"{noun}の確認", message, "はい", "いいえ") != "はい") return;
 
     var body = new JsonObject();
     // Id は文字列で持つ。数値に直してから渡すと、桁と型の解釈が 2 か所に分かれる。
@@ -390,6 +434,10 @@ void Amend(string operation, string noun, string message)
         Toaster.Error($"{result.JsonObject.message}");
         return;
     }
+
+    // **開いた先が何であるかを言う。** 複製は見た目が原仕訳と同じなので、
+    // 言わないと「保存されなかった」と読まれる。
+    if (done != "") Toaster.Success(done);
 
     NavigationService.NavigateTo(
         NavigationService.GetModuleDataUrl("JournalEntry", $"{result.JsonObject.openEntryId}"));

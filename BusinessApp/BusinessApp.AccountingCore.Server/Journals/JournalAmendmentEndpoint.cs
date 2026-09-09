@@ -9,7 +9,7 @@ using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
 /// <summary>
-/// 「取り消す」「訂正する」の入口のうち、<b>HTTP でない部分</b>（ADR-0016）。
+/// 「取り消す」「訂正する」「複製する」の入口のうち、<b>HTTP でない部分</b>（ADR-0016）。
 /// </summary>
 /// <remarks>
 /// <para>コントローラ（<c>BusinessApp.Server</c>）に残るのは認証・経路・データソース名の解決だけで、
@@ -41,7 +41,7 @@ public sealed class JournalAmendmentEndpoint(
             JournalAmendmentService.Create(dbAccessor, dataSourceName, timeProvider, authenticationContext),
             new AccountingRoleStore(dbAccessor, dataSourceName, authenticationContext));
 
-    /// <summary>この伝票にできること（取り消せるか・訂正できるか）を返す。<b>何も書かない。</b></summary>
+    /// <summary>この伝票にできること（取り消せるか・訂正できるか・複製できるか）を返す。<b>何も書かない。</b></summary>
     public Task<AmendResult> AvailabilityAsync(string? originalEntryId)
         => RunAsync(originalEntryId, async originalId =>
         {
@@ -66,6 +66,20 @@ public sealed class JournalAmendmentEndpoint(
         {
             var started = await service.CorrectAsync(originalId);
             return AmendResult.Ok(started.ReversalId.Value, started.CorrectionId.Value);
+        });
+
+    /// <summary>
+    /// 複製する。原仕訳と同じ内容の下書きを作り、<b>その下書きの識別子</b>を返す（ADR-0048）。
+    /// </summary>
+    /// <remarks>
+    /// <b>複製は取消・訂正ではない</b>が、同じ入口に置いてある——理由は
+    /// <see cref="JournalAmendmentService.DuplicateAsync"/> が持つ（権限の関門を 1 か所に保つ）。
+    /// </remarks>
+    public Task<AmendResult> DuplicateAsync(string? originalEntryId)
+        => RunAsync(originalEntryId, async originalId =>
+        {
+            var id = await service.DuplicateAsync(originalId);
+            return AmendResult.Opened(id.Value);
         });
 
     /// <summary>
@@ -107,7 +121,7 @@ public sealed class JournalAmendmentEndpoint(
     }
 }
 
-/// <summary>取り消す・訂正する対象の伝票。</summary>
+/// <summary>操作の対象の伝票（取消・訂正の原仕訳、複製の写し元）。</summary>
 public record AmendRequest([property: JsonPropertyName("originalEntryId")] string? OriginalEntryId);
 
 /// <summary>
@@ -125,13 +139,15 @@ public record AmendRequest([property: JsonPropertyName("originalEntryId")] strin
 /// </remarks>
 /// <param name="Status">"ok" か "rejected"。</param>
 /// <param name="OpenEntryId">
-/// 画面が開くべき伝票。取消では計上した反対仕訳、訂正では利用者が直す再計上の下書き。
+/// 画面が開くべき伝票。取消では計上した反対仕訳、訂正では利用者が直す再計上の下書き、
+/// 複製では作った下書き。
 /// </param>
-/// <param name="ReversalId">計上した取消の伝票。</param>
+/// <param name="ReversalId">計上した取消の伝票。<b>複製では 0</b>（取消を作っていない）。</param>
 /// <param name="Message">差し戻しの文言。そのまま画面に出せる。</param>
 /// <param name="Violations">差し戻しの内訳。画面はコードで分岐できる。</param>
 /// <param name="CanReverse">取り消せるか（<see cref="Available"/> のときだけ意味を持つ）。</param>
 /// <param name="CanCorrect">訂正できるか（<see cref="Available"/> のときだけ意味を持つ）。</param>
+/// <param name="CanDuplicate">複製できるか（同上）。</param>
 /// <param name="ReversalEntryNo">
 /// 既に取り消されているなら、その取消伝票の伝票番号。無ければ空文字。
 /// <b>数値ではなく文字列で返す</b>——<c>originalEntryId</c> を文字列で受けているのと同じ理由で、
@@ -147,6 +163,7 @@ public record AmendResult(
     [property: JsonPropertyName("violations")] IReadOnlyList<AmendViolation> Violations,
     [property: JsonPropertyName("canReverse")] bool CanReverse = false,
     [property: JsonPropertyName("canCorrect")] bool CanCorrect = false,
+    [property: JsonPropertyName("canDuplicate")] bool CanDuplicate = false,
     [property: JsonPropertyName("reversalEntryNo")] string ReversalEntryNo = "",
     [property: JsonPropertyName("correctionEntryNo")] string CorrectionEntryNo = "")
 {
@@ -159,11 +176,24 @@ public record AmendResult(
     public static AmendResult Ok(long reversalId, long openEntryId)
         => new(Succeeded, openEntryId, reversalId, string.Empty, []);
 
+    /// <summary>
+    /// 伝票を 1 本作っただけのとき（複製）。<b>取消は 1 本も作っていない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>返す JSON は <c>Ok(0, id)</c> と 1 バイトも違わない</b>（<c>reversalId</c> は 0）。
+    /// 名前を分けてあるのは<b>呼ぶ側のため</b>で、
+    /// 「取消を作っていない」ことを <c>0</c> の綴りに頼らずに書けるようにしている。
+    /// <b>画面はこの違いを読めない</b>——読む必要も無い（複製の画面は <c>reversalId</c> を見ない）。
+    /// 読ませる必要が出たら、そのとき項目を分ける（2026-09-09 の自己レビュー）。
+    /// </remarks>
+    public static AmendResult Opened(long openEntryId)
+        => new(Succeeded, openEntryId, 0, string.Empty, []);
+
     public static AmendResult Rejected(string message, IReadOnlyList<AmendViolation> violations)
         => new(RejectedStatus, 0, 0, message, violations);
 
     /// <summary>
-    /// できること。<b>成否ではないので status は ok</b> で、内容は 2 つの真偽値で表す。
+    /// できること。<b>成否ではないので status は ok</b> で、内容は 3 つの真偽値で表す。
     /// </summary>
     /// <remarks>
     /// <b>調べた結果をそのまま受け取る。</b> 項目を 1 つずつ渡す形にすると、
@@ -172,7 +202,7 @@ public record AmendResult(
     /// </remarks>
     public static AmendResult Available(AmendmentAvailability available)
         => new(Succeeded, 0, 0, available.Reason, [],
-               available.CanReverse, available.CanCorrect,
+               available.CanReverse, available.CanCorrect, available.CanDuplicate,
                EntryNoText(available.ReversalEntryNo), EntryNoText(available.CorrectionEntryNo));
 
     /// <summary>伝票番号を画面へ渡す形にする。<b>無いことは空文字で表す</b>（上の注記）。</summary>

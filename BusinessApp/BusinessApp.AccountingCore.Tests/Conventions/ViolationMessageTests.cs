@@ -25,7 +25,10 @@ using BusinessApp.AccountingCore.Tests.Fixtures;
 public class ViolationMessageTests
 {
     private static readonly string[] Headlines =
-        ["計上できません", "保存できません", "取り消せません", "訂正できません", "削除できません", "登録できません"];
+    [
+        "計上できません", "保存できません", "取り消せません", "訂正できません",
+        "削除できません", "登録できません", "複製できません",
+    ];
 
     [Fact]
     public void 検証が返す文は見出しの語を繰り返さない()

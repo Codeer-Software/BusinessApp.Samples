@@ -61,4 +61,19 @@ public static class EntryTypeExtensions
     /// </remarks>
     public static bool IsAmendable(this EntryType type)
         => type is EntryType.Normal or EntryType.Correction;
+
+    /// <summary>
+    /// 複製の<b>対象</b>にできる種別か（ADR-0048）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>期首残高・決算振替・繰越は複製できない。</b> 複製でできるのは<b>通常の伝票</b>なので、
+    /// 決算振替を複製すると「損益 → 繰越利益剰余金」を<b>期中に通常の伝票として計上できる</b>（I-10 が崩れる）し、
+    /// 繰越の複製は翌期首の残高を二重に載せる（I-12）。
+    /// <see cref="IsAmendable"/> が同じ 3 種別を除いているのと同じ理由である。</para>
+    /// <para><b>取消は複製できる</b>——ここが <see cref="IsAmendable"/> と違う。
+    /// 取消の取消は何も表現しないが、<b>取消の内容をもう一度起こす</b>のは通常の記帳として意味がある
+    /// （訂正の下書きを消したあとの作り直しがまさにそれ。ADR-0048 の状況）。</para>
+    /// </remarks>
+    public static bool IsDuplicable(this EntryType type)
+        => type is EntryType.Normal or EntryType.Correction or EntryType.Reversal;
 }

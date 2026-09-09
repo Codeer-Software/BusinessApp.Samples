@@ -1,7 +1,9 @@
 namespace BusinessApp.AccountingCore.Server.Tests.Journals;
 
+using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Server.Journals;
+using BusinessApp.AccountingCore.Server.Shared;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 using BusinessApp.AccountingCore.Shared;
 using Codeer.LowCode.Blazor.DataIO;
@@ -17,9 +19,140 @@ using Codeer.LowCode.Blazor.DataIO;
 public class JournalAmendmentServiceTests
 {
     /// <summary>取り消される側の仕訳（借方 現金 1000 / 貸方 未払金 1000）。</summary>
-    private static JournalEntryId Original(AccountingServer server, string transactionDate = "2026-05-20")
+    private static JournalEntryId Original(
+        AccountingServer server, string transactionDate = "2026-05-20", int entryNo = 1)
         => server.InsertPosted(
-            1, "5 月分の仕入", transactionDate, ("debit", "1100", 1000), ("credit", "2200", 1000));
+            entryNo, "5 月分の仕入", transactionDate, ("debit", "1100", 1000), ("credit", "2200", 1000));
+
+    // --- 複製する（ADR-0048） ---
+
+    /// <summary>
+    /// <b>複製した下書きは、DB へ書いて読み戻しても同じ内容である</b>（往復。qa/03 L-14 の処方）。
+    /// </summary>
+    /// <remarks>
+    /// <b>純粋関数が正しくても、書く経路が落とせば意味が無い。</b> 逆に、
+    /// 写してはいけない欄を書く経路が拾ってしまうこともある——どちらもここで捕まえる。
+    /// </remarks>
+    [Fact]
+    public async Task 複製した下書きは読み戻しても同じ内容である()
+    {
+        using var server = new AccountingServer();
+
+        // **写しと制度の版は下書きのうちに入れる。** 計上済みの明細は書き換えられない（I-05）ので、
+        // 「写しが付いた計上済み」はこの順でしか作れない。
+        var original = server.InsertDraft(
+            transactionDate: "2026-05-20", postingDate: "2026-05-20", description: "5 月分の仕入");
+        server.InsertLine(original, 1, "debit", "1100", 1000);
+        server.InsertLine(original, 2, "credit", "2200", 1000);
+        var partner = server.InsertPartner();
+        // **写す欄を全部非 NULL にする**（qa/03 L-04 の処方）。
+        // NULL のまま往復させると、書く経路が落としていても読み戻しは NULL で一致する。
+        server.Execute($"""
+            update journal_lines
+               set partner_name_snapshot = '株式会社取引先',
+                   registration_no_snapshot = 'T1234567890123',
+                   applied_rule_version = '2023-10-01',
+                   tax_point = '2026-05-20',
+                   department_id = (select id from departments where code = '10'),
+                   partner_id = {partner},
+                   tax_treatment = 'common',
+                   item_description = '文房具',
+                   book_only_deduction = 'public_transport'
+             where journal_entry_id = {original.Value};
+            update journal_entries
+               set status = 'posted', entry_no = 1, posted_at = '2026-05-20 10:00:00',
+                   partner_id = {partner}
+             where id = {original.Value};
+            """);
+
+        var duplicateId = await server.AmendAsync(s => s.DuplicateAsync(original));
+        var copy = await server.EntryStore.LoadAsync(duplicateId);
+
+        Assert.Equal(EntryStatus.Draft, copy.Status);
+        Assert.Equal(EntryType.Normal, copy.EntryType);
+        Assert.Null(copy.EntryNo);
+        Assert.Null(copy.OriginalEntryId);
+        Assert.Null(copy.PostedAt);
+
+        // 取引日は原仕訳のまま。計上日は「複製した日」＝今日。
+        Assert.Equal(new DateOnly(2026, 5, 20), copy.TransactionDate);
+        Assert.Equal(new DateOnly(2026, 8, 24), copy.PostingDate);
+        Assert.Equal("5 月分の仕入", copy.Description);
+
+        // 内容はそのまま（貸借は入れ替えない。取消とはここが違う）。
+        Assert.Equal([DebitCredit.Debit, DebitCredit.Credit], copy.Lines.Select(l => l.DebitCredit));
+        Assert.Equal([Yen.From(1000), Yen.From(1000)], copy.Lines.Select(l => l.Amount));
+        Assert.Equal([1, 2], copy.Lines.Select(l => l.LineNo));
+
+        // **非 NULL の欄が、書いて読み戻しても入っている。**
+        Assert.NotNull(copy.PartnerId);
+        Assert.All(copy.Lines, l => Assert.NotNull(l.DepartmentId));
+        Assert.All(copy.Lines, l => Assert.NotNull(l.PartnerId));
+        Assert.All(copy.Lines, l => Assert.Equal(TaxTreatment.Common, l.TaxTreatment));
+        Assert.All(copy.Lines, l => Assert.Equal("文房具", l.ItemDescription));
+        Assert.All(copy.Lines, l => Assert.Equal("public_transport", l.BookOnlyDeduction));
+
+        // **計上時点の写しと制度の版は、書く経路でも落ちている。**
+        Assert.All(copy.Lines, l => Assert.Null(l.PartnerNameSnapshot));
+        Assert.All(copy.Lines, l => Assert.Null(l.RegistrationNoSnapshot));
+        Assert.All(copy.Lines, l => Assert.Null(l.AppliedRuleVersion));
+
+        // **課税仕入れの時点は、書く経路でも写る**（画面に無い欄なので落とすと入れ直せない）。
+        Assert.All(copy.Lines, l => Assert.Equal(new DateOnly(2026, 5, 20), l.TaxPoint));
+    }
+
+    /// <summary>複製できない種別は「複製できません」で断る（種別の線がサーバまで届く）。</summary>
+    /// <remarks>
+    /// <b>種別は後から変えられない</b>（DDL のトリガ）ので、その種別で作る。
+    /// 決算振替を作る画面も経路もまだ無い（フェーズ 4）が、<b>DDL は値を許している</b>
+    /// ので、取込・CLI では作れる。
+    /// </remarks>
+    [Fact]
+    public async Task 決算振替は複製できない()
+    {
+        using var server = new AccountingServer();
+        server.Execute("""
+            insert into journal_entries
+                (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+            values (1, '2026-05-20', '2026-05-20', 'draft', 'closing', '決算振替', '2026-05-20 10:00:00')
+            """);
+        var original = new JournalEntryId(server.Scalar<long>("select max(id) from journal_entries"));
+
+        var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.DuplicateAsync(original)));
+
+        // **何と言うかを表明する**（qa/03 L-17。見出しと本文が同じことを 2 回言っていないことも見る）。
+        Assert.Equal(
+            "複製できません。①種別が「決算振替」の伝票は対象にできません。"
+            + "対象にできるのは通常の伝票と訂正・取消です。",
+            thrown.Message);
+    }
+
+    /// <summary>複製した下書きは、そのまま計上できる（作った下書きが計上の関門を通る）。</summary>
+    /// <remarks>
+    /// <b>「作れた」と「使える」は別である。</b> 年度や期間の取り違えは、
+    /// 計上しようとした瞬間に初めて出る（qa/03 L-30 の型）。
+    /// </remarks>
+    [Fact]
+    public async Task 複製した下書きはそのまま計上できる()
+    {
+        using var server = new AccountingServer();
+
+        // **伝票番号と識別子をずらす**（既定では両方 1 から並ぶので、
+        // 番号を出しているつもりで識別子を出している実装と区別が付かない）。
+        server.StartEntryNumbersAt(41);
+        var original = Original(server, entryNo: 41);
+
+        var duplicateId = await server.AmendAsync(s => s.DuplicateAsync(original));
+
+        var draft = await server.EntryStore.LoadAsync(duplicateId);
+        var context = await server.MasterLoader.LoadAsync();
+        var posted = await DbTransactionScope.RunAsync(
+            server.Accessor, () => server.Poster.PostAsync(draft, context));
+
+        Assert.Equal(EntryStatus.Posted, posted.Status);
+        Assert.Equal(42, posted.EntryNo);
+    }
 
     // --- 取り消す ---
 
