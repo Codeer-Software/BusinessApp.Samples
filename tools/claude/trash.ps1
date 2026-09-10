@@ -256,8 +256,9 @@ function Invoke-SelfTest {
     # Expect: $null なら止めない。文字列ならその字が理由に含まれること。
     $cases = @(
         # 保護対象そのものと、その配下
-        @{ Target = (Join-Path $root 'LocalData'); Expect = 'LocalData/' }
-        @{ Target = (Join-Path $root 'LocalData/db/x.db'); Expect = 'LocalData/' }
+        @{ Target = (Join-Path $root 'LocalData/db/x.db'); Expect = 'LocalData/db' }
+        @{ Target = (Join-Path $root 'LocalData/backup/x.db'); Expect = 'LocalData/backup' }
+        @{ Target = (Join-Path $root 'LocalData/README.md'); Expect = 'LocalData/README.md' }
         @{ Target = (Join-Path $root 'Designer/LocalEnvironment.md'); Expect = 'LocalEnvironment.md' }
         @{ Target = (Join-Path $root '.claude/settings.local.json'); Expect = '.claude/settings.local.json' }
         @{ Target = (Join-Path $root 'Designer/.claude/settings.local.json'); Expect = 'Designer/.claude' }
@@ -267,6 +268,10 @@ function Invoke-SelfTest {
         # 保護対象を内側に含むもの（**ドライブ直下と区別できているか**）
         @{ Target = $root; Expect = '内側に含む' }
         @{ Target = (Join-Path $root 'Designer'); Expect = '内側に含む' }
+        @{ Target = (Join-Path $root 'LocalData'); Expect = '内側に含む' }   # 親は 4 行を内側に含む（2026-09-10 に 1 行から割った）
+        # **`LocalData/temp/` は守らない**（いつ消えてもいいものの置き場。開発者の指示。2026-09-10）
+        @{ Target = (Join-Path $root 'LocalData/temp'); Expect = $null }
+        @{ Target = (Join-Path $root 'LocalData/temp/memo.md'); Expect = $null }
         @{ Target = $driveRoot; Expect = 'ドライブの直下' }
         # 名前が前方一致するだけのものは止めない（区切りまで見ているか）
         @{ Target = (Join-Path $root 'LocalDataX'); Expect = $null }

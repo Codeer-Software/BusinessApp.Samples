@@ -63,7 +63,11 @@
         "ask": [
             "Read(**/designer.settings.Development.json)",
             "Read(**/appsettings.Development.json)",
-            "Edit(LocalData/**)",
+            "Edit(LocalData/db/**)",
+            "Edit(LocalData/designs/**)",
+            "Edit(LocalData/storages/**)",
+            "Edit(LocalData/backup/**)",
+            "Edit(LocalData/README.md)",
             "Edit(Designer/LocalEnvironment.md)",
             "Edit(.claude/settings.local.json)",
             "Edit(Designer/.claude/settings.local.json)",
