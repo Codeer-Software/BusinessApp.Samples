@@ -28,7 +28,7 @@ public static class JournalDuplication
     /// 原仕訳と同じ内容の下書きを 1 本作る。
     /// </summary>
     /// <param name="original">複製する伝票。<b>状態は問わない。</b></param>
-    /// <param name="postingDate">計上日。<b>複製した日</b>であって原仕訳の計上日ではない（I-03）。</param>
+    /// <param name="postingDate">計上日。<b>複製した日</b>であって原仕訳の計上日ではない（I-04）。</param>
     /// <param name="enteredAt">入力年月日。システムが決める（docs/10 §2）。</param>
     /// <param name="fiscalYearId">計上日の属する会計年度。<b>原仕訳の年度ではない。</b></param>
     public static DuplicationResult Duplicate(
@@ -65,7 +65,7 @@ public static class JournalDuplication
 
             // **訂正の接頭辞は落とす**（ADR-0048 の決定 4）。写すと「伝票番号 44 の訂正」と名乗る
             // 通常の伝票ができ、**していない訂正を帳簿に書く**ことになる。
-            // **本文が空なら NULL**——空文字を残すと空値検索が取りこぼす（docs/04 §1 の A-5）。
+            // **本文が空なら NULL**——空文字を残すと空値検索が取りこぼす（docs/10 §4-4）。
             // 計上には摘要が要るので、利用者はそこで何の取引かを書く（それが正しい）。
             Description = AmendmentRules.Body(original) is { Length: > 0 } body ? body : null,
             PartnerId = original.PartnerId,

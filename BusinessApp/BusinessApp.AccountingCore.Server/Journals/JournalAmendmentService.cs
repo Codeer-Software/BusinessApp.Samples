@@ -177,7 +177,7 @@ public sealed class JournalAmendmentService(
     {
         var (original, context, today, now) = await PrepareAsync(originalId);
 
-        // **年度は今日から引く。** 原仕訳の年度を写すと、閉じた期間へ新しい伝票を落とせる（I-03）。
+        // **年度は今日から引く。** 原仕訳の年度を写すと、閉じた期間へ新しい伝票を落とせる（I-04）。
         var period = TodayPeriod(context, today);
         var result = JournalDuplication.Duplicate(original, today, now, period.FiscalYearId);
         if (!result.Created)
