@@ -284,17 +284,25 @@ def basename_of(path_value: str) -> str:
     return path_value.replace("\\", "/").rstrip("/").split("/")[-1]
 
 
+def path_pattern(path_value: str) -> re.Pattern:
+    """正典の path を、コマンド文字列に探す正規表現にする。
+
+    **相対パスの字面で探す**（区切りは / でも \\ でもよい）。末尾の名前だけで探すと、
+    `LocalData/db` の行を置いた日に `db` という語を含む関係のないコマンドまで拒む
+    （2026-09-10。`LocalData` を 4 行に割ったときに変えた）。前後に名前が続くもの（LocalDataX・.gitignore）は外す。
+    """
+    segments = path_value.replace("\\", "/").strip("/").split("/")
+    body = r"[/\\]".join(re.escape(segment) for segment in segments)
+    return re.compile(r"(?<![A-Za-z0-9_.\-])" + body + r"(?![A-Za-z0-9_.\-])", re.IGNORECASE)
+
+
 def load_protected():
     """[(コマンド文字列に探す正規表現, 理由), ...] を返す。読めなければ例外。"""
     patterns = []
     for entry in load_entries():
-        # コマンド文字列にはリポジトリからの相対でも絶対でも書かれうるので、
-        # **末尾の名前**を探す。前後に名前が続くもの（LocalDataX・.gitignore）は外す。
-        patterns.append((
-            re.compile(r"(?<![A-Za-z0-9_.\-])" + re.escape(basename_of(entry["path"])) + r"(?![A-Za-z0-9_.\-])",
-                       re.IGNORECASE),
-            entry["why"],
-        ))
+        # コマンド文字列にはリポジトリからの相対でも絶対でも書かれうるので、**相対パスの字面**を探す
+        # （絶対パスにも相対の字面は含まれる）。
+        patterns.append((path_pattern(entry["path"]), entry["why"]))
     return patterns
 
 
@@ -553,6 +561,14 @@ SELFTEST = [
     ("pwsh -c \"Get-ChildItem LocalData 2>$null\"", None),
     ("python -c \"assert n >= 1\" # LocalData", None),
     ("python -c \"assert len(sys.argv) > 1\" # LocalData", None),
+    # **`LocalData/temp/` は守らない**——いつ消えてもいいものの置き場（開発者の指示。2026-09-10）。
+    # 親の `LocalData` を 1 行で覆う形をやめ、守るサブフォルダを 4 行にした。
+    ("echo x > LocalData/temp/memo.md", None),
+    ("cp a LocalData/temp/a.md", None),
+    (f"{T} LocalData/temp/old.md", "allow"),
+    # **一般語の行が関係のないコマンドを拒まない**（`LocalData/db` は `db` の語には当たらない）
+    ("echo x > work/db/notes.txt", None),
+    ("cp a backup.txt", None),
     # **本物のリダイレクトは拾う**（追い書きも、標準エラーの振り向け先も上書きである）
     ("echo x > LocalData/db/x.db", "deny"),
     ("echo x >> LocalData/db/x.db", "deny"),
@@ -613,6 +629,8 @@ SELFTEST = [
 WRITE_SELFTEST = [
     ("LocalData/db/x.db", "deny"),
     ("LocalData/designs/App.zip", "deny"),
+    ("LocalData/storages/attachment.pdf", "deny"),
+    ("LocalData/backup/probe.db", "deny"),
     (".git/config", "deny"),
     (".claude/settings.local.json", "deny"),
     ("Designer/.claude/settings.local.json", "deny"),
@@ -621,6 +639,9 @@ WRITE_SELFTEST = [
     ("Designer/Design/designer.settings.Development.json", "deny"),
     # 名前が前方一致するだけのものは止めない（区切りまで見ているか）
     ("LocalDataX/foo.txt", None),
+    # **`LocalData/temp/` と `LocalData/README.md` は守らない**（前者はいつ消えてもいいもの、後者は説明書きで正典に無い）
+    ("LocalData/temp/memo.md", None),
+    ("LocalData/README.md", None),
     (".gitignore", None),
     ("BusinessApp/BusinessApp.Server/appsettings.json", None),
     # 追跡ファイルは止めない（git で戻せる）
@@ -699,14 +720,17 @@ def _check_canon(failed: int) -> int:
     生の削除（`rm ...`）で試すと当たり先によらず deny になるので、
     **保護判定を殺しても緑になる**。ここは trash と Write の形で投げなければ意味がない。
 
-    削除側で突き合わせるのは `why` そのものではなく**末尾の名前**である。
-    このフックはコマンド文字列に末尾の名前を探すので、名前が同じ行は同じ理由文を返す
-    （**拒む結論は同じで、正確な行はパスで見る側が判定する**）。
+    削除側は、コマンド文字列に**相対パスの字面**を探す。同じ検体に当たる行が 2 つあれば
+    先に載っているほうの `why` が返る（**拒む結論は同じで、正確な行はパスで見る側が判定する**）。
     """
-    for entry in load_entries():
-        name = basename_of(entry["path"])
-        decision, reason = decide(f"{T} {entry['path']}")
-        if decision != "deny" or name not in (reason or ""):
+    entries = load_entries()
+    for entry in entries:
+        probe = f"{T} {entry['path']}"
+        # **理由文は、その検体に当たる行のどれかのもの**でよい（settings.local.json の行は
+        # Designer 側の同名の行にも当たり、先に載っているほうの why が返る）。
+        acceptable = [e["why"] for e in entries if path_pattern(e["path"]).search(probe)]
+        decision, reason = decide(probe)
+        if decision != "deny" or not any(why in (reason or "") for why in acceptable):
             failed += 1
             print(f"NG  正典に載っているのに保護されない（削除）: {entry['path']}（{decision}）")
 
