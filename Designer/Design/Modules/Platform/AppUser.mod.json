@@ -413,7 +413,7 @@
     "": {
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "Detail_OnAfterInitialization",
-      "OnLocationChanging": "",
+      "OnLocationChanging": "Detail_OnLocationChanging",
       "OnFieldDataChanged": "",
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,

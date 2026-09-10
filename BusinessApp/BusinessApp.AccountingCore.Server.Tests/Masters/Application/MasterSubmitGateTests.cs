@@ -232,6 +232,10 @@ public class MasterSubmitGateTests
     public async Task 全社共通の部門は2つ目を断る()
     {
         using var server = new AccountingServer();
+        // **検体を縮退させない**——初期データの全社共通は名前も「全社共通」で、文言の「全社共通」と同じ字になる。
+        // 名前とコードの形が違う部門（SaaS事業部・40）に付け替えて、名前を出していることを表明する（qa/03 L-02 の型）。
+        server.Execute("update departments set is_company_wide = 0 where code = '00'");
+        server.Execute("update departments set is_company_wide = 1 where code = '40'");
 
         var thrown = await Rejected(server, Adding("Department", New(
             "Department",
@@ -239,7 +243,25 @@ public class MasterSubmitGateTests
             Text("Name", "全社共通 2"),
             ("IsCompanyWide", new BooleanFieldData { Value = true }))));
 
-        Assert.Contains("「全社共通」の部門は 1 つだけです", thrown.Message, StringComparison.Ordinal);
+        // **相手の名前とコードを言う**（qa/02 R57-06）。
+        Assert.Equal(
+            "登録できません。「全社共通」の部門は 1 つだけです。いま「全社共通」になっているのは部門名「SaaS事業部」（部門コード 40）です。"
+            + "そちらをオフにしてから、こちらをオンにしてください。",
+            thrown.Message);
+    }
+
+    /// <summary>いちばん普通の経路——既存の部門を編集して「全社共通」をオンにする（更新）。</summary>
+    [Fact]
+    public async Task 既存の部門を全社共通にするときも相手を言う()
+    {
+        using var server = new AccountingServer();
+
+        var thrown = await Rejected(server, Updating("Department", Row(
+            "Department",
+            server.DepartmentOf("10").Value,
+            ("IsCompanyWide", new BooleanFieldData { Value = true }))));
+
+        Assert.Contains("いま「全社共通」になっているのは部門名「全社共通」（部門コード 00）です。", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>いま「全社共通」の行が自分自身なら、オンのまま保存できる。</summary>

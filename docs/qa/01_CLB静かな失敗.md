@@ -4,7 +4,7 @@ status: current
 scope: 全体
 audience: [開発]
 growth: append
-updated: 2026-09-10
+updated: 2026-09-11
 supersedes: []
 related: [../CLB改善提案/README.md, ../decisions/0033-読み取りはそのアプリの役割を持つ人だけに開く.md, ../decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md, ../decisions/0036-権限は到達と書き込みに書き分け守りは保存の関門に置く.md]
 ---
@@ -71,6 +71,7 @@ F-09（予約名のデザイン型）・**F-15（`Submit()` の前の `ValidateI
 | B-08 | `AddRows()` の多重定義解決が外れて実行時に落ちる（前回実測・`designcheck` は緑） | `AddRows(int)` と `AddRows(List<Module>)` があり、引数の静的型が int に決まらないとリスト側へ流れて null が渡る。**リテラル・その場のメンバアクセス・1 文で確定する三項演算子**の形にする |
 | B-09 | フィールド値と C# の `DateTime` を `<` `>` で比較できない | `yyyy-MM-dd` の ISO 文字列に寄せて `string.CompareOrdinal` で比べる |
 | B-10 | **既定値つきの引数**（`void Amend(…, string done = "")`）を持つメソッドを、**その引数を省略して呼ぶと実行時に「Amend 操作が存在しません」**で落ちる。`designcheck` は緑。**既定値を足した日から、省略している呼び出し（訂正・取消）が全部壊れていた**（2026-09-09 に足し、2026-09-10 の実機で発見。qa/03 L-41） | 既定値を使わない。全部の呼び出しで全部の引数を渡す |
+| B-11 | **`bool` を返すメソッドの `foreach` の中で `return 値;` すると、呼び出し元が黙って false 側に落ちる**（2026-09-10 実測 1.3.20。`OnLocationChanging` から呼ぶ `bool HasUserChanges()` で `GetModifiedFieldNames()` を回し、`foreach` 内で `return true;` と書いたら、確認が出ずに遷移だけが止まった。`designcheck` は緑、コンソールにエラーも出ない）。**1 例で、原因は切り分けていない**——`void` メソッドの `foreach` 内の `return;`（`SelectFiscalYear`）は動いており、前回プロジェクト（1.3.18）の `bool` メソッドの `foreach` 内 `return true`（`List` を回す）も動いていた。遅延列挙（LINQ）を回すときに限るのかもしれない | フラグ変数で受けて、ループの外で `return` する。`lint_design.py` の B-11 が `bool` メソッドの `foreach` 内の `return 値;` を赤にする |
 
 ## C. API の落とし穴
 
@@ -190,6 +191,7 @@ F-09（予約名のデザイン型）・**F-15（`Submit()` の前の `ValidateI
 | F-41 | **サーバ側の関門が読む「送信データの形」を、想像で決めると判定が黙って消える。** 明細の追加の親 ID を `LinkFieldData` で読んでいたが、実際は `IdFieldData` で届く——追加行の行番号の重複は本番で一度も判定されていなかった（テストは同じ想像で検体を組んでいたので緑。qa/03 L-42） | **2026-09-10 に `CustomizedModuleDataIO.SubmitAsync` へ一時的なダンプを入れて実測した形（1.3.20）**。<br>① **明細（子）の親 ID（`IdFieldDesign` の欄）は `IdFieldData`** で届く。保存済みの親なら数値の字面（`"67"`）、**新しい伝票なら親と同じ仮 ID**（`@temporary:…`）。<br>② **明細だけを直した保存には、伝票（親）の差分が 1 つも無い**——伝票の `OptimisticLocking` は進まず、伝票の版の突き合わせも起きない。<br>③ **削除の差分（`ModuleDeleteInfo`）は版を運ぶ**——伝票の「削除」は `OptimisticLockingFieldData`（`DecimalValue`）つき。**子（明細）の Delete は載らない**（`DeleteTogether` は CLB の内側で消す）。明細行の × は `ModuleDeleteInfo` で届き、版は `null`。<br>④ **新規の伝票の `OptimisticLocking` は `NullValue`**、更新・削除は `DecimalValue`（`MultiTypeValue` に整数専用の型は無い）。<br>⑤ **CLB は Delete を Add より先に流す**——最終行を消して 1 行足す（同じ行番号を使い回す）保存が `UNIQUE (journal_entry_id, line_no)` に当たらない。**Delete と Update、Update と Add の順序は未実測**（画面は行番号を変えないので踏めない。関門は保守側に倒してある）。<br>⑥ **消えている行の削除を CLB に渡すと失敗し、削除なのに F-16 の定型文「入力内容を確かめ…」が出る**（別の人が先に消した伝票の「削除」）。関門が先に削除の言葉で断る（`JournalSubmitGate.RejectDeletionsAsync`）。<br>**形は実機で取る**——`ModuleSubmitData` を書き出す一時的な口を入口（`CustomizedModuleDataIO`）に足して踏み、ログを読んで戻す。**フィクスチャが同じ想像で検体を組むと、想像違いは緑のまま**（qa/03 L-42） |
 | F-42 | **関門の差し戻しにトーストが 2 枚出る**（関門の文言＋「更新に失敗しました」。R25-08）。**何で決まるか分かっていなかった** | **枚数は画面のボタンの種類で決まる**（2026-09-10 実測 1.3.20）——標準の `SubmitButtonFieldDesign`（「下書き保存」「登録」）は関門の文言に自分の定型文「更新に失敗しました」を重ね、スクリプトの `this.Submit()` / `this.Delete()`（「計上する」「削除」）は文言だけを出す。**例外で返しても、`ModuleSubmitResult.ExceptionMessage` で返しても同じ**（結果に行ごとの `SourceId`＝明細の ID を付けて返しても同じ。2026-09-02 の記録「計上するは関門の文言だけ、取引先の登録は 2 枚」がこの事実だった）。<br>**あわせて分かったこと**：`ExceptionMessage` に文言を載せた結果を返すと、CLB は**その保存で書いた分を巻き戻す**（摘要を変えて「計上する」→ 計上で差し戻し → DB の摘要も版も動いていない）。採らなかった（[ADR-0051](../decisions/0051-利用者に見せる文言は型で決め想定外の例外は保存の入口で定型文にする.md) の「検討したが採らなかった案」）。<br>**アプリ側の手**は「標準の保存ボタンをやめ、スクリプトのボタンで `ValidateInput()` → `Submit()` する」（「計上する」と同じ形。F-15 の規則）。**2 枚のままでよいと決めた**（2026-09-10。決定と理由は [21 §2-6](../21_画面の原則.md)）。CLB 側へは [FB-017](../CLB改善提案/01_機能改善提案.md) |
 | F-40 | **詳細ページを id 無しの URL で開くと、ラベルだけが並んだ「空の画面」になる。** エラーに見えず、**データが消えたように見える** | `/Settings/CompanyProfile`（`ModulePageType: Detail`）を id 無しで開くと、**ラベル・必須の印・保存ボタンはそのままで、入力欄だけが 1 つも出ない**（2026-09-04 実測 1.3.20。`/Settings/CompanyProfile/1` の直後に開いて再現した）。DOM には Blazor 既定の `An unhandled error has occurred.` が入っているが、**ページの下端なので画面には見えない**。F-38 と同じくサーキットが死んでいる。**F-37（`Auto` の画面は新規作成になる）と挙動が違う**のは、ページ種別が `Detail` だからである。**画面の導線からは踏めない**——フレームのリンクが `Id: "1"` を持っており、`company_profile` は `CHECK (id = 1)` で 1 行しか持てないので、この決め打ちは正しい（設計どおり）。踏むのは**URL を手で削ったとき**だけ |
+| F-43 | **新規作成の画面は、何も触らなくても `IsModified` が真である。** 離脱の確認を `IsModified` だけで出すと、新規の画面を開いて戻るだけで「保存していない変更があります」が出る | **CLB が `Id` を「変更あり」に数え、`Detail_OnAfterInitialization` で入れた初期値も数える**（2026-09-10 実測 1.3.20。部門で `GetModifiedFieldNames()`——戻りは欄名の列挙で `foreach` で 1 名ずつ取れる——が「Id」「IsActive」を返した）。新規のときは `Id` と初期値の欄を除いて数える（`HasUserChanges()`。[Project.md](../../Designer/Project.md) の 2026-09-10 の行。`lint_design.py` の F-43 が初期値の欄と除外の一覧を突き合わせる）。**保存が通れば偽に戻る**（既存の下書きの更新、新規の登録の両方で実測。[qa/04](04_実機操作テスト.md) の J-47・M-29） |
 
 ## G. ブラウザ自動操作（アプリの不具合ではない）
 

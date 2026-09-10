@@ -7,6 +7,11 @@
 // ここでの貸借合計や初期値は、利用者が入力中に気づく・打鍵を減らすためのもので、
 // 正しさの保証ではない。省いても計上の可否は変わらない。
 
+// スクリプト自身が起こす遷移（複製・訂正・取消の後、削除の後）の印。
+// 立てずに NavigateTo すると、離脱の確認がもう一度出て、「戻る」を選ぶとサーバは済んでいるのに
+// 画面だけが古いまま残る（自己レビュー R77）。try/finally は使えない（qa/01 B-01）ので NavigateTo の直前で立てる。
+var leavingByScript = false;
+
 void Detail_OnAfterInitialization()
 {
     // **初期値を先に入れる。** あとの ApplyPostedLock は状態を読んで表示を決めるので、
@@ -221,9 +226,15 @@ bool ShowAmendmentNotice(string reversalNo, string correctionNo)
 // ここでするのは、確認を取ることと、消えたら一覧へ戻ることだけである。
 void DeleteButton_OnClick()
 {
-    if (MessageBox.ShowWithTitle(
-            "削除の確認",
-            "この下書きを削除します。元に戻せません。よろしいですか？", "はい", "いいえ") != "はい")
+    // **訂正の下書きは、消すと原仕訳が取り消されたまま残る**（ADR-0015 の取消と再計上の組の、
+    // 再計上の側だけが無くなる）。通常の下書きと同じ文で確かめると、それを知らずに消す（docs/21 §1）。
+    // 文を選ぶだけで、帰結の判断はサーバ（ADR-0015・ADR-0048）のもの。帰結の文言が増えるなら availability API へ移す。
+    var message = EntryType.Value == EntryTypes.Correction
+        ? "この訂正の下書きを削除します。元の伝票は取り消されたままになり、この取引は帳簿に載りません。"
+          + "記し直すときは、元の伝票を開いて「複製する」を押してください。元に戻せません。よろしいですか？"
+        : "この下書きを削除します。元に戻せません。よろしいですか？";
+
+    if (MessageBox.ShowWithTitle("削除の確認", message, "はい", "いいえ") != "はい")
     {
         return;
     }
@@ -232,6 +243,7 @@ void DeleteButton_OnClick()
     // **静かに終わる**（qa/01 C-03）。関門が止めた場合の理由は CLB がトーストに出す。
     if (this.Delete() != true) return;
 
+    leavingByScript = true;
     NavigationService.NavigateTo(NavigationService.GetModuleUrl("JournalEntryBoard"));
 }
 
@@ -407,7 +419,7 @@ void ReverseButton_OnClick()
 // その変更は複製にも入らず、離脱で消える（2026-09-09 の自己レビュー）。
 void DuplicateButton_OnClick()
 {
-    var message = IsModified
+    var message = HasUserChanges()
         ? "保存していない変更があります。複製に写るのは保存済みの内容で、変更は失われます。よろしいですか？"
         : "";
 
@@ -457,6 +469,41 @@ void Amend(string operation, string noun, string message, string done)
     // 言わないと「保存されなかった」と読まれる。
     if (done != "") Toaster.Success(done);
 
+    leavingByScript = true;
     NavigationService.NavigateTo(
         NavigationService.GetModuleDataUrl("JournalEntry", $"{result.JsonObject.openEntryId}"));
+}
+
+// 保存していない変更があるまま画面を離れるときに確かめる（docs/21 §1。制限は押す前に見せる）。
+// **会計の判断は無い。** 見ているのは CLB の IsModified（画面の値が読み込み時から動いたか）だけ。
+// false を返すと遷移が止まる（Designer/ClaudeCodeForDesigner の Layouts の OnLocationChanging）。
+bool Detail_OnLocationChanging()
+{
+    if (!HasUserChanges()) return true;
+
+    // ボタンは「戻る」と書かない——ブラウザの「戻る」で出たときに、どちらへ戻るのか読めない（自己レビュー R77）。
+    return MessageBox.ShowWithTitle(
+        "画面を離れる確認",
+        "保存していない変更があります。このまま離れると、その変更は失われます。よろしいですか？",
+        "離れる", "入力を続ける") == "離れる";
+}
+
+// 利用者が触った欄があるか。
+// **新規作成の画面では、何も触らなくても IsModified が真になる**——CLB が Id を「変更あり」に数え、スクリプトが入れた初期値も数える
+// （qa/01 F-43。2026-09-10 に部門で実測——GetModifiedFieldNames は「Id,IsActive」を返した）。
+// Id と初期値の欄しか動いていなければ「変更なし」と見る。**初期値の欄の一覧は Detail_OnAfterInitialization と揃える**（lint_design が突き合わせる）。
+bool HasUserChanges()
+{
+    if (leavingByScript) return false;
+    if (!IsModified) return false;
+    if (!IsNewData) return true;
+
+    // **foreach の中で値を返さない**（この関数で書いたら、確認が出ずに遷移だけが止まった。qa/01 B-11）。
+    var changed = false;
+    foreach (var name in this.GetModifiedFieldNames())
+    {
+        if (name != "Id" && name != "TransactionDate" && name != "PostingDate" && name != "Status" && name != "EntryType" && name != "FiscalYear") changed = true;
+    }
+
+    return changed;
 }
