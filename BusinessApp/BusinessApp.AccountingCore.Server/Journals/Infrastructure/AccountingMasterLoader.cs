@@ -6,6 +6,7 @@ using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
+using BusinessApp.Partners;
 using BusinessApp.ServerSupport;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
@@ -25,7 +26,53 @@ public sealed class AccountingMasterLoader(IDbAccessor dbAccessor, string dataSo
                await LoadSubAccountsAsync(),
                await LoadDepartmentsAsync(),
                await LoadCalendarAsync(),
-               await HasSelectablePartnerAsync());
+               new PartnerCatalog([], await HasSelectablePartnerAsync()));
+
+    /// <summary>
+    /// 伝票が参照している取引先だけを読んで、目録に足す。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>全件は読まない</b>（<see cref="PartnerCatalog"/>）。伝票の取引先と明細の取引先の識別子を集め、その分だけ引く。</para>
+    /// <para><b>計上の直前に <c>JournalPoster</c> が呼ぶ</b>——検証の経路は複数（画面の保存・取消・訂正の再計上）あるので、
+    /// 呼び出し側ごとに足すと 1 経路で忘れる（qa/03 L-14 の型）。</para>
+    /// </remarks>
+    public async Task<PostingContext> WithPartnersAsync(PostingContext context, JournalEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(entry);
+
+        var ids = entry.Lines.Select(l => l.PartnerId)
+            .Append(entry.PartnerId)
+            .OfType<PartnerId>()
+            .Select(p => p.Value)
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+        {
+            return context;
+        }
+
+        // **識別子は数値で、この場で組み立てた列挙である**（利用者の入力ではない）——それでも文に埋め込まず、パラメータで渡す。
+        var parameters = new Dictionary<string, ParamAndRawDbTypeName>();
+        var placeholders = new List<string>();
+        for (var i = 0; i < ids.Count; i++)
+        {
+            placeholders.Add($"@p{i}");
+            parameters[$"@p{i}"] = new ParamAndRawDbTypeName { Value = ids[i] };
+        }
+
+        var rows = await dbAccessor.QueryAsync(
+            dataSourceName,
+            $"select id, name, is_active from partners where id in ({string.Join(", ", placeholders)})",
+            parameters);
+
+        var partners = rows.Select(r => new PartnerDefinition(
+            new PartnerId(DbValue.ToLong(r["id"])),
+            DbValue.ToText(r["name"]),
+            DbValue.ToBool(r["is_active"])));
+
+        return context with { Partners = new PartnerCatalog(partners, context.Partners.HasSelectable) };
+    }
 
     private async Task<AccountCatalog> LoadAccountsAsync()
     {

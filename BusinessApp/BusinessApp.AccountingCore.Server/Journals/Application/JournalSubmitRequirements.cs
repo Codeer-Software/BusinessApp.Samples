@@ -100,6 +100,15 @@ internal static class JournalSubmitRequirements
 
         AddIfUndefinedChoice<EntryStatus>(data, "Status", JournalLineRules.StatusNotStorable, null, violations);
         AddIfUndefinedChoice<EntryType>(data, "EntryType", JournalLineRules.EntryTypeNotStorable, null, violations);
+
+        // **元の伝票は、利用者が触ってよい場面が 1 つも無い**（qa/03 L-30）。取消・訂正の伝票はサーバが作るときに入れる
+        // （<c>JournalEntryStore.InsertDraftAsync</c>——この関門を通らない）ので、**この経路で来た値は新規でも更新でも採らない**。
+        // 更新の差分に載っているのは「変えた」ときだけ（qa/01 F-12）。画面は閲覧専用にしてあり、来るのは画面を通らない経路である。
+        if (isNew ? !IsMissing(data, "OriginalEntry", true) : data.Fields.ContainsKey("OriginalEntry"))
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.OriginalEntrySystemAssigned, JournalLineRules.OriginalEntryNotEditable));
+        }
     }
 
     private static void CheckLine(ModuleData data, bool isNew, List<Violation> violations)

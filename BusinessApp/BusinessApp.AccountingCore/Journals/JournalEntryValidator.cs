@@ -5,6 +5,7 @@ using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
+using BusinessApp.Partners;
 
 /// <summary>
 /// 仕訳を計上できるかを検査する（docs/10 §1）。
@@ -28,8 +29,56 @@ public static class JournalEntryValidator
         ValidateDescription(entry, violations);
         ValidateStructure(entry, violations);
         ValidateDates(entry, context.Calendar, violations);
+        ValidatePartners(entry, context.Partners, violations);
         ValidateLines(entry, context, violations);
         return violations;
+    }
+
+    /// <summary>
+    /// 伝票と明細が指す取引先が、マスタに実在し、有効か。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>科目・補助科目・部門と同じ形</b>（<c>E-*-UNKNOWN</c> / <c>E-*-INACTIVE</c>）。取引先だけ見ていなかった——
+    /// マスタに無い識別子は DB の外部キーの生の失敗になり、無効にした取引先も新たな計上に使えた（qa/03 L-14 の型。2026-09-10）。</para>
+    /// <para><b>伝票の取引先は伝票として 1 回、明細の取引先は行ごとに見る。</b> 明細が空なら伝票の値が実効値になる
+    /// （<see cref="JournalEntry.PartnerOf"/>）ので、行ごとに実効値を見ると同じ断りが行数だけ並ぶ。</para>
+    /// <para><b>無効の重さは種別で変わる</b>（<see cref="InactiveSeverity"/>）——取消・訂正は原仕訳の写しなので、
+    /// 原仕訳の後に無効にされた取引先でも止めない。</para>
+    /// </remarks>
+    private static void ValidatePartners(JournalEntry entry, PartnerCatalog partners, List<Violation> violations)
+    {
+        if (entry.PartnerId is PartnerId entryPartner)
+        {
+            ValidatePartner(entryPartner, entry, partners, null, violations);
+        }
+
+        foreach (var line in entry.Lines.Where(l => l.PartnerId is not null))
+        {
+            ValidatePartner(line.PartnerId!.Value, entry, partners, line.LineNo, violations);
+        }
+    }
+
+    private static void ValidatePartner(
+        PartnerId partnerId, JournalEntry entry, PartnerCatalog partners, int? lineNo, List<Violation> violations)
+    {
+        var partner = partners.Find(partnerId);
+        if (partner is null)
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.PartnerUnknown,
+                "取引先が取引先マスタにありません。",
+                lineNo));
+            return;
+        }
+
+        if (!partner.IsActive)
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.PartnerInactive,
+                $"取引先「{partner.Name}」は無効なので、新しい計上には使えません。",
+                lineNo,
+                InactiveSeverity(entry)));
+        }
     }
 
     /// <summary>

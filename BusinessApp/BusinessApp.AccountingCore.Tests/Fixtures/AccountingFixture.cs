@@ -49,6 +49,12 @@ public static class AccountingFixture
 
     /// <summary>2 つ目の取引先。<b>1 つだと「明細が伝票より優先される」が縮退する</b>（qa/03 L-02）。</summary>
     public static readonly PartnerId OtherPartner = new(2);
+
+    /// <summary>無効にした取引先。新たな計上には使えない（<c>E-PARTNER-INACTIVE</c>）。</summary>
+    public static readonly PartnerId RetiredPartner = new(3);
+
+    /// <summary>マスタに無い取引先。</summary>
+    public static readonly PartnerId UnknownPartner = new(999);
     public static readonly TaxCategoryId OutOfScope = new(1);
     public static readonly TaxCategoryId TaxablePurchase = new(2);
 
@@ -90,7 +96,25 @@ public static class AccountingFixture
                new SubAccountCatalog(SubAccounts),
                new DepartmentCatalog(Departments),
                Calendar(septemberStatus, fiscalYearStatus),
-               hasSelectablePartner);
+               Partners(hasSelectablePartner));
+
+    /// <summary>
+    /// 取引先の目録。<b>検体が指す 2 件</b>（<see cref="Partner"/>・<see cref="OtherPartner"/>）と、無効にした 1 件。
+    /// </summary>
+    /// <remarks>
+    /// <b>「選べる取引先が無い」側は、目録も空にする</b>——マスタに 1 件も無い状態を写す。
+    /// その側で <see cref="Partner"/> を指す検体は「マスタに無い」と断られる（それが正しい）。
+    /// </remarks>
+    public static PartnerCatalog Partners(bool hasSelectable = true)
+        => hasSelectable
+            ? new PartnerCatalog(
+                [
+                    new PartnerDefinition(Partner, "株式会社取引先", IsActive: true),
+                    new PartnerDefinition(OtherPartner, "別の取引先", IsActive: true),
+                    new PartnerDefinition(RetiredPartner, "取引をやめた先", IsActive: false),
+                ],
+                hasSelectable: true)
+            : new PartnerCatalog([], hasSelectable: false);
 
     public static FiscalCalendar Calendar(
         PeriodStatus septemberStatus = PeriodStatus.Open,

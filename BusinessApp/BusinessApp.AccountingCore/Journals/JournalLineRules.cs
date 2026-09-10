@@ -60,6 +60,25 @@ public static class JournalLineRules
     /// <summary>税区分が空（<see cref="JournalViolationCodes.TaxCategoryMissing"/>）。</summary>
     public const string TaxCategoryMissing = "税区分を選んでください。税に関係のない行にも「対象外」を選びます。";
 
+    // --- 利用者が触ってよい場面が無い欄（qa/03 L-30）---
+    //
+    // 画面では閲覧専用にしてある。ここで断るのは、画面を通らない経路（取込・API）のため。
+
+    public const string OriginalEntryNotEditable =
+        "元の伝票は取消・訂正のときにシステムが入れます。手で入れたり消したりすることはできません。";
+
+    // --- 同時操作（qa/03 L-31）---
+    //
+    // **入力内容は 1 つも悪くない。** 悪いのは「開いたあとに別の人が変えた」ことなので、
+    // 「入力内容を確かめ」とは言わず、開き直して相手の変更を確かめるよう案内する（docs/21 §2-3）。
+
+    public const string ChangedByOthers =
+        "この伝票は、あなたが開いたあとに別の人が変更しました。画面を開き直して、その変更を確かめてからもう一度入力してください。";
+
+    public const string DeletedByOthers = "この伝票は、あなたが開いたあとに削除されました。画面を開き直してください。";
+
+    public const string LineDeletedByOthers = "この明細は、あなたが開いたあとに削除されました。画面を開き直してください。";
+
     // --- 選択肢の値が DDL の CHECK の外（すべて JournalViolationCodes.ChoiceNotStorable）---
     //
     // **画面からは起こらない。** 貸借・状態・種別はどれも選択欄で、候補は画面が出す。

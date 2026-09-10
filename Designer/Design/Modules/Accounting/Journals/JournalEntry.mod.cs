@@ -57,6 +57,10 @@ void ApplyPostedLock()
     FiscalYear.IsViewOnly = true;
     EntryType.IsViewOnly = true;
 
+    // **元の伝票は、利用者が触ってよい場面が 1 つも無い**（qa/03 L-30）。取消・訂正では値が見えるだけでよい。
+    // 画面を通らない経路は関門（JournalSubmitRequirements）が断る。
+    OriginalEntry.IsViewOnly = true;
+
     // **計上済みの画面に必須の印の説明を出さない。** 計上済みは書き込み条件から外れていて
     // 画面全体が読むだけになる（qa/01 F-14）ので、「必須項目です」は
     // これから入力する人にしか意味が無い（docs/21 §1「書けない状態の画面は、書けないと見て分かる」）。
@@ -376,14 +380,14 @@ void PostButton_OnClick()
 void CorrectButton_OnClick()
 {
     Amend("correct", "訂正",
-        "この伝票を訂正します。取消を計上し、内容を写した訂正の下書きを開きます。よろしいですか？");
+        "この伝票を訂正します。取消を計上し、内容を写した訂正の下書きを開きます。よろしいですか？", "");
 }
 
 // 取り消す。サーバが反対仕訳を作って計上まで進める。
 void ReverseButton_OnClick()
 {
     Amend("reverse", "取消",
-        "この伝票を取り消します。取消は帳簿に残り、あとから消せません。よろしいですか？");
+        "この伝票を取り消します。取消は帳簿に残り、あとから消せません。よろしいですか？", "");
 }
 
 // 複製する。サーバが同じ内容の下書きを作って返す（ADR-0048）。
@@ -412,7 +416,9 @@ void DuplicateButton_OnClick()
 // 1 本にしたのと同じ理由で、画面も 1 本にする——文言を直す日に片方だけ直るのを避ける。
 // **message が空なら確認を出さない**（複製。上の理由）。
 // **done が空なら成功のトーストを出さない**（取消・訂正は開いた先の画面がそれを語る）。
-void Amend(string operation, string noun, string message, string done = "")
+// **既定値つきの引数を使わない。** CLB のスクリプトは省略した呼び出しを「操作が存在しません」と落とし、
+// designcheck は緑のまま——2026-09-09 に `done = ""` を足した日から訂正・取消が壊れていた（qa/01 の実例。2026-09-10 に実機で発見）。
+void Amend(string operation, string noun, string message, string done)
 {
     if (message != "" && MessageBox.ShowWithTitle($"{noun}の確認", message, "はい", "いいえ") != "はい") return;
 

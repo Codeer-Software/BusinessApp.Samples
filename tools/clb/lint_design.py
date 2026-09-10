@@ -1275,6 +1275,13 @@ def check_script(path, text, findings):
         findings.append((SEV_ERROR, "B-01", name,
                          f"{match.group(1)} は CLB スクリプトで使えない"))
 
+    # B-10 既定値つきの引数は、省略した呼び出しが実行時に「操作が存在しません」で落ちる（designcheck は緑）。
+    # 2026-09-09 に足した `string done = ""` で、訂正・取消が翌日まで壊れていた（qa/03 L-41）。
+    for match in _DEFAULT_PARAM.finditer(_blank(text, _STRINGS)):
+        findings.append((SEV_ERROR, "B-10", name,
+                         f"{match.group(1)}(): 引数に既定値を書かない（CLB は省略した呼び出しを解決しない。"
+                         "全部の呼び出しで全部の引数を渡す。qa/01 B-10）"))
+
     # A-06 数値は decimal に統一されるので整数専用書式は実行時に落ちる
     for match in re.finditer(r'ToString\("[DdXx]\d*"\)', text):
         findings.append((SEV_ERROR, "A-06", name,
@@ -1302,6 +1309,12 @@ def check_script(path, text, findings):
 # 列 0 から始まるメソッドの見出し（`void Foo()` / `string Bar(DateOnly d)`）。
 # CLB スクリプトはメソッドを平らに並べるので、これで区切れる。
 _METHOD_HEAD = re.compile(r"^[A-Za-z_][\w<>\[\],?\s]*\s+(\w+)\s*\([^)]*\)\s*$", re.MULTILINE)
+
+# 既定値つきの引数を持つメソッドの見出し（`void Amend(string a, string done = "")`）。
+# `==` は比較なので外す。文字列は先に空にしてから当てる（本文の `=` を引数と取り違えない）。
+_DEFAULT_PARAM = re.compile(
+    r"^[A-Za-z_][\w<>\[\],?\s]*\s+(\w+)\s*\((?:[^)=]|(?<![=!<>])=(?!=))*?(?<![=!<>])=(?!=)[^)]*\)\s*$",
+    re.MULTILINE)
 
 # **`row.Submit()` は別のインスタンスの保存**なので対象にしない（qa/01 F-03）。
 # `(?<![\w.])` が、直前がドットの形（＝他のオブジェクトのメソッド）を落とす。
@@ -1666,6 +1679,8 @@ def selftest():
     # スクリプトの検査（R28-17。`check_script` は selftest から一度も呼ばれていなかった）。
     for label, script, expected, says in [
         ("try は使えない", "void A()\n{\n    try\n    {\n    }\n}\n", (SEV_ERROR, "B-01"), ""),
+        ("既定値つきの引数", 'void Amend(string a, string done = "")\n{\n}\n', (SEV_ERROR, "B-10"), "Amend(): "),
+        ("数値の既定値つきの引数", "void A(int n = 0)\n{\n}\n", (SEV_ERROR, "B-10"), "A(): "),
         ("整数専用の書式", 'void A()\n{\n    var s = n.ToString("D2");\n}\n',
          (SEV_ERROR, "A-06"), ""),
         ("並べ替えの .Value 落ち", "void A()\n{\n    rows.OrderBy(r => r.Code);\n}\n",
@@ -1692,6 +1707,7 @@ def selftest():
                             f"（出たのは {[(f[0], f[1], f[3]) for f in findings]}）")
 
     for label, script in [
+        ("既定値の無い引数と、本文の代入", 'void A(string a, int b)\n{\n    var x = "=";\n    if (a == b) return;\n}\n'),
         ("検証してから Submit",
          "void A()\n{\n    if (!ValidateInput()) return;\n    var ok = this.Submit();\n}\n"),
         # **コメントの中の Submit() を叩かない。** この規則の解説そのものがコメントに書いてある。

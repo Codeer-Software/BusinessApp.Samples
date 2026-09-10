@@ -4,7 +4,7 @@ status: current
 scope: 全体
 audience: [開発]
 growth: append
-updated: 2026-09-08
+updated: 2026-09-10
 supersedes: []
 related: [../CLB改善提案/README.md, ../decisions/0033-読み取りはそのアプリの役割を持つ人だけに開く.md, ../decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md, ../decisions/0036-権限は到達と書き込みに書き分け守りは保存の関門に置く.md]
 ---
@@ -70,6 +70,7 @@ F-09（予約名のデザイン型）・**F-15（`Submit()` の前の `ValidateI
 | B-07 | `ModuleSearcher.Execute()` の結果を `List<object>` 引数で受けると**無言で停止**する（前回実測） | `Execute()` の結果を引数で持ち回らない |
 | B-08 | `AddRows()` の多重定義解決が外れて実行時に落ちる（前回実測・`designcheck` は緑） | `AddRows(int)` と `AddRows(List<Module>)` があり、引数の静的型が int に決まらないとリスト側へ流れて null が渡る。**リテラル・その場のメンバアクセス・1 文で確定する三項演算子**の形にする |
 | B-09 | フィールド値と C# の `DateTime` を `<` `>` で比較できない | `yyyy-MM-dd` の ISO 文字列に寄せて `string.CompareOrdinal` で比べる |
+| B-10 | **既定値つきの引数**（`void Amend(…, string done = "")`）を持つメソッドを、**その引数を省略して呼ぶと実行時に「Amend 操作が存在しません」**で落ちる。`designcheck` は緑。**既定値を足した日から、省略している呼び出し（訂正・取消）が全部壊れていた**（2026-09-09 に足し、2026-09-10 の実機で発見。qa/03 L-41） | 既定値を使わない。全部の呼び出しで全部の引数を渡す |
 
 ## C. API の落とし穴
 

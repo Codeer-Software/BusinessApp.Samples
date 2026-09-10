@@ -7,6 +7,7 @@ using BusinessApp.Partners.Server;
 using BusinessApp.ServerSupport;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
+using Codeer.LowCode.Blazor.Repository;
 using Codeer.LowCode.Blazor.Repository.Data;
 using BusinessApp.AccountingCore.Server.Journals.Infrastructure;
 
@@ -46,6 +47,8 @@ public sealed class JournalSubmitGate(
     TimeProvider timeProvider)
 {
     public const string EntryModuleName = "JournalEntry";
+
+    public const string LineModuleName = "JournalLine";
 
     /// <summary>
     /// 部品の組み立て。<b>本番もテストもここを通す。</b>
@@ -154,6 +157,8 @@ public sealed class JournalSubmitGate(
     {
         var violations = new List<Violation>(JournalSubmitRequirements.Check(transactionData));
         violations.AddRange(await EntryTypeChangesAsync(transactionData));
+        violations.AddRange(await ConcurrentChangesAsync(transactionData));
+        violations.AddRange(await DuplicateLineNosAsync(transactionData));
 
         if (violations.HasError())
         {
@@ -207,6 +212,8 @@ public sealed class JournalSubmitGate(
             if (!long.TryParse(submittedId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)
                 || await entryStore.FindAsync(new JournalEntryId(id)) is not JournalEntry stored)
             {
+                // **消えている行は、消しても帳簿が動かない**——別の人が先に消していても、利用者の望みは叶っている。
+                // 断るのは「開いたあとに変わった／消えた行を**保存**する」ときだけ（ConcurrentChangesAsync）。
                 continue;
             }
 
@@ -289,6 +296,143 @@ public sealed class JournalSubmitGate(
     /// 差し戻すのではなく直すのは、<b>利用者の操作が正しいから</b>——
     /// 参照を空にするのは正規の入力であって、誤りではない。</para>
     /// </remarks>
+    /// <summary>
+    /// 開いたあとに別の人が変えた・消した伝票（明細）を、保存の前に利用者の語で断る（qa/03 L-31）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>楽観ロックそのものは CLB が効かせている</b>（<c>OptimisticLockingFieldDesign</c>）。ただし食い違いを
+    /// 定型文「入力内容を確かめ…」でしか言わないので、**送られてきた版と保存されている版をここで突き合わせる**。
+    /// **版の欄が差分に無ければ判定しない**（画面は必ず載せてくる。載せない経路は CLB が最後の砦）——
+    /// 差分だけを検査するテストが、保存されていない識別子で書けるようにも、そうしてある。</para>
+    /// <para><b>削除は明細でも起きる</b>——明細には版が無いので、在るかだけを見る。</para>
+    /// </remarks>
+    private async Task<List<Violation>> ConcurrentChangesAsync(IReadOnlyList<ModuleSubmitData> transactionData)
+    {
+        var violations = new List<Violation>();
+
+        foreach (var data in EntriesIn(transactionData, d => d.Update))
+        {
+            if (SubmittedVersion(data) is not long submitted
+                || !long.TryParse(GetId(data), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id))
+            {
+                continue;
+            }
+
+            var stored = await entryStore.FindVersionAsync(new JournalEntryId(id));
+            if (stored is null)
+            {
+                violations.Add(new Violation(JournalViolationCodes.DeletedByOthers, JournalLineRules.DeletedByOthers));
+            }
+            else if (submitted != stored)
+            {
+                violations.Add(new Violation(JournalViolationCodes.ChangedByOthers, JournalLineRules.ChangedByOthers));
+            }
+        }
+
+        var lineIds = transactionData.SelectMany(d => d.Update).Where(d => d.Name == LineModuleName).Select(GetId)
+            .Concat(transactionData.SelectMany(d => d.Delete).Where(d => d.ModuleName == LineModuleName).Select(d => d.Id));
+        foreach (var lineId in lineIds.Distinct(StringComparer.Ordinal))
+        {
+            if (long.TryParse(lineId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)
+                && await entryStore.FindLineAsync(id) is null)
+            {
+                violations.Add(new Violation(JournalViolationCodes.DeletedByOthers, JournalLineRules.LineDeletedByOthers));
+            }
+        }
+
+        return violations;
+    }
+
+    /// <summary>送られてきた版。欄が無いか読めなければ <c>null</c>。</summary>
+    /// <remarks>CLB は <c>OptimisticLockingFieldData</c> で運ぶ。数値の欄で来ても読む（型を見て落とすと、型が変わった日に黙って判定が消える）。</remarks>
+    private static long? SubmittedVersion(ModuleData data)
+    {
+        var raw = data.Fields.TryGetValue("OptimisticLocking", out var field) ? field switch
+        {
+            OptimisticLockingFieldData { Value: DecimalValue locking } => $"{locking.Value}",
+            NumberFieldData number => $"{number.Value}",
+            _ => null,   // 読めない形は判定しない（CLB が最後の砦）
+        } : null;
+
+        return raw is not null && long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var version)
+            ? version
+            : null;
+    }
+
+    /// <summary>
+    /// 保存したあとの明細の行番号が重ならないか（<c>UNIQUE (journal_entry_id, line_no)</c>）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>差分だけでは判定できない</b>——保存されている明細と、差分の追加・変更・削除を合わせた姿で数える
+    /// （docs/04 §1 の B-1）。画面は行番号を自動で振るので、起きるのは画面を通らない経路である。</para>
+    /// <para>新しい伝票（仮 ID）の明細は、差分の追加だけで数える。</para>
+    /// </remarks>
+    private async Task<List<Violation>> DuplicateLineNosAsync(IReadOnlyList<ModuleSubmitData> transactionData)
+    {
+        // 伝票ごとの「明細の識別子 → 行番号」。識別子は保存済みなら数値、追加なら仮 ID。
+        var numbers = new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
+
+        async Task<Dictionary<string, int>> OfEntryAsync(string entryId)
+        {
+            if (numbers.TryGetValue(entryId, out var existing))
+            {
+                return existing;
+            }
+
+            var lines = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (long.TryParse(entryId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id))
+            {
+                foreach (var stored in await entryStore.LoadLineNosAsync(new JournalEntryId(id)))
+                {
+                    lines[stored.LineId.ToString(CultureInfo.InvariantCulture)] = stored.LineNo;
+                }
+            }
+
+            numbers[entryId] = lines;
+            return lines;
+        }
+
+        foreach (var deleted in transactionData.SelectMany(d => d.Delete).Where(d => d.ModuleName == LineModuleName))
+        {
+            if (long.TryParse(deleted.Id, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)
+                && await entryStore.FindLineAsync(id) is StoredLine stored)
+            {
+                (await OfEntryAsync(stored.EntryId.Value.ToString(CultureInfo.InvariantCulture))).Remove(deleted.Id);
+            }
+        }
+
+        foreach (var data in transactionData.SelectMany(d => d.Update).Where(d => d.Name == LineModuleName))
+        {
+            if (NumberOf(data, "LineNo") is not int lineNo
+                || !long.TryParse(GetId(data), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)
+                || await entryStore.FindLineAsync(id) is not StoredLine stored)
+            {
+                continue;
+            }
+
+            (await OfEntryAsync(stored.EntryId.Value.ToString(CultureInfo.InvariantCulture)))[GetId(data)] = lineNo;
+        }
+
+        foreach (var data in transactionData.SelectMany(d => d.Add).Where(d => d.Name == LineModuleName))
+        {
+            if (NumberOf(data, "LineNo") is int lineNo && Field<LinkFieldData>(data, "JournalEntryId")?.Value is { Length: > 0 } entryId)
+            {
+                (await OfEntryAsync(entryId))[GetId(data)] = lineNo;
+            }
+        }
+
+        return [.. numbers.Values
+            .SelectMany(lines => lines.Values.GroupBy(n => n).Where(g => g.Count() > 1).Select(g => g.Key))
+            .Distinct()
+            .OrderBy(n => n)
+            .Select(n => new Violation(JournalViolationCodes.LineNoInvalid, JournalLineRules.LineNoDuplicated, n))];
+    }
+
+    private static int? NumberOf(ModuleData data, string name)
+        => Field<NumberFieldData>(data, name)?.Value is decimal value && JournalLineRules.IsStorableLineNo(value)
+            ? (int)value
+            : null;
+
     private static void NormalizeEmptyLinks(IReadOnlyList<ModuleSubmitData> transactionData)
     {
         foreach (var data in transactionData.SelectMany(d => d.Add.Concat(d.Update)))

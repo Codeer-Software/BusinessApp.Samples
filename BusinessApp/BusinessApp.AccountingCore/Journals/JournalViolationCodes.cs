@@ -141,6 +141,12 @@ public static class JournalViolationCodes
     /// </remarks>
     public const string PartnerRequired = "E-PARTNER-REQUIRED";
 
+    /// <summary>取引先が取引先マスタに無い。</summary>
+    public const string PartnerUnknown = "E-PARTNER-UNKNOWN";
+
+    /// <summary>無効にした取引先を新たな計上に使おうとした（科目・補助科目・部門と同じ形。docs/04 §1 の B-1）。</summary>
+    public const string PartnerInactive = "E-PARTNER-INACTIVE";
+
     /// <summary>部門がマスタに無い。</summary>
     public const string DepartmentUnknown = "E-DEPARTMENT-UNKNOWN";
 
@@ -200,6 +206,20 @@ public static class JournalViolationCodes
     /// <b>種別ごとの関門が丸ごと外れる</b>ので、下書きのうちでも変えさせない。
     /// </summary>
     public const string EntryTypeImmutable = "E-ENTRY-TYPE-IMMUTABLE";
+
+    /// <summary>
+    /// 元の伝票を手で入れた、または消した。<b>利用者が触ってよい場面が 1 つも無い欄</b>である
+    /// （取消・訂正の伝票はサーバが作るときに入れる。qa/03 L-30）。
+    /// </summary>
+    public const string OriginalEntrySystemAssigned = "E-ORIGINAL-ENTRY-SYSTEM";
+
+    // --- 同時操作（qa/03 L-31）---
+
+    /// <summary>開いたあとに別の人が変更した伝票を保存しようとした（版が食い違う）。</summary>
+    public const string ChangedByOthers = "E-CONCURRENT-CHANGE";
+
+    /// <summary>開いたあとに削除された伝票（または明細）を保存・削除しようとした。</summary>
+    public const string DeletedByOthers = "E-CONCURRENT-DELETE";
 
     /// <summary>
     /// 取引先の登録が同じ日から 2 件あり、明細へ写す登録番号を決められない。
