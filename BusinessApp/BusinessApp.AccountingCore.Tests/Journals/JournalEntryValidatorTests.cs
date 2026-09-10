@@ -927,6 +927,7 @@ public class JournalEntryValidatorTests
     [InlineData(EntryType.Reversal, "entry", "inactive", ViolationSeverity.Warning)]
     [InlineData(EntryType.Reversal, "line", "inactive", ViolationSeverity.Warning)]
     [InlineData(EntryType.Reversal, "entry", "unknown", ViolationSeverity.Warning)]
+    [InlineData(EntryType.Reversal, "line", "unknown", ViolationSeverity.Warning)]
     [InlineData(EntryType.Correction, "entry", "inactive", ViolationSeverity.Error)]
     [InlineData(EntryType.Correction, "line", "inactive", ViolationSeverity.Warning)]
     [InlineData(EntryType.Correction, "entry", "unknown", ViolationSeverity.Error)]

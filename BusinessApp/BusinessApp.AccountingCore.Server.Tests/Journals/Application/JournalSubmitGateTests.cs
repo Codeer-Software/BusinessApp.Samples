@@ -732,17 +732,22 @@ public class JournalSubmitGateTests
 
     /// <summary>
     /// 保存されていない行（仮の識別子・消えている行）は、消しても帳簿が動かない。
-    /// <b>版の無い削除に限る</b>（画面を通らない経路）——画面の削除は版を運んでくるので、消えていれば断る（下の「別の人が先に消した」）。
+    /// <b>版の無い削除に限る</b>（画面を通らない経路。対照）——画面の削除は版を運んでくるので、消えていれば断る（下の「別の人が先に消した」）。
     /// </summary>
     [Theory]
     [InlineData(TemporaryId)]
     [InlineData("999")]
+    [InlineData("existing")]
     public async Task 版の無い削除は_保存されていない伝票でも通る(string id)
     {
         using var server = new AccountingServer();
         var untouched = server.InsertDraft();
+        if (id == "existing")
+        {
+            id = server.Text(untouched.Value);
+        }
 
-        await server.SubmitAsync([SubmitData.Deleting(id)], NothingSaved);
+        await server.SubmitAsync([SubmitData.Deleting(id, version: null)], NothingSaved);
 
         // **関係の無い行を巻き込んでいない。** 「例外が出なかった」だけでは、
         // 削除の対象を取り違えていても通る。
@@ -996,7 +1001,8 @@ public class JournalSubmitGateTests
         var violation = Assert.Single(error.Violations);
         Assert.Equal(JournalViolationCodes.DeletedByOthers, violation.Code);
         Assert.Equal(
-            "明細 3 行が、あなたが開いたあとに別の人に削除されています。画面を開き直して、残っている明細を確かめてください。",
+            "明細 3 行が、あなたが開いたあとに別の人に削除されています。画面を開き直して、残っている明細を確かめてください。"
+            + "伝票そのものが無ければ、振替伝票の一覧に戻ってください。",
             violation.Message);
     }
 
@@ -1026,7 +1032,6 @@ public class JournalSubmitGateTests
     [Theory]
     [InlineData("missing")]
     [InlineData("null")]
-    [InlineData("fraction")]
     [InlineData("temporary-id")]
     public async Task 版の欄が無いか版として読めなければ同時操作は判定しない(string shape)
     {
@@ -1039,9 +1044,6 @@ public class JournalSubmitGateTests
                 break;
             case "null":
                 entry.Fields["OptimisticLocking"] = new OptimisticLockingFieldData { Value = new NullValue() };
-                break;
-            case "fraction":
-                entry.Fields["OptimisticLocking"] = new NumberFieldData { Value = 1.5m };
                 break;
         }
 
@@ -1059,15 +1061,64 @@ public class JournalSubmitGateTests
     [Theory]
     [InlineData("string-value")]
     [InlineData("text-field")]
-    public async Task 版の欄が読めない型なら止まる(string shape)
+    [InlineData("fraction")]
+    public async Task 版の欄が読めない型や端数なら止まる(string shape)
     {
         using var server = new AccountingServer();
         var entry = SubmitData.Entry("999");
-        entry.Fields["OptimisticLocking"] = shape == "string-value"
-            ? new OptimisticLockingFieldData { Value = new StringValue { Value = "abc" } }
-            : new TextFieldData { Value = "abc" };
+        entry.Fields["OptimisticLocking"] = shape switch
+        {
+            "string-value" => new OptimisticLockingFieldData { Value = new StringValue { Value = "abc" } },
+            "fraction" => new OptimisticLockingFieldData { Value = new DecimalValue { Value = 1.5m } },
+            _ => new TextFieldData { Value = "abc" },
+        };
 
         await AssertUnreadable(server, SubmitData.Updating(entry), "OptimisticLocking");
+    }
+
+    /// <summary><c>3.0</c> のような整数値は版として読む（decimal を文字列にしてから long に直していた回帰。R69-14）。</summary>
+    [Fact]
+    public async Task 版が小数点つきの整数値でも読める()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+        server.Execute($"update journal_entries set optimistic_locking = 3 where id = {id.Value}");
+        var stale = SubmitData.Entry(server.Text(id.Value));
+        stale.Fields["OptimisticLocking"] = new OptimisticLockingFieldData { Value = new DecimalValue { Value = 2.0m } };
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([SubmitData.Updating(stale)], NothingSaved));
+
+        Assert.Equal([JournalViolationCodes.ChangedByOthers], error.Violations.Select(v => v.Code));
+
+        var fresh = SubmitData.Entry(server.Text(id.Value));
+        fresh.Fields["OptimisticLocking"] = new OptimisticLockingFieldData { Value = new DecimalValue { Value = 3.0m } };
+        var saved = false;
+        await server.SubmitAsync([SubmitData.Updating(fresh)], () => { saved = true; return NothingSaved(); });
+        Assert.True(saved);
+    }
+
+    /// <summary>識別子の欄が読めない型なら止める（黙って空文字にすると、同時操作も行番号も判定から外れる）。値が無いのは「無い」として扱う。</summary>
+    [Theory]
+    [InlineData("text-field")]
+    [InlineData("null-value")]
+    public async Task 識別子の欄が読めない型なら止まる(string shape)
+    {
+        using var server = new AccountingServer();
+        var entry = SubmitData.Entry("999");
+        entry.Fields["OptimisticLocking"] = Version(0);
+
+        if (shape == "text-field")
+        {
+            entry.Fields["Id"] = new TextFieldData { Value = "999" };
+            await AssertUnreadable(server, SubmitData.Updating(entry), "Id");
+            return;
+        }
+
+        entry.Fields["Id"] = new IdFieldData { Value = null };
+        var saved = false;
+        await server.SubmitAsync([SubmitData.Updating(entry)], () => { saved = true; return NothingSaved(); });
+        Assert.True(saved);
     }
 
     /// <summary>
@@ -1081,7 +1132,7 @@ public class JournalSubmitGateTests
         var untouched = server.InsertDraft();
 
         var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
-            () => server.SubmitAsync([DeletingWithVersion("999", 0)], NothingSaved));
+            () => server.SubmitAsync([SubmitData.Deleting("999")], NothingSaved));
 
         Assert.Equal(
             "削除できません。①この伝票は、あなたが開いたあとに別の人が削除しました。振替伝票の一覧に戻ってください。",
@@ -1098,12 +1149,12 @@ public class JournalSubmitGateTests
         server.Execute($"update journal_entries set optimistic_locking = 3 where id = {id.Value}");
 
         var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
-            () => server.SubmitAsync([DeletingWithVersion(server.Text(id.Value), 2)], NothingSaved));
+            () => server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value), 2)], NothingSaved));
 
         Assert.StartsWith("削除できません。①この伝票は、あなたが開いたあとに別の人が変更しました。", error.Message, StringComparison.Ordinal);
         Assert.Equal(1, server.Scalar<long>("select count(*) from journal_entries"));
 
-        await server.SubmitAsync([DeletingWithVersion(server.Text(id.Value), 3)], server.Deleting(id));
+        await server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value), 3)], server.Deleting(id));
 
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
     }
@@ -1177,7 +1228,46 @@ public class JournalSubmitGateTests
                 SubmitData.LineChanging(server.Text(second), "LineNo", new NumberFieldData { Value = 3 }),
             ],
         };
-        await server.SubmitAsync([move], NothingSaved);
+        var saved = false;
+        await server.SubmitAsync([move], () => { saved = true; return NothingSaved(); });
+        Assert.True(saved);
+    }
+
+    /// <summary>
+    /// <b>順序が分かっていない組み合わせは保守側に倒す</b>（Delete と Update、Update と Add の順序は未実測。qa/01 F-41）——
+    /// 消す行の番号へ別の行を動かす、番号を空けてそこへ足す、のどちらも断る。
+    /// </summary>
+    [Theory]
+    [InlineData("renumber-onto-deleted")]
+    [InlineData("add-onto-renumbered")]
+    public async Task 順序の分からない番号の使い回しは断る(string shape)
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+        server.InsertLine(id, 1, "debit", "1100", 100);
+        server.InsertLine(id, 2, "credit", "2200", 100);
+        var first = server.LineIdOf(id, 1);
+        var second = server.LineIdOf(id, 2);
+        var added = SubmitData.Line(1);
+        added.Fields["JournalEntryId"] = new IdFieldData { Value = server.Text(id.Value) };
+        var submit = shape == "renumber-onto-deleted"
+            ? new ModuleSubmitData
+            {
+                ModuleName = "JournalLine",
+                Update = [SubmitData.LineChanging(server.Text(second), "LineNo", new NumberFieldData { Value = 1 })],
+                Delete = [new ModuleDeleteInfo { Id = server.Text(first), ModuleName = "JournalLine" }],
+            }
+            : new ModuleSubmitData
+            {
+                ModuleName = "JournalLine",
+                Update = [SubmitData.LineChanging(server.Text(first), "LineNo", new NumberFieldData { Value = 3 })],
+                Add = [added],
+            };
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([submit], NothingSaved));
+
+        Assert.Equal([JournalLineRules.LineNoDuplicatedAt(1)], error.Violations.Select(v => v.Message));
     }
 
     /// <summary>
@@ -1205,7 +1295,8 @@ public class JournalSubmitGateTests
             () => server.SubmitAsync([new ModuleSubmitData { ModuleName = "JournalLine", Add = [added] }], NothingSaved));
         Assert.Equal([JournalLineRules.LineNoDuplicatedAt(2)], error.Violations.Select(v => v.Message));
 
-        // **対照**：2 行目を消して、同じ番号で足す。
+        // **対照**：2 行目を消して、同じ番号で足す（CLB は Delete を Add より先に流す。qa/01 F-41 ⑤）。
+        var saved = false;
         await server.SubmitAsync(
             [
                 new ModuleSubmitData
@@ -1215,7 +1306,8 @@ public class JournalSubmitGateTests
                     Delete = [new ModuleDeleteInfo { Id = server.Text(second), ModuleName = "JournalLine" }],
                 },
             ],
-            NothingSaved);
+            () => { saved = true; return NothingSaved(); });
+        Assert.True(saved);
     }
 
     /// <summary>新しい伝票（仮 ID）の明細は、差分の追加だけで数える。親の欄には伝票と同じ仮 ID が入って届く（qa/01 F-41）。</summary>
@@ -1248,22 +1340,41 @@ public class JournalSubmitGateTests
         await AssertUnreadable(server, new ModuleSubmitData { ModuleName = "JournalLine", Add = [added] }, "JournalEntryId");
     }
 
-    /// <summary>識別子は数値に直してから突き合わせる——字面のまま鍵にすると <c>"02"</c> と <c>"2"</c> が別の行になり、偽の重複で断る。</summary>
-    [Fact]
-    public async Task 明細の識別子は字面が違っても同じ行と見る()
+    /// <summary>
+    /// 識別子は数値に直してから突き合わせる——字面のまま鍵にすると <c>"02"</c> と <c>"2"</c> が別の行になる。
+    /// 明細の側（消す行が消したと数えられず、足す番号が偽の重複になる）と、伝票の側（<c>"067"</c> の親に足す行が別の伝票に数えられ、重複を見逃す）。
+    /// </summary>
+    [Theory]
+    [InlineData("line")]
+    [InlineData("entry")]
+    public async Task 識別子は字面が違っても同じ行と見る(string where)
     {
         using var server = new AccountingServer();
         var id = server.InsertDraft();
         server.InsertLine(id, 1, "debit", "1100", 100);
         server.InsertLine(id, 2, "credit", "2200", 100);
-        var submit = new ModuleSubmitData
+        var added = SubmitData.Line(1);
+        added.Fields["JournalEntryId"] = new IdFieldData { Value = (where == "entry" ? "0" : "") + server.Text(id.Value) };
+        var submit = new ModuleSubmitData { ModuleName = "JournalLine", Add = [added] };
+        if (where == "line")
         {
-            ModuleName = "JournalLine",
-            Update = [SubmitData.LineChanging("0" + server.Text(server.LineIdOf(id, 2)), "LineNo", new NumberFieldData { Value = 1 })],
-            Delete = [new ModuleDeleteInfo { Id = "0" + server.Text(server.LineIdOf(id, 1)), ModuleName = "JournalLine" }],
-        };
+            submit.Delete = [new ModuleDeleteInfo { Id = "0" + server.Text(server.LineIdOf(id, 1)), ModuleName = "JournalLine" }];
+        }
 
-        await server.SubmitAsync([submit], NothingSaved);
+        if (where == "line")
+        {
+            // 消す行の番号を足す——消したと数えられれば通る。
+            var saved = false;
+            await server.SubmitAsync([submit], () => { saved = true; return NothingSaved(); });
+            Assert.True(saved);
+        }
+        else
+        {
+            // 親を "0" 付きで指しても同じ伝票——保存済みの 1 行目と重なる。
+            var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+                () => server.SubmitAsync([submit], NothingSaved));
+            Assert.Equal([JournalLineRules.LineNoDuplicatedAt(1)], error.Violations.Select(v => v.Message));
+        }
     }
 
     /// <summary>行番号の無い追加は、必須の断りだけで止まる（重複の判定には載らない）。</summary>
@@ -1286,6 +1397,7 @@ public class JournalSubmitGateTests
     /// 行番号の重複は「どの伝票の何行目か」が分かる差分だけで数える。識別子が仮のままの変更や、伝票を指していない追加は数えない
     /// （数えられないものを断ると、正当な保存が止まる。DDL の UNIQUE が最後の砦）。**保存まで進んだことを見る。**
     /// </summary>
+    /// <remarks>仮 ID の明細の削除は画面からは来ない（取込・API の形）。</remarks>
     [Theory]
     [InlineData("update-temporary-id")]
     [InlineData("delete-temporary-id")]
@@ -1323,14 +1435,6 @@ public class JournalSubmitGateTests
     /// <summary>画面が載せてくる形の版（<c>OptimisticLockingFieldData</c> の <c>DecimalValue</c>。qa/01 F-41）。</summary>
     private static OptimisticLockingFieldData Version(long version)
         => new() { Value = new DecimalValue { Value = version } };
-
-    /// <summary>画面の「削除」が送る形——削除の差分は版を運んでくる（qa/01 F-41）。</summary>
-    private static ModuleSubmitData DeletingWithVersion(string id, long version)
-        => new()
-        {
-            ModuleName = "JournalEntry",
-            Delete = [new ModuleDeleteInfo { Id = id, ModuleName = "JournalEntry", OptimisticLockingFieldData = Version(version) }],
-        };
 
     private static FieldDataBase Parent(string shape, string value)
         => shape == "id" ? new IdFieldData { Value = value } : new LinkFieldData { Value = value };

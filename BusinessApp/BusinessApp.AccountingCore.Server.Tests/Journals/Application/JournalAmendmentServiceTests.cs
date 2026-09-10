@@ -650,6 +650,14 @@ public class JournalAmendmentServiceTests
 
         Assert.Equal(EntryStatus.Posted, (await server.EntryStore.LoadAsync(started.ReversalId)).Status);
         Assert.Equal(EntryStatus.Draft, (await server.EntryStore.LoadAsync(started.CorrectionId)).Status);
+
+        // **止める側**：訂正の再計上を、無効な取引先のまま計上しようとすると止まる（伝票の取引先は選び直せる。docs/10 §6-3）。
+        var rejected = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(async _ =>
+                await server.Poster.PostAsync(
+                    await server.EntryStore.LoadAsync(started.CorrectionId), await server.MasterLoader.LoadAsync())));
+        Assert.Contains(rejected.Violations, v => v.Code == JournalViolationCodes.PartnerInactive && v.Severity == ViolationSeverity.Error);
+        Assert.Equal(EntryStatus.Draft, (await server.EntryStore.LoadAsync(started.CorrectionId)).Status);
     }
 
     [Fact]

@@ -189,7 +189,8 @@ public sealed class JournalSubmitGate(
     /// <para><b>別の人が先に消した・変えた伝票の削除も止める。</b> 消えた伝票の削除を素通しにすると、
     /// CLB 本来の削除が失敗して<b>削除なのに「入力内容を確かめ…」の定型文</b>が出る（2026-09-10 実測 1.3.20。qa/01 F-40）。
     /// 削除の差分は版を運んでくる（<c>ModuleDeleteInfo.OptimisticLockingFieldData</c>。同実測）ので、保存と同じく突き合わせる。
-    /// <b>版の無い削除（画面を通らない経路）で消えていれば通す</b>——利用者の望みは叶っている。</para>
+    /// <b>版の無い削除（画面を通らない経路）で消えていれば通す</b>——利用者の望みは叶っている
+    /// （その先で CLB が 0 件の削除を成功と見るか定型文を出すかは未実測。画面は必ず版を運ぶので、踏むのは API だけ）。</para>
     /// <para><b>締めの側は、いまのところ完結していない。</b> 締め済み期間の下書きは
     /// <b>編集を止めていない</b>ので、計上日を開いている期間へ動かしてから消せば通る。
     /// 下書きは帳簿に載っていない（帳簿は <c>status = 'posted'</c> だけを出す）ので、
@@ -355,21 +356,19 @@ public sealed class JournalSubmitGate(
     /// <para>CLB は <c>OptimisticLockingFieldData</c> で運ぶ——更新と削除では <c>DecimalValue</c>、新規では <c>NullValue</c>
     /// （2026-09-10 実測 1.3.20。qa/01 F-40。<c>MultiTypeValue</c> に整数専用の型は無い）。数値の欄で来ても読む。</para>
     /// <para><b>型が読めなければ止める</b>（<see cref="UnreadableFieldException"/>）——黙って判定を落とすと、
-    /// 型が変わった日に断りが消える（<c>MasterSubmitGate</c> と同じ流儀）。
-    /// 型は読めるが値が整数でない（端数）のは「版ではない」ので、判定しないだけにする。</para>
+    /// 型が変わった日に断りが消える（<c>MasterSubmitGate</c> と同じ流儀）。<b>端数も止める</b>——画面からは来ない値で、
+    /// 来たら壊れている。<c>3.0</c> のような整数値は読む（R69-14 の回帰）。</para>
     /// </remarks>
     private static long? VersionOf(string module, FieldDataBase? field)
         => field switch
         {
             null => null,
             OptimisticLockingFieldData { Value: null or NullValue } => null,
-            OptimisticLockingFieldData { Value: DecimalValue locking } => WholeNumber(locking.Value),
-            NumberFieldData number => WholeNumber(number.Value),
+            OptimisticLockingFieldData { Value: DecimalValue { Value: decimal locking } }
+                when locking == decimal.Truncate(locking) => (long)locking,
+            NumberFieldData { Value: decimal number } when number == decimal.Truncate(number) => (long)number,
             _ => throw UnreadableFieldException.For(module, "OptimisticLocking", field),
         };
-
-    private static long? WholeNumber(decimal? value)
-        => value is decimal number && number == decimal.Truncate(number) ? (long)number : null;
 
     /// <summary>
     /// 差分が指している保存済みの明細。消えていれば <c>null</c>（別の人が消した）。
@@ -405,10 +404,11 @@ public sealed class JournalSubmitGate(
     /// 2026-09-10 の自己レビューまで、まさにそうなっていた（qa/03 L-42）。読めない型は止める。</para>
     /// <para><b>「保存したあとの姿」だけでは足りない。</b> CLB は UPDATE を 1 行ずつ流し、SQLite の UNIQUE は遅延できないので、
     /// 番号の入れ替え（1↔2）は最終形に重複が無くても最初の UPDATE で落ちる（関門が通して DB が拒む形。qa/03 L-21）。
-    /// 番号を変える保存済みの行は、<b>同じ保存で消されない別の保存済みの行の番号</b>とも重ならないこととする
-    /// （相手も番号を変えるつもりでも、流れる順序は選べない）。</para>
-    /// <para><b>消えた明細（別の人が消した）はここでは数えない</b>——同時操作の断りが言う。
-    /// 削除→追加で同じ番号を使い回すのは通る——CLB は Delete を Add より先に流す（2026-09-10 実測 1.3.20。qa/01 F-40）。</para>
+    /// <b>実測したのは Delete が Add より先に流れることだけ</b>（2026-09-10 実測 1.3.20。qa/01 F-41）。Delete と Update、
+    /// Update と Add の順序は分かっていないので<b>保守側に倒す</b>——番号を変える保存済みの行は<b>他の保存済みの行の元の番号</b>
+    /// （同じ保存で消す行も含む）と、足す行は<b>同じ保存で消さない保存済みの行の元の番号</b>と、重ならないこととする。
+    /// 画面は番号を変えないので、止まるのは取込・API の並べ替えだけである。</para>
+    /// <para><b>消えた明細（別の人が消した）はここでは数えない</b>——同時操作の断りが言う。</para>
     /// </remarks>
     private async Task<List<Violation>> DuplicateLineNosAsync(
         IReadOnlyList<ModuleSubmitData> transactionData, IReadOnlyDictionary<long, StoredLine?> lines)
@@ -418,6 +418,12 @@ public sealed class JournalSubmitGate(
 
         async Task<EntryLineNumbers> OfEntryAsync(string key)
         {
+            // 親の字面も数値に直す（`"067"` と `"67"` を同じ伝票に）。仮 ID はそのまま。
+            if (StoredId(key) is long numeric)
+            {
+                key = EntryKey(new JournalEntryId(numeric));
+            }
+
             if (entries.TryGetValue(key, out var existing))
             {
                 return existing;
@@ -482,7 +488,10 @@ public sealed class JournalSubmitGate(
         /// <summary>この保存で足す明細の行番号。</summary>
         public List<int> Added { get; } = [];
 
-        /// <summary>保存したあとの姿で重なる番号と、逐次の UPDATE で保存済みの行に当たる番号。</summary>
+        /// <summary>
+        /// 保存したあとの姿で重なる番号と、逐次に流れる UPDATE / INSERT が保存済みの行に当たる番号。
+        /// 順序が分かっているのは Delete → Add だけなので、それ以外は保守側（当たりうるなら断る）。
+        /// </summary>
         public IEnumerable<int> Duplicated()
         {
             var after = Stored
@@ -492,12 +501,17 @@ public sealed class JournalSubmitGate(
             var afterSave = after.GroupBy(n => n).Where(g => g.Count() > 1).Select(g => g.Key);
 
             // 番号を変える行は必ず保存済み（StoredLinesAsync で見つかった行しか載せない）。
-            var sequential = Renumbered
+            // 相手が同じ保存で消える行でも当たりうる（Delete と Update の順序は未実測）。
+            var renumbering = Renumbered
                 .Where(changed => Stored[changed.Key] != changed.Value)
                 .Select(changed => changed.Value)
+                .Where(n => Stored.Any(stored => stored.Value == n));
+
+            // 足す行は、消さない保存済みの行の元の番号と当たりうる（相手が番号を変えるつもりでも、Update と Add の順序は未実測）。
+            var adding = Added
                 .Where(n => Stored.Any(stored => stored.Value == n && !Deleted.Contains(stored.Key)));
 
-            return afterSave.Concat(sequential);
+            return afterSave.Concat(renumbering).Concat(adding);
         }
     }
 
@@ -634,7 +648,7 @@ public sealed class JournalSubmitGate(
         }
     }
 
-    private async Task PostAsync(JournalEntryId id, PostingContext context)
+    private async Task PostAsync(JournalEntryId id, AccountingMasters context)
     {
         var draft = await entryStore.LoadAsync(id);
 
@@ -723,8 +737,18 @@ public sealed class JournalSubmitGate(
             .SelectMany(d => d.Delete)
             .Where(d => d.ModuleName == EntryModuleName)];
 
+    /// <summary>送られてきた識別子。欄が無ければ空文字（新規は仮 ID が入って来る）。<b>読めない型は止める</b>（<c>MasterSubmitGate.IdText</c> と同じ）。</summary>
     private static string GetId(ModuleData data)
-        => Field<IdFieldData>(data, "Id")?.Value ?? string.Empty;
+    {
+        if (!data.Fields.TryGetValue("Id", out var field))
+        {
+            return string.Empty;
+        }
+
+        return field is IdFieldData id
+            ? id.Value ?? string.Empty
+            : throw UnreadableFieldException.For(data.Name, "Id", field);
+    }
 
     private static string GetSelect(ModuleData data, string name)
         => Field<SelectFieldData>(data, name)?.Value ?? string.Empty;

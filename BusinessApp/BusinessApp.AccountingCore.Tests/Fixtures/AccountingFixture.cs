@@ -92,11 +92,15 @@ public static class AccountingFixture
         PeriodStatus septemberStatus = PeriodStatus.Open,
         PeriodStatus fiscalYearStatus = PeriodStatus.Open,
         bool hasSelectablePartner = true)
-        => new(new AccountCatalog(Accounts),
-               new SubAccountCatalog(SubAccounts),
-               new DepartmentCatalog(Departments),
-               Calendar(septemberStatus, fiscalYearStatus),
-               Partners(hasSelectablePartner));
+        => Masters(septemberStatus, fiscalYearStatus, hasSelectablePartner).WithPartners(Partners(hasSelectablePartner));
+
+    /// <summary>取引先を足す前のマスタ一式（<see cref="AccountingMasters"/>）。</summary>
+    public static AccountingMasters Masters(
+        PeriodStatus septemberStatus = PeriodStatus.Open,
+        PeriodStatus fiscalYearStatus = PeriodStatus.Open,
+        bool hasSelectablePartner = true)
+        => new(new AccountCatalog(Accounts), new SubAccountCatalog(SubAccounts), new DepartmentCatalog(Departments),
+               Calendar(septemberStatus, fiscalYearStatus), hasSelectablePartner);
 
     /// <summary>
     /// 取引先の目録。<b>検体が指す 2 件</b>（<see cref="Partner"/>・<see cref="OtherPartner"/>）と、無効にした 1 件。

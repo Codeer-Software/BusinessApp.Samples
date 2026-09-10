@@ -239,7 +239,7 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
     /// <summary>伝票の明細の識別子と行番号（行番号の重複を保存の前に見るため）。</summary>
     public async Task<IReadOnlyList<StoredLineNo>> LoadLineNosAsync(JournalEntryId id)
     {
-        var rows = await QueryAsync("select id, line_no from journal_lines where journal_entry_id = @p1", id.Value);
+        var rows = await QueryAsync("select id, line_no from journal_lines where journal_entry_id = @p1 order by id", id.Value);
 
         return [.. rows.Select(r => new StoredLineNo(DbValue.ToLong(r["id"]), (int)DbValue.ToLong(r["line_no"])))];
     }

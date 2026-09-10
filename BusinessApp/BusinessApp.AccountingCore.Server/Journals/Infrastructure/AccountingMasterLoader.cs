@@ -22,15 +22,15 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 public sealed class AccountingMasterLoader(IDbAccessor dbAccessor, string dataSourceName)
 {
     /// <summary>
-    /// 計上検証に要るマスタ一式。<b>取引先だけは、まだ読んでいない</b>（<see cref="PartnerCatalog.Unloaded"/>）——
-    /// 伝票が決まってから <see cref="WithPartnersAsync"/> で足す。足さずに計上検証へ渡すと止まる（空の目録で通さない）。
+    /// 全件を読む会計マスタ一式。<b>取引先はまだ持たない</b>（<see cref="AccountingMasters"/>）——
+    /// 伝票が決まってから <see cref="WithPartnersAsync"/> で足す。足さずに計上検証へ渡す形はコンパイルで落ちる。
     /// </summary>
-    public async Task<PostingContext> LoadAsync()
+    public async Task<AccountingMasters> LoadAsync()
         => new(await LoadAccountsAsync(),
                await LoadSubAccountsAsync(),
                await LoadDepartmentsAsync(),
                await LoadCalendarAsync(),
-               PartnerCatalog.Unloaded(await HasSelectablePartnerAsync()));
+               await HasSelectablePartnerAsync());
 
     /// <summary>
     /// 伝票が参照している取引先だけを読んで、目録に足す。
@@ -40,9 +40,9 @@ public sealed class AccountingMasterLoader(IDbAccessor dbAccessor, string dataSo
     /// <para><b>計上の直前に <c>JournalPoster</c> が呼ぶ</b>——検証の経路は複数（画面の保存・取消・訂正の再計上）あるので、
     /// 呼び出し側ごとに足すと 1 経路で忘れる（qa/03 L-14 の型）。</para>
     /// </remarks>
-    public async Task<PostingContext> WithPartnersAsync(PostingContext context, JournalEntry entry)
+    public async Task<PostingContext> WithPartnersAsync(AccountingMasters masters, JournalEntry entry)
     {
-        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(masters);
         ArgumentNullException.ThrowIfNull(entry);
 
         var ids = entry.Lines.Select(l => l.PartnerId)
@@ -53,8 +53,7 @@ public sealed class AccountingMasterLoader(IDbAccessor dbAccessor, string dataSo
             .ToList();
         if (ids.Count == 0)
         {
-            // 参照が無くても「読んだ」目録にする（読んでいない目録のままだと、検証が止まる形のままになる）。
-            return context with { Partners = new PartnerCatalog([], context.Partners.HasSelectable) };
+            return masters.WithPartners(new PartnerCatalog([], masters.HasSelectablePartner));
         }
 
         // **識別子は数値で、この場で組み立てた列挙である**（利用者の入力ではない）——それでも文に埋め込まず、パラメータで渡す。
@@ -76,7 +75,7 @@ public sealed class AccountingMasterLoader(IDbAccessor dbAccessor, string dataSo
             DbValue.ToText(r["name"]),
             DbValue.ToBool(r["is_active"])));
 
-        return context with { Partners = new PartnerCatalog(partners, context.Partners.HasSelectable) };
+        return masters.WithPartners(new PartnerCatalog(partners, masters.HasSelectablePartner));
     }
 
     private async Task<AccountCatalog> LoadAccountsAsync()

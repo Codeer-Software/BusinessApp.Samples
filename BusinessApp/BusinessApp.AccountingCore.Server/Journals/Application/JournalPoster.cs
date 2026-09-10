@@ -50,9 +50,9 @@ public sealed class JournalPoster(
     /// 下書きを計上する。違反があれば例外にして保存全体を巻き戻す。
     /// </summary>
     /// <param name="draft">計上する下書き。<b>DB から読み直した姿</b>を渡す（qa/01 F-12）。</param>
-    /// <param name="context">計上検証に要るマスタ一式。</param>
+    /// <param name="masters">計上検証に要るマスタ一式（取引先はここで足す）。</param>
     /// <returns>計上済みになった伝票。</returns>
-    public async Task<JournalEntry> PostAsync(JournalEntry draft, PostingContext context)
+    public async Task<JournalEntry> PostAsync(JournalEntry draft, AccountingMasters masters)
     {
         ArgumentNullException.ThrowIfNull(draft);
 
@@ -63,7 +63,7 @@ public sealed class JournalPoster(
 
         // **参照している取引先だけを目録に足す**（全件は読まない。<see cref="PartnerCatalog"/>）。
         // ここで足すので、画面の保存・取消・訂正の再計上のどの経路でも取引先の実在と有効が検査される。
-        context = await masterLoader.WithPartnersAsync(context, draft);
+        var context = await masterLoader.WithPartnersAsync(masters, draft);
 
         var sequence = await sequenceStore.ReadAsync(draft.FiscalYearId);
         var result = JournalPosting.Post(draft, context, sequence, timeProvider.GetUtcNow());

@@ -215,7 +215,7 @@ public sealed class JournalAmendmentService(
     }
 
     /// <summary>取消・訂正のどちらでも要る材料をまとめて用意する。</summary>
-    private async Task<(JournalEntry Original, PostingContext Context, DateOnly Today, DateTimeOffset Now)>
+    private async Task<(JournalEntry Original, AccountingMasters Context, DateOnly Today, DateTimeOffset Now)>
         PrepareAsync(JournalEntryId originalId)
     {
         // 利用者から来た識別子なので、無いことは業務のことばで返す。
@@ -242,7 +242,7 @@ public sealed class JournalAmendmentService(
     /// 見出しの網（<c>ViolationHeadlineTests</c>）は見出しの語を含まないので鳴らない
     /// （2026-09-09 の自己レビュー）。
     /// </remarks>
-    private static AccountingPeriod TodayPeriod(PostingContext context, DateOnly today)
+    private static AccountingPeriod TodayPeriod(AccountingMasters context, DateOnly today)
         => context.Calendar.ResolvePeriod(today) is AccountingPeriod period
             ? period
             : throw new JournalPostingRejectedException(
@@ -253,7 +253,7 @@ public sealed class JournalAmendmentService(
             ]);
 
     private async Task<ReversalContext> ResolveReversalContextAsync(
-        JournalEntry original, PostingContext context, DateOnly today)
+        JournalEntry original, AccountingMasters context, DateOnly today)
     {
         var period = TodayPeriod(context, today);
 
@@ -264,7 +264,7 @@ public sealed class JournalAmendmentService(
     }
 
     /// <summary>下書きを書いて、<b>DB から読み直した姿</b>で計上する（qa/01 F-12 と同じ規律）。</summary>
-    private async Task<JournalEntryId> PostDraftAsync(JournalEntry draft, PostingContext context)
+    private async Task<JournalEntryId> PostDraftAsync(JournalEntry draft, AccountingMasters context)
     {
         var id = await entryStore.InsertDraftAsync(draft);
         await poster.PostAsync(await entryStore.LoadAsync(id), context);

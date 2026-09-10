@@ -49,27 +49,9 @@ public class AccountingMasterLoaderTests
         Assert.False(context.Partners.Find(new PartnerId(onLine))!.IsActive);
         Assert.Null(context.Partners.Find(new PartnerId(unrelated)));
         Assert.True(context.HasSelectablePartner);
-        Assert.True(context.Partners.IsLoaded);
     }
 
-    /// <summary>
-    /// <b>読む前の目録では取引先を引けない</b>（<see cref="PartnerCatalog.Unloaded"/>）——
-    /// 空の目録で計上検証を通すと、参照している取引先が全部「マスタに無い」になる。
-    /// </summary>
-    [Fact]
-    public async Task 読む前の目録では取引先を引けない()
-    {
-        using var server = new AccountingServer();
-        var partner = server.InsertPartner();
-
-        var context = await server.MasterLoader.LoadAsync();
-
-        Assert.False(context.Partners.IsLoaded);
-        Assert.True(context.HasSelectablePartner);
-        Assert.Throws<InvalidOperationException>(() => context.Partners.Find(new PartnerId(partner)));
-    }
-
-    /// <summary>取引先を 1 つも参照していなければ、DB を読まずに「読んだ」空の目録にする。</summary>
+    /// <summary>取引先を 1 つも参照していなければ、DB を読まずに空の目録で計上検証の文脈にする。</summary>
     [Fact]
     public async Task 取引先を参照していなければ読まずに空の目録にする()
     {
@@ -85,9 +67,9 @@ public class AccountingMasterLoaderTests
 
         var after = await server.MasterLoader.WithPartnersAsync(before, await server.EntryStore.LoadAsync(id));
 
-        Assert.True(after.Partners.IsLoaded);
         Assert.Null(after.Partners.Find(new PartnerId(partner)));
         Assert.True(after.HasSelectablePartner);
+        Assert.Same(before.Calendar, after.Calendar);
     }
 
     [Fact]

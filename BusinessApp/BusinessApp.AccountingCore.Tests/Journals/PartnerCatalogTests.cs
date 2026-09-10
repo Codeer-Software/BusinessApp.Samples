@@ -40,28 +40,22 @@ public class PartnerCatalogTests
             Assert.Throws<ArgumentNullException>(() => new PartnerCatalog(null!, hasSelectable: true)).ParamName);
 
     /// <summary>
-    /// <b>読む前の目録では引けない</b>——空の目録で検証を通すと、参照している取引先が全部「マスタに無い」になる。
-    /// 「選べる取引先があるか」だけは読む前でも答える。
+    /// <b>取引先を足す前の型は別</b>（<see cref="AccountingMasters"/>）——足して初めて計上検証に渡せる文脈になる。
+    /// 足し忘れは実行時ではなくコンパイルで落ちるので、「読む前の目録」という状態はこの型に無い。
     /// </summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void 読む前の目録では取引先を引けない(bool hasSelectable)
+    public void 取引先を足して計上検証の文脈になる(bool hasSelectable)
     {
-        var unloaded = PartnerCatalog.Unloaded(hasSelectable);
+        var masters = AccountingFixture.Masters(hasSelectablePartner: hasSelectable);
 
-        Assert.False(unloaded.IsLoaded);
-        Assert.Equal(hasSelectable, unloaded.HasSelectable);
-        var error = Assert.Throws<InvalidOperationException>(() => unloaded.Find(AccountingFixture.Partner));
-        Assert.Contains("WithPartnersAsync", error.Message, StringComparison.Ordinal);
-    }
+        var context = masters.WithPartners(new PartnerCatalog([], hasSelectable));
 
-    [Fact]
-    public void 読んだ目録は空でも引ける()
-    {
-        var empty = new PartnerCatalog([], hasSelectable: true);
-
-        Assert.True(empty.IsLoaded);
-        Assert.Null(empty.Find(AccountingFixture.Partner));
+        Assert.Equal(hasSelectable, context.HasSelectablePartner);
+        Assert.Same(masters.Calendar, context.Calendar);
+        Assert.Same(masters.Accounts, context.Accounts);
+        Assert.Null(context.Partners.Find(AccountingFixture.Partner));
+        Assert.Throws<ArgumentNullException>(() => masters.WithPartners(null!));
     }
 }

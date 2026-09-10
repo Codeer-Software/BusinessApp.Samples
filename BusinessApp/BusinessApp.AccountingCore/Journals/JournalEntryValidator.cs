@@ -47,9 +47,9 @@ public static class JournalEntryValidator
     /// 訂正でも外すと、無効にした相手の新しい記帳を訂正経由で帳簿へ入れられる。
     /// <b>明細の取引先</b>は画面に列が無く、訂正の下書きでも直す手立てが無いので、取消も訂正も外す（<see cref="InactiveSeverity"/>）。</para>
     /// <para><b>「マスタに無い」も同じ重さで扱う。</b> DDL の取引先のトリガは、取消の明細が計上済みの原仕訳の写しなら
-    /// 取引先が <c>partners</c> に無くても通す（<c>trg_journal_entries_partner_presence_when_posted</c>。
-    /// 外部キーを切った経路で入った行も取り消せるように）。関門が取消で Error にすると、その伝票は
-    /// 取り消せも訂正もできずに帳簿に残る——<see cref="InactiveSeverity"/> が最悪と呼ぶ形。</para>
+    /// 取引先が <c>partners</c> に無くても通す（<c>trg_journal_entries_partner_presence_when_posted</c>）ので、関門も同じ広さにする。
+    /// <b>アプリの経路では外部キーが先に止める</b>（取消は原仕訳の取引先を写して INSERT するので、マスタに無い取引先は
+    /// 検証に届く前に落ちる）——この重さが効くのは外部キーを切った経路だけで、関門の重さで取り消せなくなる伝票を作らないための整合である。</para>
     /// <para><b>警告は、いまはどこにも届かない</b>（計上の側は Error だけを読む）。「警告に落とす」は「止めない」の意味であり、
     /// 届け先は未決である（docs/04 §5）。</para>
     /// </remarks>

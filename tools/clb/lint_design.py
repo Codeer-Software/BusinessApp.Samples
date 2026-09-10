@@ -1325,9 +1325,10 @@ def check_script(path, text, findings):
 
 # 列 0 から始まるメソッドの見出し（`void Foo()` / `string Bar(DateOnly d)`）。
 # CLB スクリプトはメソッドを平らに並べるので、これで区切れる。
-# **引数の中の括弧を 1 段だけ許す**（`int n = Foo()`・タプル型）。許さないと既定値が `)` を含むとき見出しに見えない。
+# **引数の中の括弧を 2 段まで許す**（`int n = Foo(Bar())`・タプル型）。許さないと既定値が `)` を含むとき
+# 見出しに見えず、B-10 だけでなく F-15 の区切りからも落ちる。3 段は自己テストで「見えない」と分かるようにしてある。
 _METHOD_HEAD = re.compile(
-    r"^[A-Za-z_][\w<>\[\],?\s]*\s+(\w+)\s*\(((?:[^()]|\([^()]*\))*)\)\s*$", re.MULTILINE)
+    r"^[A-Za-z_][\w<>\[\],?\s]*\s+(\w+)\s*\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)\s*$", re.MULTILINE)
 
 # 引数の並びの中の代入（既定値）。`==`・`!=`・`<=`・`>=`・`=>` は外す。文字列は先に空にしてから当てる。
 _ASSIGNMENT = re.compile(r"(?<![=!<>])=(?![=>])")
@@ -1698,6 +1699,7 @@ def selftest():
         ("既定値つきの引数", 'void Amend(string a, string done = "")\n{\n}\n', (SEV_ERROR, "B-10"), "Amend(): "),
         ("数値の既定値つきの引数", "void A(int n = 0)\n{\n}\n", (SEV_ERROR, "B-10"), "A(): "),
         ("括弧を含む既定値", "void A(List<int> a = new List<int>())\n{\n}\n", (SEV_ERROR, "B-10"), "A(): "),
+        ("括弧 2 段の既定値", "void A(int n = Foo(Bar()))\n{\n}\n", (SEV_ERROR, "B-10"), "A(): "),
         ("文字列の中に = がある既定値", 'void A(string a = "=")\n{\n}\n', (SEV_ERROR, "B-10"), "A(): "),
         ("null の既定値", "void A(string a = null, int b = -1)\n{\n}\n", (SEV_ERROR, "B-10"), "A(): "),
         # **文字列の中の `//` をコメントと取り違えない。** 取り違えると閉じ引用符が消え、以降の判定がずれる。
