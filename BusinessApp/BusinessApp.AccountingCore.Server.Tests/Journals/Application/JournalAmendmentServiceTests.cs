@@ -315,8 +315,9 @@ public class JournalAmendmentServiceTests
     }
 
     [Fact]
-    public async Task 取り消し済みの伝票は取消も訂正もできない()
+    public async Task 取り消し済みの伝票は取消はできず_訂正はやり直しになる()
     {
+        // 取消済みで訂正が無い伝票は、訂正をやり直せる（ADR-0052）。理由は空で、画面は「訂正する」だけを出す。
         using var server = new AccountingServer();
         var original = Original(server);
         await server.AmendAsync(s => s.ReverseAsync(original));
@@ -324,8 +325,9 @@ public class JournalAmendmentServiceTests
         var available = await server.AmendmentService.DescribeAsync(original);
 
         Assert.False(available.CanReverse);
-        Assert.False(available.CanCorrect);
-        Assert.Contains("既に取り消されています", available.Reason, StringComparison.Ordinal);
+        Assert.True(available.CanCorrect);
+        Assert.True(available.CorrectionResumes);
+        Assert.Equal(string.Empty, available.Reason);
     }
 
     [Fact]
@@ -525,6 +527,129 @@ public class JournalAmendmentServiceTests
         Assert.Equal(original, correction.OriginalEntryId);
     }
 
+    // --- 訂正をやり直す（ADR-0052） ---
+
+    /// <summary>
+    /// <b>訂正の下書きを消したあと、もう一度「訂正する」と、取消は作り直さずに再計上の下書きだけができる。</b>
+    /// </summary>
+    [Fact]
+    public async Task 訂正の下書きを消したあとに訂正すると_取消は増えず再計上の下書きだけができる()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        var first = await server.AmendAsync(s => s.CorrectAsync(original));
+        await server.Deleting(first.CorrectionId)();
+
+        var resumed = await server.AmendAsync(s => s.CorrectAsync(original));
+
+        // 取消は最初の 1 本のまま。識別子も同じものを返す。
+        Assert.Equal(first.ReversalId, resumed.ReversalId);
+        Assert.Equal(1, server.CountAmendments(original, "reversal"));
+
+        // 再計上は新しい下書きで、原仕訳を指す（複製と違って original_entry_id が付く。ADR-0048 の帰結）。
+        var draft = await server.EntryStore.LoadAsync(resumed.CorrectionId);
+        Assert.NotEqual(first.CorrectionId, resumed.CorrectionId);
+        Assert.Equal(EntryStatus.Draft, draft.Status);
+        Assert.Equal(EntryType.Correction, draft.EntryType);
+        Assert.Equal(original, draft.OriginalEntryId);
+        Assert.Equal((await server.EntryStore.LoadAsync(original)).Lines.Count, draft.Lines.Count);
+        Assert.Equal(1, server.CountAmendments(original, "correction", "draft"));
+    }
+
+    /// <summary>下書きが残っているのに「訂正する」と、2 本目の下書きは作らずに断る。</summary>
+    [Fact]
+    public async Task 訂正の下書きが残っていれば_やり直せない()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        await server.AmendAsync(s => s.CorrectAsync(original));
+
+        var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.CorrectAsync(original)));
+
+        Assert.Equal(
+            "訂正できません。この伝票の訂正の下書きは既にあります。振替伝票の一覧から、その下書きを開いて直してください。",
+            thrown.Message);
+        Assert.Equal(1, server.CountAmendments(original, "correction", "draft"));
+        Assert.Equal(1, server.CountAmendments(original, "reversal"));
+    }
+
+    /// <summary>計上済みの訂正がある伝票は、やり直しではなく「その訂正を訂正する」（既存の規則のまま）。</summary>
+    [Fact]
+    public async Task 訂正済みの伝票は_やり直せない()
+    {
+        using var server = new AccountingServer();
+        server.StartEntryNumbersAt(101);
+        var original = Original(server);
+        var started = await server.AmendAsync(s => s.CorrectAsync(original));
+        await PostAsync(server, started.CorrectionId);
+
+        var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.CorrectAsync(original)));
+
+        Assert.Contains("既に訂正されています", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>「取り消しただけ」の伝票にも訂正のやり直しが効く——取消と、やり直しの区別は無い（ADR-0015）。</summary>
+    [Fact]
+    public async Task 取り消しただけの伝票も_訂正すると再計上の下書きができる()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        var reversalId = await server.AmendAsync(s => s.ReverseAsync(original));
+
+        var resumed = await server.AmendAsync(s => s.CorrectAsync(original));
+
+        Assert.Equal(reversalId, resumed.ReversalId);
+        Assert.Equal(EntryType.Correction, (await server.EntryStore.LoadAsync(resumed.CorrectionId)).EntryType);
+    }
+
+    [Fact]
+    public async Task 取り消されて訂正の無い伝票は_訂正できると答え_やり直しだと言う()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        var first = await server.AmendAsync(s => s.CorrectAsync(original));
+        await server.Deleting(first.CorrectionId)();
+
+        var available = await server.AmendmentService.DescribeAsync(original);
+
+        Assert.False(available.CanReverse);
+        Assert.True(available.CanCorrect);
+        Assert.True(available.CorrectionResumes);
+        Assert.False(available.CorrectionDraftExists);
+        Assert.Equal(string.Empty, available.Reason);
+    }
+
+    [Fact]
+    public async Task 訂正の下書きが残っている伝票は_訂正できないと答える()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        await server.AmendAsync(s => s.CorrectAsync(original));
+
+        var available = await server.AmendmentService.DescribeAsync(original);
+
+        Assert.False(available.CanCorrect);
+        Assert.False(available.CorrectionResumes);
+        // 画面はこれで「訂正の下書きがあります」と断る——「訂正する」が出ない理由を利用者に見せる。
+        Assert.True(available.CorrectionDraftExists);
+        Assert.Equal("この伝票は既に取り消されています。", available.Reason);
+    }
+
+    [Fact]
+    public async Task 取り消されていない伝票は_やり直しではない()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+
+        var available = await server.AmendmentService.DescribeAsync(original);
+
+        Assert.True(available.CanCorrect);
+        Assert.False(available.CorrectionResumes);
+        Assert.False(available.CorrectionDraftExists);
+    }
+
     [Fact]
     public async Task 再計上には原仕訳の内容がそのまま写る()
     {
@@ -562,20 +687,20 @@ public class JournalAmendmentServiceTests
     }
 
     [Fact]
-    public async Task 訂正できないときは取消も残らない()
+    public async Task 訂正できないときは取消も下書きも増えない()
     {
-        // **1 操作である以上、途中の状態を残さない。** 取消だけが計上されて
-        // 「訂正しようとしたのに取り消されただけ」になるのが最悪である。
+        // **1 操作である以上、途中の状態を残さない。** 断られたのに取消や下書きが増えているのが最悪である。
+        // 取り消しただけの伝票は訂正のやり直しになる（ADR-0052）ので、断られる検体は「下書きが残っている」伝票にする。
         using var server = new AccountingServer();
         var original = Original(server);
-        await server.AmendAsync(s => s.ReverseAsync(original));
+        await server.AmendAsync(s => s.CorrectAsync(original));
 
         var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
             () => server.AmendAsync(s => s.CorrectAsync(original)));
 
-        Assert.Contains(JournalViolationCodes.AlreadyReversed, error.Violations.Select(v => v.Code));
+        Assert.Contains(JournalViolationCodes.CorrectionDraftExists, error.Violations.Select(v => v.Code));
         Assert.Equal(1L, server.CountAmendments(original, "reversal"));
-        Assert.Equal(0L, server.CountAmendments(original, "correction", status: "draft"));
+        Assert.Equal(1L, server.CountAmendments(original, "correction", status: "draft"));
     }
 
     [Fact]
@@ -702,7 +827,8 @@ public class JournalAmendmentServiceTests
     {
         using var server = new AccountingServer();
         var original = Original(server);
-        await server.AmendAsync(s => s.ReverseAsync(original));
+        // 取り消しただけならやり直せる（ADR-0052）ので、断られる検体は下書きが残っている伝票にする。
+        await server.AmendAsync(s => s.CorrectAsync(original));
 
         var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
             () => server.AmendAsync(s => s.CorrectAsync(original)));

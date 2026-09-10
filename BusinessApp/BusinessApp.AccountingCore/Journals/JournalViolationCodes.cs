@@ -198,6 +198,12 @@ public static class JournalViolationCodes
     /// <summary>再計上の計上日が、原仕訳を取り消した日より前になっている。</summary>
     public const string CorrectionBeforeReversal = "E-CORRECTION-BEFORE-REVERSAL";
 
+    /// <summary>
+    /// 訂正をやり直そうとしたが、同じ原仕訳の再計上の下書きがまだある（ADR-0052）。
+    /// 下書きが 2 本並ぶと、利用者はどちらを直せばよいか分からない。
+    /// </summary>
+    public const string CorrectionDraftExists = "E-CORRECTION-DRAFT-EXISTS";
+
     /// <summary>まだ実装していない種別の仕訳を計上しようとした。</summary>
     public const string EntryTypeNotSupported = "E-ENTRY-TYPE";
 

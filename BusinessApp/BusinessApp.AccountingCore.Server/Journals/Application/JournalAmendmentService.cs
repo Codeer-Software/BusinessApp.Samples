@@ -97,10 +97,21 @@ public sealed class JournalAmendmentService(
         // 属性は置かず、会計コアの名前の属性を読む（ADR-0049 の決定 6）。
         // **ここで返さないと、画面は押せるボタンを出して必ず断られる**（docs/21 §1。
         // 2026-09-09 の自己レビュー）。
+        // **取り消されているのに訂正が残っていない伝票は、訂正をやり直せる**（ADR-0052）——
+        // 「訂正する」を押すと、取消は作らずに再計上の下書きだけを起こす。
+        // **下書きが残っていることも返す。** 取消済みの伝票で「訂正する」が出るか出ないかは
+        // 下書きの有無で決まるので、画面が「下書きを開いて直す」と案内できるようにする（21 §1「制限は押す前に見せる」）。
+        CorrectionResumeContext? resumeContext = reversedOn is null
+            ? null
+            : await ResumeContextAsync(original.Id!.Value, period.FiscalYearId);
+        var resumes = resumeContext is CorrectionResumeContext resumable
+            && JournalCorrection.Resume(original, today, timeProvider.GetUtcNow(), resumable).Resumed;
+
         return new AmendmentAvailability(
-            reversal.Created, reversal.Created, Describe(reversal),
+            reversal.Created, reversal.Created || resumes, resumes ? string.Empty : Describe(reversal),
             amendments.ReversalEntryNo, amendments.CorrectionEntryNo,
-            original.EntryType.IsAmendable());
+            original.EntryType.IsAmendable(), resumes,
+            resumeContext?.HasCorrectionDraft ?? false);
     }
 
     /// <summary>できない理由。<b>できるときは空</b>にして、画面が出し分けなくてよいようにする。</summary>
@@ -142,6 +153,21 @@ public sealed class JournalAmendmentService(
     private async Task<AmendmentStarted> CorrectCoreAsync(JournalEntryId originalId)
     {
         var (original, context, today, now) = await PrepareAsync(originalId);
+
+        // **取消が済んでいるなら、やり直しである**（ADR-0052）。取消を作り直さず、再計上の下書きだけを起こす。
+        // 取消の識別子で分岐するので、「取り消されているのに識別子が無い」形は作れない。
+        if (await entryStore.FindReversalIdAsync(original.Id!.Value) is JournalEntryId existingReversalId)
+        {
+            var period = TodayPeriod(context, today);
+            var resumed = JournalCorrection.Resume(
+                original, today, now, await ResumeContextAsync(original.Id!.Value, period.FiscalYearId));
+            if (resumed.Draft is not JournalEntry draft)
+            {
+                throw new JournalPostingRejectedException(resumed.Violations);
+            }
+
+            return new AmendmentStarted(existingReversalId, await entryStore.InsertDraftAsync(draft));
+        }
 
         var reversalContext = await ResolveReversalContextAsync(original, context, today);
         var result = JournalCorrection.Start(original, today, now, reversalContext);
@@ -252,6 +278,17 @@ public sealed class JournalAmendmentService(
                     $"今日（{today:yyyy/MM/dd}）に対応する会計期間がありません。"),
             ]);
 
+    /// <summary>
+    /// 訂正をやり直せるかを決める材料（再計上が計上済みか・下書きが残っているか）。
+    /// <b>取消が済んでいる伝票にだけ呼ぶ</b>——呼ぶ側が取消を引いてから来るので、ここでは引き直さない。
+    /// </summary>
+    private async Task<CorrectionResumeContext> ResumeContextAsync(JournalEntryId id, FiscalYearId fiscalYearId)
+        => new(
+            IsReversed: true,
+            await entryStore.HasCorrectionAsync(id),
+            await entryStore.HasCorrectionDraftAsync(id),
+            fiscalYearId);
+
     private async Task<ReversalContext> ResolveReversalContextAsync(
         JournalEntry original, AccountingMasters context, DateOnly today)
     {
@@ -281,9 +318,19 @@ public sealed class JournalAmendmentService(
 /// <param name="Reason">できない理由。できるときは空文字。</param>
 /// <param name="ReversalEntryNo">既に取り消されているなら、その取消伝票の伝票番号。</param>
 /// <param name="CorrectionEntryNo">既に訂正されているなら、その再計上の伝票番号。</param>
+/// <param name="CanDuplicate">複製できるか。</param>
+/// <param name="CorrectionResumes">
+/// 「訂正する」が<b>やり直し</b>になるか——取消は済んでいて、再計上の下書きだけを起こす（ADR-0052）。
+/// 画面が確認の文を出し分けるために返す。
+/// </param>
+/// <param name="CorrectionDraftExists">
+/// 訂正の下書き（未計上の再計上）が残っているか。取消済みの伝票で「訂正する」が出ない理由になるので、
+/// 画面が「その下書きを開いて直す」と案内するために返す（ADR-0052）。
+/// </param>
 public readonly record struct AmendmentAvailability(
     bool CanReverse, bool CanCorrect, string Reason,
-    int? ReversalEntryNo = null, int? CorrectionEntryNo = null, bool CanDuplicate = false)
+    int? ReversalEntryNo = null, int? CorrectionEntryNo = null, bool CanDuplicate = false,
+    bool CorrectionResumes = false, bool CorrectionDraftExists = false)
 {
     /// <summary>
     /// どちらもできない。<b>取消・訂正の番号は、分かっているなら落とさずに返す。</b>

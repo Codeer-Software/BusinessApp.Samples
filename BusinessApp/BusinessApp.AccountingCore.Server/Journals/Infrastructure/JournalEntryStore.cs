@@ -255,17 +255,37 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
     }
 
     /// <summary>この原仕訳を訂正する計上済みの再計上が既にあるか（二重訂正の検出）。</summary>
-    public async Task<bool> HasCorrectionAsync(JournalEntryId originalId)
+    public Task<bool> HasCorrectionAsync(JournalEntryId originalId) => HasCorrectionAsync(originalId, "posted");
+
+    /// <summary>この原仕訳を訂正する再計上の<b>下書き</b>がまだあるか（訂正のやり直しの検出。ADR-0052）。</summary>
+    public Task<bool> HasCorrectionDraftAsync(JournalEntryId originalId) => HasCorrectionAsync(originalId, "draft");
+
+    private async Task<bool> HasCorrectionAsync(JournalEntryId originalId, string status)
+    {
+        var rows = await dbAccessor.QueryAsync(
+            dataSourceName,
+            """
+            select 1 from journal_entries
+             where original_entry_id = @p1 and entry_type = 'correction' and status = @p2
+             limit 1
+            """,
+            new() { { "@p1", Param(originalId.Value) }, { "@p2", Param(status) } });
+
+        return rows.Count > 0;
+    }
+
+    /// <summary>この原仕訳を取り消した計上済みの反対仕訳の識別子。無ければ null。</summary>
+    /// <remarks>訂正のやり直し（ADR-0052）が「取消は済んでいる」ことを識別子で返すために使う。</remarks>
+    public async Task<JournalEntryId?> FindReversalIdAsync(JournalEntryId originalId)
     {
         var rows = await QueryAsync(
             """
-            select 1 from journal_entries
-             where original_entry_id = @p1 and entry_type = 'correction' and status = 'posted'
-             limit 1
+            select id from journal_entries
+             where original_entry_id = @p1 and entry_type = 'reversal' and status = 'posted'
             """,
             originalId.Value);
 
-        return rows.Count > 0;
+        return rows.Count == 0 ? null : new JournalEntryId(DbValue.ToLong(rows[0]["id"]));
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 namespace BusinessApp.AccountingCore.Journals;
 
+using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
@@ -44,10 +45,73 @@ public static class JournalCorrection
             return new CorrectionStartResult(reversed.Violations);
         }
 
-        var correction = new JournalEntry
+        return new CorrectionStartResult(
+            reversed.Violations,
+            new CorrectionDrafts(reversed.Reversal!, Draft(original, postingDate, enteredAt, context.FiscalYearId)));
+    }
+
+    /// <summary>
+    /// 訂正をやり直す。<b>取消が済んでいる原仕訳に、再計上の下書きだけを起こす</b>（ADR-0052）。
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="Start"/> は取消と再計上を組で返し、取消を伴わない再計上を作れない形にしてある。
+    /// ここはその唯一の例外で、<b>取消が既に帳簿にあるとき</b>だけ再計上を単独で起こす——
+    /// 訂正の下書きを消してしまった利用者の受け皿である（ADR-0048 の帰結）。取消が無ければ違反で返す。</para>
+    /// <para>再計上が既にあれば起こさない。計上済みなら 2 本目は計上の関門（<see cref="ValidateForPosting"/>）も止めるが、
+    /// 下書きの段階で 2 本並ぶと利用者がどちらを直せばよいか分からなくなる。</para>
+    /// </remarks>
+    /// <param name="original">訂正をやり直す原仕訳。計上済みで、取り消されていなければならない。</param>
+    /// <param name="postingDate">再計上の計上日。やり直すと決めた日。</param>
+    /// <param name="enteredAt">入力年月日。システムが決める（docs/10 §2）。</param>
+    /// <param name="context">取消・訂正の状況。呼び出し側が調べて渡す。</param>
+    public static CorrectionResumeResult Resume(
+        JournalEntry original,
+        DateOnly postingDate,
+        DateTimeOffset enteredAt,
+        CorrectionResumeContext context)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+
+        var violations = new List<Violation>(
+            AmendmentRules.ValidateOriginal(original, postingDate, AmendmentKind.Correction));
+
+        // **取消が無いのに再計上だけを起こすと、取引が帳簿に二重に載る。** 取り消されていないなら Start の道である。
+        if (!context.IsReversed)
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.OriginalNotReversed,
+                "元の伝票はまだ取り消されていません。訂正は取消と再計上の組で行います。"));
+        }
+
+        if (context.IsAlreadyCorrected)
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.AlreadyCorrected,
+                "この伝票は既に訂正されています。やり直すときは、その訂正の伝票を訂正してください。"));
+        }
+
+        if (context.HasCorrectionDraft)
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.CorrectionDraftExists,
+                "この伝票の訂正の下書きは既にあります。振替伝票の一覧から、その下書きを開いて直してください。"));
+        }
+
+        if (violations.HasError())
+        {
+            return new CorrectionResumeResult(violations);
+        }
+
+        return new CorrectionResumeResult(violations, Draft(original, postingDate, enteredAt, context.FiscalYearId));
+    }
+
+    /// <summary>原仕訳を写した再計上の下書き。<see cref="Start"/> と <see cref="Resume"/> の両方がこれを使う。</summary>
+    private static JournalEntry Draft(
+        JournalEntry original, DateOnly postingDate, DateTimeOffset enteredAt, FiscalYearId fiscalYearId)
+        => new()
         {
             // 取消と同じく、**計上日の属する会計年度**であって原仕訳の年度ではない。
-            FiscalYearId = context.FiscalYearId,
+            FiscalYearId = fiscalYearId,
             // 取引日は原仕訳と同じで始める。**ただし利用者が直せる**——
             // 「取引日を打ち間違えた」こと自体が訂正の理由になりうるからである。
             TransactionDate = original.TransactionDate,
@@ -66,10 +130,6 @@ public static class JournalCorrection
             SourceComponent = original.SourceComponent,
             SourceDocumentId = original.SourceDocumentId,
         };
-
-        return new CorrectionStartResult(
-            reversed.Violations, new CorrectionDrafts(reversed.Reversal!, correction));
-    }
 
     /// <summary>
     /// 再計上を計上してよいかを検査する。<b>中身は見ない</b>（中身は利用者が決めるもので、
@@ -147,6 +207,26 @@ public sealed record CorrectionStartResult(
     CorrectionDrafts? Drafts = null)
 {
     public bool Started => Drafts is not null;
+}
+
+/// <summary>
+/// 訂正をやり直せるかを決めるために、伝票 1 本の外から持ってくる情報（ADR-0052）。
+/// </summary>
+/// <param name="IsReversed">原仕訳を取り消す計上済みの反対仕訳があるか。<b>無ければやり直せない</b>（Start の道）。</param>
+/// <param name="IsAlreadyCorrected">計上済みの再計上が既にあるか。</param>
+/// <param name="HasCorrectionDraft">再計上の下書きがまだあるか。</param>
+/// <param name="FiscalYearId">再計上の計上日の属する会計年度。</param>
+public readonly record struct CorrectionResumeContext(
+    bool IsReversed, bool IsAlreadyCorrected, bool HasCorrectionDraft, FiscalYearId FiscalYearId);
+
+/// <summary>訂正をやり直した結果。始められたかは <see cref="Draft"/> で見る（<see cref="CorrectionStartResult"/> と同じ作法）。</summary>
+/// <param name="Violations">見つかった違反（警告を含む）。</param>
+/// <param name="Draft">できた再計上の下書き。始められなかったときは null。</param>
+public sealed record CorrectionResumeResult(
+    IReadOnlyList<Violation> Violations,
+    JournalEntry? Draft = null)
+{
+    public bool Resumed => Draft is not null;
 }
 
 /// <summary>
