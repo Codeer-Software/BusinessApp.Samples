@@ -123,7 +123,7 @@ public class JournalAmendmentServiceTests
 
         // **何と言うかを表明する**（qa/03 L-17。見出しと本文が同じことを 2 回言っていないことも見る）。
         Assert.Equal(
-            "複製できません。①種別が「決算振替」の伝票は対象にできません。"
+            "複製できません。種別が「決算振替」の伝票は対象にできません。"
             + "対象にできるのは通常の伝票と訂正だけです。",
             thrown.Message);
     }
@@ -147,7 +147,7 @@ public class JournalAmendmentServiceTests
             () => server.AmendAsync(s => s.DuplicateAsync(reversalId)));
 
         Assert.Equal(
-            "複製できません。①種別が「取消」の伝票は対象にできません。"
+            "複製できません。種別が「取消」の伝票は対象にできません。"
             + "対象にできるのは通常の伝票と訂正だけです。",
             thrown.Message);
         Assert.Equal(before, server.Scalar<long>("select count(*) from journal_entries"));

@@ -34,8 +34,8 @@ public class JournalPostingRejectedExceptionTests
     {
         var error = new JournalPostingRejectedException([new Violation("I-01", "貸借が合っていない。")]);
 
-        // 1 件のときに「（1 件）」と見せても読み手の役に立たない。番号だけ付ける。
-        Assert.Equal("計上できません。①貸借が合っていない。", error.Message);
+        // 1 件のときは件数も番号も付けない（21 §2。開発者の決定 2026-09-10。qa/02 R69-31）。
+        Assert.Equal("計上できません。貸借が合っていない。", error.Message);
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public class JournalPostingRejectedExceptionTests
             [new Violation("E-LINE-REQUIRED", "勘定科目を選んでください。", LineNo: 1)],
             JournalPostingRejectedException.SavingHeadline);
 
-        Assert.Equal("保存できません。①1 行目: 勘定科目を選んでください。", error.Message);
+        Assert.Equal("保存できません。1 行目: 勘定科目を選んでください。", error.Message);
     }
 
     [Fact]
