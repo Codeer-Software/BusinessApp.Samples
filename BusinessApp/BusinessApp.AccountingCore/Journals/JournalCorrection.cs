@@ -22,9 +22,10 @@ public static class JournalCorrection
     /// </summary>
     /// <remarks>
     /// <para>2 つに分けない理由。再計上の下書きは「原仕訳が取り消された」ことを前提にしており、
-    /// <b>取消を作らずに再計上だけを作れる API があると、取引が帳簿に二重に載る</b>。
-    /// 呼び出し側の順番に頼らず、<b>片方だけ手に入らない形</b>にしてある
-    /// （サーバ側の関門の入口を 1 本にしたのと同じ理由）。</para>
+    /// <b>取消が帳簿に無いのに再計上だけを作れる API があると、取引が帳簿に二重に載る</b>。
+    /// 呼び出し側の順番に頼らず、<b>取消が帳簿に無いときは片方だけ手に入らない形</b>にしてある
+    /// （サーバ側の関門の入口を 1 本にしたのと同じ理由）。
+    /// 取消が既に帳簿にあるときの単独の再計上は <see cref="Resume"/>（ADR-0015 決定 4・ADR-0052）。</para>
     /// <para>取消できるかどうかの判定は <see cref="JournalReversal"/> がそのまま持つ。
     /// 訂正だけの追加規則は無い——訂正できる相手は、取り消せる相手と同じである。</para>
     /// </remarks>
@@ -54,9 +55,10 @@ public static class JournalCorrection
     /// 訂正をやり直す。<b>取消が済んでいる原仕訳に、再計上の下書きだけを起こす</b>（ADR-0052）。
     /// </summary>
     /// <remarks>
-    /// <para><see cref="Start"/> は取消と再計上を組で返し、取消を伴わない再計上を作れない形にしてある。
-    /// ここはその唯一の例外で、<b>取消が既に帳簿にあるとき</b>だけ再計上を単独で起こす——
-    /// 訂正の下書きを消してしまった利用者の受け皿である（ADR-0048 の帰結）。取消が無ければ違反で返す。</para>
+    /// <para><see cref="Start"/> は取消と再計上を組で返し、取消が帳簿に無いのに再計上を作れない形にしてある。
+    /// ここは<b>取消が既に帳簿にあるとき</b>だけ再計上を単独で起こす——ADR-0015 決定 4（誤って取り消したときの復旧は
+    /// correction を単独で計上する）の道であり、訂正の下書きを消してしまった利用者の受け皿でもある（ADR-0048 の帰結）。
+    /// 取消が無ければ違反で返す。取消より前の日に再計上を起こすことも <see cref="ValidateForPosting"/> と同じ規則で断る。</para>
     /// <para>再計上が既にあれば起こさない。計上済みなら 2 本目は計上の関門（<see cref="ValidateForPosting"/>）も止めるが、
     /// 下書きの段階で 2 本並ぶと利用者がどちらを直せばよいか分からなくなる。</para>
     /// </remarks>
@@ -76,12 +78,8 @@ public static class JournalCorrection
             AmendmentRules.ValidateOriginal(original, postingDate, AmendmentKind.Correction));
 
         // **取消が無いのに再計上だけを起こすと、取引が帳簿に二重に載る。** 取り消されていないなら Start の道である。
-        if (!context.IsReversed)
-        {
-            violations.Add(new Violation(
-                JournalViolationCodes.OriginalNotReversed,
-                "元の伝票はまだ取り消されていません。訂正は取消と再計上の組で行います。"));
-        }
+        // 計上の関門と同じ規則で見る——ここで通して計上で断る形にすると、押せるのに必ず断られるボタンになる（docs/21 §1）。
+        violations.AddRange(ReversalOrder(postingDate, context.ReversedOn));
 
         if (context.IsAlreadyCorrected)
         {
@@ -94,7 +92,7 @@ public static class JournalCorrection
         {
             violations.Add(new Violation(
                 JournalViolationCodes.CorrectionDraftExists,
-                "この伝票の訂正の下書きは既にあります。振替伝票の一覧から、その下書きを開いて直してください。"));
+                "この伝票には訂正の下書きが既にあります。振替伝票の一覧から、その下書きを開いて直してください。"));
         }
 
         if (violations.HasError())
@@ -150,19 +148,7 @@ public static class JournalCorrection
         // **ここが訂正の要である。** 原仕訳が生きたまま再計上を足すと、
         // 帳簿には「原仕訳」と「直した内容」の両方が載り、取引が二重に計上される。
         // 取消を先に立てることを、規約ではなく検証で強制する（ADR-0004）。
-        if (context.ReversedOn is not DateOnly reversedOn)
-        {
-            violations.Add(new Violation(
-                JournalViolationCodes.OriginalNotReversed,
-                "元の伝票がまだ取り消されていません。訂正は取消と再計上の組で行います。"));
-        }
-        else if (correction.PostingDate < reversedOn)
-        {
-            // 取消より前に再計上が載ると、その間の期間だけ二重計上になる。
-            violations.Add(new Violation(
-                JournalViolationCodes.CorrectionBeforeReversal,
-                $"訂正の計上日（{correction.PostingDate:yyyy/MM/dd}）が、元の伝票を取り消した日（{reversedOn:yyyy/MM/dd}）より前になっています。"));
-        }
+        violations.AddRange(ReversalOrder(correction.PostingDate, context.ReversedOn));
 
         // 再計上が 2 本載れば、直した内容がそのまま二重になる。
         // やり直したいなら、その再計上を訂正する（訂正は訂正できる）。
@@ -176,6 +162,28 @@ public static class JournalCorrection
         return violations;
     }
 
+    /// <summary>
+    /// 再計上と取消の順序の規則。<b>やり直し（<see cref="Resume"/>）と計上（<see cref="ValidateForPosting"/>）で同じもの</b>を見る。
+    /// </summary>
+    /// <remarks>
+    /// 取消が無ければ再計上は載せられない。取消より前の日に再計上が載ると、その間の期間だけ二重計上になる。
+    /// 「取り消されたか」と「いつか」は <paramref name="reversedOn"/> の 1 値で受ける（<see cref="CorrectionContext"/> の注記）。
+    /// </remarks>
+    private static IEnumerable<Violation> ReversalOrder(DateOnly postingDate, DateOnly? reversedOn)
+    {
+        if (reversedOn is not DateOnly reversed)
+        {
+            yield return new Violation(
+                JournalViolationCodes.OriginalNotReversed,
+                "元の伝票がまだ取り消されていません。訂正は取消と再計上の組で行います。");
+        }
+        else if (postingDate < reversed)
+        {
+            yield return new Violation(
+                JournalViolationCodes.CorrectionBeforeReversal,
+                $"訂正の計上日（{postingDate:yyyy/MM/dd}）が、元の伝票を取り消した日（{reversed:yyyy/MM/dd}）より前になっています。");
+        }
+    }
 }
 
 /// <summary>
@@ -212,12 +220,15 @@ public sealed record CorrectionStartResult(
 /// <summary>
 /// 訂正をやり直せるかを決めるために、伝票 1 本の外から持ってくる情報（ADR-0052）。
 /// </summary>
-/// <param name="IsReversed">原仕訳を取り消す計上済みの反対仕訳があるか。<b>無ければやり直せない</b>（Start の道）。</param>
+/// <param name="ReversedOn">
+/// 原仕訳を取り消した反対仕訳の計上日。<b>まだ取り消されていなければ null</b>（やり直せない。Start の道）。
+/// <see cref="CorrectionContext"/> と同じく「取り消されたか」と「いつか」を 1 値で受ける。
+/// </param>
 /// <param name="IsAlreadyCorrected">計上済みの再計上が既にあるか。</param>
 /// <param name="HasCorrectionDraft">再計上の下書きがまだあるか。</param>
 /// <param name="FiscalYearId">再計上の計上日の属する会計年度。</param>
 public readonly record struct CorrectionResumeContext(
-    bool IsReversed, bool IsAlreadyCorrected, bool HasCorrectionDraft, FiscalYearId FiscalYearId);
+    DateOnly? ReversedOn, bool IsAlreadyCorrected, bool HasCorrectionDraft, FiscalYearId FiscalYearId);
 
 /// <summary>訂正をやり直した結果。始められたかは <see cref="Draft"/> で見る（<see cref="CorrectionStartResult"/> と同じ作法）。</summary>
 /// <param name="Violations">見つかった違反（警告を含む）。</param>

@@ -500,6 +500,26 @@ public class JournalAmendmentServiceTests
         Assert.False(available.CanReverse);
         Assert.Contains("会計期間がありません", available.Reason, StringComparison.Ordinal);
         Assert.Equal((await server.EntryStore.LoadAsync(reversalId)).EntryNo, available.ReversalEntryNo);
+        Assert.False(available.CorrectionDraftExists);
+    }
+
+    /// <summary>下書きが残っていることも、番号と同じ「先に引く事実」——期間が無くても画面の断りから消えない。</summary>
+    [Fact]
+    public async Task 会計期間が無くても訂正の下書きがあることは答える()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        await server.AmendAsync(s => s.CorrectAsync(original));
+        server.Execute("""
+            delete from accounting_periods
+            where date(start_date) <= '2026-08-24' and date(end_date) >= '2026-08-24'
+            """);
+
+        var available = await server.AmendmentService.DescribeAsync(original);
+
+        Assert.Contains("会計期間がありません", available.Reason, StringComparison.Ordinal);
+        Assert.True(available.CorrectionDraftExists);
+        Assert.False(available.CorrectionResumes);
     }
 
     // --- 訂正する ---
@@ -568,7 +588,7 @@ public class JournalAmendmentServiceTests
             () => server.AmendAsync(s => s.CorrectAsync(original)));
 
         Assert.Equal(
-            "訂正できません。この伝票の訂正の下書きは既にあります。振替伝票の一覧から、その下書きを開いて直してください。",
+            "訂正できません。この伝票には訂正の下書きが既にあります。振替伝票の一覧から、その下書きを開いて直してください。",
             thrown.Message);
         Assert.Equal(1, server.CountAmendments(original, "correction", "draft"));
         Assert.Equal(1, server.CountAmendments(original, "reversal"));
@@ -588,6 +608,44 @@ public class JournalAmendmentServiceTests
             () => server.AmendAsync(s => s.CorrectAsync(original)));
 
         Assert.Contains("既に訂正されています", thrown.Message, StringComparison.Ordinal);
+        // **断られたのに増えているのが最悪**——下書きも取消も増えない。
+        Assert.Equal(0, server.CountAmendments(original, "correction", "draft"));
+        Assert.Equal(1, server.CountAmendments(original, "correction"));
+        Assert.Equal(1, server.CountAmendments(original, "reversal"));
+    }
+
+    /// <summary>
+    /// <b>やり直した下書きは、そのまま計上できる</b>（「作れた」と「使える」は別。qa/03 L-20）。
+    /// 取消の<b>翌日</b>にやり直す——取消と同じ日だと、計上日と取消の日の境界が見えない（qa/03 L-02）。
+    /// </summary>
+    [Fact]
+    public async Task 取消の翌日にやり直した下書きは計上でき_計上すると訂正済みになる()
+    {
+        using var server = new AccountingServer();
+        server.StartEntryNumbersAt(101);
+        var original = Original(server);
+        var first = await server.AmendAsync(s => s.CorrectAsync(original));
+        await server.Deleting(first.CorrectionId)();
+
+        var nextDay = server.AmendmentServiceAt(AccountingServer.Now.AddDays(1));
+        var resumed = await DbTransactionScope.RunAsync(server.Accessor, () => nextDay.CorrectAsync(original));
+
+        // 下書きは翌日の計上日・その日の年度。取引日は原仕訳のまま。
+        var draft = await server.EntryStore.LoadAsync(resumed.CorrectionId);
+        Assert.Equal(new DateOnly(2026, 8, 25), draft.PostingDate);
+        Assert.Equal(new DateOnly(2026, 5, 20), draft.TransactionDate);
+        Assert.Equal(AccountingServer.FiscalYear, draft.FiscalYearId);
+
+        await PostAsync(server, resumed.CorrectionId);
+
+        var posted = await server.EntryStore.LoadAsync(resumed.CorrectionId);
+        Assert.Equal(EntryStatus.Posted, posted.Status);
+        var available = await server.AmendmentService.DescribeAsync(original);
+        Assert.False(available.CanCorrect);
+        Assert.False(available.CorrectionResumes);
+        Assert.False(available.CorrectionDraftExists);
+        Assert.Equal(posted.EntryNo, available.CorrectionEntryNo);
+        Assert.Equal("この伝票は既に訂正されています。やり直すときは、その訂正の伝票を訂正してください。", available.Reason);
     }
 
     /// <summary>「取り消しただけ」の伝票にも訂正のやり直しが効く——取消と、やり直しの区別は無い（ADR-0015）。</summary>
@@ -630,11 +688,15 @@ public class JournalAmendmentServiceTests
 
         var available = await server.AmendmentService.DescribeAsync(original);
 
+        Assert.False(available.CanReverse);
         Assert.False(available.CanCorrect);
         Assert.False(available.CorrectionResumes);
         // 画面はこれで「訂正の下書きがあります」と断る——「訂正する」が出ない理由を利用者に見せる。
         Assert.True(available.CorrectionDraftExists);
-        Assert.Equal("この伝票は既に取り消されています。", available.Reason);
+        // **理由も本当の理由**（「既に取り消されています」ではない。取り消されていることは訂正を断る理由ではなくなった）。
+        Assert.Equal(
+            "この伝票には訂正の下書きが既にあります。振替伝票の一覧から、その下書きを開いて直してください。",
+            available.Reason);
     }
 
     [Fact]

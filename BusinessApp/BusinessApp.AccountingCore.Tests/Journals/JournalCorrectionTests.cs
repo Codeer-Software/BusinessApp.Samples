@@ -410,9 +410,10 @@ public class JournalCorrectionTests
 
     // --- 訂正をやり直す（ADR-0052） ---
 
+    /// <summary>既定は「取消と同じ日にやり直す」（訂正の下書きを消してすぐ、が普通の姿）。</summary>
     private static CorrectionResumeContext ResumeContext(
-        bool reversed = true, bool alreadyCorrected = false, bool hasDraft = false)
-        => new(reversed, alreadyCorrected, hasDraft, AccountingFixture.FiscalYear);
+        bool reversed = true, bool alreadyCorrected = false, bool hasDraft = false, DateOnly? reversedOn = null)
+        => new(reversed ? reversedOn ?? CorrectedOn : null, alreadyCorrected, hasDraft, AccountingFixture.FiscalYear);
 
     /// <summary>
     /// <b>取消が済んでいれば、再計上の下書きだけを起こせる。</b> 訂正の下書きを消してしまった利用者の受け皿。
@@ -444,8 +445,35 @@ public class JournalCorrectionTests
 
         Assert.False(result.Resumed);
         Assert.Equal(
-            "元の伝票はまだ取り消されていません。訂正は取消と再計上の組で行います。",
+            "元の伝票がまだ取り消されていません。訂正は取消と再計上の組で行います。",
             Message(result.Violations, JournalViolationCodes.OriginalNotReversed));
+    }
+
+    /// <summary>
+    /// 取消より前の日に再計上を起こすと、その間だけ二重計上になる。**計上の関門と同じ規則**を押す前に見る
+    /// （ここで通して計上で断ると、押せるのに必ず断られるボタンになる。docs/21 §1）。
+    /// </summary>
+    [Fact]
+    public void 取消より前の日にはやり直せない()
+    {
+        var result = JournalCorrection.Resume(
+            Posted(), CorrectedOn, EnteredAt, ResumeContext(reversedOn: CorrectedOn.AddDays(1)));
+
+        Assert.False(result.Resumed);
+        Assert.Equal(
+            "訂正の計上日（2026/06/10）が、元の伝票を取り消した日（2026/06/11）より前になっています。",
+            Message(result.Violations, JournalViolationCodes.CorrectionBeforeReversal));
+    }
+
+    /// <summary>境界。取消の翌日にやり直すのが本番の姿（取消と同じ日は既定の検体が見ている）。</summary>
+    [Fact]
+    public void 取消の翌日にはやり直せる()
+    {
+        var result = JournalCorrection.Resume(
+            Posted(), CorrectedOn, EnteredAt, ResumeContext(reversedOn: CorrectedOn.AddDays(-1)));
+
+        Assert.True(result.Resumed);
+        Assert.Equal(CorrectedOn, result.Draft!.PostingDate);
     }
 
     [Fact]
@@ -455,7 +483,7 @@ public class JournalCorrectionTests
 
         Assert.False(result.Resumed);
         Assert.Equal(
-            "この伝票の訂正の下書きは既にあります。振替伝票の一覧から、その下書きを開いて直してください。",
+            "この伝票には訂正の下書きが既にあります。振替伝票の一覧から、その下書きを開いて直してください。",
             Message(result.Violations, JournalViolationCodes.CorrectionDraftExists));
     }
 

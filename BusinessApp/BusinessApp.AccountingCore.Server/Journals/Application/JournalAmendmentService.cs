@@ -72,53 +72,59 @@ public sealed class JournalAmendmentService(
         // **「できない」で早く返る経路でも詰める**——一覧の逆引きはカレンダーと無関係に出続けるので、
         // ここで落とすと**一覧には「取り消されています」と出るのに詳細では消える**。
         // 会計期間をまだ作っていない年度で現実に起きる（2026-08-31 の自己レビュー）。
-        var amendments = await entryStore.FindAmendmentEntryNosAsync(original.Id!.Value);
+        var id = original.Id!.Value;
+        var reversal = await entryStore.FindReversalAsync(id);
+        var correctionEntryNo = await entryStore.FindCorrectionEntryNoAsync(id);
+        // 下書きは取消の後にしか作れない（Start も Resume も取消を前提にする）ので、取消が無ければ引かない。
+        var hasCorrectionDraft = reversal is not null && await entryStore.HasCorrectionDraftAsync(id);
+        var amendments = new AmendmentEntryNumbers(reversal?.EntryNo, correctionEntryNo);
 
         var context = await masterLoader.LoadAsync();
-        var today = DateOnly.FromDateTime(DatabaseTimeZone.ToWallClock(timeProvider.GetUtcNow()));
+        var now = timeProvider.GetUtcNow();
+        var today = DateOnly.FromDateTime(DatabaseTimeZone.ToWallClock(now));
 
         if (context.Calendar.ResolvePeriod(today) is not AccountingPeriod period)
         {
             return AmendmentAvailability.None(
-                $"今日（{today:yyyy/MM/dd}）に対応する会計期間がありません。", amendments);
+                $"今日（{today:yyyy/MM/dd}）に対応する会計期間がありません。", amendments, hasCorrectionDraft);
         }
 
-        var reversedOn = await entryStore.FindReversedOnAsync(original.Id!.Value);
-        var reversal = JournalReversal.Reverse(
-            original, today, timeProvider.GetUtcNow(),
-            new ReversalContext(reversedOn is not null, period.FiscalYearId));
-
-        // **訂正は「取消 ＋ 再計上」なので、取り消せる伝票と訂正できる伝票は今のところ同じである。**
-        // 「既に訂正されている」を別に見る必要は無い——訂正があるなら必ず取消もあるので、
-        // 取消の判定（既に取り消されている）で先に落ちる。
-        // 2 つの値に分けてあるのは、片方だけできる状態が将来生まれうるからである。
         // **複製は原仕訳の状態を見ない**（ADR-0048 の決定 6）ので、種別だけで決まる。
         // **元にできる種別は、取消・訂正の対象にできる種別と同じ**——ドメインに「複製できるか」という
         // 属性は置かず、会計コアの名前の属性を読む（ADR-0049 の決定 6）。
-        // **ここで返さないと、画面は押せるボタンを出して必ず断られる**（docs/21 §1。
-        // 2026-09-09 の自己レビュー）。
-        // **取り消されているのに訂正が残っていない伝票は、訂正をやり直せる**（ADR-0052）——
-        // 「訂正する」を押すと、取消は作らずに再計上の下書きだけを起こす。
-        // **下書きが残っていることも返す。** 取消済みの伝票で「訂正する」が出るか出ないかは
-        // 下書きの有無で決まるので、画面が「下書きを開いて直す」と案内できるようにする（21 §1「制限は押す前に見せる」）。
-        CorrectionResumeContext? resumeContext = reversedOn is null
-            ? null
-            : await ResumeContextAsync(original.Id!.Value, period.FiscalYearId);
-        var resumes = resumeContext is CorrectionResumeContext resumable
-            && JournalCorrection.Resume(original, today, timeProvider.GetUtcNow(), resumable).Resumed;
+        var canDuplicate = original.EntryType.IsAmendable();
+
+        // **取り消されていない伝票では、取り消せる伝票と訂正できる伝票は同じである**（訂正は「取消 ＋ 再計上」）。
+        // **ここで返さないと、画面は押せるボタンを出して必ず断られる**（docs/21 §1。2026-09-09 の自己レビュー）。
+        if (reversal is not PostedReversal posted)
+        {
+            var reversible = JournalReversal.Reverse(
+                original, today, now, new ReversalContext(IsAlreadyReversed: false, period.FiscalYearId));
+
+            return new AmendmentAvailability(
+                reversible.Created, reversible.Created, Describe(reversible.Violations),
+                amendments.ReversalEntryNo, amendments.CorrectionEntryNo, canDuplicate);
+        }
+
+        // **取り消されている伝票では、取消はできず、訂正はやり直しになる**（ADR-0052）——
+        // 「訂正する」を押すと、取消は作らずに再計上の下書きだけを起こす。できない理由もやり直しの規則のもの
+        // （計上済みの再計上がある・下書きが残っている）で、「既に取り消されています」ではない。
+        // 「取り消されているか」の判断はここで済んでいるので、ドメインには取消の計上日をそのまま渡す。
+        var resume = JournalCorrection.Resume(
+            original, today, now,
+            new CorrectionResumeContext(posted.PostedOn, correctionEntryNo is not null, hasCorrectionDraft, period.FiscalYearId));
 
         return new AmendmentAvailability(
-            reversal.Created, reversal.Created || resumes, resumes ? string.Empty : Describe(reversal),
-            amendments.ReversalEntryNo, amendments.CorrectionEntryNo,
-            original.EntryType.IsAmendable(), resumes,
-            resumeContext?.HasCorrectionDraft ?? false);
+            false, resume.Resumed, Describe(resume.Violations),
+            amendments.ReversalEntryNo, amendments.CorrectionEntryNo, canDuplicate,
+            CorrectionResumes: resume.Resumed, CorrectionDraftExists: hasCorrectionDraft);
     }
 
     /// <summary>できない理由。<b>できるときは空</b>にして、画面が出し分けなくてよいようにする。</summary>
-    private static string Describe(ReversalResult reversal)
+    private static string Describe(IReadOnlyList<Violation> violations)
         => string.Join(
             string.Empty,
-            reversal.Violations.Where(v => v.Severity == ViolationSeverity.Error).Select(v => v.Message));
+            violations.Where(v => v.Severity == ViolationSeverity.Error).Select(v => v.Message));
 
     /// <summary>
     /// 原仕訳を取り消す。反対仕訳を作って<b>計上まで進める</b>。
@@ -155,18 +161,19 @@ public sealed class JournalAmendmentService(
         var (original, context, today, now) = await PrepareAsync(originalId);
 
         // **取消が済んでいるなら、やり直しである**（ADR-0052）。取消を作り直さず、再計上の下書きだけを起こす。
-        // 取消の識別子で分岐するので、「取り消されているのに識別子が無い」形は作れない。
-        if (await entryStore.FindReversalIdAsync(original.Id!.Value) is JournalEntryId existingReversalId)
+        // 取消の行そのもの（識別子・計上日）で分岐するので、「取り消されているのに識別子が無い」形は作れない。
+        // **可否（DescribeAsync）と同じ読み・同じ規則**——押せたのに断られる形を作らない。
+        if (await entryStore.FindReversalAsync(original.Id!.Value) is PostedReversal reversal)
         {
             var period = TodayPeriod(context, today);
             var resumed = JournalCorrection.Resume(
-                original, today, now, await ResumeContextAsync(original.Id!.Value, period.FiscalYearId));
+                original, today, now, await ResumeContextAsync(original.Id!.Value, reversal, period.FiscalYearId));
             if (resumed.Draft is not JournalEntry draft)
             {
                 throw new JournalPostingRejectedException(resumed.Violations);
             }
 
-            return new AmendmentStarted(existingReversalId, await entryStore.InsertDraftAsync(draft));
+            return new AmendmentStarted(reversal.Id, await entryStore.InsertDraftAsync(draft));
         }
 
         var reversalContext = await ResolveReversalContextAsync(original, context, today);
@@ -279,12 +286,12 @@ public sealed class JournalAmendmentService(
             ]);
 
     /// <summary>
-    /// 訂正をやり直せるかを決める材料（再計上が計上済みか・下書きが残っているか）。
-    /// <b>取消が済んでいる伝票にだけ呼ぶ</b>——呼ぶ側が取消を引いてから来るので、ここでは引き直さない。
+    /// 訂正をやり直せるかを決める材料。取消は呼ぶ側が読んだ行をそのまま渡し、再計上（計上済み・下書き）をここで引く。
     /// </summary>
-    private async Task<CorrectionResumeContext> ResumeContextAsync(JournalEntryId id, FiscalYearId fiscalYearId)
+    private async Task<CorrectionResumeContext> ResumeContextAsync(
+        JournalEntryId id, PostedReversal reversal, FiscalYearId fiscalYearId)
         => new(
-            IsReversed: true,
+            reversal.PostedOn,
             await entryStore.HasCorrectionAsync(id),
             await entryStore.HasCorrectionDraftAsync(id),
             fiscalYearId);
@@ -318,7 +325,6 @@ public sealed class JournalAmendmentService(
 /// <param name="Reason">できない理由。できるときは空文字。</param>
 /// <param name="ReversalEntryNo">既に取り消されているなら、その取消伝票の伝票番号。</param>
 /// <param name="CorrectionEntryNo">既に訂正されているなら、その再計上の伝票番号。</param>
-/// <param name="CanDuplicate">複製できるか。</param>
 /// <param name="CorrectionResumes">
 /// 「訂正する」が<b>やり直し</b>になるか——取消は済んでいて、再計上の下書きだけを起こす（ADR-0052）。
 /// 画面が確認の文を出し分けるために返す。
@@ -333,15 +339,17 @@ public readonly record struct AmendmentAvailability(
     bool CorrectionResumes = false, bool CorrectionDraftExists = false)
 {
     /// <summary>
-    /// どちらもできない。<b>取消・訂正の番号は、分かっているなら落とさずに返す。</b>
+    /// どちらもできない。<b>取消・訂正の番号と、下書きが残っていることは、分かっているなら落とさずに返す。</b>
     /// </summary>
     /// <remarks>
     /// 「取り消せるか」と「取り消されているか」は別の問いである。前者が答えられなくても
     /// 後者は答えられることがあり、<b>落とすと一覧と詳細で見えるものが食い違う</b>（ADR-0027 §3）。
     /// 対象の伝票そのものが無いときだけ、引数を省いて既定（どちらも null）にする。
     /// </remarks>
-    public static AmendmentAvailability None(string reason, AmendmentEntryNumbers amendments = default)
-        => new(false, false, reason, amendments.ReversalEntryNo, amendments.CorrectionEntryNo);
+    public static AmendmentAvailability None(
+        string reason, AmendmentEntryNumbers amendments = default, bool correctionDraftExists = false)
+        => new(false, false, reason, amendments.ReversalEntryNo, amendments.CorrectionEntryNo,
+               CorrectionDraftExists: correctionDraftExists);
 }
 
 /// <summary>訂正を始めた結果。画面は再計上の下書きを開く。</summary>

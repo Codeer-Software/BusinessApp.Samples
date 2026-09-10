@@ -191,7 +191,7 @@ public class JournalAmendmentEndpointTests
     }
 
     [Fact]
-    public async Task 取り消し済みならできないと返す()
+    public async Task 取り消し済みなら取消はできず訂正はやり直しだと返す()
     {
         using var server = new AccountingServer();
         // **識別子と伝票番号をずらす**（既定ではどちらも 1 から並び、取り違えを検出できない）。
