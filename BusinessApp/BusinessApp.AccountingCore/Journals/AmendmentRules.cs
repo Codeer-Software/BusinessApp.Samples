@@ -19,7 +19,7 @@ public static class AmendmentRules
     /// <param name="original">対象の原仕訳。</param>
     /// <param name="postingDate">足す伝票の計上日。</param>
     /// <param name="kind">取消か訂正か。文言に使う。</param>
-    public static IEnumerable<Violation> ValidateOriginal(
+    internal static IEnumerable<Violation> ValidateOriginal(
         JournalEntry original, DateOnly postingDate, AmendmentKind kind)
     {
         // 下書きは帳簿ではないので、打ち消すのではなく消せばよい（docs/10 §5）。
@@ -54,10 +54,30 @@ public static class AmendmentRules
         // 繰越の再実行が噛み合わなくなる。
         if (!original.EntryType.IsAmendable())
         {
-            yield return new Violation(
-                JournalViolationCodes.AmendmentTargetNotAmendable,
-                $"種別が「{original.EntryType.DisplayName()}」の伝票は対象にできません。対象にできるのは通常の伝票と訂正だけです。");
+            yield return NotAmendableTarget(original.EntryType);
         }
+    }
+
+    /// <summary>
+    /// 取消・訂正の対象にできない種別を対象にしようとした、という断り。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>文はここにしか無い。</b> 対象にできる種別（<see cref="EntryTypeExtensions.IsAmendable"/>）を
+    /// 読む側は、断りもここから取る——写して 2 か所に置くと、種別を増やした日に片方だけ古くなる
+    /// （docs/20 §4）。</para>
+    /// <para><b>見出し（「取り消せません」等）はここに持たない</b>（docs/21 §2-6。<see cref="AmendmentKind"/> の注記）。</para>
+    /// </remarks>
+    /// <param name="type">対象にできない種別。対象にできる種別で呼ぶのは呼び手の誤りなので止める。</param>
+    public static Violation NotAmendableTarget(EntryType type)
+    {
+        if (type.IsAmendable())
+        {
+            throw new ArgumentException($"種別 {type} は対象にできるので、断りは要らない。", nameof(type));
+        }
+
+        return new Violation(
+            JournalViolationCodes.AmendmentTargetNotAmendable,
+            $"種別が「{type.DisplayName()}」の伝票は対象にできません。対象にできるのは通常の伝票と訂正だけです。");
     }
 
     /// <summary>
@@ -71,7 +91,7 @@ public static class AmendmentRules
     /// 履歴は <c>original_entry_id</c> で辿れる。<b>直前の接頭辞をすべて落として本文だけを引き継ぐ。</b></para>
     /// <para>伝票番号がある前提で書いてよい。無い伝票は <see cref="ValidateOriginal"/> が先に止めている。</para>
     /// </remarks>
-    public static string Describe(JournalEntry original, AmendmentKind kind)
+    internal static string Describe(JournalEntry original, AmendmentKind kind)
     {
         var body = Body(original);
 
@@ -85,8 +105,8 @@ public static class AmendmentRules
     /// </summary>
     /// <remarks>
     /// <para><b>ドメインが持つのは「自分の接頭辞を剥がす手段」まで</b>で、それを何に使うかは知らない
-    /// （訂正の摘要を作るときと、会計補助の複製が呼ぶ。ADR-0049 の決定 6——
-    /// 補助で使われるものでも、補助の名前ではなく会計コアの名前を持つ）。</para>
+    /// （訂正の摘要を作るときに呼ぶほか、アプリケーション層が本文だけを要るときにも呼ぶ。
+    /// ADR-0049 の決定 6——呼び手が誰でも、会計コアの名前を持つ）。</para>
     /// <para><b>剥がすのは、原仕訳が取消・訂正のときだけ。</b>
     /// 通常の仕訳の摘要は利用者が書いた文であって、たまたま同じ形をしていることがある
     /// （「伝票番号 12 の取消について」と書いた通常の仕訳など）。
@@ -94,7 +114,7 @@ public static class AmendmentRules
     /// <para><b>前後の空白を落とすのは種別によらない。</b> 通常の伝票だけ素通しにすると、
     /// 空白だけの摘要が<b>見た目は入っているのに計上のときだけ断られる</b>
     /// （10 §4-2-1 の二層は空白だけを空とみなす。2026-09-09 の自己レビュー）。</para>
-    /// <para><b>取消・訂正と複製が同じ 1 本を呼ぶ。</b> 写して 2 か所に置くと、
+    /// <para><b>剥がす手段はこの 1 本だけ。</b> 呼び手ごとに写して置くと、
     /// 剥がし方を直したときに片方だけ古くなる（qa/03 L-20 の型。同じ日の自己レビュー）。</para>
     /// </remarks>
     public static string Body(JournalEntry original)
@@ -144,7 +164,7 @@ public static class AmendmentRules
 /// <c>JournalPostingRejectedException</c> が押されたボタンから決める（2026-08-31。
 /// qa/02 R25-10）。両方が持つと「取り消せません。①…は取り消せません。」と 2 回言うことになる。
 /// </remarks>
-public readonly record struct AmendmentKind(string Noun)
+internal readonly record struct AmendmentKind(string Noun)
 {
     public static readonly AmendmentKind Reversal = new("取消");
 

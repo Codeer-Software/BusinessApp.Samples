@@ -129,17 +129,17 @@ public class JournalDuplicationTests
     /// <b>していない訂正を名乗る通常の伝票</b>ができる——摘要は帳簿の記載事項
     /// （法税規則 55 ① の「内容」）なので、<b>帳簿に嘘が残る</b>
     /// （2026-09-09 の実機確認で見つけた）。</para>
-    /// <para>剥がす規則そのものは会計コアの <c>AmendmentRules.Body</c> が持ち、
-    /// 複製はそれを借りるだけである（ADR-0049 の決定 6）。ここで見るのは「借りている」ことまで。</para>
+    /// <para>剥がす規則そのものは会計コアの <c>AmendmentRules.Body</c> が持ち（入れ子の剥がし方まで
+    /// そちらのテストが見る）、複製はそれを借りるだけである（ADR-0049 の決定 6）。
+    /// ここで見るのは「借りている」ことまで。</para>
     /// </remarks>
-    [Theory]
-    [InlineData("伝票番号 44 の訂正: 5 月分の現金売上", "5 月分の現金売上")]
-    [InlineData("伝票番号 5 の訂正: 伝票番号 3 の取消: 家賃", "家賃")]
-    public void 訂正の摘要は接頭辞を落として写す(string description, string expected)
+    [Fact]
+    public void 訂正の摘要は接頭辞を落として写す()
     {
-        var copy = Duplicate(Posted() with { EntryType = EntryType.Correction, Description = description });
+        var copy = Duplicate(
+            Posted() with { EntryType = EntryType.Correction, Description = "伝票番号 44 の訂正: 5 月分の現金売上" });
 
-        Assert.Equal(expected, copy.Description);
+        Assert.Equal("5 月分の現金売上", copy.Description);
     }
 
     /// <summary>
@@ -410,24 +410,21 @@ public class JournalDuplicationTests
     }
 
     /// <summary>
-    /// <b>断る文言は、取消・訂正が同じ種別を断るときの文言と一字も違わない。</b>
+    /// <b>断りは、取消・訂正が同じ種別を断るときのものを借りる。</b>
     /// </summary>
     /// <remarks>
     /// 集合が同じなのに文言が 2 通りあると、「対象にできない種別」を片方だけ直した日にずれる
-    /// （<c>AmendmentRules</c> と複製が同じ文を持っていたのを、2026-09-10 に片方へ寄せた）。
-    /// 違反コードも共有しているので、ここで文言も突き合わせておく。
+    /// （<c>AmendmentRules</c> と複製が同じ文を持っていたのを、2026-09-10 にドメインの 1 本へ寄せた）。
+    /// 上の Theory が全文を表明しているので、ここは「同じものを返している」ことだけを見る。
     /// </remarks>
     [Fact]
-    public void 断る文言は取消と訂正の文言と同じ()
+    public void 断りは取消と訂正のものを借りる()
     {
-        var original = Posted() with { EntryType = EntryType.Reversal };
-
-        var byDuplication = JournalDuplication.Duplicate(original, DuplicatedOn, EnteredAt, FiscalYear)
+        var byDuplication = JournalDuplication.Duplicate(
+                Posted() with { EntryType = EntryType.Reversal }, DuplicatedOn, EnteredAt, FiscalYear)
             .Violations.Single();
-        var byAmendment = AmendmentRules.ValidateOriginal(original, DuplicatedOn, AmendmentKind.Reversal)
-            .Single(v => v.Code == JournalViolationCodes.AmendmentTargetNotAmendable);
 
-        Assert.Equal(byAmendment.Message, byDuplication.Message);
+        Assert.Equal(AmendmentRules.NotAmendableTarget(EntryType.Reversal), byDuplication);
     }
 
     /// <summary>通常・訂正は複製できる（種別ごとの線を両側から見る）。</summary>
@@ -435,9 +432,7 @@ public class JournalDuplicationTests
     [InlineData(EntryType.Normal)]
     [InlineData(EntryType.Correction)]
     public void 通常と訂正は複製できる(EntryType entryType)
-        => Assert.True(
-            JournalDuplication.Duplicate(
-                Posted() with { EntryType = entryType }, DuplicatedOn, EnteredAt, FiscalYear).Created);
+        => Assert.NotNull(Duplicate(Posted() with { EntryType = entryType }));
 
     // --- 欄が増えた日に気づく ---------------------------------------------------
 

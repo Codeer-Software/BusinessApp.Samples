@@ -11,8 +11,8 @@ using BusinessApp.AccountingCore.Shared;
 /// <para><b>アプリケーション層に置く。</b> 写す欄の取捨選択はユーザビリティのためのもので、
 /// 会計コアのドメイン知識ではない（ADR-0049 の決定 5。ドメイン層に置きたくなったら、
 /// 本当に補助か再検討する）。ドメインから借りるのは、取消・訂正の対象にできる種別
-/// （<see cref="EntryTypeExtensions.IsAmendable"/>）と、自分が付けた接頭辞を落とした本文
-/// （<see cref="AmendmentRules.Body"/>）の 2 つだけである。</para>
+/// （<see cref="EntryTypeExtensions.IsAmendable"/>）とその断り（<see cref="AmendmentRules.NotAmendableTarget"/>）、
+/// 自分が付けた接頭辞を落とした本文（<see cref="AmendmentRules.Body"/>）だけである。</para>
 /// <para><b>複製は新しい記帳である。</b> 取消・訂正とは別の操作で、原仕訳の状態を何も見ない
 /// ——下書きからも計上済みからも、取消済み・訂正済みの<b>原仕訳</b>からも作れる。</para>
 /// <para><b>写すのは取引の内容だけで、出来事の記録は 1 つも写さない</b>（ADR-0048 の決定 1・2）。
@@ -44,16 +44,9 @@ public static class JournalDuplication
         // 取消伝票は貸借の反転した内容しか写せない（戻したいなら原仕訳を複製する）。
         if (!original.EntryType.IsAmendable())
         {
-            return new DuplicationResult(
-            [
-                new Violation(
-                    // **違反コードも文言も取消・訂正と同じ。** 集合が同じなので、別のコードを作ると
-                    // 「対象にできない種別」が 2 つの名前を持つ。**見出しが「複製できません」と言う**ので、
-                    // 文の側では繰り返さない（docs/21 §2-6）。
-                    JournalViolationCodes.AmendmentTargetNotAmendable,
-                    $"種別が「{original.EntryType.DisplayName()}」の伝票は対象にできません。"
-                    + "対象にできるのは通常の伝票と訂正だけです。"),
-            ]);
+            // **断りも取消・訂正のものを借りる。** 集合が同じなので、別のコードや文を作ると
+            // 「対象にできない種別」が 2 つの名前を持つ（見出し「複製できません」は差し戻しの側が付ける）。
+            return new DuplicationResult([AmendmentRules.NotAmendableTarget(original.EntryType)]);
         }
 
         var draft = new JournalEntry
@@ -66,12 +59,12 @@ public static class JournalDuplication
             PostingDate = postingDate,
             Status = EntryStatus.Draft,
 
-            // **訂正・取消を複製しても、できるのは通常の記帳である。**
+            // **訂正を複製しても、できるのは通常の記帳である。**
             // 種別を写すと、原仕訳を持たない訂正伝票ができて I-06 を破る。
             EntryType = EntryType.Normal,
 
-            // **取消・訂正の接頭辞は落とす**（ADR-0048 の決定 4）。写すと「伝票番号 44 の取消」と名乗る
-            // 通常の伝票ができ、**していない取消を帳簿に書く**ことになる。
+            // **訂正の接頭辞は落とす**（ADR-0048 の決定 4）。写すと「伝票番号 44 の訂正」と名乗る
+            // 通常の伝票ができ、**していない訂正を帳簿に書く**ことになる。
             // **本文が空なら NULL**——空文字を残すと空値検索が取りこぼす（docs/04 §1 の A-5）。
             // 計上には摘要が要るので、利用者はそこで何の取引かを書く（それが正しい）。
             Description = AmendmentRules.Body(original) is { Length: > 0 } body ? body : null,

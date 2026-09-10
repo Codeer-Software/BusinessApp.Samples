@@ -314,6 +314,11 @@ public class JournalAmendmentEndpointTests
         Assert.False(available.CanDuplicate);
         Assert.False(available.CanReverse);
         Assert.False(available.CanCorrect);
+
+        // **理由の全文を表明する**（qa/03 L-39 の処方）。画面はこれを合計の行に出す。
+        Assert.Equal(
+            "種別が「取消」の伝票は対象にできません。対象にできるのは通常の伝票と訂正だけです。",
+            available.Message);
     }
 
     /// <summary>
