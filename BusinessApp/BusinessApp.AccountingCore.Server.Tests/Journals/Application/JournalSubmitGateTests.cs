@@ -1446,11 +1446,11 @@ public class JournalSubmitGateTests
     private static async Task AssertUnreadable(AccountingServer server, ModuleSubmitData submitted, string field)
     {
         var saved = false;
-        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => server.SubmitAsync([submitted], () => { saved = true; return NothingSaved(); }));
+        var results = await server.Pipeline.SubmitAsResultAsync([submitted], () => { saved = true; return NothingSaved(); });
 
-        Assert.Equal(SaveFailureMessage.Text, thrown.Message);
-        Assert.DoesNotContain(field, thrown.Message, StringComparison.Ordinal);
+        var message = Assert.Single(results).ExceptionMessage;
+        Assert.Equal(SaveFailureMessage.Text, message);
+        Assert.DoesNotContain(field, message, StringComparison.Ordinal);
         Assert.Contains(field, Assert.Single(server.SaveFailureLog), StringComparison.Ordinal);
         Assert.False(saved);
     }

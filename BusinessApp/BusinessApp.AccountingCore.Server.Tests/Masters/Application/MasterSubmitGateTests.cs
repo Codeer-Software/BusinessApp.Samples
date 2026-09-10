@@ -791,12 +791,10 @@ public class MasterSubmitGateTests
         var data = New("Account", Text("Name", "検証"));
         data.Fields["Code"] = new NumberFieldData { Value = 1100 };
 
-        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => server.PipelineWithoutLog.SubmitAsync(
-                [Adding("Account", data)], () => Task.FromResult(new List<ModuleSubmitResult>())));
+        var results = await server.PipelineWithoutLog.SubmitAsResultAsync(
+            [Adding("Account", data)], () => Task.FromResult(new List<ModuleSubmitResult>()));
 
-        Assert.Equal(SaveFailureMessageText, thrown.Message);
-        Assert.Null(thrown.InnerException);
+        Assert.Equal([SaveFailureMessageText], results.Select(r => r.ExceptionMessage));
     }
 
     /// <summary>
@@ -811,17 +809,16 @@ public class MasterSubmitGateTests
         AccountingServer server, ModuleSubmitData submitted, string field, string typeName)
     {
         var called = false;
-        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => server.Pipeline.SubmitAsync([submitted], () =>
-            {
-                called = true;
-                return Task.FromResult(new List<ModuleSubmitResult>());
-            }));
+        var results = await server.Pipeline.SubmitAsResultAsync([submitted], () =>
+        {
+            called = true;
+            return Task.FromResult(new List<ModuleSubmitResult>());
+        });
 
-        Assert.Equal(SaveFailureMessageText, thrown.Message);
-        Assert.Null(thrown.InnerException);
-        Assert.DoesNotContain(field, thrown.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain(typeName, thrown.Message, StringComparison.Ordinal);
+        var message = Assert.Single(results).ExceptionMessage;
+        Assert.Equal(SaveFailureMessageText, message);
+        Assert.DoesNotContain(field, message, StringComparison.Ordinal);
+        Assert.DoesNotContain(typeName, message, StringComparison.Ordinal);
 
         var logged = Assert.Single(server.SaveFailureLog);
         Assert.Contains(field, logged, StringComparison.Ordinal);
