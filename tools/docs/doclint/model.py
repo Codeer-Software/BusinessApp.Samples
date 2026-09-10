@@ -46,6 +46,8 @@ EXCLUDE_FILES = ("Designer/CLAUDE.md",)
 
 # 「引くもの」であって通読しない文書。行数の警告と指標の対象から外す
 REFERENCE_PREFIXES = ("docs/decisions/", "docs/research/")
+# 行数の目安を当てない文書（docs/00 §5。開発者の決定 2026-09-10——責務は 1 つで、長さは未決の数で決まる）
+LINE_LIMIT_EXEMPT = ("docs/05_開発者への問い.md",)
 
 # コード参照検査（check_code_references）の対象拡張子と除外。
 # Designer/migrations/ は適用済みがチェックサムで凍結される歴史文書なので、

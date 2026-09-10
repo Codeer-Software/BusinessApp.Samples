@@ -14,7 +14,7 @@ import re
 from typing import Dict, List, NamedTuple, Optional, Tuple
 
 from .model import (ADR_LEDGER, APPEND_ANTIPATTERN, CODE_EXTENSIONS, excluded_from_code_check,
-                    DATE_RE, DOCS_INDEX, Doc, GENERIC_DOC_NAMES, INLINE_IGNORE, LINE_LIMIT, MD_LINK,
+                    DATE_RE, DOCS_INDEX, Doc, GENERIC_DOC_NAMES, INLINE_IGNORE, LINE_LIMIT, LINE_LIMIT_EXEMPT, MD_LINK,
                     REFERENCE_PREFIXES, REPO_ROOT, REQUIRED_KEYS, SEV_ERROR, SEV_WARN,
                     STALE_MARKER, VALID_AUDIENCE, VALID_STATUS, body_of, git_text,
                     resolve, run_git)
@@ -164,7 +164,7 @@ def check_body(doc: Doc, findings: List[Finding]) -> None:
 
     is_reference = doc.rel.startswith(REFERENCE_PREFIXES)
     body_len = len(doc.lines) - doc.body_start
-    if body_len > LINE_LIMIT and not doc.is_append and not is_reference:
+    if body_len > LINE_LIMIT and not doc.is_append and not is_reference and doc.rel not in LINE_LIMIT_EXEMPT:
         add(SEV_WARN, "{} 行あります（目安 {} 行）。分割を検討する".format(body_len, LINE_LIMIT))
 
     head_end = min(doc.body_start + 20, len(doc.lines))
