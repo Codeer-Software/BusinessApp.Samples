@@ -13,7 +13,7 @@ using BusinessApp.AccountingCore.Shared;
 /// <para>操作ごとに違うのは「既に取り消されているか」「既に訂正されているか」だけで、
 /// それらは <see cref="JournalReversal"/> と <see cref="JournalCorrection"/> が各自で見る。</para>
 /// </remarks>
-internal static class AmendmentRules
+public static class AmendmentRules
 {
     /// <summary>原仕訳に取消・訂正を足せるかを見る。足す側の中身は見ない。</summary>
     /// <param name="original">対象の原仕訳。</param>
@@ -81,30 +81,12 @@ internal static class AmendmentRules
     }
 
     /// <summary>
-    /// 複製の摘要（ADR-0048）。<b>原仕訳が取消・訂正なら、接頭辞を落として本文だけを引き継ぐ。</b>
+    /// 摘要の<b>本文</b>（自分が付けた接頭辞を落とし、前後の空白も落とした姿）。空なら空文字。
     /// </summary>
     /// <remarks>
-    /// <para><b>複製でできるのは通常の伝票である。</b> 接頭辞をそのまま写すと、
-    /// <b>「伝票番号 44 の取消」と名乗る通常の伝票</b>ができる——
-    /// <b>摘要は帳簿の記載事項「内容」に当たる</b>と当てはめている（ADR-0048 の決定 4）ので、
-    /// <b>していない取消を帳簿に書くことになる</b>（2026-09-09 の実機確認で見つけた）。</para>
-    /// <para><b>本文が空になるなら NULL にする。</b> 「伝票番号 44 の取消」のように
-    /// 本文を持たない摘要を複製すると、引き継ぐものが無い——空文字を残すと
-    /// 空値検索が取りこぼす（docs/04 §1 の A-5）。<b>計上には摘要が要る</b>ので、
-    /// 利用者はここで何の取引かを書くことになる（それが正しい）。</para>
-    /// </remarks>
-    public static string? DescriptionForDuplicate(JournalEntry original)
-    {
-        ArgumentNullException.ThrowIfNull(original);
-
-        var body = Body(original);
-        return body.Length == 0 ? null : body;
-    }
-
-    /// <summary>
-    /// 摘要の<b>本文</b>（接頭辞を落とし、前後の空白も落とした姿）。
-    /// </summary>
-    /// <remarks>
+    /// <para><b>ドメインが持つのは「自分の接頭辞を剥がす手段」まで</b>で、それを何に使うかは知らない
+    /// （訂正の摘要を作るときと、会計補助の複製が呼ぶ。ADR-0049 の決定 6——
+    /// 補助で使われるものでも、補助の名前ではなく会計コアの名前を持つ）。</para>
     /// <para><b>剥がすのは、原仕訳が取消・訂正のときだけ。</b>
     /// 通常の仕訳の摘要は利用者が書いた文であって、たまたま同じ形をしていることがある
     /// （「伝票番号 12 の取消について」と書いた通常の仕訳など）。
@@ -115,10 +97,14 @@ internal static class AmendmentRules
     /// <para><b>取消・訂正と複製が同じ 1 本を呼ぶ。</b> 写して 2 か所に置くと、
     /// 剥がし方を直したときに片方だけ古くなる（qa/03 L-20 の型。同じ日の自己レビュー）。</para>
     /// </remarks>
-    private static string Body(JournalEntry original)
-        => original.EntryType.RequiresOriginalEntry()
+    public static string Body(JournalEntry original)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+
+        return original.EntryType.RequiresOriginalEntry()
             ? StripPrefixes(original.Description)
             : (original.Description ?? string.Empty).Trim();
+    }
 
     /// <summary>
     /// 自分で付けた接頭辞（「伝票番号 N の取消: 」等）を、無くなるまで落とす。
@@ -158,7 +144,7 @@ internal static class AmendmentRules
 /// <c>JournalPostingRejectedException</c> が押されたボタンから決める（2026-08-31。
 /// qa/02 R25-10）。両方が持つと「取り消せません。①…は取り消せません。」と 2 回言うことになる。
 /// </remarks>
-internal readonly record struct AmendmentKind(string Noun)
+public readonly record struct AmendmentKind(string Noun)
 {
     public static readonly AmendmentKind Reversal = new("取消");
 

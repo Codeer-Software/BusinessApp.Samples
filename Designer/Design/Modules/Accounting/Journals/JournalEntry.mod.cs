@@ -74,7 +74,7 @@ void ApplyPostedLock()
     ReverseButton.IsVisible = false;
 
     // **複製の可否はサーバに聞く**（下の ApplyAmendmentAvailability）。
-    // 原仕訳の状態には依らないが**種別には依る**（期首残高・決算振替・繰越は複製できない。
+    // 原仕訳の状態には依らないが**種別には依る**（元にできるのは通常と訂正だけ。取消伝票は元にできない。
     // ADR-0048 の決定 6）ので、**押せるのに必ず断られるボタンを出さない**（docs/21 §1。
     // 2026-09-09 の自己レビュー）。**新規（まだ保存していない）伝票には出さない**——写す元がまだ無い。
     DuplicateButton.IsVisible = false;

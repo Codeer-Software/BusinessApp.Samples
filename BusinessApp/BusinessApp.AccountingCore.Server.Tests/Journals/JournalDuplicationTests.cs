@@ -1,20 +1,27 @@
-namespace BusinessApp.AccountingCore.Tests.Journals;
+namespace BusinessApp.AccountingCore.Server.Tests.Journals;
 
 using System.Reflection;
 
+using BusinessApp.AccountingCore.Accounts;
 using BusinessApp.AccountingCore.ConsumptionTax;
+using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Journals;
+using BusinessApp.AccountingCore.Periods;
+using BusinessApp.AccountingCore.Server.Journals;
 using BusinessApp.AccountingCore.Shared;
-using BusinessApp.AccountingCore.Tests.Fixtures;
 using BusinessApp.Partners;
 
 /// <summary>
-/// 伝票の複製（ADR-0048）。
+/// 伝票の複製（ADR-0048）。会計補助（ステートレス）なので、テストもアプリケーション層に置く（ADR-0049）。
 /// </summary>
 /// <remarks>
-/// <b>ここで守っているのは「複製した伝票が、していない出来事を語らない」ことである。</b>
+/// <para><b>ここで守っているのは「複製した伝票が、していない出来事を語らない」ことである。</b>
 /// 計上時点の写し・適用した制度の版・投入元を写すと、
-/// <b>帳簿に嘘の記録が残る</b>——しかも利用者からは見えない欄なので、気づけない。
+/// <b>帳簿に嘘の記録が残る</b>——しかも利用者からは見えない欄なので、気づけない。</para>
+/// <para><b>検体は DB に触らず、ここで組み立てる。</b> 複製は純粋関数で、識別子をマスタと突き合わせない
+/// （突き合わせるのは計上の関門）ので、識別子の値そのものに意味は無い。
+/// <b>写さない欄には既定値と違う値を入れる</b>——既定値のままだと、写していても
+/// 写していなくても同じに見える（qa/03 L-02 の縮退）。</para>
 /// </remarks>
 public class JournalDuplicationTests
 {
@@ -22,11 +29,25 @@ public class JournalDuplicationTests
     private static readonly DateOnly DuplicatedOn = new(2026, 6, 10);
     private static readonly DateTimeOffset EnteredAt = new(2026, 6, 10, 9, 0, 0, TimeSpan.FromHours(9));
 
+    private static readonly FiscalYearId FiscalYear = new(18);
+    private static readonly FiscalYearId OtherFiscalYear = new(17);
+
+    private static readonly AccountId Cash = new(1);
+    private static readonly AccountId Sales = new(3);
+    private static readonly AccountId BankAccount = new(6);
+    private static readonly SubAccountId MainBank = new(1);
+    private static readonly DepartmentId SalesDepartment = new(1);
+    private static readonly PartnerId Partner = new(1);
+    private static readonly TaxCategoryId OutOfScope = new(1);
+    private static readonly TaxCategoryId TaxablePurchase = new(2);
+
+    /// <summary>摘要の既定値。<b>訂正のテストが使う字とは別</b>にしてある（接頭辞を剥がす検査が既定値だけで通らないように）。</summary>
+    private const string DefaultDescription = "5 月分の現金売上";
+
     /// <summary>複製して、できた下書きを取り出す（作れないはずの検体は下の Theory が見る）。</summary>
     private static JournalEntry Duplicate(JournalEntry original)
     {
-        var result = JournalDuplication.Duplicate(
-            original, DuplicatedOn, EnteredAt, AccountingFixture.FiscalYear);
+        var result = JournalDuplication.Duplicate(original, DuplicatedOn, EnteredAt, FiscalYear);
 
         Assert.True(result.Created);
         Assert.Empty(result.Violations);
@@ -34,12 +55,8 @@ public class JournalDuplicationTests
     }
 
     /// <summary>計上済みの伝票（写してはいけない欄を全部埋めてある）。</summary>
-    /// <remarks>
-    /// <b>写さない欄には、既定値と違う値を入れる。</b> 既定値のままだと、
-    /// 写していても写していなくても同じに見える（qa/03 L-02 の縮退）。
-    /// </remarks>
     private static JournalEntry Posted()
-        => AccountingFixture.CashSale(TransactionDate) with
+        => CashSale(TransactionDate) with
         {
             Id = new JournalEntryId(42),
             Status = EntryStatus.Posted,
@@ -51,7 +68,7 @@ public class JournalDuplicationTests
             SourceComponent = "expense",
             SourceDocumentId = "EX-001",
             IdempotencyKey = "expense/EX-001",
-            PartnerId = AccountingFixture.Partner,
+            PartnerId = Partner,
         };
 
     // --- 写すもの（取引の内容） -------------------------------------------------
@@ -59,7 +76,7 @@ public class JournalDuplicationTests
     [Fact]
     public void 取引日と摘要と取引先を写す()
     {
-        // **通常の伝票で見る。** 取消・訂正は摘要の接頭辞を落とすので、
+        // **通常の伝票で見る。** 訂正は摘要の接頭辞を落とすので、
         // その検体で「摘要を写す」を表明すると、剥がす規則ごと固定してしまう。
         var original = Posted() with { EntryType = EntryType.Normal };
 
@@ -68,74 +85,74 @@ public class JournalDuplicationTests
         Assert.Equal(original.TransactionDate, copy.TransactionDate);
         Assert.Equal(original.Description, copy.Description);
         Assert.Equal(original.PartnerId, copy.PartnerId);
-        Assert.Equal(AccountingFixture.DefaultDescription, copy.Description);
+        Assert.Equal(DefaultDescription, copy.Description);
     }
 
     /// <summary>明細の内容を写す（貸借・科目・部門・金額・税区分ほか）。</summary>
     [Fact]
     public void 明細の内容を写す()
     {
-        var original = AccountingFixture.Entry(
+        var original = Entry(
             TransactionDate,
-            AccountingFixture.Line(
-                1, DebitCredit.Debit, AccountingFixture.BankAccount, 100_000,
-                subAccountId: AccountingFixture.MainBank,
-                department: AccountingFixture.SalesDepartment,
-                taxCategoryId: AccountingFixture.TaxablePurchase,
-                partner: AccountingFixture.Partner) with
+            Line(
+                1, DebitCredit.Debit, BankAccount, 100_000,
+                subAccountId: MainBank,
+                department: SalesDepartment,
+                taxCategoryId: TaxablePurchase,
+                partner: Partner) with
             {
                 TaxTreatment = TaxTreatment.ForTaxableSales,
                 ItemDescription = "文房具",
                 BookOnlyDeduction = "public_transport",
             },
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Sales, 100_000,
-                department: AccountingFixture.SalesDepartment));
+            Line(2, DebitCredit.Credit, Sales, 100_000, department: SalesDepartment));
 
         var line = Duplicate(original).Lines[0];
 
         Assert.Equal(DebitCredit.Debit, line.DebitCredit);
-        Assert.Equal(AccountingFixture.BankAccount, line.AccountId);
-        Assert.Equal(AccountingFixture.MainBank, line.SubAccountId);
-        Assert.Equal(AccountingFixture.SalesDepartment, line.DepartmentId);
-        Assert.Equal(AccountingFixture.Partner, line.PartnerId);
+        Assert.Equal(BankAccount, line.AccountId);
+        Assert.Equal(MainBank, line.SubAccountId);
+        Assert.Equal(SalesDepartment, line.DepartmentId);
+        Assert.Equal(Partner, line.PartnerId);
         Assert.Equal(Yen.From(100_000), line.Amount);
-        Assert.Equal(AccountingFixture.TaxablePurchase, line.TaxCategoryId);
+        Assert.Equal(TaxablePurchase, line.TaxCategoryId);
         Assert.Equal(TaxTreatment.ForTaxableSales, line.TaxTreatment);
         Assert.Equal("文房具", line.ItemDescription);
         Assert.Equal("public_transport", line.BookOnlyDeduction);
     }
 
     /// <summary>
-    /// <b>取消・訂正を複製すると、摘要の接頭辞は落ちる。</b>
+    /// <b>訂正を複製すると、摘要の接頭辞は落ちる。</b>
     /// </summary>
     /// <remarks>
-    /// <b>複製でできるのは通常の伝票である。</b> 「伝票番号 44 の取消: …」を写すと、
-    /// <b>していない取消を名乗る通常の伝票</b>ができる——摘要は帳簿の記載事項
+    /// <para><b>複製でできるのは通常の伝票である。</b> 「伝票番号 44 の訂正: …」を写すと、
+    /// <b>していない訂正を名乗る通常の伝票</b>ができる——摘要は帳簿の記載事項
     /// （法税規則 55 ① の「内容」）なので、<b>帳簿に嘘が残る</b>
-    /// （2026-09-09 の実機確認で見つけた）。
+    /// （2026-09-09 の実機確認で見つけた）。</para>
+    /// <para>剥がす規則そのものは会計コアの <c>AmendmentRules.Body</c> が持ち、
+    /// 複製はそれを借りるだけである（ADR-0049 の決定 6）。ここで見るのは「借りている」ことまで。</para>
     /// </remarks>
     [Theory]
-    [InlineData(EntryType.Reversal, "伝票番号 44 の取消: 5 月分の現金売上", "5 月分の現金売上")]
-    [InlineData(EntryType.Correction, "伝票番号 44 の訂正: 5 月分の現金売上", "5 月分の現金売上")]
-    [InlineData(EntryType.Correction, "伝票番号 5 の訂正: 伝票番号 3 の取消: 家賃", "家賃")]
-    public void 取消と訂正の摘要は接頭辞を落として写す(EntryType entryType, string description, string expected)
+    [InlineData("伝票番号 44 の訂正: 5 月分の現金売上", "5 月分の現金売上")]
+    [InlineData("伝票番号 5 の訂正: 伝票番号 3 の取消: 家賃", "家賃")]
+    public void 訂正の摘要は接頭辞を落として写す(string description, string expected)
     {
-        var copy = Duplicate(Posted() with { EntryType = entryType, Description = description });
+        var copy = Duplicate(Posted() with { EntryType = EntryType.Correction, Description = description });
 
         Assert.Equal(expected, copy.Description);
     }
 
     /// <summary>
-    /// 本文の無い取消の摘要は、引き継ぐものが無いので<b>空</b>になる。
+    /// 本文の無い訂正の摘要は、引き継ぐものが無いので<b>空</b>になる。
     /// </summary>
     /// <remarks>
     /// <b>空文字ではなく NULL</b>（docs/04 §1 の A-5）。<b>計上には摘要が要る</b>ので、
     /// 利用者はここで何の取引かを書くことになる——それが正しい。
     /// </remarks>
     [Fact]
-    public void 本文の無い取消の摘要は空になる()
+    public void 本文の無い訂正の摘要は空になる()
     {
-        var copy = Duplicate(Posted() with { EntryType = EntryType.Reversal, Description = "伝票番号 44 の取消" });
+        var copy = Duplicate(Posted() with { EntryType = EntryType.Correction, Description = "伝票番号 44 の訂正" });
 
         Assert.Null(copy.Description);
     }
@@ -143,10 +160,11 @@ public class JournalDuplicationTests
     /// <summary>摘要の無い伝票を複製しても落ちない（空は空のまま）。</summary>
     /// <remarks>
     /// <b>摘要の無い計上済みが稼働 DB に 2 件ある</b>（規則より前の伝票。docs/10 §4-2-1）。
+    /// 種別で剥がし方が分かれる（<c>AmendmentRules.Body</c>）ので、両方の側で見る。
     /// </remarks>
     [Theory]
     [InlineData(EntryType.Normal)]
-    [InlineData(EntryType.Reversal)]
+    [InlineData(EntryType.Correction)]
     public void 摘要の無い伝票を複製しても落ちない(EntryType entryType)
     {
         var copy = Duplicate(Posted() with { EntryType = entryType, Description = null });
@@ -204,15 +222,16 @@ public class JournalDuplicationTests
     }
 
     /// <summary>
-    /// <b>訂正・取消を複製しても、できるのは通常の記帳である。</b>
+    /// <b>訂正を複製しても、できるのは通常の記帳である。</b>
     /// </summary>
     /// <remarks>
     /// 種別を写すと<b>原仕訳を持たない訂正伝票</b>ができて I-06 を破る。
+    /// 通常の伝票の側も見るのは、「種別を写している」実装でも訂正の検体だけなら気づける一方、
+    /// 原仕訳との関係（<c>OriginalEntryId</c>）は種別に関わらず切れることを表明するため。
     /// </remarks>
     [Theory]
     [InlineData(EntryType.Normal)]
     [InlineData(EntryType.Correction)]
-    [InlineData(EntryType.Reversal)]
     public void 種別は通常になり原仕訳との関係は切れる(EntryType entryType)
     {
         var copy = Duplicate(Posted() with { EntryType = entryType });
@@ -250,9 +269,9 @@ public class JournalDuplicationTests
     [Fact]
     public void 明細の計上時点の写しと制度の版を写さない()
     {
-        var original = AccountingFixture.Entry(
+        var original = Entry(
             TransactionDate,
-            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 100_000) with
+            Line(1, DebitCredit.Debit, Cash, 100_000) with
             {
                 PartnerNameSnapshot = "株式会社取引先",
                 RegistrationNoSnapshot = "T1234567890123",
@@ -260,8 +279,7 @@ public class JournalDuplicationTests
                 TaxPoint = new DateOnly(2026, 5, 20),
                 EvidenceRef = "EV-001",
             },
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Sales, 100_000,
-                department: AccountingFixture.SalesDepartment));
+            Line(2, DebitCredit.Credit, Sales, 100_000, department: SalesDepartment));
 
         var line = Duplicate(original).Lines[0];
 
@@ -284,16 +302,15 @@ public class JournalDuplicationTests
     [Fact]
     public void 消費税行を落として行番号を振り直す()
     {
-        var original = AccountingFixture.Entry(
+        var original = Entry(
             TransactionDate,
-            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 100_000),
-            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 10_000) with
+            Line(1, DebitCredit.Debit, Cash, 100_000),
+            Line(2, DebitCredit.Debit, Cash, 10_000) with
             {
                 IsTaxLine = true,
                 ParentLineNo = 1,
             },
-            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 110_000,
-                department: AccountingFixture.SalesDepartment));
+            Line(3, DebitCredit.Credit, Sales, 110_000, department: SalesDepartment));
 
         var copy = Duplicate(original);
 
@@ -303,7 +320,7 @@ public class JournalDuplicationTests
         Assert.All(copy.Lines, l => Assert.Null(l.ParentLineNo));
 
         // **本体行はそのまま残る**（落としたのは税行だけ）。
-        Assert.Equal([AccountingFixture.Cash, AccountingFixture.Sales], copy.Lines.Select(l => l.AccountId));
+        Assert.Equal([Cash, Sales], copy.Lines.Select(l => l.AccountId));
     }
 
     // --- 日付と年度 -------------------------------------------------------------
@@ -318,12 +335,12 @@ public class JournalDuplicationTests
     [Fact]
     public void 計上日と年度と入力年月日は複製した時点のもの()
     {
-        var original = Posted() with { FiscalYearId = AccountingFixture.OtherFiscalYear };
+        var original = Posted() with { FiscalYearId = OtherFiscalYear };
 
         var copy = Duplicate(original);
 
         Assert.Equal(DuplicatedOn, copy.PostingDate);
-        Assert.Equal(AccountingFixture.FiscalYear, copy.FiscalYearId);
+        Assert.Equal(FiscalYear, copy.FiscalYearId);
         Assert.Equal(EnteredAt, copy.EnteredAt);
 
         // **取引日だけは原仕訳のものを引き継ぐ**（ADR-0048 の決定 5）。
@@ -348,52 +365,79 @@ public class JournalDuplicationTests
         => Assert.Equal(
             "original",
             Assert.Throws<ArgumentNullException>(
-                () => JournalDuplication.Duplicate(null!, DuplicatedOn, EnteredAt, AccountingFixture.FiscalYear))
+                () => JournalDuplication.Duplicate(null!, DuplicatedOn, EnteredAt, FiscalYear))
                 .ParamName);
 
-    // --- 複製できる種別（ADR-0048 の決定 6） -----------------------------------
+    // --- 元にできる種別（ADR-0048 の決定 6） -----------------------------------
 
     /// <summary>
-    /// <b>期首残高・決算振替・繰越は複製できない。</b>
+    /// <b>期首残高・決算振替・繰越・取消は複製の元にできない。</b>
     /// </summary>
     /// <remarks>
-    /// <b>複製でできるのは通常の伝票</b>なので、決算振替を複製すると
+    /// <para><b>複製でできるのは通常の伝票</b>なので、決算振替を複製すると
     /// 「損益 → 繰越利益剰余金」を<b>期中に通常の伝票として計上できる</b>（I-10）し、
     /// 繰越の複製は翌期首の残高を二重に載せる（I-12）。
     /// <b>いまはどれも未実装だが、実装した日に黙って開かないようにここで止める</b>
-    /// （2026-09-09 の自己レビュー。qa/03 L-13 の型）。
+    /// （2026-09-09 の自己レビュー。qa/03 L-13 の型）。</para>
+    /// <para><b>取消伝票は、貸借の反転した内容しか写せない。</b> 「取り消した取引をもう一度起こす」
+    /// のは<b>原仕訳</b>（通常）を複製すればよく、取消伝票そのものを元にする場面は無い
+    /// （2026-09-10、開発者の決定。当初は元にできるとしていたが、
+    /// それは「取消済みの原仕訳」と「取消伝票」の取り違えだった——qa/03 L-40）。</para>
+    /// <para><b>元にできる集合は、取消・訂正の対象にできる集合と同じ</b>（<c>IsAmendable</c>）。
+    /// ドメインに「複製できる種別」という属性は置かない（ADR-0049 の決定 6）。</para>
     /// </remarks>
     [Theory]
     [InlineData(EntryType.Opening, "期首残高")]
     [InlineData(EntryType.Closing, "決算振替")]
     [InlineData(EntryType.Carryover, "繰越")]
-    public void 期首残高と決算振替と繰越は複製できない(EntryType entryType, string label)
+    [InlineData(EntryType.Reversal, "取消")]
+    public void 期首残高と決算振替と繰越と取消は複製できない(EntryType entryType, string label)
     {
         var result = JournalDuplication.Duplicate(
-            Posted() with { EntryType = entryType }, DuplicatedOn, EnteredAt, AccountingFixture.FiscalYear);
+            Posted() with { EntryType = entryType }, DuplicatedOn, EnteredAt, FiscalYear);
 
         Assert.False(result.Created);
+        Assert.Null(result.Draft);
         Assert.Equal(
-            [JournalViolationCodes.DuplicationTargetNotDuplicable],
+            [JournalViolationCodes.AmendmentTargetNotAmendable],
             result.Violations.Select(v => v.Code));
         Assert.Equal(
-            $"種別が「{label}」の伝票は対象にできません。対象にできるのは通常の伝票と訂正・取消です。",
+            $"種別が「{label}」の伝票は対象にできません。対象にできるのは通常の伝票と訂正だけです。",
             result.Violations[0].Message);
 
         // **見出しの語を文の側で繰り返さない**（docs/21 §2-6。`ViolationMessageTests` が全文に当てる）。
         Assert.DoesNotContain("複製できません", result.Violations[0].Message, StringComparison.Ordinal);
     }
 
-    /// <summary>通常・訂正・取消は複製できる（種別ごとの線を両側から見る）。</summary>
+    /// <summary>
+    /// <b>断る文言は、取消・訂正が同じ種別を断るときの文言と一字も違わない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 集合が同じなのに文言が 2 通りあると、「対象にできない種別」を片方だけ直した日にずれる
+    /// （<c>AmendmentRules</c> と複製が同じ文を持っていたのを、2026-09-10 に片方へ寄せた）。
+    /// 違反コードも共有しているので、ここで文言も突き合わせておく。
+    /// </remarks>
+    [Fact]
+    public void 断る文言は取消と訂正の文言と同じ()
+    {
+        var original = Posted() with { EntryType = EntryType.Reversal };
+
+        var byDuplication = JournalDuplication.Duplicate(original, DuplicatedOn, EnteredAt, FiscalYear)
+            .Violations.Single();
+        var byAmendment = AmendmentRules.ValidateOriginal(original, DuplicatedOn, AmendmentKind.Reversal)
+            .Single(v => v.Code == JournalViolationCodes.AmendmentTargetNotAmendable);
+
+        Assert.Equal(byAmendment.Message, byDuplication.Message);
+    }
+
+    /// <summary>通常・訂正は複製できる（種別ごとの線を両側から見る）。</summary>
     [Theory]
     [InlineData(EntryType.Normal)]
     [InlineData(EntryType.Correction)]
-    [InlineData(EntryType.Reversal)]
-    public void 通常と訂正と取消は複製できる(EntryType entryType)
+    public void 通常と訂正は複製できる(EntryType entryType)
         => Assert.True(
             JournalDuplication.Duplicate(
-                Posted() with { EntryType = entryType },
-                DuplicatedOn, EnteredAt, AccountingFixture.FiscalYear).Created);
+                Posted() with { EntryType = entryType }, DuplicatedOn, EnteredAt, FiscalYear).Created);
 
     // --- 欄が増えた日に気づく ---------------------------------------------------
 
@@ -456,7 +500,7 @@ public class JournalDuplicationTests
     [Fact]
     public void 明細は写す欄が写り写さない欄が落ちる()
     {
-        var original = AccountingFixture.Entry(TransactionDate, SentinelLine());
+        var original = Entry(TransactionDate, SentinelLine());
 
         AssertCopiedAndDropped(
             original.Lines[0],
@@ -474,7 +518,7 @@ public class JournalDuplicationTests
     /// 伝票の側も同じように読む。
     /// </summary>
     /// <remarks>
-    /// <b>摘要はここで見ない。</b> 写し方が種別で変わる（取消・訂正は接頭辞を落とす。決定 4）ので、
+    /// <b>摘要はここで見ない。</b> 写し方が種別で変わる（訂正は接頭辞を落とす。決定 4）ので、
     /// <b>「非既定の種別」と「摘要をそのまま写す」を同時に満たす検体が作れない</b>
     /// ——複製できて接頭辞を落とさない種別は「通常」だけで、それは種別の既定値である。
     /// 摘要は上の 4 本が種別ごとに見る。
@@ -538,12 +582,12 @@ public class JournalDuplicationTests
     /// <see cref="消費税行を落として行番号を振り直す"/> が専門に見る。
     /// </remarks>
     private static JournalLine SentinelLine()
-        => AccountingFixture.Line(
-            7, DebitCredit.Credit, AccountingFixture.BankAccount, 12_345,
-            subAccountId: AccountingFixture.MainBank,
-            department: AccountingFixture.SalesDepartment,
-            taxCategoryId: AccountingFixture.TaxablePurchase,
-            partner: AccountingFixture.Partner) with
+        => Line(
+            7, DebitCredit.Credit, BankAccount, 12_345,
+            subAccountId: MainBank,
+            department: SalesDepartment,
+            taxCategoryId: TaxablePurchase,
+            partner: Partner) with
         {
             TaxTreatment = TaxTreatment.Common,
             TaxPoint = new DateOnly(2026, 4, 30),
@@ -573,4 +617,51 @@ public class JournalDuplicationTests
                 .OrderBy(n => n, StringComparer.Ordinal),
             all.OrderBy(n => n, StringComparer.Ordinal));
     }
+
+    // --- 検体の組み立て ---------------------------------------------------------
+
+    /// <summary>現金売上 1 本。損益科目には部門を付ける（I-13）。</summary>
+    private static JournalEntry CashSale(DateOnly date, long amount = 100_000)
+        => Entry(date,
+            Line(1, DebitCredit.Debit, Cash, amount),
+            Line(2, DebitCredit.Credit, Sales, amount, department: SalesDepartment));
+
+    /// <summary>
+    /// 伝票 1 本。<b>取引日と計上日はずらす</b>——同じ値にすると、取引日を書くべき場所に
+    /// 計上日を書いても緑のままになる（qa/03 L-02）。
+    /// </summary>
+    private static JournalEntry Entry(DateOnly date, params JournalLine[] lines)
+        => new()
+        {
+            Id = new JournalEntryId(1),
+            FiscalYearId = FiscalYear,
+            TransactionDate = date,
+            PostingDate = date.AddDays(2),
+            Status = EntryStatus.Draft,
+            EntryType = EntryType.Normal,
+            Description = DefaultDescription,
+            EnteredAt = new DateTimeOffset(2026, 8, 23, 10, 0, 0, TimeSpan.FromHours(9)),
+            Lines = lines,
+        };
+
+    private static JournalLine Line(
+        int lineNo,
+        DebitCredit side,
+        AccountId accountId,
+        long amount,
+        DepartmentId? department = null,
+        TaxCategoryId? taxCategoryId = null,
+        SubAccountId? subAccountId = null,
+        PartnerId? partner = null)
+        => new()
+        {
+            LineNo = lineNo,
+            DebitCredit = side,
+            AccountId = accountId,
+            SubAccountId = subAccountId,
+            DepartmentId = department,
+            PartnerId = partner,
+            Amount = Yen.From(amount),
+            TaxCategoryId = taxCategoryId ?? OutOfScope,
+        };
 }

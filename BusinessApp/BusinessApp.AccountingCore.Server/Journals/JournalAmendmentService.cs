@@ -92,12 +92,14 @@ public sealed class JournalAmendmentService(
         // 取消の判定（既に取り消されている）で先に落ちる。
         // 2 つの値に分けてあるのは、片方だけできる状態が将来生まれうるからである。
         // **複製は原仕訳の状態を見ない**（ADR-0048 の決定 6）ので、種別だけで決まる。
+        // **元にできる種別は、取消・訂正の対象にできる種別と同じ**——ドメインに「複製できるか」という
+        // 属性は置かず、会計コアの名前の属性を読む（ADR-0049 の決定 6）。
         // **ここで返さないと、画面は押せるボタンを出して必ず断られる**（docs/21 §1。
         // 2026-09-09 の自己レビュー）。
         return new AmendmentAvailability(
             reversal.Created, reversal.Created, Describe(reversal),
             amendments.ReversalEntryNo, amendments.CorrectionEntryNo,
-            original.EntryType.IsDuplicable());
+            original.EntryType.IsAmendable());
     }
 
     /// <summary>できない理由。<b>できるときは空</b>にして、画面が出し分けなくてよいようにする。</summary>
@@ -163,8 +165,8 @@ public sealed class JournalAmendmentService(
     /// それでも<b>同じ入口に置いてある</b>のは、<b>権限の関門を 1 か所に保つため</b>である——
     /// この経路は CLB のモジュール条件を 1 つも通らないので、
     /// 入口を分けると<b>片方に関門を書き忘れる</b>（[qa/03 L-22] がその実例）。</para>
-    /// <para><b>会計の判断は <see cref="JournalDuplication"/> が持つ。</b> ここがするのは、
-    /// 原仕訳を読むこと・今日の年度を引くこと・下書きを入れることだけである。</para>
+    /// <para><b>写す欄の取捨は <see cref="JournalDuplication"/> が持つ</b>（会計補助（ステートレス）。
+    /// ADR-0049）。ここがするのは、原仕訳を読むこと・今日の年度を引くこと・下書きを入れることだけである。</para>
     /// </remarks>
     /// <returns>できた下書きの識別子。画面はそれを開く。</returns>
     public Task<JournalEntryId> DuplicateAsync(JournalEntryId originalId)
