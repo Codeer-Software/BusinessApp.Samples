@@ -144,7 +144,7 @@ public static class JournalViolationCodes
     /// <summary>取引先が取引先マスタに無い。</summary>
     public const string PartnerUnknown = "E-PARTNER-UNKNOWN";
 
-    /// <summary>無効にした取引先を新たな計上に使おうとした（科目・補助科目・部門と同じ形。docs/04 §1 の B-1）。</summary>
+    /// <summary>無効にした取引先を新たな計上に使おうとした（科目・補助科目・部門と同じ形。docs/10 §6-3）。</summary>
     public const string PartnerInactive = "E-PARTNER-INACTIVE";
 
     /// <summary>部門がマスタに無い。</summary>

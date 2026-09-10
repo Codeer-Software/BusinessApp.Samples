@@ -49,22 +49,44 @@ public class AccountingMasterLoaderTests
         Assert.False(context.Partners.Find(new PartnerId(onLine))!.IsActive);
         Assert.Null(context.Partners.Find(new PartnerId(unrelated)));
         Assert.True(context.HasSelectablePartner);
+        Assert.True(context.Partners.IsLoaded);
     }
 
-    /// <summary>取引先を 1 つも参照していなければ、読まずに同じ目録を返す。</summary>
+    /// <summary>
+    /// <b>読む前の目録では取引先を引けない</b>（<see cref="PartnerCatalog.Unloaded"/>）——
+    /// 空の目録で計上検証を通すと、参照している取引先が全部「マスタに無い」になる。
+    /// </summary>
     [Fact]
-    public async Task 取引先を参照していなければ目録は空のまま()
+    public async Task 読む前の目録では取引先を引けない()
     {
         using var server = new AccountingServer();
-        server.InsertPartner();
+        var partner = server.InsertPartner();
+
+        var context = await server.MasterLoader.LoadAsync();
+
+        Assert.False(context.Partners.IsLoaded);
+        Assert.True(context.HasSelectablePartner);
+        Assert.Throws<InvalidOperationException>(() => context.Partners.Find(new PartnerId(partner)));
+    }
+
+    /// <summary>取引先を 1 つも参照していなければ、DB を読まずに「読んだ」空の目録にする。</summary>
+    [Fact]
+    public async Task 取引先を参照していなければ読まずに空の目録にする()
+    {
+        using var server = new AccountingServer();
+        var partner = server.InsertPartner();
         var id = server.InsertDraft();
         server.InsertLine(id, 1, "debit", "1100", 1000);
         server.InsertLine(id, 2, "credit", "1110", 1000);
         var before = await server.MasterLoader.LoadAsync();
+        server.FailBeforeStatement = sql => sql.Contains("from partners", StringComparison.Ordinal)
+            ? new InvalidOperationException("参照が無いのに取引先を読みに行った")
+            : null;
 
         var after = await server.MasterLoader.WithPartnersAsync(before, await server.EntryStore.LoadAsync(id));
 
-        Assert.Same(before, after);
+        Assert.True(after.Partners.IsLoaded);
+        Assert.Null(after.Partners.Find(new PartnerId(partner)));
         Assert.True(after.HasSelectablePartner);
     }
 

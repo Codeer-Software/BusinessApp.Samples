@@ -21,12 +21,16 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 /// </remarks>
 public sealed class AccountingMasterLoader(IDbAccessor dbAccessor, string dataSourceName)
 {
+    /// <summary>
+    /// 計上検証に要るマスタ一式。<b>取引先だけは、まだ読んでいない</b>（<see cref="PartnerCatalog.Unloaded"/>）——
+    /// 伝票が決まってから <see cref="WithPartnersAsync"/> で足す。足さずに計上検証へ渡すと止まる（空の目録で通さない）。
+    /// </summary>
     public async Task<PostingContext> LoadAsync()
         => new(await LoadAccountsAsync(),
                await LoadSubAccountsAsync(),
                await LoadDepartmentsAsync(),
                await LoadCalendarAsync(),
-               new PartnerCatalog([], await HasSelectablePartnerAsync()));
+               PartnerCatalog.Unloaded(await HasSelectablePartnerAsync()));
 
     /// <summary>
     /// 伝票が参照している取引先だけを読んで、目録に足す。
@@ -49,7 +53,8 @@ public sealed class AccountingMasterLoader(IDbAccessor dbAccessor, string dataSo
             .ToList();
         if (ids.Count == 0)
         {
-            return context;
+            // 参照が無くても「読んだ」目録にする（読んでいない目録のままだと、検証が止まる形のままになる）。
+            return context with { Partners = new PartnerCatalog([], context.Partners.HasSelectable) };
         }
 
         // **識別子は数値で、この場で組み立てた列挙である**（利用者の入力ではない）——それでも文に埋め込まず、パラメータで渡す。

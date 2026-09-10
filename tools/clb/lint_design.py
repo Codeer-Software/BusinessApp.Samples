@@ -1262,13 +1262,29 @@ def _blank(text, pattern):
 # 素で走らせると自分の解説文を叩く（2026-09-02 に F-15 で実際に起きた）。
 _COMMENTS = r"//[^\n]*|/\*.*?\*/"
 
-# 文字列リテラルも落とす（F-15 だけ）。利用者に見せる文言に `Submit()` と書けば当たってしまう。
+# 文字列リテラルも落とす。利用者に見せる文言に `Submit()` と書けば当たってしまう。
 _STRINGS = r'"(?:\\.|[^"\\\n])*"'
+
+# **文字列とコメントは 1 回で、左から順に消す。** 先にコメントだけ消すと、`"https://x"` の `//` 以降が
+# 行末まで消えて閉じ引用符が無くなり、以降の文字列の空白化がずれる（2026-09-10 の自己レビュー）。
+_STRINGS_AND_COMMENTS = _STRINGS + "|" + _COMMENTS
+
+
+def _blank_comments(text):
+    """コメントだけを空白にする。文字列の中の `//` は残す（A-06 は文字列の中を見る）。"""
+
+    def blank(match):
+        if match.group(1) is None:
+            return match.group(0)
+        return "".join(c if c == "\n" else " " for c in match.group(0))
+
+    return re.sub(_STRINGS + "|(" + _COMMENTS + ")", blank, text, flags=re.DOTALL)
 
 
 def check_script(path, text, findings):
     name = relative(path)
-    text = _blank(text, _COMMENTS)
+    text = _blank_comments(text)
+    code = _blank(text, _STRINGS_AND_COMMENTS)
 
     # B-01 try / catch / finally はロードできない
     for match in re.finditer(r"^\s*(try|catch|finally)\b", text, re.MULTILINE):
@@ -1277,10 +1293,11 @@ def check_script(path, text, findings):
 
     # B-10 既定値つきの引数は、省略した呼び出しが実行時に「操作が存在しません」で落ちる（designcheck は緑）。
     # 2026-09-09 に足した `string done = ""` で、訂正・取消が翌日まで壊れていた（qa/03 L-41）。
-    for match in _DEFAULT_PARAM.finditer(_blank(text, _STRINGS)):
-        findings.append((SEV_ERROR, "B-10", name,
-                         f"{match.group(1)}(): 引数に既定値を書かない（CLB は省略した呼び出しを解決しない。"
-                         "全部の呼び出しで全部の引数を渡す。qa/01 B-10）"))
+    for match in _METHOD_HEAD.finditer(code):
+        if _ASSIGNMENT.search(match.group(2)):
+            findings.append((SEV_ERROR, "B-10", name,
+                             f"{match.group(1)}(): 引数に既定値を書かない（CLB は省略した呼び出しを解決しない。"
+                             "全部の呼び出しで全部の引数を渡す。qa/01 B-10）"))
 
     # A-06 数値は decimal に統一されるので整数専用書式は実行時に落ちる
     for match in re.finditer(r'ToString\("[DdXx]\d*"\)', text):
@@ -1294,7 +1311,7 @@ def check_script(path, text, findings):
                              f"{match.group(1)} のラムダは .Value まで書く（今は {match.group(2).strip()}）"))
 
     # F-15 スクリプトからの Submit() は CLB 本来の入力検証を走らせない
-    for method, body in _methods(_blank(text, _STRINGS)):
+    for method, body in _methods(code):
         submit = _SUBMIT.search(body)
         if not submit:
             continue
@@ -1308,13 +1325,12 @@ def check_script(path, text, findings):
 
 # 列 0 から始まるメソッドの見出し（`void Foo()` / `string Bar(DateOnly d)`）。
 # CLB スクリプトはメソッドを平らに並べるので、これで区切れる。
-_METHOD_HEAD = re.compile(r"^[A-Za-z_][\w<>\[\],?\s]*\s+(\w+)\s*\([^)]*\)\s*$", re.MULTILINE)
+# **引数の中の括弧を 1 段だけ許す**（`int n = Foo()`・タプル型）。許さないと既定値が `)` を含むとき見出しに見えない。
+_METHOD_HEAD = re.compile(
+    r"^[A-Za-z_][\w<>\[\],?\s]*\s+(\w+)\s*\(((?:[^()]|\([^()]*\))*)\)\s*$", re.MULTILINE)
 
-# 既定値つきの引数を持つメソッドの見出し（`void Amend(string a, string done = "")`）。
-# `==` は比較なので外す。文字列は先に空にしてから当てる（本文の `=` を引数と取り違えない）。
-_DEFAULT_PARAM = re.compile(
-    r"^[A-Za-z_][\w<>\[\],?\s]*\s+(\w+)\s*\((?:[^)=]|(?<![=!<>])=(?!=))*?(?<![=!<>])=(?!=)[^)]*\)\s*$",
-    re.MULTILINE)
+# 引数の並びの中の代入（既定値）。`==`・`!=`・`<=`・`>=`・`=>` は外す。文字列は先に空にしてから当てる。
+_ASSIGNMENT = re.compile(r"(?<![=!<>])=(?![=>])")
 
 # **`row.Submit()` は別のインスタンスの保存**なので対象にしない（qa/01 F-03）。
 # `(?<![\w.])` が、直前がドットの形（＝他のオブジェクトのメソッド）を落とす。
@@ -1681,6 +1697,12 @@ def selftest():
         ("try は使えない", "void A()\n{\n    try\n    {\n    }\n}\n", (SEV_ERROR, "B-01"), ""),
         ("既定値つきの引数", 'void Amend(string a, string done = "")\n{\n}\n', (SEV_ERROR, "B-10"), "Amend(): "),
         ("数値の既定値つきの引数", "void A(int n = 0)\n{\n}\n", (SEV_ERROR, "B-10"), "A(): "),
+        ("括弧を含む既定値", "void A(List<int> a = new List<int>())\n{\n}\n", (SEV_ERROR, "B-10"), "A(): "),
+        ("文字列の中に = がある既定値", 'void A(string a = "=")\n{\n}\n', (SEV_ERROR, "B-10"), "A(): "),
+        ("null の既定値", "void A(string a = null, int b = -1)\n{\n}\n", (SEV_ERROR, "B-10"), "A(): "),
+        # **文字列の中の `//` をコメントと取り違えない。** 取り違えると閉じ引用符が消え、以降の判定がずれる。
+        ("URL の文字列の後の Submit", 'void A()\n{\n    var u = "https://x";\n    Submit();\n}\n',
+         (SEV_ERROR, "F-15"), "Submit() の前に ValidateInput() を呼ぶ"),
         ("整数専用の書式", 'void A()\n{\n    var s = n.ToString("D2");\n}\n',
          (SEV_ERROR, "A-06"), ""),
         ("並べ替えの .Value 落ち", "void A()\n{\n    rows.OrderBy(r => r.Code);\n}\n",
@@ -1708,6 +1730,10 @@ def selftest():
 
     for label, script in [
         ("既定値の無い引数と、本文の代入", 'void A(string a, int b)\n{\n    var x = "=";\n    if (a == b) return;\n}\n'),
+        # **見出しの直後の本文の代入と、列 0 のモジュール変数は引数ではない。**
+        ("見出しの直後の代入", "void A(int a)\n{\n    a = 1;\n    var f = (int x) => x >= a;\n}\n"),
+        ("列 0 のモジュール変数", "bool _busy = false;\n\nvoid A(int a)\n{\n}\n"),
+        ("比較を含む引数の無いメソッド", "bool A(int a, int b)\n{\n    return a != b && a <= b;\n}\n"),
         ("検証してから Submit",
          "void A()\n{\n    if (!ValidateInput()) return;\n    var ok = this.Submit();\n}\n"),
         # **コメントの中の Submit() を叩かない。** この規則の解説そのものがコメントに書いてある。

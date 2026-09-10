@@ -102,19 +102,24 @@ public static class AccountingFixture
     /// 取引先の目録。<b>検体が指す 2 件</b>（<see cref="Partner"/>・<see cref="OtherPartner"/>）と、無効にした 1 件。
     /// </summary>
     /// <remarks>
-    /// <b>「選べる取引先が無い」側は、目録も空にする</b>——マスタに 1 件も無い状態を写す。
+    /// <b>「選べる取引先が無い」側は、無効にした 1 件だけの目録にする</b>——「1 件も無い」ではなく
+    /// 「全部無効」の状態を写す（<c>PartnerRequired</c> の文言が名指しする状態。2026-09-10 の自己レビュー）。
     /// その側で <see cref="Partner"/> を指す検体は「マスタに無い」と断られる（それが正しい）。
     /// </remarks>
     public static PartnerCatalog Partners(bool hasSelectable = true)
-        => hasSelectable
+    {
+        var retired = new PartnerDefinition(RetiredPartner, "取引をやめた先", IsActive: false);
+
+        return hasSelectable
             ? new PartnerCatalog(
                 [
                     new PartnerDefinition(Partner, "株式会社取引先", IsActive: true),
                     new PartnerDefinition(OtherPartner, "別の取引先", IsActive: true),
-                    new PartnerDefinition(RetiredPartner, "取引をやめた先", IsActive: false),
+                    retired,
                 ],
                 hasSelectable: true)
-            : new PartnerCatalog([], hasSelectable: false);
+            : new PartnerCatalog([retired], hasSelectable: false);
+    }
 
     public static FiscalCalendar Calendar(
         PeriodStatus septemberStatus = PeriodStatus.Open,

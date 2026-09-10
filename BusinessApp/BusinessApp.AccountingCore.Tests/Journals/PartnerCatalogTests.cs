@@ -39,11 +39,29 @@ public class PartnerCatalogTests
             "partners",
             Assert.Throws<ArgumentNullException>(() => new PartnerCatalog(null!, hasSelectable: true)).ParamName);
 
-    [Fact]
-    public void 同じ取引先を二度渡せば止まる()
+    /// <summary>
+    /// <b>読む前の目録では引けない</b>——空の目録で検証を通すと、参照している取引先が全部「マスタに無い」になる。
+    /// 「選べる取引先があるか」だけは読む前でも答える。
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void 読む前の目録では取引先を引けない(bool hasSelectable)
     {
-        var twice = new PartnerDefinition(new PartnerId(1), "同じ", IsActive: true);
+        var unloaded = PartnerCatalog.Unloaded(hasSelectable);
 
-        Assert.Throws<ArgumentException>(() => new PartnerCatalog([twice, twice], hasSelectable: true));
+        Assert.False(unloaded.IsLoaded);
+        Assert.Equal(hasSelectable, unloaded.HasSelectable);
+        var error = Assert.Throws<InvalidOperationException>(() => unloaded.Find(AccountingFixture.Partner));
+        Assert.Contains("WithPartnersAsync", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void 読んだ目録は空でも引ける()
+    {
+        var empty = new PartnerCatalog([], hasSelectable: true);
+
+        Assert.True(empty.IsLoaded);
+        Assert.Null(empty.Find(AccountingFixture.Partner));
     }
 }

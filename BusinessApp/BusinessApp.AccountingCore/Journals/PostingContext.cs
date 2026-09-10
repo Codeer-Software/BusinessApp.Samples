@@ -20,7 +20,7 @@ using BusinessApp.AccountingCore.Periods;
 /// （<c>JournalPoster</c> が計上の直前に足す）。</para>
 /// <para><b>実在と有効は科目・補助科目・部門と同じ形で見る</b>（<c>E-PARTNER-UNKNOWN</c> / <c>E-PARTNER-INACTIVE</c>。
 /// 2026-09-10。それまでは有無しか持たず、マスタに無い識別子は DB の外部キーの生の失敗になり、
-/// 無効にした取引先も新たな計上に使えた——qa/03 L-14 と同じ型。docs/04 §1 の B-1）。</para>
+/// 無効にした取引先も新たな計上に使えた——qa/03 L-14 と同じ型。docs/10 §6-3）。</para>
 /// </remarks>
 public sealed record PostingContext(
     AccountCatalog Accounts,

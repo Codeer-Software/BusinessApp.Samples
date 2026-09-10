@@ -42,8 +42,16 @@ public static class JournalEntryValidator
     /// マスタに無い識別子は DB の外部キーの生の失敗になり、無効にした取引先も新たな計上に使えた（qa/03 L-14 の型。2026-09-10）。</para>
     /// <para><b>伝票の取引先は伝票として 1 回、明細の取引先は行ごとに見る。</b> 明細が空なら伝票の値が実効値になる
     /// （<see cref="JournalEntry.PartnerOf"/>）ので、行ごとに実効値を見ると同じ断りが行数だけ並ぶ。</para>
-    /// <para><b>無効の重さは種別で変わる</b>（<see cref="InactiveSeverity"/>）——取消・訂正は原仕訳の写しなので、
-    /// 原仕訳の後に無効にされた取引先でも止めない。</para>
+    /// <para><b>重さは、利用者が直せるかで決める</b>（<see cref="ReversalOnlySeverity"/> の注記と同じ線）。
+    /// <b>伝票の取引先</b>は訂正の下書きで選び直せるので、外すのは取消だけ（<see cref="ReversalOnlySeverity"/>）——
+    /// 訂正でも外すと、無効にした相手の新しい記帳を訂正経由で帳簿へ入れられる。
+    /// <b>明細の取引先</b>は画面に列が無く、訂正の下書きでも直す手立てが無いので、取消も訂正も外す（<see cref="InactiveSeverity"/>）。</para>
+    /// <para><b>「マスタに無い」も同じ重さで扱う。</b> DDL の取引先のトリガは、取消の明細が計上済みの原仕訳の写しなら
+    /// 取引先が <c>partners</c> に無くても通す（<c>trg_journal_entries_partner_presence_when_posted</c>。
+    /// 外部キーを切った経路で入った行も取り消せるように）。関門が取消で Error にすると、その伝票は
+    /// 取り消せも訂正もできずに帳簿に残る——<see cref="InactiveSeverity"/> が最悪と呼ぶ形。</para>
+    /// <para><b>警告は、いまはどこにも届かない</b>（計上の側は Error だけを読む）。「警告に落とす」は「止めない」の意味であり、
+    /// 届け先は未決である（docs/04 §5）。</para>
     /// </remarks>
     private static void ValidatePartners(JournalEntry entry, PartnerCatalog partners, List<Violation> violations)
     {
@@ -61,13 +69,18 @@ public static class JournalEntryValidator
     private static void ValidatePartner(
         PartnerId partnerId, JournalEntry entry, PartnerCatalog partners, int? lineNo, List<Violation> violations)
     {
+        // 伝票の取引先は直せる（訂正の下書きで選び直せる）。明細の取引先は直せない（画面に列が無い）。
+        var severity = lineNo is null ? ReversalOnlySeverity(entry) : InactiveSeverity(entry);
+
+        // **次の一手まで言う**（docs/21 §2-3）。読み手の経理担当は取引先を保守する役でもある（docs/02）。
         var partner = partners.Find(partnerId);
         if (partner is null)
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PartnerUnknown,
-                "取引先が取引先マスタにありません。",
-                lineNo));
+                "取引先が取引先マスタにありません。別の取引先を選ぶか、取引先マスタに登録してください。",
+                lineNo,
+                severity));
             return;
         }
 
@@ -75,9 +88,10 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PartnerInactive,
-                $"取引先「{partner.Name}」は無効なので、新しい計上には使えません。",
+                $"取引先「{partner.Name}」は無効なので、新しい計上には使えません。"
+                + "別の取引先を選ぶか、取引先の画面で有効に戻してください。",
                 lineNo,
-                InactiveSeverity(entry)));
+                severity));
         }
     }
 
@@ -154,7 +168,7 @@ public static class JournalEntryValidator
         foreach (var lineNo in entry.Lines.GroupBy(l => l.LineNo).Where(g => g.Count() > 1).Select(g => g.Key))
         {
             violations.Add(new Violation(
-                JournalViolationCodes.LineNoInvalid, JournalLineRules.LineNoDuplicated, lineNo));
+                JournalViolationCodes.LineNoInvalid, JournalLineRules.LineNoDuplicatedAt(lineNo)));
         }
 
         // **行番号を添えない。** 添えると「0 行目: 行番号が正しくありません」と、

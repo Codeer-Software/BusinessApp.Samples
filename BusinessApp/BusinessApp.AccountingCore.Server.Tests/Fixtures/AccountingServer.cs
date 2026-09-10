@@ -349,6 +349,10 @@ internal sealed class AccountingServer : IDisposable
             """);
     }
 
+    /// <summary>行番号から明細の識別子を引く。</summary>
+    public long LineIdOf(JournalEntryId entryId, int lineNo)
+        => Scalar<long>($"select id from journal_lines where journal_entry_id = {entryId.Value} and line_no = {lineNo}");
+
     /// <summary>
     /// 明細を、<b>保存の関門が通したとおりの値で</b> 1 行足す。
     /// </summary>
