@@ -427,7 +427,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SubmitButtonFieldDesign"
     },
     {
-      "Text": "「*」は必須項目です。",
+      "Text": "「*」は必須項目です。「税率区分」は「課税区分」が「課税売上」「課税仕入」のときに必要で、それ以外では空にします。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -475,7 +475,7 @@
     "": {
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "Detail_OnAfterInitialization",
-      "OnLocationChanging": "",
+      "OnLocationChanging": "Detail_OnLocationChanging",
       "OnFieldDataChanged": "",
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,
@@ -726,7 +726,7 @@
                 "Layout": {
                   "FieldName": "RateKindLabel",
                   "ContextMenu": "",
-                  "ClassName": "",
+                  "ClassName": "required-label",
                   "FontFamily": "",
                   "Color": "",
                   "Name": "",

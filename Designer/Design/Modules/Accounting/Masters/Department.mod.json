@@ -328,7 +328,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SubmitButtonFieldDesign"
     },
     {
-      "Text": "「*」は必須項目です。",
+      "Text": "「*」は必須項目です。「全社共通」にできる部門は 1 つだけです。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -376,7 +376,7 @@
     "": {
       "OnBeforeInitialization": "",
       "OnAfterInitialization": "Detail_OnAfterInitialization",
-      "OnLocationChanging": "",
+      "OnLocationChanging": "Detail_OnLocationChanging",
       "OnFieldDataChanged": "",
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,

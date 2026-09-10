@@ -52,20 +52,27 @@ public sealed class MasterCodeStore(IDbAccessor accessor, string dataSourceName)
         return rows.Count == 0 ? null : Convert.ToString(rows[0]["code"], CultureInfo.InvariantCulture);
     }
 
-    /// <summary>「全社共通」の部門が既にあるか（自分自身は除く）。</summary>
+    /// <summary>いま「全社共通」になっている部門の（コード, 名前）。無ければ <c>null</c>（自分自身は除く）。</summary>
     /// <remarks>
     /// <b>DDL の部分 UNIQUE インデックスと同じことを見る。</b> 二層に置く狙いは、
     /// DB に当たると定型文になる失敗を、利用者の語で先に断ることである（qa/03 L-28）。
+    /// <b>相手の字を返す</b>のはコードの重複（<see cref="FindConflictingCodeAsync"/>）と同じ理由——
+    /// ぶつかった相手を教えないと、利用者はどの部門をオフにすればよいか分からない（qa/02 R57-06）。
     /// </remarks>
-    public async Task<bool> CompanyWideDepartmentExistsAsync(long? id)
+    public async Task<(string Code, string Name)?> CompanyWideDepartmentAsync(long? id)
     {
         var rows = await accessor.QueryAsync(
             dataSourceName,
-            "select count(*) as n from departments"
-            + " where is_company_wide = 1 and (@p1 is null or id <> @p1)",
+            "select code, name from departments"
+            + " where is_company_wide = 1 and (@p1 is null or id <> @p1) limit 1",
             new() { { "@p1", Param(id) } });
 
-        return Convert.ToInt64(rows[0]["n"], CultureInfo.InvariantCulture) > 0;
+        // code と name は NOT NULL の列（ddl/004_masters.sql）。Convert.ToString は null も DBNull も空文字に落とすので、
+        // ここで見分ける分岐は作らない（作っても通らない）。行は部分 UNIQUE インデックスが高々 1 件を保証する——limit 1 は念のため。
+        return rows.Count == 0
+            ? null
+            : (Convert.ToString(rows[0]["code"], CultureInfo.InvariantCulture)!,
+               Convert.ToString(rows[0]["name"], CultureInfo.InvariantCulture)!);
     }
 
     /// <summary>

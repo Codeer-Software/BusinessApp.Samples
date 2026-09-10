@@ -4,7 +4,7 @@ status: current
 scope: 会計コア
 audience: [開発]
 growth: append
-updated: 2026-09-08
+updated: 2026-09-11
 supersedes: []
 related: [CLAUDE.md, ../docs/README.md, ../docs/21_画面の原則.md, ../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md]
 ---
@@ -183,6 +183,22 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
   サーバ側の整った文言に永久に到達しない（`FiscalYear` で実際に起きた。qa/02 R24-25）。
   DB の `NOT NULL` と関門は別に守っているので、外しても穴は開かない。
   **`lint_design.py` はこの意味を前提に「必須欄のラベルに印があるか」を検査する。**
+- 2026-09-10: **離脱の確認は `DetailLayouts` の `OnLocationChanging` に `bool Detail_OnLocationChanging()` を配線する**
+  （`false` で遷移が止まる。`MessageBox.ShowWithTitle` で「離れる／戻る」）。**新規作成の画面では、何も触らなくても
+  `IsModified` が真になる**——CLB が `Id` を「変更あり」に数え、`Detail_OnAfterInitialization` で入れた初期値（`IsActive` など）も数える
+  （`GetModifiedFieldNames()` が「Id,IsActive」を返した。[docs/qa/01 F-43](../docs/qa/01_CLB静かな失敗.md)）。
+  新規のときは `Id` と初期値の欄を除いて数える（`HasUserChanges()`。初期値の欄の一覧は初期化と揃える——`lint_design.py` の F-43 が突き合わせる）。
+  **`bool` メソッドの `foreach` の中で `return 値;` すると、離脱の確認が黙って「離れない」になる**（[docs/qa/01 B-11](../docs/qa/01_CLB静かな失敗.md)。1 例）——フラグで受けて外で返す。
+  保存（`Submit`）が通れば `IsModified` は戻る。**`*.mod.cs` を足したモジュール（自社情報）はサーバ再起動が要る**。
+  **スクリプト自身が `NavigateTo` する経路（複製・訂正・取消・削除の後）では、モジュール変数の印（`leavingByScript`）を `NavigateTo` の直前で立て、
+  `HasUserChanges()` の先頭で見る**——立てないと確認が重なり、「入力を続ける」を選ぶとサーバは済んでいるのに画面が残る。
+  **8 モジュールに同じ 2 関数を写している**——`IsModified` / `GetModifiedFieldNames` はモジュールの状態で、別モジュールのメソッドは呼べず
+  （[docs/qa/01 X-04](../docs/qa/01_CLB静かな失敗.md)）モジュールを引数にも取れない（同 B-06）ので、共通化の手段が無い。
+  **効くのはアプリの中の遷移だけ**（再読込・タブを閉じるは止めない。[docs/qa/04 J-50](../docs/qa/04_実機操作テスト.md)）。
+  削除の確認の文は種別で選ぶだけ——帰結の文言が増えるなら availability API へ移す（ADR-0008）
+- 2026-09-10: **条件つき必須の印**は、欄が 1 つの画面（税区分の「税率区分」）ならラベルの `required-label` ＋ 凡例で条件を言い、
+  `MARK_WITHOUT_REQUIRED` に載せる。**明細の一覧（`ListField`）の欄は印を付ける場所が無い**——行の詳細レイアウトは
+  `CanNavigateToDetail: false` で開けないので、そこに凡例を足しても届かない（2026-09-10 に足して実機で気づき、戻した）。伝票の凡例で言う
 - 2026-09-08: **選べない相手を候補に出さない絞りは、`FieldValueMatchCondition` を 1 つ足すだけで書ける**
   （補助科目の「勘定科目」の候補を `UsesSubAccount.Value = true` で絞った。既存の `IsActive` の条件と同じ形）。
   **一覧の列に足すときは、既にある同型の列を複製する**（`IsContra` を写して `UsesSubAccount` にした——

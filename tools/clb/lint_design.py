@@ -192,6 +192,11 @@ REQUIRED_EXEMPTIONS = {
 MARK_WITHOUT_REQUIRED = {
     ("JournalEntry", "Description"):
         "摘要は計上でだけ必須。IsRequired を立てると下書き保存も止まる（docs/10 §4-2-1）",
+    # 条件つき必須（要否が他の欄の値で変わる）。IsRequired では表せないので、印と凡例で先出しする（docs/21 §1）。
+    ("TaxCategory", "RateKind"):
+        "税率区分は課税区分が課税売上・課税仕入のときだけ必須（docs/11 §1。関門 MasterSubmitGate）",
+    ("JournalEntry", "Partner"):
+        "伝票の取引先は「取引先を要する」科目の明細があるときだけ、計上に必須（docs/10 §6-2。計上の関門）",
 }
 
 
@@ -1020,6 +1025,30 @@ def check_app_access_condition(doc, path, findings):
 
 
 
+def _has_required_mark(doc, field):
+    """その欄のラベルに印が出るか（`required-label` か、`RelativeField` を欄に向けた LabelField）。"""
+    for f in doc.get("Fields", []):
+        if (f.get("TypeFullName", "").endswith("LabelFieldDesign") and f.get("RelativeField") == field):
+            return True
+    found = False
+
+    def walk(node):
+        nonlocal found
+        if isinstance(node, dict):
+            if (node.get("TypeFullName", "").endswith("FieldLayoutDesign")
+                    and node.get("FieldName") == f"{field}Label"
+                    and REQUIRED_LABEL_CLASS in (node.get("ClassName") or "").split()):
+                found = True
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(doc.get("DetailLayouts", {}))
+    return found
+
+
 def check_exemptions(modules, findings):
     """**免除表が腐っていないか**（2026-09-02 の自己レビュー）。
 
@@ -1060,6 +1089,10 @@ def check_exemptions(modules, findings):
         elif fields[field].get("IsRequired"):
             findings.append((SEV_ERROR, "D-20", where,
                              f"{module}.{field} は IsRequired になったので、免除の行は要らない（消す）"))
+        elif not _has_required_mark(doc, field):
+            # 印を消しても行が残ると、免除表が死んだ条件になる（qa/03 L-35 の型。2026-09-10 の自己レビュー）。
+            findings.append((SEV_ERROR, "D-20", where,
+                             f"{module}.{field} のラベルに印が無いのに MARK_WITHOUT_REQUIRED に載っている（印を戻すか、行を消す）"))
 
     for module, column in sorted(REQUIRED_EXEMPTIONS):
         doc = by_name.get(module)
@@ -1299,6 +1332,31 @@ def check_script(path, text, findings):
                              f"{match.group(1)}(): 引数に既定値を書かない（CLB は省略した呼び出しを解決しない。"
                              "全部の呼び出しで全部の引数を渡す。qa/01 B-10）"))
 
+    # B-11 bool を返すメソッドの foreach の中で値を返すと、呼び出し元が黙って false 側に落ちる
+    # （2026-09-10 実測。OnLocationChanging から呼んだ HasUserChanges で、確認が出ずに遷移だけが止まった。qa/01 B-11）。
+    # void の `return;`（SelectFiscalYear）は動いているので、値を返す return だけを見る。
+    for method, body in _methods(code):
+        if not re.search(r"^bool\s+" + re.escape(method) + r"\s*\(", code, re.MULTILINE):
+            continue
+        for block in _foreach_blocks(body):
+            if re.search(r"\breturn\s+[^;\s][^;]*;", block):
+                findings.append((SEV_ERROR, "B-11", name,
+                                 f"{method}(): foreach の中で値を返さない（フラグで受けて外で返す。qa/01 B-11）"))
+                break
+
+    # F-43 新規作成の画面で IsModified が真になる初期値の欄は、HasUserChanges の除外と揃える
+    # （揃っていないと、新規の画面を開いて戻るだけで「保存していない変更があります」が出る。qa/01 F-43）。
+    bodies = dict(_methods(code))
+    # 除外の欄名は文字列の中にある——`code` は文字列を空白にしてあるので、コメントだけ消した `text` から読む。
+    bodies_with_strings = dict(_methods(text))
+    if "HasUserChanges" in bodies and "Detail_OnAfterInitialization" in bodies:
+        excluded = set(re.findall(r'name\s*!=\s*"(\w+)"', bodies_with_strings.get("HasUserChanges", "")))
+        for field in sorted(set(re.findall(r"^\s*(\w+)\.Value\s*=[^=]", bodies["Detail_OnAfterInitialization"], re.MULTILINE))):
+            if field not in excluded:
+                findings.append((SEV_ERROR, "F-43", name,
+                                 f"Detail_OnAfterInitialization が {field} に初期値を入れるのに、HasUserChanges が除いていない"
+                                 "（新規作成の画面で離脱の確認が毎回出る。qa/01 F-43）"))
+
     # A-06 数値は decimal に統一されるので整数専用書式は実行時に落ちる
     for match in re.finditer(r'ToString\("[DdXx]\d*"\)', text):
         findings.append((SEV_ERROR, "A-06", name,
@@ -1338,6 +1396,23 @@ _ASSIGNMENT = re.compile(r"(?<![=!<>])=(?![=>])")
 # **引数のある形も見る。** CLB は `Submit()` と `Submit(List<Module>)` の 2 つを公開している。
 _SUBMIT = re.compile(r"(?<![\w.])(?:this\.)?Submit\s*\([^)]*\)")
 _VALIDATE_INPUT = re.compile(r"(?<![\w.])(?:this\.)?ValidateInput\s*\([^)]*\)")
+
+
+def _foreach_blocks(body):
+    """本文の中の foreach ブロック（`{`〜対応する `}`）の中身を順に返す。入れ子は外側ごと 1 つに数える。"""
+    for match in re.finditer(r"\bforeach\s*\(", body):
+        start = body.find("{", match.end())
+        if start < 0:
+            continue
+        depth = 0
+        for i in range(start, len(body)):
+            if body[i] == "{":
+                depth += 1
+            elif body[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    yield body[start + 1:i]
+                    break
 
 
 def _methods(text):
@@ -1707,6 +1782,14 @@ def selftest():
          (SEV_ERROR, "F-15"), "Submit() の前に ValidateInput() を呼ぶ"),
         ("整数専用の書式", 'void A()\n{\n    var s = n.ToString("D2");\n}\n',
          (SEV_ERROR, "A-06"), ""),
+        ("bool メソッドの foreach の中で値を返す",
+         'bool A()\n{\n    foreach (var n in Xs())\n    {\n        if (n != "a") return true;\n    }\n    return false;\n}\n',
+         (SEV_ERROR, "B-11"), "A(): "),
+        ("初期値の欄を HasUserChanges が除いていない",
+         'void Detail_OnAfterInitialization()\n{\n    if (!IsNewData) return;\n    IsActive.Value = true;\n}\n'
+         'bool HasUserChanges()\n{\n    var changed = false;\n    foreach (var name in this.GetModifiedFieldNames())\n    {\n'
+         '        if (name != "Id") changed = true;\n    }\n    return changed;\n}\n',
+         (SEV_ERROR, "F-43"), "IsActive"),
         ("並べ替えの .Value 落ち", "void A()\n{\n    rows.OrderBy(r => r.Code);\n}\n",
          (SEV_ERROR, "C-01"), ""),
         ("検証を呼ばない Submit", "void A()\n{\n    Submit();\n}\n",

@@ -176,6 +176,10 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     }
 
     /// <summary>「全社共通」の部門は 1 つだけ（docs/10 §9-1）。</summary>
+    /// <remarks>
+    /// 見るのは DB に保存済みの行だけである。<b>同じ保存に「全社共通」の行を 2 つ載せる経路（取込・API）は関門では数えず、
+    /// DDL の部分 UNIQUE インデックス（<c>ux_departments_company_wide</c>）が定型文で拒む</b>——画面は 1 行ずつしか保存しない。
+    /// </remarks>
     private async Task RejectSecondCompanyWideDepartmentAsync(CodedMaster master, ModuleData data, long? id)
     {
         if (master.ModuleName != "Department" || Boolean(data, "IsCompanyWide") is not true)
@@ -183,12 +187,17 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             return;
         }
 
-        if (await store.CompanyWideDepartmentExistsAsync(id))
+        var current = await store.CompanyWideDepartmentAsync(id);
+        if (current is null)
         {
-            throw new MasterRejectedException(
-                "「全社共通」の部門は 1 つだけです。"
-                + "いま「全社共通」になっている部門をオフにしてから、こちらをオンにしてください。");
+            return;
         }
+
+        // **ぶつかった相手を教える**（qa/02 R57-06）。コードの重複の断りは相手の字を見せているのに、
+        // こちらだけ「いまなっている部門」と言うのは非対称で、利用者は一覧を探しに行くことになる。
+        throw new MasterRejectedException(
+            $"「全社共通」の部門は 1 つだけです。いま「全社共通」になっているのは部門名「{current.Value.Name}」（部門コード {current.Value.Code}）です。"
+            + "そちらをオフにしてから、こちらをオンにしてください。");
     }
 
     /// <summary>
