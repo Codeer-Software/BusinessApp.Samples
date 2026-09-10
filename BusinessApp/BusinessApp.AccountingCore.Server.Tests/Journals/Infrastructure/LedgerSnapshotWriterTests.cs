@@ -490,6 +490,55 @@ public class LedgerSnapshotWriterTests
     }
 
     /// <summary>
+    /// <b>断りがあれば、伝票にも明細にも 1 行も写しを書かない。断りは取引先ごとに 1 件。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="登録が同じ日に_2_件あれば計上を止める"/> は計上の経路（例外と <c>status</c>）しか見ておらず、
+    /// **写す前に断る**という性質も、戻り値の契約も表明していなかった（2026-09-10 の自己レビュー R67-03）。
+    /// ここは <c>BurnAsync</c> を直接呼び、**書いた値を読み戻す**——伝票の写し（先に書かれる側）が
+    /// 空のままであることが、「断るなら 1 行も書かない」の表明である。</para>
+    /// <para><b>同じ取引先を 2 行に置く</b>——行ごとに断ると同じ文が 2 つ並ぶ。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 断りがあれば_1_行も書かず_断りは取引先ごとに_1_件()
+    {
+        using var server = new AccountingServer();
+        var partner = InsertPartner(server, "P900", "株式会社ベガ商会");
+        server.Execute("drop index ux_partner_invoice_registrations_valid_from");
+        InsertRegistration(server, partner, "T1111111111111", "2023-10-01");
+        InsertRegistration(server, partner, "T2222222222222", "2023-10-01");
+        var entry = PostableDraft(server);
+        SetEntryPartner(server, entry, partner);
+        SetLinePartner(server, entry, 1, partner, "2026-08-19");
+        SetLinePartner(server, entry, 2, partner, "2026-08-19");
+
+        var violations = await server.SnapshotWriter.BurnAsync(await server.EntryStore.LoadAsync(new(entry)));
+
+        var violation = Assert.Single(violations);
+        Assert.Equal(JournalViolationCodes.AmbiguousRegistration, violation.Code);
+        Assert.Contains("株式会社ベガ商会", violation.Message, StringComparison.Ordinal);
+        Assert.Null(EntrySnapshot(server, entry));
+        Assert.Null(Snapshot(server, entry, 1, "partner_name_snapshot"));
+        Assert.Null(Snapshot(server, entry, 2, "partner_name_snapshot"));
+    }
+
+    /// <summary>断りが無ければ空を返す（呼び手はこれで投げるかを決める）。</summary>
+    [Fact]
+    public async Task 断りが無ければ空を返す()
+    {
+        using var server = new AccountingServer();
+        var partner = InsertPartner(server, "P900", "株式会社ベガ商会");
+        InsertRegistration(server, partner, "T1111111111111", "2023-10-01");
+        var entry = PostableDraft(server);
+        SetLinePartner(server, entry, 1, partner, "2026-08-19");
+
+        var violations = await server.SnapshotWriter.BurnAsync(await server.EntryStore.LoadAsync(new(entry)));
+
+        Assert.Empty(violations);
+        Assert.Equal("株式会社ベガ商会", Snapshot(server, entry, 1, "partner_name_snapshot"));
+    }
+
+    /// <summary>
     /// <b>写しの書き込みが 1 行に当たらなければ止める。</b>
     /// 黙って 0 件で通すと、写しが空のまま計上済みになって永久に直せない。
     /// </summary>

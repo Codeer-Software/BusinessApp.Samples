@@ -4,7 +4,6 @@ using BusinessApp.AccountingCore.Server.Journals.Application;
 using BusinessApp.AccountingCore.Server.Journals.Presentation;
 using BusinessApp.AccountingCore.Server.Masters.Application;
 
-
 /// <summary>
 /// <c>record</c> のコピーコンストラクタ（<c>with</c> のために自動生成される部分）に触れる。
 /// </summary>
@@ -30,6 +29,7 @@ public class GeneratedCopyConstructorTests
         _ = new DuplicationResult([]) with { };
         // 関門の定数表（守る列の現在形は docs/12 §2）。組み替える場面は無い
         _ = new BusinessApp.AccountingCore.Server.Masters.Infrastructure.GuardedColumn("Code", "code", "コード") with { };
+        // **記述子の置き場は Masters/Infrastructure**（ADR-0050 の決定 7。一覧は Application の関門が持つ）。
         _ = new BusinessApp.AccountingCore.Server.Masters.Infrastructure.GuardedMaster("Account", "勘定科目", "accounts", "account_id", []) with { };
     }
 }

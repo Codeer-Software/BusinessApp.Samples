@@ -2,8 +2,6 @@ namespace BusinessApp.AccountingCore.Server.Shared.Presentation;
 
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
-using BusinessApp.AccountingCore.Server.Masters.Application;
-using BusinessApp.AccountingCore.Server.Settings.Application;
 
 /// <summary>
 /// 空にした文字の欄を、空文字ではなく NULL で保存する（docs/04 §1 の A-5）。

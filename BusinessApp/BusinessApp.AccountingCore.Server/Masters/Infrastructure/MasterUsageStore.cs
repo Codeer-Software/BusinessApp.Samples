@@ -5,7 +5,6 @@ using System.Globalization;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
-
 /// <summary>
 /// マスタの行が<b>計上済みの仕訳明細に使われているか</b>と、いま保存されている値を読む（ADR-0038）。
 /// </summary>

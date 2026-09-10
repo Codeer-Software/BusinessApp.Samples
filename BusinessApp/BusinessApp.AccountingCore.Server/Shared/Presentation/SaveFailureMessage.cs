@@ -12,7 +12,7 @@ using BusinessApp.AccountingCore.Server.Journals.Application;
 /// <b>観測した文言の一覧と、中身を見ずにまるごと差し替える理由は qa/01 F-16 が持つ</b>
 /// （CLB の版に紐づくので、台帳側で増える）。</para>
 /// <para><b>ここは最後の網であって、一次の守りではない。</b> 差し戻しの理由は関門が
-/// 利用者の語で作る（<see cref="Journals.JournalSubmitRequirements"/> ほか）。
+/// 利用者の語で作る（<see cref="JournalSubmitRequirements"/> ほか）。
 /// ここに落ちてくるのは<b>関門が拾えなかった失敗</b>だけで、それは「関門が 1 つ足りない」という合図である。</para>
 /// <para><b>差し替えた原文は捨てず、呼び出し側に渡す。</b> F-26 は<b>生のメッセージが見えたから
 /// 見つかった</b>もので、黙って捨てるとこの網が次の F-26 を隠す。

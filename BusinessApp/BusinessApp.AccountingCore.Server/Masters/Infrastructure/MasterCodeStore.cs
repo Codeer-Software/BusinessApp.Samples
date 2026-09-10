@@ -5,7 +5,6 @@ using System.Globalization;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
 
-
 /// <summary>
 /// マスタの値を保存する前に、DB へ問い合わせるもの（<c>MasterSubmitGate</c> の口）。
 /// </summary>

@@ -67,18 +67,26 @@ public sealed class LedgerSnapshotWriter(IDbAccessor dbAccessor, string dataSour
 
         // **先に全行の写しを決め、断るものがあれば 1 行も書かない。** 断りは呼び手（<c>JournalPoster</c>）が
         // 差し戻しに載せる——ここは Infrastructure なので、Application の例外を知らない（ADR-0050 の決定 4）。
+        // **断りは取引先ごとに 1 件。** 同じ取引先が 3 行にあっても、直すのは登録年月日 1 か所である
+        // （行ごとに出すと同じ文が ①②③ と並ぶ。2026-09-10 の自己レビュー R67-03）。
         var resolved = new List<(int LineNo, string? Name, string? RegistrationNo)>();
         var violations = new List<Violation>();
+        var rejectedPartners = new HashSet<long>();
         foreach (var line in draft.Lines)
         {
-            var snapshot = draft.PartnerOf(line) is PartnerId partnerId
+            var partner = draft.PartnerOf(line);
+            var snapshot = partner is PartnerId partnerId
                 ? await CachedAsync(cache, partnerId)
                 : PartnerSnapshot.None;
 
             var (registrationNo, violation) = RegistrationNoAt(snapshot, TaxPointOf(draft, line));
             if (violation is not null)
             {
-                violations.Add(violation);
+                if (rejectedPartners.Add(partner!.Value.Value))
+                {
+                    violations.Add(violation);
+                }
+
                 continue;
             }
 

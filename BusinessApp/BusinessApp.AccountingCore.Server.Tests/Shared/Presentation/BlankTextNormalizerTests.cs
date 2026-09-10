@@ -1,6 +1,5 @@
 namespace BusinessApp.AccountingCore.Server.Tests.Shared.Presentation;
 
-
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
 using BusinessApp.AccountingCore.Server.Shared.Presentation;

@@ -9,10 +9,11 @@ using BusinessApp.AccountingCore.Server.Shared.Infrastructure;
 /// サーバ層のどこが<b>取引先部品を名指ししてよいか</b>（ADR-0025 §4・ADR-0029 §2）。
 /// </summary>
 /// <remarks>
-/// <para><b>見るのは部品の境界をまたぐ参照だけ</b>である。サーバ層の中の向き
+/// <para><b>見るのは部品の境界をまたぐ参照だけ</b>である。サーバ層の中の<b>機能どうし</b>の向き
 /// （<c>Journals</c> ↔ <c>Settings</c> ↔ <c>Shared</c>）は、いま誰も見ていない——
 /// 純粋層の同名クラスが持つ 4 種の検査のうち 1 種だけをここに置いている
-/// （2026-09-02 の自己レビュー。表を足すかは、サーバ層のフォルダが増えた日に決める）。</para>
+/// （2026-09-02 の自己レビュー）。<b>層の向き</b>（Application・Infrastructure・Presentation）は
+/// 隣の <see cref="LayerDependencyTests"/> が見る（ADR-0050。2026-09-10）。</para>
 /// <para><b>純粋層にしか規則が無かった。</b> <c>AccountingCore.Tests</c> の
 /// <c>ModuleDependencyTests</c> は「<c>Journals</c> だけが取引先部品を知ってよい」を守っているが、
 /// 見ているのは <c>BusinessApp.AccountingCore</c> だけである。**サーバ層は素通りしていた**——

@@ -15,9 +15,6 @@ namespace BusinessApp.AccountingCore.Server.Masters.Infrastructure;
 /// <param name="moduleName">CLB のモジュール名。</param>
 /// <param name="table">DB の表（CLB の <c>DbTable</c> の写し）。</param>
 /// <param name="codeLabel">コードの欄の呼び名（CLB の <c>DisplayName</c> の写し）。</param>
-/// <param name="moduleName">CLB のモジュール名。</param>
-/// <param name="table">DB の表（CLB の <c>DbTable</c> の写し）。</param>
-/// <param name="codeLabel">コードの欄の呼び名（CLB の <c>DisplayName</c> の写し）。</param>
 /// <param name="parent">一意の範囲を絞る親（補助科目だけ）。</param>
 public sealed class CodedMaster(
     string moduleName,

@@ -2,7 +2,6 @@ namespace BusinessApp.AccountingCore.Server.Tests.Settings.Application;
 
 using BusinessApp.AccountingCore.Server.Settings.Application;
 
-
 /// <summary>
 /// 自社情報の差し戻しが<b>見出しから始まる</b>こと（qa/02 R26-26・ADR-0023）。
 /// </summary>
