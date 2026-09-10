@@ -55,10 +55,52 @@ public static class JournalLineRules
     public const string LineNoNotStorable = "明細の行番号が正しくありません。行番号は画面が自動で振るので、明細を入力し直してください。";
 
     /// <summary>同じ行番号が 2 つある（同上）。</summary>
-    public const string LineNoDuplicated = "明細の行番号が重なっています。行番号は画面が自動で振るので、明細を入力し直してください。";
+    /// <remarks>
+    /// <b>番号は文に埋める</b>（<c>Violation.LineNo</c> に載せない）。「3 行目: 行番号が重なっています」では、
+    /// 3 行目が 2 つあるという事実を読み手に推測させる（2026-09-10 の自己レビュー）。
+    /// </remarks>
+    public static string LineNoDuplicatedAt(int lineNo)
+        => $"行番号 {lineNo} が 2 つの明細に付いています。行番号は画面が自動で振るので、明細を入力し直してください。";
 
     /// <summary>税区分が空（<see cref="JournalViolationCodes.TaxCategoryMissing"/>）。</summary>
     public const string TaxCategoryMissing = "税区分を選んでください。税に関係のない行にも「対象外」を選びます。";
+
+    // --- 利用者が触ってよい場面が無い欄（qa/03 L-30）---
+    //
+    // 画面では閲覧専用にしてある。ここで断るのは、画面を通らない経路（取込・API）のため。
+
+    // 「自動で」と言う——「伝票番号は計上のときに自動で付きます」（JournalEntryValidator）と同じ語。「システム」は画面の語彙に無い。
+    public const string OriginalEntryNotEditable =
+        "元の伝票は、取消・訂正のときに自動で入ります。手で入れたり消したりはできません。";
+
+    // --- 同時操作（qa/03 L-31）---
+    //
+    // **入力内容は 1 つも悪くない。** 悪いのは「開いたあとに別の人が変えた」ことなので、
+    // 「入力内容を確かめ」とは言わず、開き直して相手の変更を確かめるよう案内する（docs/21 §2-3）。
+    // **「もう一度入力」とは言わない**——何も直さず「計上する」を押しただけでも起きる。
+    // **消えた伝票に「開き直せ」とは言わない**——開き直す対象が無い。一覧へ戻す。
+
+    public const string ChangedByOthers =
+        "この伝票は、あなたが開いたあとに別の人が変更しました。画面を開き直して、その変更を確かめてから、もう一度操作してください。";
+
+    /// <summary>消えた伝票を<b>保存</b>しようとした。手元の入力をどうすればよいかまで言う。</summary>
+    public const string DeletedByOthers =
+        "この伝票は、あなたが開いたあとに別の人が削除しました。振替伝票の一覧に戻ってください。"
+        + "この内容が必要なら、新しい振替伝票として入力し直してください。";
+
+    /// <summary>消えた伝票を<b>削除</b>しようとした。入力は無いので、戻り先だけを言う。</summary>
+    public const string AlreadyDeletedByOthers =
+        "この伝票は、あなたが開いたあとに別の人が削除しました。振替伝票の一覧に戻ってください。";
+
+    /// <summary>
+    /// 変える・消す明細が消えていた。<b>件数で束ねる</b>——差分に行番号は無いので行は指せず、
+    /// 行ごとに同じ文を並べても読み手には同じ文が並ぶだけになる（2026-09-10 の自己レビュー）。
+    /// </summary>
+    // **伝票ごと消えている場合もこの文になる**——明細だけを直した保存には伝票の差分が無く（qa/01 F-41）、
+    // 消えた明細の親は分からない。開き直す先が無いときの行き先まで言う。
+    public static string LinesDeletedByOthers(int count)
+        => $"明細 {count} 行が、あなたが開いたあとに別の人に削除されています。画面を開き直して、残っている明細を確かめてください。"
+           + "伝票そのものが無ければ、振替伝票の一覧に戻ってください。";
 
     // --- 選択肢の値が DDL の CHECK の外（すべて JournalViolationCodes.ChoiceNotStorable）---
     //

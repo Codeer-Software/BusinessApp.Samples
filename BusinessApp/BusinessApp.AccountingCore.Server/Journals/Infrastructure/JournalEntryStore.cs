@@ -222,6 +222,38 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
         return rows.Count == 0 ? null : DbValue.ToEnum<EntryType>(rows[0]["entry_type"]);
     }
 
+    /// <summary>
+    /// 保存されている版（<c>optimistic_locking</c>）。無ければ <c>null</c>（削除されている）。
+    /// </summary>
+    /// <remarks>
+    /// <b>同時操作の断りのために読む</b>（qa/03 L-31）。CLB は版の食い違いを定型文でしか言わないので、
+    /// 関門が保存の前に版を突き合わせて、利用者の語で断る。**書くのは CLB だけ**（<c>OptimisticLockingFieldDesign</c>）。
+    /// </remarks>
+    public async Task<long?> FindVersionAsync(JournalEntryId id)
+    {
+        var rows = await QueryAsync("select optimistic_locking from journal_entries where id = @p1", id.Value);
+
+        return rows.Count == 0 ? null : DbValue.ToLong(rows[0]["optimistic_locking"]);
+    }
+
+    /// <summary>伝票の明細の識別子と行番号（行番号の重複を保存の前に見るため）。</summary>
+    public async Task<IReadOnlyList<StoredLineNo>> LoadLineNosAsync(JournalEntryId id)
+    {
+        var rows = await QueryAsync("select id, line_no from journal_lines where journal_entry_id = @p1 order by id", id.Value);
+
+        return [.. rows.Select(r => new StoredLineNo(DbValue.ToLong(r["id"]), (int)DbValue.ToLong(r["line_no"])))];
+    }
+
+    /// <summary>明細の識別子から、それが属する伝票と行番号。無ければ <c>null</c>（削除されている）。</summary>
+    public async Task<StoredLine?> FindLineAsync(long lineId)
+    {
+        var rows = await QueryAsync("select journal_entry_id, line_no from journal_lines where id = @p1", lineId);
+
+        return rows.Count == 0
+            ? null
+            : new StoredLine(new JournalEntryId(DbValue.ToLong(rows[0]["journal_entry_id"])), (int)DbValue.ToLong(rows[0]["line_no"]));
+    }
+
     /// <summary>この原仕訳を訂正する計上済みの再計上が既にあるか（二重訂正の検出）。</summary>
     public async Task<bool> HasCorrectionAsync(JournalEntryId originalId)
     {
@@ -414,3 +446,9 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
 /// <param name="ReversalEntryNo">取り消した反対仕訳の伝票番号。</param>
 /// <param name="CorrectionEntryNo">訂正の再計上の伝票番号。</param>
 public readonly record struct AmendmentEntryNumbers(int? ReversalEntryNo, int? CorrectionEntryNo);
+
+/// <summary>保存されている明細の識別子と行番号。</summary>
+public readonly record struct StoredLineNo(long LineId, int LineNo);
+
+/// <summary>保存されている明細が属する伝票と行番号。</summary>
+public readonly record struct StoredLine(JournalEntryId EntryId, int LineNo);

@@ -20,7 +20,7 @@ public sealed class JournalReversalPosting(JournalEntryStore entryStore)
     /// 取消の下書きに、原仕訳を反転した明細と摘要を書き込み、書き戻した姿を返す。
     /// 取り消せないときは例外にして保存全体を巻き戻す。
     /// </summary>
-    public async Task<JournalEntry> ApplyAsync(JournalEntry draft, PostingContext context)
+    public async Task<JournalEntry> ApplyAsync(JournalEntry draft, AccountingMasters context)
     {
         ArgumentNullException.ThrowIfNull(draft);
         ArgumentNullException.ThrowIfNull(context);

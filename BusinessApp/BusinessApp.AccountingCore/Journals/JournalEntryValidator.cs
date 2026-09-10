@@ -5,6 +5,7 @@ using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
+using BusinessApp.Partners;
 
 /// <summary>
 /// 仕訳を計上できるかを検査する（docs/10 §1）。
@@ -28,8 +29,70 @@ public static class JournalEntryValidator
         ValidateDescription(entry, violations);
         ValidateStructure(entry, violations);
         ValidateDates(entry, context.Calendar, violations);
+        ValidatePartners(entry, context.Partners, violations);
         ValidateLines(entry, context, violations);
         return violations;
+    }
+
+    /// <summary>
+    /// 伝票と明細が指す取引先が、マスタに実在し、有効か。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>科目・補助科目・部門と同じ形</b>（<c>E-*-UNKNOWN</c> / <c>E-*-INACTIVE</c>）。取引先だけ見ていなかった——
+    /// マスタに無い識別子は DB の外部キーの生の失敗になり、無効にした取引先も新たな計上に使えた（qa/03 L-14 の型。2026-09-10）。</para>
+    /// <para><b>伝票の取引先は伝票として 1 回、明細の取引先は行ごとに見る。</b> 明細が空なら伝票の値が実効値になる
+    /// （<see cref="JournalEntry.PartnerOf"/>）ので、行ごとに実効値を見ると同じ断りが行数だけ並ぶ。</para>
+    /// <para><b>重さは、利用者が直せるかで決める</b>（<see cref="ReversalOnlySeverity"/> の注記と同じ線）。
+    /// <b>伝票の取引先</b>は訂正の下書きで選び直せるので、外すのは取消だけ（<see cref="ReversalOnlySeverity"/>）——
+    /// 訂正でも外すと、無効にした相手の新しい記帳を訂正経由で帳簿へ入れられる。
+    /// <b>明細の取引先</b>は画面に列が無く、訂正の下書きでも直す手立てが無いので、取消も訂正も外す（<see cref="InactiveSeverity"/>）。</para>
+    /// <para><b>「マスタに無い」も同じ重さで扱う。</b> DDL の取引先のトリガは、取消の明細が計上済みの原仕訳の写しなら
+    /// 取引先が <c>partners</c> に無くても通す（<c>trg_journal_entries_partner_presence_when_posted</c>）ので、関門も同じ広さにする。
+    /// <b>アプリの経路では外部キーが先に止める</b>（取消は原仕訳の取引先を写して INSERT するので、マスタに無い取引先は
+    /// 検証に届く前に落ちる）——この重さが効くのは外部キーを切った経路だけで、関門の重さで取り消せなくなる伝票を作らないための整合である。</para>
+    /// <para><b>警告は、いまはどこにも届かない</b>（計上の側は Error だけを読む）。「警告に落とす」は「止めない」の意味であり、
+    /// 届け先は未決である（docs/04 §5）。</para>
+    /// </remarks>
+    private static void ValidatePartners(JournalEntry entry, PartnerCatalog partners, List<Violation> violations)
+    {
+        if (entry.PartnerId is PartnerId entryPartner)
+        {
+            ValidatePartner(entryPartner, entry, partners, null, violations);
+        }
+
+        foreach (var line in entry.Lines.Where(l => l.PartnerId is not null))
+        {
+            ValidatePartner(line.PartnerId!.Value, entry, partners, line.LineNo, violations);
+        }
+    }
+
+    private static void ValidatePartner(
+        PartnerId partnerId, JournalEntry entry, PartnerCatalog partners, int? lineNo, List<Violation> violations)
+    {
+        // 伝票の取引先は直せる（訂正の下書きで選び直せる）。明細の取引先は直せない（画面に列が無い）。
+        var severity = lineNo is null ? ReversalOnlySeverity(entry) : InactiveSeverity(entry);
+
+        // **次の一手まで言う**（docs/21 §2-3）。読み手の経理担当は取引先を保守する役でもある（docs/02）。
+        var partner = partners.Find(partnerId);
+        if (partner is null)
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.PartnerUnknown,
+                "取引先が取引先マスタにありません。別の取引先を選ぶか、取引先マスタに登録してください。",
+                lineNo,
+                severity));
+            return;
+        }
+
+        if (!partner.IsActive)
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.PartnerInactive,
+                $"取引先「{partner.Name}」は無効なので、新しい計上には使えません。"
+                + "別の取引先を選ぶか、取引先の画面で有効に戻してください。",
+                lineNo,
+                severity));
+        }
     }
 
     /// <summary>
@@ -105,7 +168,7 @@ public static class JournalEntryValidator
         foreach (var lineNo in entry.Lines.GroupBy(l => l.LineNo).Where(g => g.Count() > 1).Select(g => g.Key))
         {
             violations.Add(new Violation(
-                JournalViolationCodes.LineNoInvalid, JournalLineRules.LineNoDuplicated, lineNo));
+                JournalViolationCodes.LineNoInvalid, JournalLineRules.LineNoDuplicatedAt(lineNo)));
         }
 
         // **行番号を添えない。** 添えると「0 行目: 行番号が正しくありません」と、

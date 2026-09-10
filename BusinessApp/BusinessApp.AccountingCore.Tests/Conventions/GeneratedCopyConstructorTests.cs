@@ -33,6 +33,8 @@ public class GeneratedCopyConstructorTests
     {
         _ = new Violation("E-X", "x") with { Severity = ViolationSeverity.Warning };
         _ = AccountingFixture.Context() with { };
+        _ = AccountingFixture.Masters() with { };
+        _ = new PartnerDefinition(AccountingFixture.Partner, "株式会社取引先", IsActive: true) with { };
         _ = new PostingResult([]) with { };
         _ = new ReversalResult([]) with { };
         _ = new CorrectionStartResult([]) with { };

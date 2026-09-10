@@ -49,6 +49,12 @@ public static class AccountingFixture
 
     /// <summary>2 つ目の取引先。<b>1 つだと「明細が伝票より優先される」が縮退する</b>（qa/03 L-02）。</summary>
     public static readonly PartnerId OtherPartner = new(2);
+
+    /// <summary>無効にした取引先。新たな計上には使えない（<c>E-PARTNER-INACTIVE</c>）。</summary>
+    public static readonly PartnerId RetiredPartner = new(3);
+
+    /// <summary>マスタに無い取引先。</summary>
+    public static readonly PartnerId UnknownPartner = new(999);
     public static readonly TaxCategoryId OutOfScope = new(1);
     public static readonly TaxCategoryId TaxablePurchase = new(2);
 
@@ -86,11 +92,38 @@ public static class AccountingFixture
         PeriodStatus septemberStatus = PeriodStatus.Open,
         PeriodStatus fiscalYearStatus = PeriodStatus.Open,
         bool hasSelectablePartner = true)
-        => new(new AccountCatalog(Accounts),
-               new SubAccountCatalog(SubAccounts),
-               new DepartmentCatalog(Departments),
-               Calendar(septemberStatus, fiscalYearStatus),
-               hasSelectablePartner);
+        => Masters(septemberStatus, fiscalYearStatus, hasSelectablePartner).WithPartners(Partners(hasSelectablePartner));
+
+    /// <summary>取引先を足す前のマスタ一式（<see cref="AccountingMasters"/>）。</summary>
+    public static AccountingMasters Masters(
+        PeriodStatus septemberStatus = PeriodStatus.Open,
+        PeriodStatus fiscalYearStatus = PeriodStatus.Open,
+        bool hasSelectablePartner = true)
+        => new(new AccountCatalog(Accounts), new SubAccountCatalog(SubAccounts), new DepartmentCatalog(Departments),
+               Calendar(septemberStatus, fiscalYearStatus), hasSelectablePartner);
+
+    /// <summary>
+    /// 取引先の目録。<b>検体が指す 2 件</b>（<see cref="Partner"/>・<see cref="OtherPartner"/>）と、無効にした 1 件。
+    /// </summary>
+    /// <remarks>
+    /// <b>「選べる取引先が無い」側は、無効にした 1 件だけの目録にする</b>——「1 件も無い」ではなく
+    /// 「全部無効」の状態を写す（<c>PartnerRequired</c> の文言が名指しする状態。2026-09-10 の自己レビュー）。
+    /// その側で <see cref="Partner"/> を指す検体は「マスタに無い」と断られる（それが正しい）。
+    /// </remarks>
+    public static PartnerCatalog Partners(bool hasSelectable = true)
+    {
+        var retired = new PartnerDefinition(RetiredPartner, "取引をやめた先", IsActive: false);
+
+        return hasSelectable
+            ? new PartnerCatalog(
+                [
+                    new PartnerDefinition(Partner, "株式会社取引先", IsActive: true),
+                    new PartnerDefinition(OtherPartner, "別の取引先", IsActive: true),
+                    retired,
+                ],
+                hasSelectable: true)
+            : new PartnerCatalog([retired], hasSelectable: false);
+    }
 
     public static FiscalCalendar Calendar(
         PeriodStatus septemberStatus = PeriodStatus.Open,

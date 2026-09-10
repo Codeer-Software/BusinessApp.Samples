@@ -124,7 +124,7 @@ public class JournalEntryValidatorTests
             new SubAccountCatalog(AccountingFixture.SubAccounts),
             new DepartmentCatalog(AccountingFixture.Departments),
             new FiscalCalendar([], [orphan]),
-            HasSelectablePartner: true);
+            AccountingFixture.Partners());
 
         var violations = JournalEntryValidator.ValidateForPosting(AccountingFixture.CashSale(Ordinary), context);
 
@@ -694,7 +694,11 @@ public class JournalEntryValidatorTests
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
             AccountingFixture.Line(1, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
-        Assert.Equal(1, AssertViolation(JournalViolationCodes.LineNoInvalid, Validate(entry)).LineNo);
+        var violation = AssertViolation(JournalViolationCodes.LineNoInvalid, Validate(entry));
+
+        // 番号は文に埋める。「1 行目: 重なっています」では、1 行目が 2 つあることが読めない。
+        Assert.Null(violation.LineNo);
+        Assert.Equal("行番号 1 が 2 つの明細に付いています。行番号は画面が自動で振るので、明細を入力し直してください。", violation.Message);
     }
 
     [Theory]
@@ -858,6 +862,115 @@ public class JournalEntryValidatorTests
             () => JournalEntryValidator.ValidateForPosting(null!, AccountingFixture.Context()));
         Assert.Throws<ArgumentNullException>(
             () => JournalEntryValidator.ValidateForPosting(AccountingFixture.CashSale(Ordinary), null!));
+    }
+
+    // --- 取引先の実在と有効（docs/10 §6-2。科目・補助科目・部門と同じ形） --------------------------
+
+    /// <summary>マスタに無い取引先は、明細の行番号つきで断る。</summary>
+    [Fact]
+    public void 明細の取引先がマスタに無ければ計上できない()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.UnknownPartner),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Sales, 1_000,
+                department: AccountingFixture.SalesDepartment));
+
+        var violations = Validate(entry);
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerUnknown, violations);
+        Assert.Equal(1, violation.LineNo);
+        Assert.Equal("取引先が取引先マスタにありません。別の取引先を選ぶか、取引先マスタに登録してください。", violation.Message);
+        Assert.True(violations.HasError());
+    }
+
+    /// <summary>伝票の取引先は伝票として 1 回だけ見る（行番号なし）。明細が空でも行ごとには言わない。</summary>
+    [Fact]
+    public void 伝票の取引先が無効なら計上できない()
+    {
+        var entry = AccountingFixture.CashSale(Ordinary) with { PartnerId = AccountingFixture.RetiredPartner };
+
+        var violations = Validate(entry);
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerInactive, violations);
+        Assert.Null(violation.LineNo);
+        Assert.Equal(
+            "取引先「取引をやめた先」は無効なので、新しい計上には使えません。別の取引先を選ぶか、取引先の画面で有効に戻してください。",
+            violation.Message);
+        Assert.Equal(ViolationSeverity.Error, violation.Severity);
+        Assert.Single(violations, v => v.Code == JournalViolationCodes.PartnerInactive);
+    }
+
+    /// <summary>明細が自分の取引先を持つときは行ごとに見る。</summary>
+    [Fact]
+    public void 明細の取引先が無効なら行番号つきで断る()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.RetiredPartner),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Sales, 1_000,
+                department: AccountingFixture.SalesDepartment));
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerInactive, Validate(entry));
+
+        Assert.Equal(1, violation.LineNo);
+    }
+
+    /// <summary>
+    /// <b>重さは、利用者が直せるかで決まる。</b> 取消は明細も伝票も写しなので止めない（警告）。
+    /// 訂正は、伝票の取引先は選び直せるので止める（Error）が、明細の取引先は画面に列が無いので止めない（警告）。
+    /// 「マスタに無い」も同じ重さ（DDL の取引先のトリガが、取消の写しではマスタに無い取引先を通すのと同じ広さ）。
+    /// </summary>
+    [Theory]
+    [InlineData(EntryType.Reversal, "entry", "inactive", ViolationSeverity.Warning)]
+    [InlineData(EntryType.Reversal, "line", "inactive", ViolationSeverity.Warning)]
+    [InlineData(EntryType.Reversal, "entry", "unknown", ViolationSeverity.Warning)]
+    [InlineData(EntryType.Reversal, "line", "unknown", ViolationSeverity.Warning)]
+    [InlineData(EntryType.Correction, "entry", "inactive", ViolationSeverity.Error)]
+    [InlineData(EntryType.Correction, "line", "inactive", ViolationSeverity.Warning)]
+    [InlineData(EntryType.Correction, "entry", "unknown", ViolationSeverity.Error)]
+    [InlineData(EntryType.Correction, "line", "unknown", ViolationSeverity.Warning)]
+    public void 取消と訂正で取引先の断りの重さは直せるかで決まる(
+        EntryType entryType, string where, string problem, ViolationSeverity expected)
+    {
+        var partner = problem == "inactive" ? AccountingFixture.RetiredPartner : AccountingFixture.UnknownPartner;
+        var code = problem == "inactive" ? JournalViolationCodes.PartnerInactive : JournalViolationCodes.PartnerUnknown;
+        var ordinary = where == "entry"
+            ? AccountingFixture.CashSale(Ordinary) with { PartnerId = partner }
+            : AccountingFixture.Entry(
+                Ordinary,
+                AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000, partner: partner),
+                AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Sales, 1_000,
+                    department: AccountingFixture.SalesDepartment));
+        var entry = ordinary with { EntryType = entryType, OriginalEntryId = new JournalEntryId(41) };
+
+        var violation = AssertViolation(code, Validate(entry));
+
+        Assert.Equal(expected, violation.Severity);
+        Assert.Equal(where == "line" ? 1 : null, violation.LineNo);
+    }
+
+    /// <summary>有効な取引先なら、伝票にも明細にも何も言わない（検体が縮退していないことも見る）。</summary>
+    [Fact]
+    public void 有効な取引先には何も言わない()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.OtherPartner),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Sales, 1_000,
+                department: AccountingFixture.SalesDepartment)) with
+        {
+            PartnerId = AccountingFixture.Partner,
+        };
+
+        var violations = Validate(entry);
+
+        Assert.DoesNotContain(
+            violations,
+            v => v.Code is JournalViolationCodes.PartnerUnknown or JournalViolationCodes.PartnerInactive);
     }
 
     private static IReadOnlyList<Violation> Validate(JournalEntry entry)

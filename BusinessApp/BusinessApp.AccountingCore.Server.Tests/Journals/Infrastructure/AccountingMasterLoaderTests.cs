@@ -6,6 +6,8 @@ using BusinessApp.AccountingCore.Accounts;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 using BusinessApp.AccountingCore.Shared;
+using BusinessApp.Partners;
+using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Server.Journals.Infrastructure;
 
 /// <summary>
@@ -18,6 +20,69 @@ using BusinessApp.AccountingCore.Server.Journals.Infrastructure;
 /// </remarks>
 public class AccountingMasterLoaderTests
 {
+    /// <summary>
+    /// <b>伝票が参照している取引先だけ</b>を読んで目録に足す。名前と有効を読み戻せる。
+    /// </summary>
+    /// <remarks>
+    /// 参照していない取引先は目録に入らない（全件は読まない。<see cref="PartnerCatalog"/>）——
+    /// 検体に 3 件置いて、伝票の取引先と明細の取引先の 2 件だけが入ることを見る。
+    /// </remarks>
+    [Fact]
+    public async Task 参照している取引先だけを目録に足す()
+    {
+        using var server = new AccountingServer();
+        var onEntry = server.InsertPartner("P001", "伝票の取引先");
+        var onLine = server.InsertPartner("P002", "明細の取引先");
+        var unrelated = server.InsertPartner("P003", "関係ない取引先");
+        server.Execute($"update partners set is_active = 0 where id = {onLine}");
+        var id = server.InsertDraft();
+        server.Execute($"update journal_entries set partner_id = {onEntry} where id = {id.Value}");
+        server.InsertLine(id, 1, "debit", "1100", 1000);
+        server.InsertLine(id, 2, "credit", "1110", 1000);
+        server.Execute($"update journal_lines set partner_id = {onLine} where journal_entry_id = {id.Value} and line_no = 2");
+        var draft = await server.EntryStore.LoadAsync(id);
+
+        var context = await server.MasterLoader.WithPartnersAsync(await server.MasterLoader.LoadAsync(), draft);
+
+        Assert.Equal("伝票の取引先", context.Partners.Find(new PartnerId(onEntry))!.Name);
+        Assert.True(context.Partners.Find(new PartnerId(onEntry))!.IsActive);
+        Assert.False(context.Partners.Find(new PartnerId(onLine))!.IsActive);
+        Assert.Null(context.Partners.Find(new PartnerId(unrelated)));
+        Assert.True(context.HasSelectablePartner);
+    }
+
+    /// <summary>取引先を 1 つも参照していなければ、DB を読まずに空の目録で計上検証の文脈にする。</summary>
+    [Fact]
+    public async Task 取引先を参照していなければ読まずに空の目録にする()
+    {
+        using var server = new AccountingServer();
+        var partner = server.InsertPartner();
+        var id = server.InsertDraft();
+        server.InsertLine(id, 1, "debit", "1100", 1000);
+        server.InsertLine(id, 2, "credit", "1110", 1000);
+        var before = await server.MasterLoader.LoadAsync();
+        server.FailBeforeStatement = sql => sql.Contains("from partners", StringComparison.Ordinal)
+            ? new InvalidOperationException("参照が無いのに取引先を読みに行った")
+            : null;
+
+        var after = await server.MasterLoader.WithPartnersAsync(before, await server.EntryStore.LoadAsync(id));
+
+        Assert.Null(after.Partners.Find(new PartnerId(partner)));
+        Assert.True(after.HasSelectablePartner);
+        Assert.Same(before.Calendar, after.Calendar);
+    }
+
+    [Fact]
+    public async Task 目録か伝票を渡さなければ止まる()
+    {
+        using var server = new AccountingServer();
+        var context = await server.MasterLoader.LoadAsync();
+        var draft = await server.EntryStore.LoadAsync(server.InsertDraft());
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => server.MasterLoader.WithPartnersAsync(null!, draft));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => server.MasterLoader.WithPartnersAsync(context, null!));
+    }
+
     [Fact]
     public async Task 勘定科目は区分と属性まで読む()
     {

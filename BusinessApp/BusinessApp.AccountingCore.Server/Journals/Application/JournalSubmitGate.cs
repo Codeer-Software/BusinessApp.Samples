@@ -7,6 +7,7 @@ using BusinessApp.Partners.Server;
 using BusinessApp.ServerSupport;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
+using Codeer.LowCode.Blazor.Repository;
 using Codeer.LowCode.Blazor.Repository.Data;
 using BusinessApp.AccountingCore.Server.Journals.Infrastructure;
 
@@ -46,6 +47,8 @@ public sealed class JournalSubmitGate(
     TimeProvider timeProvider)
 {
     public const string EntryModuleName = "JournalEntry";
+
+    public const string LineModuleName = "JournalLine";
 
     /// <summary>
     /// 部品の組み立て。<b>本番もテストもここを通す。</b>
@@ -154,6 +157,9 @@ public sealed class JournalSubmitGate(
     {
         var violations = new List<Violation>(JournalSubmitRequirements.Check(transactionData));
         violations.AddRange(await EntryTypeChangesAsync(transactionData));
+        var lines = await StoredLinesAsync(transactionData);
+        violations.AddRange(await ConcurrentChangesAsync(transactionData, lines));
+        violations.AddRange(await DuplicateLineNosAsync(transactionData, lines));
 
         if (violations.HasError())
         {
@@ -180,6 +186,11 @@ public sealed class JournalSubmitGate(
     /// 正常系でトリガに当てると、利用者には生の SQLite の例外がそのまま出る（qa/01 F-16）。</para>
     /// <para><b>会計期間が無い伝票は止めない。</b> 期間が無ければ締めようもなく、
     /// 期間の設定を直すまで消せない下書きが残るほうが困る。</para>
+    /// <para><b>別の人が先に消した・変えた伝票の削除も止める。</b> 消えた伝票の削除を素通しにすると、
+    /// CLB 本来の削除が失敗して<b>削除なのに「入力内容を確かめ…」の定型文</b>が出る（2026-09-10 実測 1.3.20。qa/01 F-40）。
+    /// 削除の差分は版を運んでくる（<c>ModuleDeleteInfo.OptimisticLockingFieldData</c>。同実測）ので、保存と同じく突き合わせる。
+    /// <b>版の無い削除（画面を通らない経路）で消えていれば通す</b>——利用者の望みは叶っている
+    /// （その先で CLB が 0 件の削除を成功と見るか定型文を出すかは未実測。画面は必ず版を運ぶので、踏むのは API だけ）。</para>
     /// <para><b>締めの側は、いまのところ完結していない。</b> 締め済み期間の下書きは
     /// <b>編集を止めていない</b>ので、計上日を開いている期間へ動かしてから消せば通る。
     /// 下書きは帳簿に載っていない（帳簿は <c>status = 'posted'</c> だけを出す）ので、
@@ -190,7 +201,7 @@ public sealed class JournalSubmitGate(
     /// </remarks>
     private async Task RejectDeletionsAsync(IReadOnlyList<ModuleSubmitData> transactionData)
     {
-        var deleted = DeletedEntryIdsIn(transactionData);
+        var deleted = DeletedEntriesIn(transactionData);
         if (deleted.Count == 0)
         {
             // **削除が無い保存でマスタを読みに行かない。** 保存のたびに会計年度と期間を
@@ -201,15 +212,33 @@ public sealed class JournalSubmitGate(
         var calendar = (await masterLoader.LoadAsync()).Calendar;
         var violations = new List<Violation>();
 
-        foreach (var submittedId in deleted)
+        foreach (var deletion in deleted)
         {
             // 保存されていない行（仮 ID）は、消しても帳簿は動かない。
-            if (!long.TryParse(submittedId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)
-                || await entryStore.FindAsync(new JournalEntryId(id)) is not JournalEntry stored)
+            if (StoredId(deletion.Id) is not long id)
             {
                 continue;
             }
 
+            var submitted = VersionOf(EntryModuleName, deletion.OptimisticLockingFieldData);
+            var version = await entryStore.FindVersionAsync(new JournalEntryId(id));
+            if (version is null)
+            {
+                if (submitted is not null)
+                {
+                    violations.Add(new Violation(JournalViolationCodes.DeletedByOthers, JournalLineRules.AlreadyDeletedByOthers));
+                }
+
+                continue;
+            }
+
+            if (submitted is long known && known != version)
+            {
+                violations.Add(new Violation(JournalViolationCodes.ChangedByOthers, JournalLineRules.ChangedByOthers));
+                continue;
+            }
+
+            var stored = await entryStore.LoadAsync(new JournalEntryId(id));
             if (stored.Status == EntryStatus.Posted)
             {
                 violations.Add(new Violation(
@@ -272,6 +301,247 @@ public sealed class JournalSubmitGate(
 
         return violations;
     }
+
+    /// <summary>
+    /// 開いたあとに別の人が変えた・消した伝票（明細）を、保存の前に利用者の語で断る（qa/03 L-31）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>楽観ロックそのものは CLB が効かせている</b>（<c>OptimisticLockingFieldDesign</c>）。ただし食い違いを
+    /// 定型文「入力内容を確かめ…」でしか言わないので、<b>送られてきた版と保存されている版をここで突き合わせる</b>。
+    /// <b>版の欄が差分に無ければ判定しない</b>（画面の更新は必ず載せてくる。qa/01 F-12。載せない経路は CLB が最後の砦）。
+    /// 版の欄が<b>読めない型</b>で届いたら止める（<see cref="VersionOf"/>）。</para>
+    /// <para><b>明細だけを直した保存には、伝票の差分が無い</b>（2026-09-10 実測 1.3.20。qa/01 F-40）。
+    /// そのとき伝票の版は突き合わせようがなく（CLB も進めない）、ここで見るのは明細が在るかだけである。</para>
+    /// <para><b>明細には版が無い</b>ので、変える・消す明細が在るかだけを見る。消えた明細は<b>件数で束ねて 1 回</b>言う——
+    /// 差分に行番号は無いので行は指せず、行ごとに並べても同じ文が並ぶだけになる。
+    /// <b>伝票ごと消えていたら明細は数えない</b>——1 つの出来事に 2 つの断りを出さない（docs/21 §2-6）。</para>
+    /// </remarks>
+    private async Task<List<Violation>> ConcurrentChangesAsync(
+        IReadOnlyList<ModuleSubmitData> transactionData, IReadOnlyDictionary<long, StoredLine?> lines)
+    {
+        var violations = new List<Violation>();
+        var entryGone = false;
+
+        foreach (var data in EntriesIn(transactionData, d => d.Update))
+        {
+            if (VersionOf(data.Name, Field<FieldDataBase>(data, "OptimisticLocking")) is not long submitted
+                || StoredId(GetId(data)) is not long id)
+            {
+                continue;
+            }
+
+            var stored = await entryStore.FindVersionAsync(new JournalEntryId(id));
+            if (stored is null)
+            {
+                violations.Add(new Violation(JournalViolationCodes.DeletedByOthers, JournalLineRules.DeletedByOthers));
+                entryGone = true;
+            }
+            else if (submitted != stored)
+            {
+                violations.Add(new Violation(JournalViolationCodes.ChangedByOthers, JournalLineRules.ChangedByOthers));
+            }
+        }
+
+        var gone = lines.Count(line => line.Value is null);
+        if (gone > 0 && !entryGone)
+        {
+            violations.Add(new Violation(JournalViolationCodes.DeletedByOthers, JournalLineRules.LinesDeletedByOthers(gone)));
+        }
+
+        return violations;
+    }
+
+    /// <summary>送られてきた版。欄が無いか、値が版として読めなければ <c>null</c>。</summary>
+    /// <remarks>
+    /// <para>CLB は <c>OptimisticLockingFieldData</c> で運ぶ——更新と削除では <c>DecimalValue</c>、新規では <c>NullValue</c>
+    /// （2026-09-10 実測 1.3.20。qa/01 F-40。<c>MultiTypeValue</c> に整数専用の型は無い）。数値の欄で来ても読む。</para>
+    /// <para><b>型が読めなければ止める</b>（<see cref="UnreadableFieldException"/>）——黙って判定を落とすと、
+    /// 型が変わった日に断りが消える（<c>MasterSubmitGate</c> と同じ流儀）。<b>端数も止める</b>——画面からは来ない値で、
+    /// 来たら壊れている。<c>3.0</c> のような整数値は読む（R69-14 の回帰）。</para>
+    /// </remarks>
+    private static long? VersionOf(string module, FieldDataBase? field)
+        => field switch
+        {
+            null => null,
+            OptimisticLockingFieldData { Value: null or NullValue } => null,
+            OptimisticLockingFieldData { Value: DecimalValue { Value: decimal locking } }
+                when locking == decimal.Truncate(locking) => (long)locking,
+            NumberFieldData { Value: decimal number } when number == decimal.Truncate(number) => (long)number,
+            _ => throw UnreadableFieldException.For(module, "OptimisticLocking", field),
+        };
+
+    /// <summary>
+    /// 差分が指している保存済みの明細。消えていれば <c>null</c>（別の人が消した）。
+    /// </summary>
+    /// <remarks>
+    /// 同時操作と行番号の重複の両方が使うので、<b>1 回だけ引く</b>。
+    /// 追加の明細（仮 ID）はまだ保存されていないので載らない。識別子は数値に直してから鍵にする——
+    /// 字面のまま鍵にすると <c>"007"</c> と <c>"7"</c> が別の行になる。
+    /// </remarks>
+    private async Task<Dictionary<long, StoredLine?>> StoredLinesAsync(IReadOnlyList<ModuleSubmitData> transactionData)
+    {
+        var lines = new Dictionary<long, StoredLine?>();
+        var ids = transactionData.SelectMany(d => d.Update).Where(d => d.Name == LineModuleName).Select(GetId)
+            .Concat(transactionData.SelectMany(d => d.Delete).Where(d => d.ModuleName == LineModuleName).Select(d => d.Id));
+
+        foreach (var id in ids.Select(StoredId).OfType<long>().Distinct())
+        {
+            lines[id] = await entryStore.FindLineAsync(id);
+        }
+
+        return lines;
+    }
+
+    /// <summary>
+    /// 明細の行番号の重複を、保存の前に断る（正典は DDL の <c>UNIQUE (journal_entry_id, line_no)</c>。生の失敗にしない）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>差分だけでは判定できない</b>——保存されている明細と、差分の追加・変更・削除を合わせた「保存したあとの姿」で数える。
+    /// 画面は行番号を自動で振るので、起きるのは画面を通らない経路である。</para>
+    /// <para><b>親の識別子は <c>IdFieldData</c> で届く</b>（明細の親 FK は <c>IdFieldDesign</c>。qa/01 D-17）。
+    /// 保存済みの親なら数値の字面、新しい伝票なら親と同じ仮 ID（2026-09-10 実測 1.3.20。qa/01 F-40）。
+    /// <b>型を決め打ちにして黙って落とすと、追加の判定が本番で一度も効かない</b>——
+    /// 2026-09-10 の自己レビューまで、まさにそうなっていた（qa/03 L-42）。読めない型は止める。</para>
+    /// <para><b>「保存したあとの姿」だけでは足りない。</b> CLB は UPDATE を 1 行ずつ流し、SQLite の UNIQUE は遅延できないので、
+    /// 番号の入れ替え（1↔2）は最終形に重複が無くても最初の UPDATE で落ちる（関門が通して DB が拒む形。qa/03 L-21）。
+    /// <b>実測したのは Delete が Add より先に流れることだけ</b>（2026-09-10 実測 1.3.20。qa/01 F-41）。Delete と Update、
+    /// Update と Add の順序は分かっていないので<b>保守側に倒す</b>——番号を変える保存済みの行は<b>他の保存済みの行の元の番号</b>
+    /// （同じ保存で消す行も含む）と、足す行は<b>同じ保存で消さない保存済みの行の元の番号</b>と、重ならないこととする。
+    /// 画面は番号を変えないので、止まるのは取込・API の並べ替えだけである。</para>
+    /// <para><b>消えた明細（別の人が消した）はここでは数えない</b>——同時操作の断りが言う。</para>
+    /// </remarks>
+    private async Task<List<Violation>> DuplicateLineNosAsync(
+        IReadOnlyList<ModuleSubmitData> transactionData, IReadOnlyDictionary<long, StoredLine?> lines)
+    {
+        // 伝票ごと。鍵は保存済みなら数値の字面（InvariantCulture）、新しい伝票なら仮 ID。
+        var entries = new Dictionary<string, EntryLineNumbers>(StringComparer.Ordinal);
+
+        async Task<EntryLineNumbers> OfEntryAsync(string key)
+        {
+            // 親の字面も数値に直す（`"067"` と `"67"` を同じ伝票に）。仮 ID はそのまま。
+            if (StoredId(key) is long numeric)
+            {
+                key = EntryKey(new JournalEntryId(numeric));
+            }
+
+            if (entries.TryGetValue(key, out var existing))
+            {
+                return existing;
+            }
+
+            var numbers = new EntryLineNumbers();
+            if (StoredId(key) is long id)
+            {
+                foreach (var stored in await entryStore.LoadLineNosAsync(new JournalEntryId(id)))
+                {
+                    numbers.Stored[stored.LineId] = stored.LineNo;
+                }
+            }
+
+            entries[key] = numbers;
+            return numbers;
+        }
+
+        foreach (var deleted in transactionData.SelectMany(d => d.Delete).Where(d => d.ModuleName == LineModuleName))
+        {
+            if (StoredId(deleted.Id) is long id && lines[id] is StoredLine stored)
+            {
+                (await OfEntryAsync(EntryKey(stored.EntryId))).Deleted.Add(id);
+            }
+        }
+
+        foreach (var data in transactionData.SelectMany(d => d.Update).Where(d => d.Name == LineModuleName))
+        {
+            if (NumberOf(data, "LineNo") is int lineNo && StoredId(GetId(data)) is long id && lines[id] is StoredLine stored)
+            {
+                (await OfEntryAsync(EntryKey(stored.EntryId))).Renumbered[id] = lineNo;
+            }
+        }
+
+        foreach (var data in transactionData.SelectMany(d => d.Add).Where(d => d.Name == LineModuleName))
+        {
+            if (NumberOf(data, "LineNo") is int lineNo && ParentKey(data) is { Length: > 0 } key)
+            {
+                (await OfEntryAsync(key)).Added.Add(lineNo);
+            }
+        }
+
+        return [.. entries.Values
+            .SelectMany(numbers => numbers.Duplicated())
+            .Distinct()
+            .OrderBy(n => n)
+            .Select(n => new Violation(JournalViolationCodes.LineNoInvalid, JournalLineRules.LineNoDuplicatedAt(n)))];
+    }
+
+    /// <summary>1 つの伝票の明細の行番号。保存されている姿と、この保存が加える差分。</summary>
+    private sealed class EntryLineNumbers
+    {
+        /// <summary>保存されている明細（識別子 → 行番号）。</summary>
+        public Dictionary<long, int> Stored { get; } = [];
+
+        /// <summary>この保存で消す明細。</summary>
+        public HashSet<long> Deleted { get; } = [];
+
+        /// <summary>この保存で番号を変える明細（識別子 → 新しい行番号）。</summary>
+        public Dictionary<long, int> Renumbered { get; } = [];
+
+        /// <summary>この保存で足す明細の行番号。</summary>
+        public List<int> Added { get; } = [];
+
+        /// <summary>
+        /// 保存したあとの姿で重なる番号と、逐次に流れる UPDATE / INSERT が保存済みの行に当たる番号。
+        /// 順序が分かっているのは Delete → Add だけなので、それ以外は保守側（当たりうるなら断る）。
+        /// </summary>
+        public IEnumerable<int> Duplicated()
+        {
+            var after = Stored
+                .Where(stored => !Deleted.Contains(stored.Key))
+                .Select(stored => Renumbered.TryGetValue(stored.Key, out var changed) ? changed : stored.Value)
+                .Concat(Added);
+            var afterSave = after.GroupBy(n => n).Where(g => g.Count() > 1).Select(g => g.Key);
+
+            // 番号を変える行は必ず保存済み（StoredLinesAsync で見つかった行しか載せない）。
+            // 相手が同じ保存で消える行でも当たりうる（Delete と Update の順序は未実測）。
+            var renumbering = Renumbered
+                .Where(changed => Stored[changed.Key] != changed.Value)
+                .Select(changed => changed.Value)
+                .Where(n => Stored.Any(stored => stored.Value == n));
+
+            // 足す行は、消さない保存済みの行の元の番号と当たりうる（相手が番号を変えるつもりでも、Update と Add の順序は未実測）。
+            var adding = Added
+                .Where(n => Stored.Any(stored => stored.Value == n && !Deleted.Contains(stored.Key)));
+
+            return afterSave.Concat(renumbering).Concat(adding);
+        }
+    }
+
+    private static string EntryKey(JournalEntryId id) => id.Value.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>保存済みの識別子。仮 ID や数値でない字面なら <c>null</c>。</summary>
+    private static long? StoredId(string id)
+        => long.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : null;
+
+    /// <summary>明細が指す親（伝票）の字面。数値か仮 ID。欄が無ければ <c>null</c>。</summary>
+    /// <remarks><b>型を 1 つに決め打ちしない</b>（<c>MasterSubmitGate.ParentKey</c> と同じ戒め）。読めない型は止める。</remarks>
+    private static string? ParentKey(ModuleData data)
+    {
+        if (!data.Fields.TryGetValue("JournalEntryId", out var field))
+        {
+            return null;
+        }
+
+        return field switch
+        {
+            IdFieldData reference => reference.Value,
+            LinkFieldData link => link.Value,
+            _ => throw UnreadableFieldException.For(data.Name, "JournalEntryId", field),
+        };
+    }
+
+    private static int? NumberOf(ModuleData data, string name)
+        => Field<NumberFieldData>(data, name)?.Value is decimal value && JournalLineRules.IsStorableLineNo(value)
+            ? (int)value
+            : null;
 
     /// <summary>
     /// 空にした参照フィールドを、<b>DB が受け取れる「無い」</b>に直す。
@@ -378,7 +648,7 @@ public sealed class JournalSubmitGate(
         }
     }
 
-    private async Task PostAsync(JournalEntryId id, PostingContext context)
+    private async Task PostAsync(JournalEntryId id, AccountingMasters context)
     {
         var draft = await entryStore.LoadAsync(id);
 
@@ -462,14 +732,23 @@ public sealed class JournalSubmitGate(
     /// <b>入れた日に、明細の一括削除が関門を通らず DDL のトリガの生の例外として出る</b>
     /// （qa/01 F-16 の形）。<c>ReplaceMode</c> を触るときは、ここも一緒に見ること。</para>
     /// </remarks>
-    private static List<string> DeletedEntryIdsIn(IReadOnlyList<ModuleSubmitData> transactionData)
+    private static List<ModuleDeleteInfo> DeletedEntriesIn(IReadOnlyList<ModuleSubmitData> transactionData)
         => [.. transactionData
             .SelectMany(d => d.Delete)
-            .Where(d => d.ModuleName == EntryModuleName)
-            .Select(d => d.Id)];
+            .Where(d => d.ModuleName == EntryModuleName)];
 
+    /// <summary>送られてきた識別子。欄が無ければ空文字（新規は仮 ID が入って来る）。<b>読めない型は止める</b>（<c>MasterSubmitGate.IdText</c> と同じ）。</summary>
     private static string GetId(ModuleData data)
-        => Field<IdFieldData>(data, "Id")?.Value ?? string.Empty;
+    {
+        if (!data.Fields.TryGetValue("Id", out var field))
+        {
+            return string.Empty;
+        }
+
+        return field is IdFieldData id
+            ? id.Value ?? string.Empty
+            : throw UnreadableFieldException.For(data.Name, "Id", field);
+    }
 
     private static string GetSelect(ModuleData data, string name)
         => Field<SelectFieldData>(data, name)?.Value ?? string.Empty;

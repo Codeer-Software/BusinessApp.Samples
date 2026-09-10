@@ -1,6 +1,7 @@
 namespace BusinessApp.AccountingCore.Server.Tests.Fixtures;
 
 using Codeer.LowCode.Blazor.DataIO;
+using Codeer.LowCode.Blazor.Repository;
 using Codeer.LowCode.Blazor.Repository.Data;
 using BusinessApp.AccountingCore.Server.Journals.Application;
 
@@ -37,12 +38,24 @@ internal static class SubmitData
     /// <b>削除だけ器が違う。</b> 追加・更新はフィールドの束（<see cref="ModuleData"/>）で来るが、
     /// 削除は識別子とモジュール名だけの <see cref="ModuleDeleteInfo"/> で来る。
     /// <b>ここを ModuleData で作ると、関門が本番で見ている場所を 1 度も通らない。</b>
+    /// <b>画面の削除は版を運んでくる</b>（qa/01 F-41 ③）ので、既定で版を載せる（作ったばかりの下書きは 0）。
+    /// 版の無い形（画面を通らない経路）は <paramref name="version"/> に <c>null</c> を渡す。
     /// </remarks>
-    public static ModuleSubmitData Deleting(params string[] ids)
+    public static ModuleSubmitData Deleting(string id, long? version = 0)
         => new()
         {
             ModuleName = "JournalEntry",
-            Delete = [.. ids.Select(id => new ModuleDeleteInfo { Id = id, ModuleName = "JournalEntry" })],
+            Delete =
+            [
+                new ModuleDeleteInfo
+                {
+                    Id = id,
+                    ModuleName = "JournalEntry",
+                    OptimisticLockingFieldData = version is long known
+                        ? new OptimisticLockingFieldData { Value = new DecimalValue { Value = known } }
+                        : null,
+                },
+            ],
         };
 
     /// <summary>

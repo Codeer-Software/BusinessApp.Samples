@@ -632,6 +632,34 @@ public class JournalAmendmentServiceTests
         Assert.Equal(partner, (await server.EntryStore.LoadAsync(started.CorrectionId)).PartnerId!.Value.Value);
     }
 
+    /// <summary>
+    /// <b>原仕訳の後に無効にした取引先でも、取り消せる</b>（取消の明細は写しで、利用者に直す手立てが無い。
+    /// <c>JournalEntryValidator</c> が取消で警告に落とす唯一の理由を、本番の配線で踏む）。
+    /// 訂正の再計上は下書きのまま残る（計上は利用者が取引先を選び直してから）。
+    /// </summary>
+    [Fact]
+    public async Task 原仕訳の取引先が無効でも取消と訂正の開始はできる()
+    {
+        using var server = new AccountingServer();
+        var partner = server.InsertPartner("P900", "取引をやめた先");
+        var original = server.InsertPosted(
+            1, "5 月分の仕入", "2026-05-20", partner, ("debit", "1100", 1000), ("credit", "2200", 1000));
+        server.Execute($"update partners set is_active = 0 where id = {partner}");
+
+        var started = await server.AmendAsync(s => s.CorrectAsync(original));
+
+        Assert.Equal(EntryStatus.Posted, (await server.EntryStore.LoadAsync(started.ReversalId)).Status);
+        Assert.Equal(EntryStatus.Draft, (await server.EntryStore.LoadAsync(started.CorrectionId)).Status);
+
+        // **止める側**：訂正の再計上を、無効な取引先のまま計上しようとすると止まる（伝票の取引先は選び直せる。docs/10 §6-3）。
+        var rejected = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(async _ =>
+                await server.Poster.PostAsync(
+                    await server.EntryStore.LoadAsync(started.CorrectionId), await server.MasterLoader.LoadAsync())));
+        Assert.Contains(rejected.Violations, v => v.Code == JournalViolationCodes.PartnerInactive && v.Severity == ViolationSeverity.Error);
+        Assert.Equal(EntryStatus.Draft, (await server.EntryStore.LoadAsync(started.CorrectionId)).Status);
+    }
+
     [Fact]
     public async Task 取消の伝票は訂正できない()
     {

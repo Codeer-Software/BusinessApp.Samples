@@ -7,6 +7,7 @@ using BusinessApp.AccountingCore.Journals;
 using BusinessApp.Partners;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 using BusinessApp.AccountingCore.Shared;
+using BusinessApp.AccountingCore.Server.Journals.Infrastructure;
 
 /// <summary>
 /// 保存済みの仕訳の読み書き。
@@ -392,6 +393,55 @@ public class JournalEntryStoreTests
         Assert.Null(await server.EntryStore.FindEntryTypeAsync(new JournalEntryId(999)));
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => server.EntryStore.LoadAsync(new JournalEntryId(999)));
+    }
+
+    /// <summary>版は保存されている値をそのまま返す。無ければ <c>null</c>（削除されている）。</summary>
+    [Fact]
+    public async Task 版を読める_無ければnull()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+        server.Execute($"update journal_entries set optimistic_locking = 7 where id = {id.Value}");
+
+        Assert.Equal(7, await server.EntryStore.FindVersionAsync(id));
+        Assert.Null(await server.EntryStore.FindVersionAsync(new JournalEntryId(999)));
+    }
+
+    /// <summary>
+    /// 明細の識別子と行番号を読める。<b>識別子と行番号がずれた検体</b>で見る（qa/03 L-02 の縮退）——
+    /// 先に別の伝票の明細を入れて、識別子が行番号と一致しないようにする。
+    /// </summary>
+    [Fact]
+    public async Task 明細の識別子と行番号を読める()
+    {
+        using var server = new AccountingServer();
+        var other = server.InsertDraft();
+        server.InsertLine(other, 1, "debit", "1100", 100);
+        server.InsertLine(other, 2, "credit", "2200", 100);
+        var id = server.InsertDraft();
+        server.InsertLine(id, 1, "debit", "1100", 100);
+        server.InsertLine(id, 2, "credit", "2200", 100);
+
+        var lines = await server.EntryStore.LoadLineNosAsync(id);
+
+        Assert.Equal([(3L, 1), (4L, 2)], lines.Select(l => (l.LineId, l.LineNo)));
+        Assert.Empty(await server.EntryStore.LoadLineNosAsync(new JournalEntryId(999)));
+    }
+
+    /// <summary>明細の識別子から、属する伝票と行番号を引ける。無ければ <c>null</c>。</summary>
+    [Fact]
+    public async Task 明細から伝票と行番号を引ける()
+    {
+        using var server = new AccountingServer();
+        var other = server.InsertDraft();
+        server.InsertLine(other, 1, "debit", "1100", 100);
+        var id = server.InsertDraft();
+        server.InsertLine(id, 5, "debit", "1100", 100);
+
+        var line = await server.EntryStore.FindLineAsync(2);
+
+        Assert.Equal(new StoredLine(id, 5), line);
+        Assert.Null(await server.EntryStore.FindLineAsync(999));
     }
 
     [Fact]
