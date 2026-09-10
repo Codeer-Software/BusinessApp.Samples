@@ -12,7 +12,7 @@ using BusinessApp.AccountingCore.Server.Shared.Presentation;
 using BusinessApp.AccountingCore.Server.Masters.Infrastructure;
 
 /// <summary>
-/// マスタの値の関門（docs/04 §1 の B-1・B-2）。
+/// マスタの値の関門（docs/12 §2-1・ADR-0047・qa/03 L-28）。
 /// </summary>
 /// <remarks>
 /// <para><b>DDL に当たると全部が同じ定型文になっていた</b>（qa/03 L-28）。
@@ -89,7 +89,7 @@ public class MasterSubmitGateTests
         return thrown;
     }
 
-    // --- コードの重複（B-1 の 1 例目） -------------------------------------------
+    // --- コードの重複（qa/03 L-28 の表の 1 例目） -------------------------------------------
 
     /// <summary>
     /// 既にあるコードは、利用者の語で断る。
@@ -173,7 +173,7 @@ public class MasterSubmitGateTests
         Assert.Contains("補助科目コード", thrown.Message, StringComparison.Ordinal);
     }
 
-    // --- コードの書式（B-2） -----------------------------------------------------
+    // --- コードの書式（docs/12 §2-1） -----------------------------------------------------
 
     [Theory]
     [InlineData("11 00", "目に見えない文字")]
@@ -219,7 +219,7 @@ public class MasterSubmitGateTests
         Assert.Contains("「科目コード」を入れてください", thrown.Message, StringComparison.Ordinal);
     }
 
-    // --- 全社共通の部門（B-1 の 2 例目） -----------------------------------------
+    // --- 全社共通の部門（qa/03 L-28 の表の 2 例目） -----------------------------------------
 
     /// <summary>
     /// 「全社共通」の部門は 1 つだけ。
@@ -254,7 +254,7 @@ public class MasterSubmitGateTests
             ("IsCompanyWide", new BooleanFieldData { Value = true })))));
     }
 
-    // --- 税区分の整合（B-1 の 4 例目） -------------------------------------------
+    // --- 税区分の整合（qa/03 L-28 の表の 4 例目） -------------------------------------------
 
     [Fact]
     public async Task 課税の区分に税率区分が無ければ断る()
@@ -316,7 +316,7 @@ public class MasterSubmitGateTests
         Assert.Contains("「税率区分」は空にしてください", thrown.Message, StringComparison.Ordinal);
     }
 
-    // --- 補助科目の 2 値（A-3 の残り） -------------------------------------------
+    // --- 補助科目の 2 値（qa/03 L-27。マスタの側） -------------------------------------------
 
     /// <summary>
     /// 補助科目を使わない勘定科目の下には作れない（ADR-0038 §3）。

@@ -81,7 +81,7 @@ public class JournalSubmitGateTests
     }
 
     /// <summary>
-    /// 摘要のない伝票は計上できない（docs/10 §4-2-1。A-2）。
+    /// 摘要のない伝票は計上できない（docs/10 §4-2-1）。
     /// </summary>
     /// <remarks>
     /// <b>純粋関数のテスト（<c>JournalEntryValidatorTests</c>）とは別に、DB を通した経路でも見る。</b>

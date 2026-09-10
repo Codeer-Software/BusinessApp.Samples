@@ -94,7 +94,7 @@ public sealed class MasterCodeStore(IDbAccessor accessor, string dataSourceName)
     /// <remarks>
     /// <b>使わない科目の下に補助科目を作れてしまう穴</b>を塞ぐための問い合わせである
     /// （[ADR-0038 §3](../../../docs/decisions/0038-使用中のマスタは意味を変えられない.md) の 2 値は、
-    /// 2026-09-08 の回では明細の側しか塞いでいなかった。docs/04 §1 の B-1）。
+    /// 2026-09-08 の回では明細の側しか塞いでおらず、2026-09-09 に塞いだ。qa/03 L-27）。
     /// </remarks>
     public async Task<bool?> UsesSubAccountAsync(long accountId)
     {

@@ -4,7 +4,7 @@ using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
 
 /// <summary>
-/// 空にした文字の欄を、空文字ではなく NULL で保存する（docs/04 §1 の A-5）。
+/// 空にした文字の欄を、空文字ではなく NULL で保存する（docs/10 §4-4）。
 /// </summary>
 /// <remarks>
 /// <para><b>CLB の既定は空文字である</b>（<c>TextEditEmptyType: StringEmpty</c>。qa/01 A-11）。

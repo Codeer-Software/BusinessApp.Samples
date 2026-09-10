@@ -132,7 +132,7 @@ public static class JournalViolationCodes
     public const string SubAccountNotAllowed = "E-SUBACCOUNT-NOT-ALLOWED";
 
     /// <summary>
-    /// 取引先を要する科目なのに、伝票にも明細にも取引先が無い（docs/10 §6-2。docs/04 §1 の A-4）。
+    /// 取引先を要する科目なのに、伝票にも明細にも取引先が無い（docs/10 §6-2）。
     /// </summary>
     /// <remarks>
     /// <b>相手方を欠いた行は「相手方別」のどの帳簿にも載らない</b>——売掛金・買掛金は

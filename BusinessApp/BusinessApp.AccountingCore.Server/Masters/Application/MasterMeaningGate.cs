@@ -8,7 +8,7 @@ using Codeer.LowCode.Blazor.Repository.Data;
 using BusinessApp.AccountingCore.Server.Masters.Infrastructure;
 
 /// <summary>
-/// 使用中のマスタは、意味を変えられない（ADR-0038。docs/04 §1 の A-1）。
+/// 使用中のマスタは、意味を変えられない（ADR-0038）。
 /// </summary>
 /// <remarks>
 /// <para><b>計上済みの仕訳明細が 1 行でも参照しているマスタの行は、意味を決める列を変えられない</b>（ADR-0038）。

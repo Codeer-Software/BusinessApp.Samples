@@ -340,7 +340,7 @@ public class JournalEntryValidatorTests
     [Fact]
     public void 補助科目を使わない科目の明細に補助科目は付けられない()
     {
-        // **補助科目は 2 値**（ADR-0038 §3。docs/04 §1 の A-3）。
+        // **補助科目は 2 値**（ADR-0038 §3・docs/10 §6）。
         // 現金は「補助科目を使う」がオフなので、補助科目を付けたまま計上できない。
         // **この形は開発機に実在する**（規則より前に計上された明細 1 行。伝票 36）。
         var entry = SubAccountOnUnusedAccount();
@@ -430,7 +430,7 @@ public class JournalEntryValidatorTests
     [Fact]
     public void 取引先を要する科目に取引先がなければ計上できない()
     {
-        // **相手方を欠いた行は「相手方別」のどの帳簿にも載らない**（docs/40 §4-1。docs/04 §1 の A-4）。
+        // **相手方を欠いた行は「相手方別」のどの帳簿にも載らない**（docs/40 §4-1・docs/10 §6-2）。
         var entry = ReceivableWithoutPartner();
 
         var violation = AssertViolation(JournalViolationCodes.PartnerRequired, Validate(entry));

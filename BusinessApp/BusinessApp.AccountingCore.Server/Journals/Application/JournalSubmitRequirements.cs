@@ -23,12 +23,12 @@ using Codeer.LowCode.Blazor.Repository.Data;
 ///   <item><b>外部キーの実在</b>（勘定科目・税区分・部門・取引先）。マスタを引く必要があり、
 ///     それは計上の検証（<c>AccountUnknown</c> ほか）が持つ。画面の候補は実在するものしか出さない。</item>
 ///   <item><b>行番号の重複</b>（<c>UNIQUE (journal_entry_id, line_no)</c>）。
-///     <b>差分に載っていない行と衝突しうるので、保存済みの行を読まないと判定できない。</b>
-///     <b>計上でも通り抜ける</b>——計上の検証は保存の<b>後</b>に読み直した伝票を見るので
-///     （<see cref="JournalSubmitGate"/>）、<c>UNIQUE</c> のほうが先に当たる。
-///     枠組みの言葉で失敗する形を直すのは docs/04 §1 の B-1 である。</item>
+///     <b>差分に載っていない行と衝突しうるので、保存済みの行を読まないと判定できない</b>——
+///     ここ（1 行だけの判定）では見ず、<see cref="JournalSubmitGate"/> が保存済みの行を読んで
+///     保存の前に数える（2026-09-10 から）。</item>
 /// </list>
-/// どちらも通り抜けると枠組みの言葉で失敗する（<c>SaveFailureMessage</c> が利用者の語に差し替える）。</para>
+/// 外部キーの実在が通り抜けると（画面の候補に無いものは API からしか来ない）
+/// 枠組みの言葉で失敗する（<c>SaveFailureMessage</c> が利用者の語に差し替える）。</para>
 /// </remarks>
 internal static class JournalSubmitRequirements
 {

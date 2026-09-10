@@ -10,7 +10,7 @@ using Codeer.LowCode.Blazor.Repository.Data;
 using BusinessApp.AccountingCore.Server.Masters.Infrastructure;
 
 /// <summary>
-/// マスタを保存するときの関門（docs/04 §1 の B-1・B-2）。
+/// マスタを保存するときの関門（docs/12 §2-1・ADR-0047。qa/03 L-28 の型）。
 /// </summary>
 /// <remarks>
 /// <para><b>DDL の制約に当たると、利用者には定型文しか出ない</b>——
@@ -240,7 +240,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// </summary>
     /// <remarks>
     /// <b>2026-09-08 の回では明細の側しか塞いでいなかった</b>——
-    /// マスタの画面からは、使わない設定の科目にも補助科目を足せた（docs/04 §1 の B-1）。
+    /// マスタの画面からは、使わない設定の科目にも補助科目を足せた（2026-09-09 に塞いだ。qa/03 L-27）。
     /// </remarks>
     private async Task RejectSubAccountUnderPlainAccountAsync(
         CodedMaster master, ModuleData data, IReadOnlyList<ModuleSubmitData> transactionData)
