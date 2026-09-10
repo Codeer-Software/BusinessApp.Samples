@@ -14,6 +14,11 @@
 -- **前後の空白を落とすのは関門（C# の MasterCode）の仕事**である。ここへ来る値は落とした後の姿で、
 -- 空白が残っていれば「使えない字」として断る——字種の GLOB がすべての空白を拾う。
 --
+-- **文言は条件ごとに分ける**（2026-09-10。qa/02 R57-04）——4 つの条件を 1 本の文言で断ると、取込や `sql` CLI で流した人は
+-- どこが悪いか特定できない。順は関門（`MasterCode.DescribeProblem`）と同じ 字種 → 先頭末尾 → 連続 → 長さ で、
+-- 最初に当たった 1 つだけが鳴る。欄の呼び名は画面のラベル（docs/21 §2-6）。WHEN 節は変えていない
+-- （`MasterCodeGuardTests` が規則の写しを持たずに WHEN 節を読む）。
+--
 -- **最後の 2 つは、GLOB が読めない値のためにある。**
 --
 -- **BLOB は TEXT の列にそのまま入る**（STRICT ではないので affinity が効かない。
@@ -44,7 +49,20 @@ WHEN NEW.code GLOB '*[^0-9A-Za-z_-]*'
      OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code)
      OR typeof(NEW.code) = 'blob'
 BEGIN
-    SELECT RAISE(ABORT, '会計年度のコードは半角の英数字と「-」「_」で、20 文字以内です。「-」「_」は先頭と末尾には置けません。');
+    SELECT RAISE(ABORT, '「年度コード」に使えない字が入っています。半角の英数字と「-」「_」だけで入れてください。')
+     WHERE typeof(NEW.code) = 'blob'
+        OR NEW.code GLOB '*[^0-9A-Za-z_-]*'
+        OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code);
+    SELECT RAISE(ABORT, '「年度コード」の先頭に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '[-_]*';
+    SELECT RAISE(ABORT, '「年度コード」の末尾に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '*[-_]';
+    SELECT RAISE(ABORT, '「年度コード」の「-」「_」は続けて使えません。')
+     WHERE NEW.code GLOB '*[-_][-_]*';
+    SELECT RAISE(ABORT, '「年度コード」は 20 文字以内です。')
+     WHERE LENGTH(NEW.code) > 20;
+    SELECT RAISE(ABORT, '「年度コード」を入れてください。')
+     WHERE LENGTH(NEW.code) < 1;
 END;
 
 CREATE TRIGGER trg_fiscal_years_code_format_update
@@ -59,7 +77,20 @@ WHEN NEW.code GLOB '*[^0-9A-Za-z_-]*'
      OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code)
      OR typeof(NEW.code) = 'blob'
 BEGIN
-    SELECT RAISE(ABORT, '会計年度のコードは半角の英数字と「-」「_」で、20 文字以内です。「-」「_」は先頭と末尾には置けません。');
+    SELECT RAISE(ABORT, '「年度コード」に使えない字が入っています。半角の英数字と「-」「_」だけで入れてください。')
+     WHERE typeof(NEW.code) = 'blob'
+        OR NEW.code GLOB '*[^0-9A-Za-z_-]*'
+        OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code);
+    SELECT RAISE(ABORT, '「年度コード」の先頭に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '[-_]*';
+    SELECT RAISE(ABORT, '「年度コード」の末尾に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '*[-_]';
+    SELECT RAISE(ABORT, '「年度コード」の「-」「_」は続けて使えません。')
+     WHERE NEW.code GLOB '*[-_][-_]*';
+    SELECT RAISE(ABORT, '「年度コード」は 20 文字以内です。')
+     WHERE LENGTH(NEW.code) > 20;
+    SELECT RAISE(ABORT, '「年度コード」を入れてください。')
+     WHERE LENGTH(NEW.code) < 1;
 END;
 
 CREATE TRIGGER trg_tax_categories_code_format_insert
@@ -74,7 +105,20 @@ WHEN NEW.code GLOB '*[^0-9A-Za-z_-]*'
      OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code)
      OR typeof(NEW.code) = 'blob'
 BEGIN
-    SELECT RAISE(ABORT, '税区分のコードは半角の英数字と「-」「_」で、20 文字以内です。「-」「_」は先頭と末尾には置けません。');
+    SELECT RAISE(ABORT, '「税区分コード」に使えない字が入っています。半角の英数字と「-」「_」だけで入れてください。')
+     WHERE typeof(NEW.code) = 'blob'
+        OR NEW.code GLOB '*[^0-9A-Za-z_-]*'
+        OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code);
+    SELECT RAISE(ABORT, '「税区分コード」の先頭に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '[-_]*';
+    SELECT RAISE(ABORT, '「税区分コード」の末尾に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '*[-_]';
+    SELECT RAISE(ABORT, '「税区分コード」の「-」「_」は続けて使えません。')
+     WHERE NEW.code GLOB '*[-_][-_]*';
+    SELECT RAISE(ABORT, '「税区分コード」は 20 文字以内です。')
+     WHERE LENGTH(NEW.code) > 20;
+    SELECT RAISE(ABORT, '「税区分コード」を入れてください。')
+     WHERE LENGTH(NEW.code) < 1;
 END;
 
 CREATE TRIGGER trg_tax_categories_code_format_update
@@ -89,7 +133,20 @@ WHEN NEW.code GLOB '*[^0-9A-Za-z_-]*'
      OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code)
      OR typeof(NEW.code) = 'blob'
 BEGIN
-    SELECT RAISE(ABORT, '税区分のコードは半角の英数字と「-」「_」で、20 文字以内です。「-」「_」は先頭と末尾には置けません。');
+    SELECT RAISE(ABORT, '「税区分コード」に使えない字が入っています。半角の英数字と「-」「_」だけで入れてください。')
+     WHERE typeof(NEW.code) = 'blob'
+        OR NEW.code GLOB '*[^0-9A-Za-z_-]*'
+        OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code);
+    SELECT RAISE(ABORT, '「税区分コード」の先頭に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '[-_]*';
+    SELECT RAISE(ABORT, '「税区分コード」の末尾に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '*[-_]';
+    SELECT RAISE(ABORT, '「税区分コード」の「-」「_」は続けて使えません。')
+     WHERE NEW.code GLOB '*[-_][-_]*';
+    SELECT RAISE(ABORT, '「税区分コード」は 20 文字以内です。')
+     WHERE LENGTH(NEW.code) > 20;
+    SELECT RAISE(ABORT, '「税区分コード」を入れてください。')
+     WHERE LENGTH(NEW.code) < 1;
 END;
 
 CREATE TRIGGER trg_accounts_code_format_insert
@@ -104,7 +161,20 @@ WHEN NEW.code GLOB '*[^0-9A-Za-z_-]*'
      OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code)
      OR typeof(NEW.code) = 'blob'
 BEGIN
-    SELECT RAISE(ABORT, '勘定科目のコードは半角の英数字と「-」「_」で、20 文字以内です。「-」「_」は先頭と末尾には置けません。');
+    SELECT RAISE(ABORT, '「科目コード」に使えない字が入っています。半角の英数字と「-」「_」だけで入れてください。')
+     WHERE typeof(NEW.code) = 'blob'
+        OR NEW.code GLOB '*[^0-9A-Za-z_-]*'
+        OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code);
+    SELECT RAISE(ABORT, '「科目コード」の先頭に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '[-_]*';
+    SELECT RAISE(ABORT, '「科目コード」の末尾に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '*[-_]';
+    SELECT RAISE(ABORT, '「科目コード」の「-」「_」は続けて使えません。')
+     WHERE NEW.code GLOB '*[-_][-_]*';
+    SELECT RAISE(ABORT, '「科目コード」は 20 文字以内です。')
+     WHERE LENGTH(NEW.code) > 20;
+    SELECT RAISE(ABORT, '「科目コード」を入れてください。')
+     WHERE LENGTH(NEW.code) < 1;
 END;
 
 CREATE TRIGGER trg_accounts_code_format_update
@@ -119,7 +189,20 @@ WHEN NEW.code GLOB '*[^0-9A-Za-z_-]*'
      OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code)
      OR typeof(NEW.code) = 'blob'
 BEGIN
-    SELECT RAISE(ABORT, '勘定科目のコードは半角の英数字と「-」「_」で、20 文字以内です。「-」「_」は先頭と末尾には置けません。');
+    SELECT RAISE(ABORT, '「科目コード」に使えない字が入っています。半角の英数字と「-」「_」だけで入れてください。')
+     WHERE typeof(NEW.code) = 'blob'
+        OR NEW.code GLOB '*[^0-9A-Za-z_-]*'
+        OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code);
+    SELECT RAISE(ABORT, '「科目コード」の先頭に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '[-_]*';
+    SELECT RAISE(ABORT, '「科目コード」の末尾に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '*[-_]';
+    SELECT RAISE(ABORT, '「科目コード」の「-」「_」は続けて使えません。')
+     WHERE NEW.code GLOB '*[-_][-_]*';
+    SELECT RAISE(ABORT, '「科目コード」は 20 文字以内です。')
+     WHERE LENGTH(NEW.code) > 20;
+    SELECT RAISE(ABORT, '「科目コード」を入れてください。')
+     WHERE LENGTH(NEW.code) < 1;
 END;
 
 CREATE TRIGGER trg_sub_accounts_code_format_insert
@@ -134,7 +217,20 @@ WHEN NEW.code GLOB '*[^0-9A-Za-z_-]*'
      OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code)
      OR typeof(NEW.code) = 'blob'
 BEGIN
-    SELECT RAISE(ABORT, '補助科目のコードは半角の英数字と「-」「_」で、20 文字以内です。「-」「_」は先頭と末尾には置けません。');
+    SELECT RAISE(ABORT, '「補助科目コード」に使えない字が入っています。半角の英数字と「-」「_」だけで入れてください。')
+     WHERE typeof(NEW.code) = 'blob'
+        OR NEW.code GLOB '*[^0-9A-Za-z_-]*'
+        OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code);
+    SELECT RAISE(ABORT, '「補助科目コード」の先頭に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '[-_]*';
+    SELECT RAISE(ABORT, '「補助科目コード」の末尾に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '*[-_]';
+    SELECT RAISE(ABORT, '「補助科目コード」の「-」「_」は続けて使えません。')
+     WHERE NEW.code GLOB '*[-_][-_]*';
+    SELECT RAISE(ABORT, '「補助科目コード」は 20 文字以内です。')
+     WHERE LENGTH(NEW.code) > 20;
+    SELECT RAISE(ABORT, '「補助科目コード」を入れてください。')
+     WHERE LENGTH(NEW.code) < 1;
 END;
 
 CREATE TRIGGER trg_sub_accounts_code_format_update
@@ -149,7 +245,20 @@ WHEN NEW.code GLOB '*[^0-9A-Za-z_-]*'
      OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code)
      OR typeof(NEW.code) = 'blob'
 BEGIN
-    SELECT RAISE(ABORT, '補助科目のコードは半角の英数字と「-」「_」で、20 文字以内です。「-」「_」は先頭と末尾には置けません。');
+    SELECT RAISE(ABORT, '「補助科目コード」に使えない字が入っています。半角の英数字と「-」「_」だけで入れてください。')
+     WHERE typeof(NEW.code) = 'blob'
+        OR NEW.code GLOB '*[^0-9A-Za-z_-]*'
+        OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code);
+    SELECT RAISE(ABORT, '「補助科目コード」の先頭に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '[-_]*';
+    SELECT RAISE(ABORT, '「補助科目コード」の末尾に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '*[-_]';
+    SELECT RAISE(ABORT, '「補助科目コード」の「-」「_」は続けて使えません。')
+     WHERE NEW.code GLOB '*[-_][-_]*';
+    SELECT RAISE(ABORT, '「補助科目コード」は 20 文字以内です。')
+     WHERE LENGTH(NEW.code) > 20;
+    SELECT RAISE(ABORT, '「補助科目コード」を入れてください。')
+     WHERE LENGTH(NEW.code) < 1;
 END;
 
 CREATE TRIGGER trg_departments_code_format_insert
@@ -164,7 +273,20 @@ WHEN NEW.code GLOB '*[^0-9A-Za-z_-]*'
      OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code)
      OR typeof(NEW.code) = 'blob'
 BEGIN
-    SELECT RAISE(ABORT, '部門のコードは半角の英数字と「-」「_」で、20 文字以内です。「-」「_」は先頭と末尾には置けません。');
+    SELECT RAISE(ABORT, '「部門コード」に使えない字が入っています。半角の英数字と「-」「_」だけで入れてください。')
+     WHERE typeof(NEW.code) = 'blob'
+        OR NEW.code GLOB '*[^0-9A-Za-z_-]*'
+        OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code);
+    SELECT RAISE(ABORT, '「部門コード」の先頭に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '[-_]*';
+    SELECT RAISE(ABORT, '「部門コード」の末尾に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '*[-_]';
+    SELECT RAISE(ABORT, '「部門コード」の「-」「_」は続けて使えません。')
+     WHERE NEW.code GLOB '*[-_][-_]*';
+    SELECT RAISE(ABORT, '「部門コード」は 20 文字以内です。')
+     WHERE LENGTH(NEW.code) > 20;
+    SELECT RAISE(ABORT, '「部門コード」を入れてください。')
+     WHERE LENGTH(NEW.code) < 1;
 END;
 
 CREATE TRIGGER trg_departments_code_format_update
@@ -179,7 +301,20 @@ WHEN NEW.code GLOB '*[^0-9A-Za-z_-]*'
      OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code)
      OR typeof(NEW.code) = 'blob'
 BEGIN
-    SELECT RAISE(ABORT, '部門のコードは半角の英数字と「-」「_」で、20 文字以内です。「-」「_」は先頭と末尾には置けません。');
+    SELECT RAISE(ABORT, '「部門コード」に使えない字が入っています。半角の英数字と「-」「_」だけで入れてください。')
+     WHERE typeof(NEW.code) = 'blob'
+        OR NEW.code GLOB '*[^0-9A-Za-z_-]*'
+        OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code);
+    SELECT RAISE(ABORT, '「部門コード」の先頭に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '[-_]*';
+    SELECT RAISE(ABORT, '「部門コード」の末尾に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '*[-_]';
+    SELECT RAISE(ABORT, '「部門コード」の「-」「_」は続けて使えません。')
+     WHERE NEW.code GLOB '*[-_][-_]*';
+    SELECT RAISE(ABORT, '「部門コード」は 20 文字以内です。')
+     WHERE LENGTH(NEW.code) > 20;
+    SELECT RAISE(ABORT, '「部門コード」を入れてください。')
+     WHERE LENGTH(NEW.code) < 1;
 END;
 
 CREATE TRIGGER trg_partners_code_format_insert
@@ -194,7 +329,20 @@ WHEN NEW.code GLOB '*[^0-9A-Za-z_-]*'
      OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code)
      OR typeof(NEW.code) = 'blob'
 BEGIN
-    SELECT RAISE(ABORT, '取引先のコードは半角の英数字と「-」「_」で、20 文字以内です。「-」「_」は先頭と末尾には置けません。');
+    SELECT RAISE(ABORT, '「取引先コード」に使えない字が入っています。半角の英数字と「-」「_」だけで入れてください。')
+     WHERE typeof(NEW.code) = 'blob'
+        OR NEW.code GLOB '*[^0-9A-Za-z_-]*'
+        OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code);
+    SELECT RAISE(ABORT, '「取引先コード」の先頭に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '[-_]*';
+    SELECT RAISE(ABORT, '「取引先コード」の末尾に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '*[-_]';
+    SELECT RAISE(ABORT, '「取引先コード」の「-」「_」は続けて使えません。')
+     WHERE NEW.code GLOB '*[-_][-_]*';
+    SELECT RAISE(ABORT, '「取引先コード」は 20 文字以内です。')
+     WHERE LENGTH(NEW.code) > 20;
+    SELECT RAISE(ABORT, '「取引先コード」を入れてください。')
+     WHERE LENGTH(NEW.code) < 1;
 END;
 
 CREATE TRIGGER trg_partners_code_format_update
@@ -209,7 +357,20 @@ WHEN NEW.code GLOB '*[^0-9A-Za-z_-]*'
      OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code)
      OR typeof(NEW.code) = 'blob'
 BEGIN
-    SELECT RAISE(ABORT, '取引先のコードは半角の英数字と「-」「_」で、20 文字以内です。「-」「_」は先頭と末尾には置けません。');
+    SELECT RAISE(ABORT, '「取引先コード」に使えない字が入っています。半角の英数字と「-」「_」だけで入れてください。')
+     WHERE typeof(NEW.code) = 'blob'
+        OR NEW.code GLOB '*[^0-9A-Za-z_-]*'
+        OR LENGTH(CAST(NEW.code AS BLOB)) <> LENGTH(NEW.code);
+    SELECT RAISE(ABORT, '「取引先コード」の先頭に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '[-_]*';
+    SELECT RAISE(ABORT, '「取引先コード」の末尾に「-」「_」は置けません。')
+     WHERE NEW.code GLOB '*[-_]';
+    SELECT RAISE(ABORT, '「取引先コード」の「-」「_」は続けて使えません。')
+     WHERE NEW.code GLOB '*[-_][-_]*';
+    SELECT RAISE(ABORT, '「取引先コード」は 20 文字以内です。')
+     WHERE LENGTH(NEW.code) > 20;
+    SELECT RAISE(ABORT, '「取引先コード」を入れてください。')
+     WHERE LENGTH(NEW.code) < 1;
 END;
 
 -- 大小を無視した重複を止める。**保存される字は入力のまま**で、畳むのは判定だけである（ADR-0047 の決定 7）。

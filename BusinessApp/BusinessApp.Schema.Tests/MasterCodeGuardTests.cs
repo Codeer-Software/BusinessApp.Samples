@@ -246,6 +246,40 @@ public class MasterCodeGuardTests
     }
 
     /// <summary>
+    /// <b>文言は条件ごとに分かれ、欄の呼び名は画面のラベルである</b>（qa/02 R57-04。docs/21 §2-6）。
+    /// 4 つの条件を 1 本の文言で断ると、取込や <c>sql</c> CLI で流した人はどこが悪いか特定できない。
+    /// 順は関門（<c>MasterCode.DescribeProblem</c>）と同じ——字種 → 先頭 → 末尾 → 連続 → 長さ。
+    /// </summary>
+    [Theory]
+    [InlineData("１１００", "に使えない字が入っています")]
+    [InlineData("-A", "の先頭に「-」「_」は置けません")]
+    [InlineData("A-", "の末尾に「-」「_」は置けません")]
+    [InlineData("A--B", "の「-」「_」は続けて使えません")]
+    [InlineData("ABCDEFGHIJKLMNOPQRSTU", "は 20 文字以内です")]
+    [InlineData("", "を入れてください")]
+    public void 書式の断りは条件ごとに分かれ_欄の呼び名は画面のラベルである(string code, string expected)
+    {
+        var labels = new Dictionary<string, string>
+        {
+            ["fiscal_years"] = "年度コード",
+            ["tax_categories"] = "税区分コード",
+            ["accounts"] = "科目コード",
+            ["sub_accounts"] = "補助科目コード",
+            ["departments"] = "部門コード",
+            ["partners"] = "取引先コード",
+        };
+
+        foreach (var table in Tables.Select(row => (string)row[0]))
+        {
+            using var db = SchemaSeed.Create();
+
+            var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Insert(table, code)));
+
+            Assert.Contains($"「{labels[table]}」{expected}", thrown.Message, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// 大小を無視した重複は、一意索引が止める（ADR-0047 の決定 7）。
     /// </summary>
     /// <remarks>
