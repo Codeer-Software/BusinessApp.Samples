@@ -3,15 +3,17 @@ namespace BusinessApp.AccountingCore.Server.Tests.Conventions;
 using System.Text.RegularExpressions;
 
 using BusinessApp.TestSupport;
+using BusinessApp.AccountingCore.Server.Shared.Infrastructure;
 
 /// <summary>
 /// サーバ層のどこが<b>取引先部品を名指ししてよいか</b>（ADR-0025 §4・ADR-0029 §2）。
 /// </summary>
 /// <remarks>
-/// <para><b>見るのは部品の境界をまたぐ参照だけ</b>である。サーバ層の中の向き
+/// <para><b>見るのは部品の境界をまたぐ参照だけ</b>である。サーバ層の中の<b>機能どうし</b>の向き
 /// （<c>Journals</c> ↔ <c>Settings</c> ↔ <c>Shared</c>）は、いま誰も見ていない——
 /// 純粋層の同名クラスが持つ 4 種の検査のうち 1 種だけをここに置いている
-/// （2026-09-02 の自己レビュー。表を足すかは、サーバ層のフォルダが増えた日に決める）。</para>
+/// （2026-09-02 の自己レビュー）。<b>層の向き</b>（Application・Infrastructure・Presentation）は
+/// 隣の <see cref="LayerDependencyTests"/> が見る（ADR-0050。2026-09-10）。</para>
 /// <para><b>純粋層にしか規則が無かった。</b> <c>AccountingCore.Tests</c> の
 /// <c>ModuleDependencyTests</c> は「<c>Journals</c> だけが取引先部品を知ってよい」を守っているが、
 /// 見ているのは <c>BusinessApp.AccountingCore</c> だけである。**サーバ層は素通りしていた**——
@@ -34,7 +36,7 @@ public class ModuleDependencyTests
     /// </remarks>
     private static readonly Dictionary<string, string> FoldersAllowedToUsePartners = new(StringComparer.Ordinal)
     {
-        [""] = "保存の入口。取引先部品の関門を 1 つずつ数えず、部品の入口を 1 本呼ぶ（依存の向きは ADR-0025 §4）",
+        ["Shared"] = "保存の入口（Shared/Presentation）。取引先部品の関門を 1 つずつ数えず、部品の入口を 1 本呼ぶ（依存の向きは ADR-0025 §4）",
         ["Journals"] = "帳簿の記載事項①（相手方の氏名又は名称）と登録番号を、計上時に取引先から写す（ADR-0018）",
         ["Settings"] = "自社の法人番号の判定に、取引先部品の CorporateNumber を使う（qa/02 R26-32 で「出さない」と決めた）",
     };

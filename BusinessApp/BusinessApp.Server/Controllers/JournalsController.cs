@@ -1,9 +1,9 @@
-using BusinessApp.AccountingCore.Server.Journals;
 using BusinessApp.Server.Services;
 using Codeer.LowCode.Blazor;
 using Codeer.LowCode.Blazor.DataIO.Db;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using BusinessApp.AccountingCore.Server.Journals.Presentation;
 
 namespace BusinessApp.Server.Controllers
 {

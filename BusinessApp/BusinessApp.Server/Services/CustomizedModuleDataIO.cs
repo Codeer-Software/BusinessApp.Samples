@@ -4,7 +4,7 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 using Codeer.LowCode.Blazor.DesignLogic;
 using Codeer.LowCode.Blazor.Extras.Services;
 using Codeer.LowCode.Blazor.Repository.Data;
-using BusinessApp.AccountingCore.Server;
+using BusinessApp.AccountingCore.Server.Shared.Presentation;
 
 namespace BusinessApp.Server.Services
 {

@@ -6,14 +6,16 @@ using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Departments;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Periods;
-using BusinessApp.AccountingCore.Server;
-using BusinessApp.AccountingCore.Server.Journals;
 using BusinessApp.Partners.Server;
-using BusinessApp.AccountingCore.Server.Shared;
 using BusinessApp.TestSupport;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
 using Microsoft.Data.Sqlite;
+using BusinessApp.AccountingCore.Server.Journals.Application;
+using BusinessApp.AccountingCore.Server.Journals.Infrastructure;
+using BusinessApp.AccountingCore.Server.Journals.Presentation;
+using BusinessApp.AccountingCore.Server.Shared.Infrastructure;
+using BusinessApp.AccountingCore.Server.Shared.Presentation;
 
 /// <summary>
 /// 本物の DDL と初期データを載せた SQLite の上に、サーバ側部品を組み立てて渡す。

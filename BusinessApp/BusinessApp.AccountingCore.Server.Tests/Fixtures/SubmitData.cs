@@ -2,6 +2,7 @@ namespace BusinessApp.AccountingCore.Server.Tests.Fixtures;
 
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
+using BusinessApp.AccountingCore.Server.Journals.Application;
 
 /// <summary>
 /// CLB が保存時に送ってくる形（<see cref="ModuleSubmitData"/>）を組み立てる。
