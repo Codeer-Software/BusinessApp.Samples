@@ -475,7 +475,7 @@ public class JournalAmendmentEndpointTests
 
         Assert.Equal(AmendResult.RejectedStatus, result.Status);
         Assert.Equal(
-            $"複製できません。①今日（2026/08/24）に対応する会計期間がありません。", result.Message);
+            $"複製できません。今日（2026/08/24）に対応する会計期間がありません。", result.Message);
         Assert.Equal([JournalViolationCodes.PeriodNotFound], result.Violations.Select(v => v.Code));
     }
 

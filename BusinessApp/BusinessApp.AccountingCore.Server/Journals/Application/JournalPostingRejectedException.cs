@@ -62,9 +62,12 @@ public sealed class JournalPostingRejectedException(
     private static string BuildMessage(IReadOnlyList<Violation> violations, string headline)
     {
         var errors = violations.Where(v => v.Severity == ViolationSeverity.Error).ToList();
-        var numbered = errors.Select((violation, index) => $"{Number(index)}{Describe(violation)}");
 
-        // 1 件のときに「（1 件）」と数えて見せても、読み手の役に立たない。
+        // 1 件のときは件数も番号も付けない（開発者の決定。2026-09-10。「どちらでも許容範囲。ベターは A。実装が難しくなければ A に」。
+        // 理由は Claude の qa/02 R69-31——②の無い①は「まだ続きがある」と読める。「（1 件）」を出さないのは以前からの Claude の判断）。
+        var numbered = errors.Count > 1
+            ? errors.Select((violation, index) => $"{Number(index)}{Describe(violation)}")
+            : errors.Select(Describe);
         var count = errors.Count > 1 ? $"（{errors.Count} 件）" : string.Empty;
         return $"{headline}{count}。{string.Join(string.Empty, numbered)}";
     }

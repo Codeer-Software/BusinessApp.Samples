@@ -475,7 +475,7 @@ public class JournalSubmitGateTests
                 }));
 
         Assert.False(saved);
-        Assert.Equal("計上できません。①1 行目: 勘定科目を選んでください。", error.Message);
+        Assert.Equal("計上できません。1 行目: 勘定科目を選んでください。", error.Message);
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_lines"));
     }
@@ -500,7 +500,7 @@ public class JournalSubmitGateTests
                 }));
 
         Assert.False(saved);
-        Assert.Equal("保存できません。①1 行目: 金額を入力してください。", error.Message);
+        Assert.Equal("保存できません。1 行目: 金額を入力してください。", error.Message);
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
     }
 
@@ -888,7 +888,7 @@ public class JournalSubmitGateTests
             () => server.SubmitAsync([SubmitData.Adding(entry)], NothingSaved));
 
         Assert.Equal(
-            "保存できません。①元の伝票は、取消・訂正のときに自動で入ります。手で入れたり消したりはできません。",
+            "保存できません。元の伝票は、取消・訂正のときに自動で入ります。手で入れたり消したりはできません。",
             error.Message);
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries where status = 'draft'"));
     }
@@ -947,7 +947,7 @@ public class JournalSubmitGateTests
             () => server.SubmitAsync([SubmitData.Updating(stale)], NothingSaved));
 
         Assert.Equal(
-            "保存できません。①この伝票は、あなたが開いたあとに別の人が変更しました。"
+            "保存できません。この伝票は、あなたが開いたあとに別の人が変更しました。"
             + "画面を開き直して、その変更を確かめてから、もう一度操作してください。",
             error.Message);
 
@@ -969,7 +969,7 @@ public class JournalSubmitGateTests
             () => server.SubmitAsync([SubmitData.Updating(gone)], NothingSaved));
 
         Assert.Equal(
-            "保存できません。①この伝票は、あなたが開いたあとに別の人が削除しました。振替伝票の一覧に戻ってください。"
+            "保存できません。この伝票は、あなたが開いたあとに別の人が削除しました。振替伝票の一覧に戻ってください。"
             + "この内容が必要なら、新しい振替伝票として入力し直してください。",
             error.Message);
     }
@@ -1138,7 +1138,7 @@ public class JournalSubmitGateTests
             () => server.SubmitAsync([SubmitData.Deleting("999")], NothingSaved));
 
         Assert.Equal(
-            "削除できません。①この伝票は、あなたが開いたあとに別の人が削除しました。振替伝票の一覧に戻ってください。",
+            "削除できません。この伝票は、あなたが開いたあとに別の人が削除しました。振替伝票の一覧に戻ってください。",
             error.Message);
         Assert.Equal(untouched.Value, server.Scalar<long>("select id from journal_entries"));
     }
@@ -1154,7 +1154,7 @@ public class JournalSubmitGateTests
         var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
             () => server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value), 2)], NothingSaved));
 
-        Assert.StartsWith("削除できません。①この伝票は、あなたが開いたあとに別の人が変更しました。", error.Message, StringComparison.Ordinal);
+        Assert.StartsWith("削除できません。この伝票は、あなたが開いたあとに別の人が変更しました。", error.Message, StringComparison.Ordinal);
         Assert.Equal(1, server.Scalar<long>("select count(*) from journal_entries"));
 
         await server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value), 3)], server.Deleting(id));

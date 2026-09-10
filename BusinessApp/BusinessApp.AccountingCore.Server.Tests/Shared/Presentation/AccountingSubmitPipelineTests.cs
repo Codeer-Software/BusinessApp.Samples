@@ -222,7 +222,7 @@ public class AccountingSubmitPipelineTests
             () => server.Pipeline.SubmitAsync(
                 [SubmitData.Adding(entry)], () => { saved = true; return Task.FromResult(new List<ModuleSubmitResult>()); }));
 
-        Assert.StartsWith("保存できません。①", thrown.Message, StringComparison.Ordinal);
+        Assert.StartsWith("保存できません。", thrown.Message, StringComparison.Ordinal);
         Assert.Contains("取引日", thrown.Message, StringComparison.Ordinal);
         Assert.IsAssignableFrom<RejectedException>(thrown);
         Assert.False(saved);
