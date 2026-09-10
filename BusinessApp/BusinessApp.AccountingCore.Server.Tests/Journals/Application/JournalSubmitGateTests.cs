@@ -351,7 +351,7 @@ public class JournalSubmitGateTests
         var codes = error.Violations.Select(v => v.Code).ToList();
         Assert.Contains(JournalViolationCodes.Unbalanced, codes);
         Assert.Contains(JournalViolationCodes.DepartmentMissing, codes);
-        Assert.Contains("1 行目", error.Message, StringComparison.Ordinal);
+        Assert.Contains("行 1:", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -475,7 +475,7 @@ public class JournalSubmitGateTests
                 }));
 
         Assert.False(saved);
-        Assert.Equal("計上できません。1 行目: 勘定科目を選んでください。", error.Message);
+        Assert.Equal("計上できません。行 1: 勘定科目を選んでください。", error.Message);
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_lines"));
     }
@@ -500,7 +500,7 @@ public class JournalSubmitGateTests
                 }));
 
         Assert.False(saved);
-        Assert.Equal("保存できません。1 行目: 金額を入力してください。", error.Message);
+        Assert.Equal("保存できません。行 1: 金額を入力してください。", error.Message);
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
     }
 

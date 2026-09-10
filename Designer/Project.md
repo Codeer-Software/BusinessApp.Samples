@@ -72,6 +72,7 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/21_画面の原則.md, ../docs/d
 | 帳簿を並べ替えさせない | 列の `CanUserSort: false`。**PageFrame 側でも切る**（両方書く） |
 | 必須の欄に赤い `*` | 詳細レイアウトの**ラベル側**の要素に `"ClassName": "required-label"`（`app.css` の `::after` が印を出す）＋ フォームの先頭行に `RequiredLegendLabel`。**ラベルが `RelativeField` でその欄を指しているときは、CLB が自分で `*` を足すのでクラスを付けない**（付けると `*` が 2 つ並ぶ。qa/01 F-32。認証部品の `AppUser` がこの形）。**一覧・明細表の見出しには付けられない**——`ListElement.ClassName` は `<td>` にしか付かない（qa/01 D-16）ので、**見出しの文字列そのものに `*` を入れる**（「勘定科目 *」。したがって明細の印だけ黒い） |
 | ボタンの色は 3 値だけ | `Variant` に [21 §4](../docs/21_画面の原則.md) の 3 値以外を書かない |
+| 上限で入力を止めない | `TextFieldDesign` に `MaxLength` を書かない（HTML の `maxlength` になり、黙って止める・切る。[qa/01 A-13](../docs/qa/01_CLB静かな失敗.md)）。上限は `Placeholder` に文字で書き（「半角英数字と「-」「_」（20 文字以内）」）、関門が断る。`FieldLengthConsistencyTests` が守る |
 | 押せないボタンを灰色にしない | **まだ無い。** 押せなくする手段は `IsViewOnly` か `IsVisible: false` で、`ButtonField` に `disabled` は無い（[qa/01 D-01・F-14](../docs/qa/01_CLB静かな失敗.md)）。半透明にするなら `app.css` に `opacity: .45`（**Bootstrap 既定の `.65` より薄く**）。**`cursor` は効かない**——`IsViewOnly` は `pointer-events: none` になる |
 
 **CLB 固有の寸法・組み方**（21 には無い。ここだけが持つ）

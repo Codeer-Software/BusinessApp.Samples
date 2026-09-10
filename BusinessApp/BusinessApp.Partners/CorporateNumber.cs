@@ -22,6 +22,9 @@ public static class CorporateNumber
     /// <summary>基礎番号の桁数（検査用数字を除いた残り）。</summary>
     public const int BaseNumberLength = Length - 1;
 
+    /// <summary>画面のラベル。取引先・自社情報のどちらの欄も <c>DisplayName</c> はこれである（docs/21 §2-6——欄の名前は画面のラベルを鉤括弧で括る）。</summary>
+    public const string Label = "法人番号";
+
     /// <summary>
     /// 利用者に見せる書式の説明。<b>差し戻しの文言で使う。</b>
     /// </summary>
@@ -30,7 +33,7 @@ public static class CorporateNumber
     /// 説明だけが古くなり、「13 桁です」と言いながら 14 桁を要求する関門になる。
     /// </remarks>
     public static readonly string FormatDescription =
-        $"法人番号は数字 {Length} 桁です。";
+        $"「{Label}」は数字 {Length} 桁です。";
 
     /// <summary>
     /// 検査用数字が合っていないときに利用者へ見せる文言。
@@ -52,15 +55,26 @@ public static class CorporateNumber
     /// 判定と文言をここ 1 か所に置き、<b>投げる例外の型だけを呼ぶ側が決める</b>。</para>
     /// <para><b>空欄は呼ぶ側が先に落とす。</b> どちらの画面でも任意の項目だが、
     /// 「空欄をどう保存するか」（NULL に倒すか）は画面ごとの話なので、ここでは決めない。</para>
+    /// <para><b>何が悪いかを名指しする</b>（<c>MasterCode.DescribeProblem</c> と同じ作法）。桁が違うなら今の文字数、
+    /// 字種が違うなら何文字目の何か——画面は上限で入力を止めない（docs/21 §1）ので、貼り付けた 14 桁と
+    /// 全角で打った 13 桁は、この文言だけを手がかりに直すことになる。</para>
     /// </remarks>
     public static string? DescribeProblem(string? value)
     {
-        if (!IsWellFormed(value))
+        var text = Normalize(value);
+
+        if (text.Length != Length)
         {
-            return $"{FormatDescription}入力し直してください。";
+            var count = text.Length == 0 ? string.Empty : $"いまは {text.Length} 文字あります。";
+            return $"{FormatDescription}{count}入力し直してください。";
         }
 
-        return HasValidCheckDigit(value) ? null : CheckDigitDescription;
+        if (text.AsSpan().IndexOfAnyExceptInRange('0', '9') is int at && at >= 0)
+        {
+            return $"「{Label}」の {at + 1} 文字目の「{text[at]}」は使えません。半角の数字で入力し直してください。";
+        }
+
+        return HasValidCheckDigit(text) ? null : CheckDigitDescription;
     }
 
     /// <summary>前後の空白を落とした姿。<b>保存するのはこの形</b>。</summary>

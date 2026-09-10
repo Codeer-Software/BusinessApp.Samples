@@ -76,6 +76,11 @@ public sealed class JournalPostingRejectedException(
     private static string Number(int index)
         => index < Numbers.Length ? Numbers[index] : string.Empty;
 
+    /// <summary>
+    /// 行を指す言い方は<b>「行 3:」</b>——画面の「行」列の値で指す。
+    /// 「3 行目」は上から 3 番目の意味になり、下書きで行を消して番号が飛んだ伝票（行 2・行 3）では
+    /// 存在しない 3 番目を探させる（docs/21 §3。行番号は飛んでよいと決めた）。
+    /// </summary>
     private static string Describe(Violation violation)
-        => violation.LineNo is int lineNo ? $"{lineNo} 行目: {violation.Message}" : violation.Message;
+        => violation.LineNo is int lineNo ? $"行 {lineNo}: {violation.Message}" : violation.Message;
 }

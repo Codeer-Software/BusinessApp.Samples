@@ -13,7 +13,7 @@ using BusinessApp.TestSupport;
 /// </summary>
 /// <remarks>
 /// <para><b>docs/20 §4 の表がこの行を「守れていない」と書いていた。</b>
-/// 法人番号の 13 桁が 3 か所（C# の定数・DDL の <c>GLOB</c>・デザインのプレースホルダ）にあり、
+/// 法人番号の 13 桁が 3 か所（C# の定数・DDL の <c>GLOB</c>・デザイン——2026-09-09 は <c>MaxLength</c>、2026-09-11 からプレースホルダ）にあり、
 /// 突き合わせるテストが無かった。<b>マスタのコードの 20 文字を足すときに、まとめて閉じた</b>（2026-09-09）。</para>
 /// <para><b>3 か所に書かざるを得ないのは、DDL が SQL テキスト・デザインが JSON で、
 /// どちらも C# の定数を読めないからである</b>（docs/20 §4 の「已むを得ない重複」）。
@@ -54,7 +54,7 @@ public class FieldLengthConsistencyTests
 
         Assert.False(
             code.TryGetProperty("MaxLength", out var max) && max.ValueKind == JsonValueKind.Number,
-            $"{module}.Code に MaxLength がある。黙って切るので使わない（21 §0）");
+            $"{module}.Code に MaxLength がある。黙って切るので使わない（21 §1）");
         Assert.Contains(
             MasterCode.MaxLength.ToString(CultureInfo.InvariantCulture),
             code.GetProperty("Placeholder").GetString(),
@@ -105,7 +105,7 @@ public class FieldLengthConsistencyTests
 
             Assert.False(
                 design.TryGetProperty("MaxLength", out var max) && max.ValueKind == JsonValueKind.Number,
-                $"{module}.{field} に MaxLength がある。黙って切るので使わない（21 §0）");
+                $"{module}.{field} に MaxLength がある。黙って切るので使わない（21 §1）");
             Assert.Contains(
                 CorporateNumber.Length.ToString(CultureInfo.InvariantCulture),
                 design.GetProperty("Placeholder").GetString(),

@@ -114,15 +114,37 @@ public class CorporateNumberTests
     public void 検査に通る番号は理由を返さない()
         => Assert.Null(CorporateNumber.DescribeProblem(NtaExample));
 
-    /// <summary>書式が崩れていれば、桁の説明を返す。</summary>
+    /// <summary>空なら桁の説明だけ（呼ぶ側が先に落とすので、実際にはここへ来ない）。</summary>
     [Theory]
-    [InlineData("12345")]
     [InlineData("")]
     [InlineData(null)]
-    [InlineData("１２３４５６７８９０１２３")]
-    public void 書式が崩れていれば桁の説明を返す(string? value)
-        => Assert.StartsWith(
-            CorporateNumber.FormatDescription, CorporateNumber.DescribeProblem(value), StringComparison.Ordinal);
+    [InlineData("   ")]
+    public void 空なら桁の説明を返す(string? value)
+        => Assert.Equal(
+            $"{CorporateNumber.FormatDescription}入力し直してください。", CorporateNumber.DescribeProblem(value));
+
+    /// <summary>
+    /// 桁が違えば、<b>いま何文字あるか</b>を言う。画面は上限で入力を止めない（docs/21 §1）ので、
+    /// 貼り付けで 14 桁になった人は「13 桁です」だけでは何が起きたか分からない。
+    /// </summary>
+    [Theory]
+    [InlineData("123456789012", 12)]
+    [InlineData("12345678901234", 14)]
+    [InlineData(" 12345678901234 ", 14)]
+    public void 桁が違えば今の文字数を言う(string value, int count)
+        => Assert.Equal(
+            $"「法人番号」は数字 13 桁です。いまは {count} 文字あります。入力し直してください。",
+            CorporateNumber.DescribeProblem(value));
+
+    /// <summary>字種が違えば、<b>何文字目の何が</b>使えないかを言う（全角の数字も名指しする）。</summary>
+    [Theory]
+    [InlineData("１２３４５６７８９０１２３", 1, "１")]
+    [InlineData("87001100059O1", 12, "O")]
+    [InlineData("870011000590１", 13, "１")]
+    public void 字種が違えば何文字目の何かを言う(string value, int at, string character)
+        => Assert.Equal(
+            $"「法人番号」の {at} 文字目の「{character}」は使えません。半角の数字で入力し直してください。",
+            CorporateNumber.DescribeProblem(value));
 
     /// <summary>
     /// 書式は合っていて検査用数字だけが違えば、<b>打ち間違いとして</b>知らせる。

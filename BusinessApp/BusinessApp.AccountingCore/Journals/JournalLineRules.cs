@@ -56,8 +56,8 @@ public static class JournalLineRules
 
     /// <summary>同じ行番号が 2 つある（同上）。</summary>
     /// <remarks>
-    /// <b>番号は文に埋める</b>（<c>Violation.LineNo</c> に載せない）。「3 行目: 行番号が重なっています」では、
-    /// 3 行目が 2 つあるという事実を読み手に推測させる（2026-09-10 の自己レビュー）。
+    /// <b>番号は文に埋める</b>（<c>Violation.LineNo</c> に載せない）。「行 3: 行番号が重なっています」では、
+    /// 行 3 が 2 つあるという事実を読み手に推測させる（2026-09-10 の自己レビュー）。
     /// </remarks>
     public static string LineNoDuplicatedAt(int lineNo)
         => $"行番号 {lineNo} が 2 つの明細に付いています。行番号は画面が自動で振るので、明細を入力し直してください。";
