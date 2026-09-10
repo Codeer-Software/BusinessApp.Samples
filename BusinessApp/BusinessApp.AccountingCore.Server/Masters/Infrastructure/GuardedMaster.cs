@@ -2,7 +2,7 @@ namespace BusinessApp.AccountingCore.Server.Masters.Infrastructure;
 
 // 表と列の記述子。**どのマスタを守るか（一覧）は Application の MasterMeaningGate が持ち**、
 // ここは「表・列・呼び名」を束ねる型だけ——Infrastructure の口（MasterUsageStore）が生の文字列を受けないための型である
-//（ADR-0050 の決定 4。Infrastructure は Application を参照しないので、型はこちらに置く）。
+//（ADR-0050 の決定 7。Infrastructure は Application を参照しないので、型はこちらに置く）。
 
 /// <summary>守るマスタ 1 つ。</summary>
 /// <param name="ModuleName">CLB のモジュール名。</param>

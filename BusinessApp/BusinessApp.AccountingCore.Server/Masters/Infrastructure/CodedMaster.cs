@@ -1,7 +1,7 @@
 namespace BusinessApp.AccountingCore.Server.Masters.Infrastructure;
 
 // コードを持つマスタの記述子。**どのマスタがコードを持つか（一覧）は Application の MasterSubmitGate が持ち**、
-// ここは表・欄の呼び名・親を束ねる型だけ（ADR-0050 の決定 4。GuardedMaster と同じ置き方）。
+// ここは表・欄の呼び名・親を束ねる型だけ（ADR-0050 の決定 7。GuardedMaster と同じ置き方）。
 
 /// <summary>
 /// コードを持つマスタ 1 つ。
