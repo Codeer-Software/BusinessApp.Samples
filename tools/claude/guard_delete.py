@@ -292,17 +292,58 @@ def path_pattern(path_value: str) -> re.Pattern:
     （2026-09-10。`LocalData` を 4 行に割ったときに変えた）。前後に名前が続くもの（LocalDataX・.gitignore）は外す。
     """
     segments = path_value.replace("\\", "/").strip("/").split("/")
-    body = r"[/\\]".join(re.escape(segment) for segment in segments)
+    body = r"[/\\]+".join(re.escape(segment) for segment in segments)
     return re.compile(r"(?<![A-Za-z0-9_.\-])" + body + r"(?![A-Za-z0-9_.\-])", re.IGNORECASE)
+
+
+# 当たり先の直後に来てよい字（引用符・括弧・空白・行末）。ここで終わる形は「裸で指している」。
+_END = r"(?=$|[\s\"'`)\]])"
+
+
+def parent_pattern(parent: str) -> re.Pattern:
+    """**親を裸で指す形**に当たる正規表現（`LocalData`・`LocalData/`・`LocalData/*`・`LocalData/.`・`LocalData/x/..`）。
+
+    正典の行が `LocalData/db` のように親を持つとき、親そのものを当たり先に書く上書き・移動
+    （`unzip -d LocalData`・`cp -r src/. LocalData/`・`mv LocalData/* x`）は守る配下を丸ごと含むのに、
+    行の字面には当たらない（2026-09-10 の自己レビューで実測。R66-01）。`..` を含む形は行き先が字面では
+    決まらないので、**過剰検出側**に倒して親の全行に当てる。`LocalData/temp/x` のように別の名前が続く形には当たらない。
+    """
+    head = r"(?<![A-Za-z0-9_.\-])" + r"[/\\]+".join(re.escape(s) for s in parent.replace("\\", "/").strip("/").split("/"))
+    tail = (r"(?:" + _END
+            + r"|[/\\]+(?:\*|\." + _END + r"|" + _END + r"|[^\s\"'`]*\.\.))")
+    return re.compile(head + tail, re.IGNORECASE)
+
+
+def normalized_for_match(command: str) -> str:
+    """照合の前に、パスの書き方の揺れを畳む。
+
+    `\\\\`（Python・C#・JSON の文字列で書いた Windows の区切り）を 1 本に、`/./` を落とし、
+    連続した区切りを 1 つにする。**照合にだけ使い、判定の他の部分は元の文字列を見る。**
+    （2026-09-10 の自己レビューで、これらの形が全部素通りしていたのを実測。R66-02）
+    """
+    text = command.replace("\\\\", "\\")
+    text = re.sub(r"[/\\]\.(?=[/\\])", "/", text)
+    text = re.sub(r"[/\\]{2,}", "/", text)
+    return text
 
 
 def load_protected():
     """[(コマンド文字列に探す正規表現, 理由), ...] を返す。読めなければ例外。"""
     patterns = []
+    parents = {}
     for entry in load_entries():
         # コマンド文字列にはリポジトリからの相対でも絶対でも書かれうるので、**相対パスの字面**を探す
         # （絶対パスにも相対の字面は含まれる）。
         patterns.append((path_pattern(entry["path"]), entry["why"]))
+        parent = entry["path"].replace("\\", "/").rsplit("/", 1)[0] if "/" in entry["path"] else ""
+        if parent:
+            parents.setdefault(parent, []).append(entry["path"])
+    # **親を裸で指す形**（`LocalData`・`LocalData/*`・`LocalData/..`）は、守る配下を丸ごと含む。
+    for parent, children in parents.items():
+        patterns.append((
+            parent_pattern(parent),
+            f"{parent}/ をまとめて当たり先にする形は、守っている {'・'.join(children)} を含む",
+        ))
     return patterns
 
 
@@ -439,8 +480,9 @@ def decide(command: str):
             "読めないまま削除・上書きは通さない（tools/claude/guard_delete.py）。"
         )
 
+    matchable = normalized_for_match(command)
     for pattern, why in (protected if names_a_target else []):
-        if pattern.search(command):
+        if pattern.search(matchable):
             reason = (
                 f"{why}。この操作は許可しない（tools/claude/guard_delete.py）。"
                 "作業用の複製が要るなら、サブエージェントの worktree かスクラッチパッドを使う。"
@@ -569,6 +611,25 @@ SELFTEST = [
     # **一般語の行が関係のないコマンドを拒まない**（`LocalData/db` は `db` の語には当たらない）
     ("echo x > work/db/notes.txt", None),
     ("cp a backup.txt", None),
+    ("echo x > XLocalData/db/x", None),
+    # **4 行のそれぞれに、コマンド側の検体を置く**（WRITE 側だけだと、行を消しても片方しか鳴らない。R66-04）
+    ("Copy-Item x LocalData\\db\\x.db", "deny"),
+    ("cp x LocalData/designs/App.zip", "deny"),
+    ("cp x LocalData/storages/a.pdf", "deny"),
+    ("cp x LocalData/backup/a.db", "deny"),
+    ("echo x > LocalData/README.md", "deny"),
+    # **区切りの書き方の揺れ**（2026-09-10 の自己レビューで全部素通りしていた。R66-02）
+    ("python -c \"open('LocalData\\\\db\\\\x.db','w')\"", "deny"),
+    ("echo x > LocalData/temp/../db/x.db", "deny"),
+    ("echo x > LocalData//db/x.db", "deny"),
+    ("echo x > LocalData/./db/x.db", "deny"),
+    # **親を裸で指す形**は、守る配下を丸ごと含む（R66-01）
+    ("unzip -o a.zip -d LocalData", "deny"),
+    ("Expand-Archive a.zip LocalData", "deny"),
+    ("cp -r src/. LocalData/", "deny"),
+    ("Copy-Item -Recurse -Force src\\* LocalData", "deny"),
+    ("mv LocalData/* work/", "deny"),
+    ("mv LocalData LocalData_old", "deny"),
     # **本物のリダイレクトは拾う**（追い書きも、標準エラーの振り向け先も上書きである）
     ("echo x > LocalData/db/x.db", "deny"),
     ("echo x >> LocalData/db/x.db", "deny"),
@@ -639,9 +700,9 @@ WRITE_SELFTEST = [
     ("Designer/Design/designer.settings.Development.json", "deny"),
     # 名前が前方一致するだけのものは止めない（区切りまで見ているか）
     ("LocalDataX/foo.txt", None),
-    # **`LocalData/temp/` と `LocalData/README.md` は守らない**（前者はいつ消えてもいいもの、後者は説明書きで正典に無い）
+    # **`LocalData/temp/` は守らない**（いつ消えてもいいもの）。**README.md は file 行で守る**（各自の環境にしか無い文書）
     ("LocalData/temp/memo.md", None),
-    ("LocalData/README.md", None),
+    ("LocalData/README.md", "deny"),
     (".gitignore", None),
     ("BusinessApp/BusinessApp.Server/appsettings.json", None),
     # 追跡ファイルは止めない（git で戻せる）
@@ -728,7 +789,8 @@ def _check_canon(failed: int) -> int:
         probe = f"{T} {entry['path']}"
         # **理由文は、その検体に当たる行のどれかのもの**でよい（settings.local.json の行は
         # Designer 側の同名の行にも当たり、先に載っているほうの why が返る）。
-        acceptable = [e["why"] for e in entries if path_pattern(e["path"]).search(probe)]
+        # **正規表現を経由しない**（path_pattern を「何にでも当たる」に潰しても、ここが赤になるように）。
+        acceptable = [e["why"] for e in entries if e["path"].lower() in probe.lower()]
         decision, reason = decide(probe)
         if decision != "deny" or not any(why in (reason or "") for why in acceptable):
             failed += 1
@@ -822,12 +884,21 @@ def _check_wiring(failed: int) -> int:
     # フックが落ちたときに残るのは、この `ask` の行による確認である。
     # **形まで見る。** フォルダに `Edit(<path>)`、ファイルに `Edit(<path>/**)` は**何も覆わない**のに、
     # どちらかがあればよい形で見ると緑になる（同じく自己レビューで実証。2026-09-08）。
+    required_edits = set()
     for entry in load_entries():
         path = entry["path"]
         required = f"Edit({path}/**)" if entry["kind"] == "dir" else f"Edit({path})"
+        required_edits.add(required)
         if required not in ask:
             failed += 1
             print(f"NG  settings.json の ask に {required} が無い（{entry['kind']} に要る形）")
+
+    # **逆向きも見る。** 正典から生成できない `Edit(` の行が ask に残っていると、守りは弱まらないが
+    # 「temp/ は自由に書ける」のような意図が黙って成立しない（`Edit(LocalData/**)` を残しても緑だった。R66-08）。
+    for rule in sorted(ask):
+        if str(rule).startswith("Edit(") and rule not in required_edits:
+            failed += 1
+            print(f"NG  settings.json の ask に、正典から生成できない Edit の行がある: {rule}")
 
     # **当たらない形の規則を置かない。** ファイルの権限判定は `Edit(パス)` と `Read(パス)` しか見ず、
     # `Write(パス)` などは受け付けられたうえで参照されない（起動時に警告が出るだけで、
