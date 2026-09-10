@@ -24,7 +24,7 @@ public class JournalPostingRejectedExceptionTests
         // **改行を入れない。** トースト内の文字列は改行できないので（qa/01 D-12）、
         // 件数と番号で区切る——1 行に繋がっても「あと何を直すか」が読み取れる。
         Assert.Equal(
-            "計上できません（2 件）。①借方合計と貸方合計が一致していない。②2 行目: 部門が要る。",
+            "計上できません（2 件）。①借方合計と貸方合計が一致していない。②行 2: 部門が要る。",
             error.Message);
         Assert.DoesNotContain("\n", error.Message, StringComparison.Ordinal);
     }
@@ -65,7 +65,8 @@ public class JournalPostingRejectedExceptionTests
             [new Violation("E-LINE-REQUIRED", "勘定科目を選んでください。", LineNo: 1)],
             JournalPostingRejectedException.SavingHeadline);
 
-        Assert.Equal("保存できません。1 行目: 勘定科目を選んでください。", error.Message);
+        // **「行 1:」は画面の「行」列の値。** 「1 行目」だと番号が飛んだ伝票で上から数えさせる（docs/21 §3）。
+        Assert.Equal("保存できません。行 1: 勘定科目を選んでください。", error.Message);
     }
 
     [Fact]

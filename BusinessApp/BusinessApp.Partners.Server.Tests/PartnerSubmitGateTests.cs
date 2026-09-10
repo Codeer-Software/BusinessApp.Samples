@@ -142,16 +142,17 @@ public class PartnerSubmitGateTests
     }
 
     [Theory]
-    [InlineData("123456789012")]
-    [InlineData("12345678901234")]
-    [InlineData("87001100059O1")]
-    public async Task 桁や字種が違う法人番号を弾く(string value)
+    [InlineData("123456789012", "いまは 12 文字あります")]
+    [InlineData("12345678901234", "いまは 14 文字あります")]
+    [InlineData("87001100059O1", "12 文字目の「O」は使えません")]
+    public async Task 桁や字種が違う法人番号を弾く(string value, string expected)
     {
         using var server = new PartnerServer();
 
         var rejected = await RejectedAsync(server, Adding(Partner(corporateNumber: value)), new SaveSpy());
 
-        Assert.Contains("13 桁", rejected.Message, StringComparison.Ordinal);
+        // 何が悪いかまで届く（文言そのものは CorporateNumberTests が固定する）。
+        Assert.Contains(expected, rejected.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

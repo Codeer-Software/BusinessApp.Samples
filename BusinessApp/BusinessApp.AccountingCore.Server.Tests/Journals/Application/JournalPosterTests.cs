@@ -61,7 +61,7 @@ public class JournalPosterTests
 
         var violation = Assert.Single(thrown.Violations, v => v.Code == JournalViolationCodes.PartnerInactive);
         Assert.Equal(2, violation.LineNo);
-        Assert.Contains("2 行目: 取引先「取引をやめた先」は無効", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("行 2: 取引先「取引をやめた先」は無効", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

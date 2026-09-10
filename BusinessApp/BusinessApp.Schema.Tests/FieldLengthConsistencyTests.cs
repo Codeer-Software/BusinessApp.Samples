@@ -13,7 +13,7 @@ using BusinessApp.TestSupport;
 /// </summary>
 /// <remarks>
 /// <para><b>docs/20 §4 の表がこの行を「守れていない」と書いていた。</b>
-/// 法人番号の 13 桁が 3 か所（C# の定数・DDL の <c>GLOB</c>・デザインの <c>MaxLength</c>）にあり、
+/// 法人番号の 13 桁が 3 か所（C# の定数・DDL の <c>GLOB</c>・デザイン——2026-09-09 は <c>MaxLength</c>、2026-09-11 からプレースホルダ）にあり、
 /// 突き合わせるテストが無かった。<b>マスタのコードの 20 文字を足すときに、まとめて閉じた</b>（2026-09-09）。</para>
 /// <para><b>3 か所に書かざるを得ないのは、DDL が SQL テキスト・デザインが JSON で、
 /// どちらも C# の定数を読めないからである</b>（docs/20 §4 の「已むを得ない重複」）。
@@ -54,7 +54,7 @@ public class FieldLengthConsistencyTests
 
         Assert.False(
             code.TryGetProperty("MaxLength", out var max) && max.ValueKind == JsonValueKind.Number,
-            $"{module}.Code に MaxLength がある。黙って切るので使わない（21 §0）");
+            $"{module}.Code に MaxLength がある。黙って切るので使わない（21 §1）");
         Assert.Contains(
             MasterCode.MaxLength.ToString(CultureInfo.InvariantCulture),
             code.GetProperty("Placeholder").GetString(),
@@ -90,13 +90,27 @@ public class FieldLengthConsistencyTests
     /// 法人番号の桁数も、C# と DDL とデザインで一致する。
     /// </summary>
     /// <remarks>
-    /// <b>docs/20 §4 が名指しで「守れていない」と書いていた 3 か所</b>である。
-    /// DDL は <c>GLOB '[0-9]…'</c> を桁の数だけ並べて書いているので、その並びの数を数える。
+    /// <para><b>docs/20 §4 が名指しで「守れていない」と書いていた 3 か所</b>である。
+    /// DDL は <c>GLOB '[0-9]…'</c> を桁の数だけ並べて書いているので、その並びの数を数える。</para>
+    /// <para><b>デザインはコードと同じくプレースホルダで見せ、<c>MaxLength</c> は使わない</b>——
+    /// 14 桁を貼ると黙って 13 桁に切って保存し、検査用数字が偶然合えば別の法人の番号になる（qa/01 A-13。2026-09-11）。
+    /// 取引先と自社情報の 2 つの欄を見る。</para>
     /// </remarks>
     [Fact]
     public void 法人番号の桁は_CSharp_と_DDL_とデザインで一致する()
     {
-        Assert.Equal(CorporateNumber.Length, MaxLengthOf("Partner", "CorporateNumber"));
+        foreach (var (module, field) in new[] { ("Partner", "CorporateNumber"), ("CompanyProfile", "CorporateNumber") })
+        {
+            var design = FieldOf(module, field);
+
+            Assert.False(
+                design.TryGetProperty("MaxLength", out var max) && max.ValueKind == JsonValueKind.Number,
+                $"{module}.{field} に MaxLength がある。黙って切るので使わない（21 §1）");
+            Assert.Contains(
+                CorporateNumber.Length.ToString(CultureInfo.InvariantCulture),
+                design.GetProperty("Placeholder").GetString(),
+                StringComparison.Ordinal);
+        }
 
         using var db = SchemaSeed.Create();
         foreach (var table in new[] { "partners", "company_profile" })
@@ -113,8 +127,7 @@ public class FieldLengthConsistencyTests
     /// <summary>デザインの 1 つの欄。</summary>
     /// <remarks>
     /// <b>JSON を読んだまま返す。</b> 呼ぶ側が見たい属性を選ぶ——
-    /// 「<c>MaxLength</c> があること」と「無いこと」の両方を表明したいので、
-    /// 値だけを返す口にすると片方が書けない。
+    /// 「<c>MaxLength</c> が無いこと」と「プレースホルダに数があること」を両方表明する。
     /// </remarks>
     private static JsonElement FieldOf(string module, string field)
     {
@@ -127,17 +140,5 @@ public class FieldLengthConsistencyTests
         return design.RootElement.GetProperty("Fields").EnumerateArray()
             .Single(f => f.GetProperty("Name").GetString() == field)
             .Clone();
-    }
-
-    /// <summary>デザインの <c>MaxLength</c>。無ければ落とす（無いこと自体が食い違いである）。</summary>
-    private static int MaxLengthOf(string module, string field)
-    {
-        var target = FieldOf(module, field);
-
-        Assert.True(
-            target.TryGetProperty("MaxLength", out var max) && max.ValueKind == JsonValueKind.Number,
-            $"{module}.{field} に MaxLength が無い（画面が上限を見せていない。docs/21 §1）");
-
-        return max.GetInt32();
     }
 }
