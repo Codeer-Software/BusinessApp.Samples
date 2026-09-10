@@ -56,7 +56,7 @@ public class MasterMeaningGuardTests
         var thrown = Assert.Throws<SqliteException>(
             () => TestDatabase.Execute(db, "UPDATE accounts SET requires_partner = 0 WHERE id = 1"));
 
-        Assert.Contains("取引先を必須から外すことはできない", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「取引先を要する」をオフにできない", thrown.Message, StringComparison.Ordinal);
         Assert.Equal(1L, TestDatabase.ScalarOf<long>(db, "SELECT requires_partner FROM accounts WHERE id = 1"));
     }
 

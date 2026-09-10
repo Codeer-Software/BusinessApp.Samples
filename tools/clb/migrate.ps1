@@ -127,7 +127,8 @@ function Invoke-SchemaVerify {
 
     # schema_migrations の除外はテーブルに限る（SchemaSnapshot.FromRows と同じ理由。
     # 名前だけで除くと同名トリガ等が検査の死角になる）。
-    $live = Invoke-SqlQuery "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND NOT (type = 'table' AND name = 'schema_migrations');"
+    # rowid 順で取り出す——表ごとのトリガの作られた順（発火順）も CLI が突き合わせる。
+    $live = Invoke-SqlQuery "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND NOT (type = 'table' AND name = 'schema_migrations') ORDER BY rowid;"
     $rows = if ($live.results[0].rowCount -eq 0) { @() } else { @($live.results[0].rows) }
     $json = ConvertTo-Json -InputObject $rows -Depth 3
 

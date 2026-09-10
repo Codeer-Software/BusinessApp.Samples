@@ -61,6 +61,20 @@ public static class SchemaSnapshot
             .ToList();
     }
 
+    /// <summary>
+    /// <c>sqlite_master</c> の行（<b>rowid 順</b>）から、表ごとのトリガの作られた順を作る。
+    /// <paramref name="tables"/> に無い表（他部品の表）は見ない。<c>-Verify</c> が稼働 DB に使う——
+    /// 名前で並べ替えて比べる <see cref="Diff"/> は順を見ないので、これが無いと再生と稼働 DB の順の違いに誰も気づかない。
+    /// </summary>
+    public static IReadOnlyList<string> TriggerOrderFromRows(
+        IEnumerable<(string Type, string Name, string TblName)> rows, ISet<string> tables)
+        => rows
+            .Where(r => r.Type == "trigger" && !r.Name.StartsWith("sqlite_", StringComparison.Ordinal) && tables.Contains(r.TblName))
+            .GroupBy(r => r.TblName, StringComparer.Ordinal)
+            .OrderBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g => $"{g.Key}: {string.Join(" → ", g.Select(r => r.Name))}")
+            .ToList();
+
     /// <summary>開いている接続のスキーマを正規化して返す。</summary>
     public static IReadOnlyList<SchemaObject> Dump(SqliteConnection connection)
     {

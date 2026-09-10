@@ -54,10 +54,29 @@ if (ignored.Count > 0)
     Console.WriteLine($"他部品のオブジェクト {ignored.Count} 件は管轄外として比較しない: {string.Join(", ", ignored)}");
 }
 
-var diff = SchemaSnapshot.Diff(expected, actual, "正典(Designer/ddl)", "稼働 DB");
+var diff = SchemaSnapshot.Diff(expected, actual, "正典(Designer/ddl)", "稼働 DB").ToList();
+
+// **表ごとのトリガの作られた順も見る**（発火順は仕様上 undefined。同値テストと同じ物差し。
+// 行は migrate.ps1 が rowid 順で流す）。管轄は正典のテーブルに限る。
+var canonTables = expected.Where(o => o.Type == "table").Select(o => o.Name).ToHashSet(StringComparer.Ordinal);
+var expectedOrder = SchemaSnapshot.TriggerOrder(canonical);
+var actualOrder = SchemaSnapshot.TriggerOrderFromRows(rows.Select(r => (r.Type, r.Name, r.TblName)), canonTables);
+foreach (var (e, a) in expectedOrder.Zip(actualOrder))
+{
+    if (e != a)
+    {
+        diff.Add($"トリガの作られた順が違う: 正典 [{e}] / 稼働 DB [{a}]");
+    }
+}
+
+if (expectedOrder.Count != actualOrder.Count)
+{
+    diff.Add($"トリガを持つ表の数が違う: 正典 {expectedOrder.Count} / 稼働 DB {actualOrder.Count}");
+}
+
 if (diff.Count == 0)
 {
-    Console.WriteLine($"一致: 稼働 DB のスキーマは Designer/ddl と同値である（{expected.Count} オブジェクト）。");
+    Console.WriteLine($"一致: 稼働 DB のスキーマは Designer/ddl と同値である（{expected.Count} オブジェクト。トリガの順も同じ）。");
     return 0;
 }
 

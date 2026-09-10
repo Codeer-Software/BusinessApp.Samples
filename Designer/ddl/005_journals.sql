@@ -347,7 +347,7 @@ FOR EACH ROW WHEN NEW.code IS NOT OLD.code
               OR NEW.is_contra IS NOT OLD.is_contra
               OR NEW.uses_sub_account IS NOT OLD.uses_sub_account
 BEGIN
-    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている勘定科目の意味は変更できない。新しい科目を作る。')
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている勘定科目の意味は変更できない。新しい勘定科目を作る。')
      WHERE EXISTS (SELECT 1 FROM journal_lines l
                      JOIN journal_entries e ON e.id = l.journal_entry_id
                     WHERE l.account_id = OLD.id AND e.status = 'posted');
@@ -358,7 +358,7 @@ BEFORE UPDATE OF code, account_id ON sub_accounts
 FOR EACH ROW WHEN NEW.code IS NOT OLD.code
               OR NEW.account_id IS NOT OLD.account_id
 BEGIN
-    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている補助科目の意味（補助科目コード・勘定科目）は変更できない。新しい補助科目を作る。')
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている補助科目の意味は変更できない。新しい補助科目を作る。')
      WHERE EXISTS (SELECT 1 FROM journal_lines l
                      JOIN journal_entries e ON e.id = l.journal_entry_id
                     WHERE l.sub_account_id = OLD.id AND e.status = 'posted');
@@ -369,7 +369,7 @@ BEFORE UPDATE OF code, is_company_wide ON departments
 FOR EACH ROW WHEN NEW.code IS NOT OLD.code
               OR NEW.is_company_wide IS NOT OLD.is_company_wide
 BEGIN
-    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている部門の意味（部門コード・全社共通）は変更できない。新しい部門を作る。')
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている部門の意味は変更できない。新しい部門を作る。')
      WHERE EXISTS (SELECT 1 FROM journal_lines l
                      JOIN journal_entries e ON e.id = l.journal_entry_id
                     WHERE l.department_id = OLD.id AND e.status = 'posted');
@@ -381,7 +381,7 @@ FOR EACH ROW WHEN NEW.code IS NOT OLD.code
               OR NEW.taxation_type IS NOT OLD.taxation_type
               OR NEW.rate_kind IS NOT OLD.rate_kind
 BEGIN
-    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている税区分の意味（税区分コード・課税区分・税率区分）は変更できない。新しい税区分を作る。')
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている税区分の意味は変更できない。新しい税区分を作る。')
      WHERE EXISTS (SELECT 1 FROM journal_lines l
                      JOIN journal_entries e ON e.id = l.journal_entry_id
                     WHERE l.tax_category_id = OLD.id AND e.status = 'posted');
@@ -611,7 +611,7 @@ CREATE TRIGGER trg_accounts_requires_partner_not_loosened_when_posted
 BEFORE UPDATE OF requires_partner ON accounts
 FOR EACH ROW WHEN OLD.requires_partner = 1 AND NEW.requires_partner = 0
 BEGIN
-    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている勘定科目で、取引先を必須から外すことはできない。')
+    SELECT RAISE(ABORT, '計上済みの仕訳明細が使っている勘定科目では、「取引先を要する」をオフにできない。')
      WHERE EXISTS (SELECT 1 FROM journal_lines l
                      JOIN journal_entries e ON e.id = l.journal_entry_id
                     WHERE l.account_id = OLD.id AND e.status = 'posted');
