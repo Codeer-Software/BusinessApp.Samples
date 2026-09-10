@@ -937,7 +937,7 @@ public class PartnerSubmitGateTests
         return server.Scalar<long>("select last_insert_rowid()");
     }
 
-    // --- コードの書式と重複（ADR-0047。docs/04 §1 の B-1・B-2） -------------------
+    // --- コードの書式と重複（ADR-0047・docs/12 §2-1） -------------------
 
     [Theory]
     [InlineData("11 00", "目に見えない文字")]

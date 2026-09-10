@@ -30,8 +30,8 @@ using BusinessApp.AccountingCore.Server.Settings.Application;
 /// 1 本呼ぶ。</b> ここで数えると、取引先部品に関門が増えたときに会計側を直さないと
 /// 1 つ足りないまま通る——しかもテストは緑のままである（ADR-0025 §6 の「持ち出し忘れ」の型）。</para>
 /// <para><b>マスタの関門（<see cref="MasterMeaningGate"/>。ADR-0038）も保存の前に検査するだけ</b>なので内側でよい。
-/// 2026-09-07 に足した（docs/04 §1 の A-1）。</para>
-/// <para><b>値の関門（<see cref="MasterSubmitGate"/>。docs/04 §1 の B-1・B-2）は、意味の凍結の内側に置く。</b>
+/// 2026-09-07 に足した。</para>
+/// <para><b>値の関門（<see cref="MasterSubmitGate"/>。docs/12 §2-1・ADR-0047・qa/03 L-28）は、意味の凍結の内側に置く。</b>
 /// <b>先に返すべきは意味の凍結のほう</b>——あちらは直す手立てが無い（新しい行を作るしかない）が、
 /// こちらは値を直せば通るからである（<c>MasterMeaningGate</c> が同じ理由で
 /// 意味を決める列の断りを一方通行の列より先に返している）。2026-09-09 に足した。</para>
@@ -81,7 +81,7 @@ public sealed class AccountingSubmitPipeline(
         ArgumentNullException.ThrowIfNull(transactionData);
         ArgumentNullException.ThrowIfNull(save);
 
-        // **いちばん先に、空白だけの文字の欄を NULL へ寄せる**（docs/04 §1 の A-5）。
+        // **いちばん先に、空白だけの文字の欄を NULL へ寄せる**（docs/10 §4-4）。
         // 関門より後ろに置くと、関門が「触った値」と「保存されている値」を比べるときに
         // 片方が空文字・片方が NULL で「変わった」と読んでしまう。
         BlankTextNormalizer.ToNull(transactionData);

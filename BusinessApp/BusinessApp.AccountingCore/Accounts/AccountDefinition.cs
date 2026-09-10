@@ -19,7 +19,7 @@ using BusinessApp.AccountingCore.Shared;
 /// 使わない科目は補助科目を<b>持てない</b>（ADR-0038 §3）。
 /// </param>
 /// <param name="RequiresPartner">
-/// 取引先を要する科目か（docs/10 §6-2。docs/04 §1 の A-4）。
+/// 取引先を要する科目か（docs/10 §6-2）。
 /// <b>片側だけの規則である</b>——要する科目では取引先が必須だが、
 /// 要しない科目でも取引先は付けてよい（補助科目の 2 値と違う。理由は docs/10 §6-2）。
 /// </param>

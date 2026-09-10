@@ -5,7 +5,7 @@ using BusinessApp.TestSupport;
 using Microsoft.Data.Sqlite;
 
 /// <summary>
-/// 取引先を要する科目の明細は、取引先が無いままでは計上できない（docs/10 §6-2。docs/04 §1 の A-4）。
+/// 取引先を要する科目の明細は、取引先が無いままでは計上できない（docs/10 §6-2）。
 /// </summary>
 /// <remarks>
 /// <para><b>相手方を欠いた行は「相手方別」のどの帳簿にも載らない</b>（電帳規則 5 ① の括弧書き。docs/40 §4-1）。

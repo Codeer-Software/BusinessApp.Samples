@@ -73,7 +73,7 @@ public sealed class CompanyProfileSubmitGate
     /// <remarks>
     /// <para><b>13 を入れると定型文になっていた</b>（qa/03 L-28。2026-09-04 の探索的テストで実測）。
     /// 画面の <c>Min</c> / <c>Max</c> で止める手もあるが、<b>そちらは CLB 自身の文言が出る</b>
-    /// （qa/01 A-10。docs/04 §1 の B-3）ので、利用者の語で断るにはここが要る。</para>
+    /// （qa/01 A-10。CLB 側の話で FB-015）ので、利用者の語で断るにはここが要る。</para>
     /// <para><b>小数も断る。</b> 「1.5 月」は月ではない。CLB の数値欄は小数を受け取れるので、
     /// ここで見ないと DB の <c>CHECK</c>（<c>BETWEEN</c> は 1.5 を通す）も素通りする。</para>
     /// <para><b>空も断る。</b> DB の <c>NOT NULL</c> に投げると定型文になり、

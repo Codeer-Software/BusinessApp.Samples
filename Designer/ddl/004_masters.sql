@@ -40,7 +40,7 @@ CREATE TABLE accounts (
     updater                     INTEGER,
     optimistic_locking          INTEGER NOT NULL DEFAULT 0,
 
-    -- 取引先を要する科目か（docs/10 §6-2。docs/04 §1 の A-4）。売掛金・買掛金・売上げのように、
+    -- 取引先を要する科目か（docs/10 §6-2）。売掛金・買掛金・売上げのように、
     -- **相手方別に記載する帳簿が要る**科目では、取引先の無い行を計上させない
     -- （電帳規則 5 ① の括弧書き。docs/40 §4-1）。守るのは
     -- trg_journal_entries_partner_presence_when_posted と計上の関門（E-PARTNER-REQUIRED）。

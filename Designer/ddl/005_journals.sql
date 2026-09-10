@@ -496,7 +496,7 @@ BEGIN
     SELECT RAISE(ABORT, '摘要のない仕訳は計上できない。帳簿の記載事項「内容」を欠くため。');
 END;
 
--- 補助科目の 2 値を、計上のときに守る（ADR-0038 §3。docs/04 §1 の A-3）。
+-- 補助科目の 2 値を、計上のときに守る（ADR-0038 §3・docs/10 §6）。
 -- **使う科目では補助科目が要り、使わない科目は持てない。**
 -- 上の摘要のトリガと同じく**下書き → 計上の UPDATE だけを見る**（status = 'posted' の INSERT は
 -- trg_journal_entries_no_posted_insert が拒む）。
@@ -555,7 +555,7 @@ BEGIN
                                               AND o.sub_account_id IS l.sub_account_id)));
 END;
 
--- 取引先を要する科目の明細を、取引先の無いまま計上させない（docs/10 §6-2。docs/04 §1 の A-4）。
+-- 取引先を要する科目の明細を、取引先の無いまま計上させない（docs/10 §6-2）。
 -- **相手方を欠いた行は「相手方別」のどの帳簿にも載らない**（電帳規則 5 ① の括弧書き。docs/40 §4-1）。
 -- 上の 2 本と同じく**下書き → 計上の UPDATE だけを見る**（status = 'posted' の INSERT は
 -- trg_journal_entries_no_posted_insert が拒む）。

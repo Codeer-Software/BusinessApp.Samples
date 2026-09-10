@@ -233,7 +233,7 @@ public class MasterMeaningGateTests
     {
         using var server = new AccountingServer();
         // **補助科目を使う科目に付ける**（ADR-0038 §3。1100 現金は使わない科目なので、
-        // 補助科目を付けた明細は計上できない——docs/04 §1 の A-3 で塞いだ）。
+        // 補助科目を付けた明細は計上できない——2026-09-08 に塞いだ）。
         var sub = server.InsertSubAccount("1200");
         var dept = server.DepartmentOf("20").Value;
         // 補助科目と部門つきの明細は、フィクスチャの InsertPosted が作れないので SQL で計上する
