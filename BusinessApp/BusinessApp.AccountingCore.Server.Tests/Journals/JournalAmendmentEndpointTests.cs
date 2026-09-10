@@ -291,10 +291,18 @@ public class JournalAmendmentEndpointTests
         Assert.True(available.CanReverse);
     }
 
-    /// <summary>取消の伝票は「取り消せない・訂正できない」が「複製できる」。</summary>
-    /// <remarks><b>3 つの可否が同じ値で動かないことを見る</b>（縮退。qa/03 L-02）。</remarks>
+    /// <summary>
+    /// <b>取消伝票は、取り消せない・訂正できない・複製もできない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>元にできる種別は取消・訂正の対象にできる種別と同じ（ADR-0048 の決定 6。2026-09-10 に
+    /// 取消を外した）。画面は「複製する」を出さない。</para>
+    /// <para><b>「取消伝票」と「取消済みの原仕訳」は別物</b>で、後者は複製できる
+    /// （下の <see cref="取消済みの原仕訳は複製だけできる"/>）。2 本を並べるのは、
+    /// 取り違えたまま集合を広げた実例があるから（qa/03 L-40）。</para>
+    /// </remarks>
     [Fact]
-    public async Task 取消の伝票は複製だけできる()
+    public async Task 取消伝票は複製もできない()
     {
         using var server = new AccountingServer();
         var original = Original(server);
@@ -302,6 +310,34 @@ public class JournalAmendmentEndpointTests
 
         var available = await server.Amendment.AvailabilityAsync(server.Text(reversalId));
 
+        Assert.Equal(AmendResult.Succeeded, available.Status);
+        Assert.False(available.CanDuplicate);
+        Assert.False(available.CanReverse);
+        Assert.False(available.CanCorrect);
+
+        // **理由の全文を表明する**（qa/03 L-39 の処方）。画面はこれを合計の行に出す。
+        Assert.Equal(
+            "種別が「取消」の伝票は対象にできません。対象にできるのは通常の伝票と訂正だけです。",
+            available.Message);
+    }
+
+    /// <summary>
+    /// <b>取り消された原仕訳は、取り消せない・訂正できないが、複製はできる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>3 つの可否が同じ値で動かないことを見る</b>（縮退。qa/03 L-02）。
+    /// 訂正の下書きを消したあとの作り直しが、この場面である（ADR-0048 の状況）。
+    /// </remarks>
+    [Fact]
+    public async Task 取消済みの原仕訳は複製だけできる()
+    {
+        using var server = new AccountingServer();
+        var original = Original(server);
+        await server.Amendment.ReverseAsync(server.Text(original.Value));
+
+        var available = await server.Amendment.AvailabilityAsync(server.Text(original.Value));
+
+        Assert.Equal(AmendResult.Succeeded, available.Status);
         Assert.True(available.CanDuplicate);
         Assert.False(available.CanReverse);
         Assert.False(available.CanCorrect);
@@ -366,14 +402,14 @@ public class JournalAmendmentEndpointTests
     }
 
     /// <summary>
-    /// 取り消された伝票も複製できる（<b>新しい記帳だから</b>。ADR-0048 の決定 6）。
+    /// 取り消された<b>原仕訳</b>も複製できる（<b>新しい記帳だから</b>。ADR-0048 の決定 6）。
     /// </summary>
     /// <remarks>
     /// <b>訂正の下書きを消したあとの受け皿がこれである</b>（qa/04 の 2026-09-04）。
     /// ここを取消・訂正と同じ条件で閉じると、いちばん要る場面で使えない。
     /// </remarks>
     [Fact]
-    public async Task 取り消された伝票も複製できる()
+    public async Task 取り消された原仕訳も複製できる()
     {
         using var server = new AccountingServer();
         var original = Original(server);
@@ -384,7 +420,7 @@ public class JournalAmendmentEndpointTests
         Assert.Equal(AmendResult.Succeeded, result.Status);
         Assert.Equal("draft", server.StatusOf(new JournalEntryId(result.OpenEntryId)));
 
-        // **できるのは通常の伝票**（取消を複製しても取消にはならない）。
+        // **できるのは通常の伝票**（取り消されていたことは写らない）。
         Assert.Equal(
             "normal",
             server.Scalar<string>($"select entry_type from journal_entries where id = {result.OpenEntryId}"));

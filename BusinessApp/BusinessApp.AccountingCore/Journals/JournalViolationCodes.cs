@@ -170,11 +170,8 @@ public static class JournalViolationCodes
     /// <summary>取消・訂正の計上日が原仕訳より前になっている。</summary>
     public const string AmendmentBeforeOriginal = "E-AMEND-DATE";
 
-    /// <summary>対象にできない種別（取消・期首残高・決算振替・繰越）を取り消す／訂正しようとした。</summary>
+    /// <summary>取消・訂正の対象にできない種別（取消・期首残高・決算振替・繰越）を対象にしようとした。</summary>
     public const string AmendmentTargetNotAmendable = "E-AMEND-TARGET-TYPE";
-
-    /// <summary>複製できない種別（期首残高・決算振替・繰越）を複製しようとした。</summary>
-    public const string DuplicationTargetNotDuplicable = "E-DUPLICATE-TARGET-TYPE";
 
     // --- 取消 ---
 

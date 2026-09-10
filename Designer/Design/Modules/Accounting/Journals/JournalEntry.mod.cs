@@ -74,7 +74,7 @@ void ApplyPostedLock()
     ReverseButton.IsVisible = false;
 
     // **複製の可否はサーバに聞く**（下の ApplyAmendmentAvailability）。
-    // 原仕訳の状態には依らないが**種別には依る**（期首残高・決算振替・繰越は複製できない。
+    // 原仕訳の状態には依らないが**種別には依る**（元にできるのは通常と訂正だけ。取消伝票は元にできない。
     // ADR-0048 の決定 6）ので、**押せるのに必ず断られるボタンを出さない**（docs/21 §1。
     // 2026-09-09 の自己レビュー）。**新規（まだ保存していない）伝票には出さない**——写す元がまだ無い。
     DuplicateButton.IsVisible = false;
@@ -164,10 +164,13 @@ void ApplyAmendmentAvailability()
         // **操作を名乗る。** 関門の文は「見出しが結果を言う」前提で書いてあるので
         // （docs/21 §2-6）、見出しの無いここに置くと**何の対象か**が読めない。
         // **複製が押せる画面では「取消・訂正はできない」と読めることが要る**（2026-09-09 の自己レビュー）。
+        // **複製も出ない画面（取消伝票）では複製も名乗る**——ボタンが 1 つも無いのに理由が 2 操作分では、
+        // 複製できない理由がどこにも無い（2026-09-10 の自己レビュー）。
         var reason = $"{result.JsonObject.message}";
         if (!string.IsNullOrEmpty(reason))
         {
-            TotalsLabel.Text = $"{TotalsLabel.Text}　（取消・訂正はできません: {reason}）";
+            var operations = DuplicateButton.IsVisible ? "取消・訂正" : "取消・訂正・複製";
+            TotalsLabel.Text = $"{TotalsLabel.Text}　（{operations}はできません: {reason}）";
         }
     }
 }

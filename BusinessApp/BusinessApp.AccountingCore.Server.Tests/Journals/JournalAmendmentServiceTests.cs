@@ -124,8 +124,33 @@ public class JournalAmendmentServiceTests
         // **何と言うかを表明する**（qa/03 L-17。見出しと本文が同じことを 2 回言っていないことも見る）。
         Assert.Equal(
             "複製できません。①種別が「決算振替」の伝票は対象にできません。"
-            + "対象にできるのは通常の伝票と訂正・取消です。",
+            + "対象にできるのは通常の伝票と訂正だけです。",
             thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>取消伝票は複製できない</b>（元にできる種別は取消・訂正の対象と同じ。ADR-0048 の決定 6）。
+    /// </summary>
+    /// <remarks>
+    /// <b>L-40 で読み違えた集合の境界を、押した側の経路で撃つ。</b> 可否（<c>CanDuplicate</c>）が
+    /// 偽でも、API を直接叩けば別の答えが返る形は作れる（qa/03 L-22 の型）。
+    /// 断られたら伝票が 1 本も増えていないことも見る。
+    /// </remarks>
+    [Fact]
+    public async Task 取消伝票は複製できない()
+    {
+        using var server = new AccountingServer();
+        var reversalId = await server.AmendAsync(s => s.ReverseAsync(Original(server)));
+        var before = server.Scalar<long>("select count(*) from journal_entries");
+
+        var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.AmendAsync(s => s.DuplicateAsync(reversalId)));
+
+        Assert.Equal(
+            "複製できません。①種別が「取消」の伝票は対象にできません。"
+            + "対象にできるのは通常の伝票と訂正だけです。",
+            thrown.Message);
+        Assert.Equal(before, server.Scalar<long>("select count(*) from journal_entries"));
     }
 
     /// <summary>複製した下書きは、そのまま計上できる（作った下書きが計上の関門を通る）。</summary>
