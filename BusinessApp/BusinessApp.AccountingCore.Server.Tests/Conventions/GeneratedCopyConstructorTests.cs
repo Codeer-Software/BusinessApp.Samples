@@ -1,6 +1,9 @@
 namespace BusinessApp.AccountingCore.Server.Tests.Conventions;
 
-using BusinessApp.AccountingCore.Server.Journals;
+using BusinessApp.AccountingCore.Server.Journals.Application;
+using BusinessApp.AccountingCore.Server.Journals.Presentation;
+using BusinessApp.AccountingCore.Server.Masters.Application;
+
 
 /// <summary>
 /// <c>record</c> のコピーコンストラクタ（<c>with</c> のために自動生成される部分）に触れる。
@@ -26,7 +29,7 @@ public class GeneratedCopyConstructorTests
         _ = new AmendViolation("E-01", "理由", null) with { };
         _ = new DuplicationResult([]) with { };
         // 関門の定数表（守る列の現在形は docs/12 §2）。組み替える場面は無い
-        _ = new BusinessApp.AccountingCore.Server.Masters.MasterMeaningGate.GuardedColumn("Code", "code", "コード") with { };
-        _ = new BusinessApp.AccountingCore.Server.Masters.MasterMeaningGate.GuardedMaster("Account", "勘定科目", "accounts", "account_id", []) with { };
+        _ = new BusinessApp.AccountingCore.Server.Masters.Infrastructure.GuardedColumn("Code", "code", "コード") with { };
+        _ = new BusinessApp.AccountingCore.Server.Masters.Infrastructure.GuardedMaster("Account", "勘定科目", "accounts", "account_id", []) with { };
     }
 }

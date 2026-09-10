@@ -1,0 +1,356 @@
+namespace BusinessApp.AccountingCore.Server.Tests.Settings.Application;
+
+
+using BusinessApp.AccountingCore.Server.Tests.Fixtures;
+
+using Codeer.LowCode.Blazor.DataIO;
+using Codeer.LowCode.Blazor.Repository.Data;
+using BusinessApp.AccountingCore.Server.Settings.Application;
+
+/// <summary>
+/// 自社情報を保存するときの関門（<see cref="CompanyProfileSubmitGate"/>）。
+/// </summary>
+/// <remarks>
+/// <b>見るのは法人番号だけ</b>である。取引先の法人番号と<b>同じ判定</b>を通すことがこの関門の要点で、
+/// 判定と文言は <see cref="BusinessApp.Partners.CorporateNumber"/> が 1 か所で持つ。
+/// ここが確かめるのは「その判定に通していること」と「空欄の扱い」である。
+/// </remarks>
+public class CompanyProfileSubmitGateTests
+{
+    /// <summary>国税庁の計算例で検査用数字が合う番号。</summary>
+    private const string ValidNumber = "5835678256246";
+
+    private sealed class SaveSpy
+    {
+        public bool Called { get; private set; }
+
+        public Task<List<ModuleSubmitResult>> SaveAsync()
+        {
+            Called = true;
+            return Task.FromResult(new List<ModuleSubmitResult>());
+        }
+    }
+
+    /// <summary>CLB は<b>変更されたフィールドしか送ってこない</b>ので、渡された項目だけ載せる。</summary>
+    private static ModuleData Profile(string? corporateNumber = null, string? name = null)
+    {
+        var data = new ModuleData { Name = CompanyProfileSubmitGate.ModuleName };
+
+        if (corporateNumber is not null)
+        {
+            data.Fields["CorporateNumber"] = new TextFieldData { Value = corporateNumber };
+        }
+
+        if (name is not null)
+        {
+            data.Fields["Name"] = new TextFieldData { Value = name };
+        }
+
+        return data;
+    }
+
+    /// <summary>決算月だけを触った更新（実機で来る形。触った欄しか載らない）。</summary>
+    private static ModuleData Month(decimal? month)
+    {
+        var data = new ModuleData { Name = CompanyProfileSubmitGate.ModuleName };
+        data.Fields["FiscalYearEndMonth"] = new NumberFieldData { Value = month };
+        return data;
+    }
+
+    private static ModuleSubmitData Updating(params ModuleData[] data)
+        => new() { ModuleName = CompanyProfileSubmitGate.ModuleName, Update = [.. data] };
+
+    private static ModuleSubmitData Adding(params ModuleData[] data)
+        => new() { ModuleName = CompanyProfileSubmitGate.ModuleName, Add = [.. data] };
+
+    [Fact]
+    public async Task 検査用数字の合う法人番号は保存へ進む()
+    {
+        var save = new SaveSpy();
+
+        await new CompanyProfileSubmitGate().SubmitAsync(
+            [Updating(Profile(corporateNumber: ValidNumber))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>桁が足りない番号は書式で止まる。</summary>
+    [Fact]
+    public async Task 桁の足りない法人番号は止める()
+    {
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => new CompanyProfileSubmitGate().SubmitAsync(
+                [Updating(Profile(corporateNumber: "12345"))], save.SaveAsync));
+
+        Assert.Contains("13 桁", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>桁は合っているが検査用数字が合わない番号を止める。</b>
+    /// </summary>
+    /// <remarks>
+    /// ここが本題である。桁だけを見る関門は、打ち間違えた番号を全部通す——
+    /// そして<b>自社の法人番号は帳簿と申告書に載る</b>ので、誤りが外へ出る。
+    /// </remarks>
+    [Fact]
+    public async Task 検査用数字の合わない法人番号を止める()
+    {
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => new CompanyProfileSubmitGate().SubmitAsync(
+                [Updating(Profile(corporateNumber: "1835678256246"))], save.SaveAsync));
+
+        Assert.Contains("打ち間違い", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// 空欄は通す。<b>ただし空文字ではなく <c>null</c> で保存する。</b>
+    /// </summary>
+    /// <remarks>
+    /// DDL の <c>CHECK</c> は「NULL か、数字 13 桁」しか許さない。空文字を書き戻すと、
+    /// <b>入っていた番号を消すという正規の直し方</b>が DB の失敗になる（取引先で実際に踏んだ）。
+    /// </remarks>
+    [Theory]
+    [InlineData("")]        // 画面が実際に送る形（TextEditEmptyType: "StringEmpty"）
+    [InlineData("   ")]     // 空白だけを打った・貼り付けた
+    public async Task 空欄はNULLで保存する(string blank)
+    {
+        var save = new SaveSpy();
+        var profile = Profile(corporateNumber: blank);
+
+        await new CompanyProfileSubmitGate().SubmitAsync([Updating(profile)], save.SaveAsync);
+
+        Assert.Null(((TextFieldData)profile.Fields["CorporateNumber"]).Value);
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>関門が通した値は、DB も受け取れる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>関門は「DB に拒まれる値を保存へ渡さない」ところまで責任を持つ</b>（qa/03 L-14）。
+    /// 通しただけで DB が拒むと、利用者には生の SQLite のメッセージが出る（qa/01 F-16）。</para>
+    /// <para><b>ここは往復で見る。</b> <c>company_profile.corporate_number</c> には
+    /// <c>partners</c> と違って <c>CHECK</c> が無い（qa/02 R25-11 で揃える）ので、
+    /// <b>DB 側の砦が無いぶん、通した値が本当に書けることを見ておく価値がある。</b></para>
+    /// </remarks>
+    [Theory]
+    [InlineData(ValidNumber)]
+    [InlineData(null)]
+    public async Task 関門が通した値はDBも受け取れる(string? stored)
+    {
+        using var server = new AccountingServer();
+        var save = new SaveSpy();
+        var profile = Profile(corporateNumber: stored ?? string.Empty);
+
+        await new CompanyProfileSubmitGate().SubmitAsync([Updating(profile)], save.SaveAsync);
+
+        // 関門が書き換えた**そのままの値**を DB へ入れる。
+        var written = ((TextFieldData)profile.Fields["CorporateNumber"]).Value;
+        server.Execute(
+            written is null
+                ? "update company_profile set corporate_number = null where id = 1"
+                : $"update company_profile set corporate_number = '{written}' where id = 1");
+
+        Assert.Equal(stored, server.Scalar<string?>("select corporate_number from company_profile"));
+    }
+
+    /// <summary>貼り付けで紛れ込んだ空白は落として保存する。</summary>
+    [Fact]
+    public async Task 前後の空白を落として保存する()
+    {
+        var save = new SaveSpy();
+        var profile = Profile(corporateNumber: $" {ValidNumber} ");
+
+        await new CompanyProfileSubmitGate().SubmitAsync([Updating(profile)], save.SaveAsync);
+
+        Assert.Equal(ValidNumber, ((TextFieldData)profile.Fields["CorporateNumber"]).Value);
+    }
+
+    /// <summary>法人番号が差分に無ければ検査しない（社名だけを直した保存）。</summary>
+    [Fact]
+    public async Task 法人番号が差分に無ければ検査しない()
+    {
+        var save = new SaveSpy();
+
+        await new CompanyProfileSubmitGate().SubmitAsync(
+            [Updating(Profile(name: "株式会社アルタイルシステムズ"))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// 法人番号の欄が<b>文字の欄でない</b>形で来ても落ちない。
+    /// </summary>
+    /// <remarks>
+    /// CLB は宣言した型でしか送らないので画面からは来ないが、
+    /// 型で分岐している以上、外れたときに例外ではなく素通しになることを固定しておく。
+    /// </remarks>
+    [Fact]
+    public async Task 想定していない型の法人番号は素通しする()
+    {
+        var save = new SaveSpy();
+        var profile = Profile();
+        // **検査に落ちる番号を使う。** 正しい番号だと「非テキストは素通し」と
+        // 「非テキストも検査する」のどちらの実装でも緑になり、何も表明しない（qa/03 L-03）。
+        profile.Fields["CorporateNumber"] = new NumberFieldData { Value = 1835678256246m };
+
+        await new CompanyProfileSubmitGate().SubmitAsync([Updating(profile)], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>追加でも見る（初期データを入れ直した環境で穴にしない）。</summary>
+    [Fact]
+    public async Task 追加の自社情報も見る()
+    {
+        var save = new SaveSpy();
+
+        await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => new CompanyProfileSubmitGate().SubmitAsync(
+                [Adding(Profile(corporateNumber: "1835678256246"))], save.SaveAsync));
+
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>入れ物の名前ではなく、中身の名前で担当を決める。</b>
+    /// </summary>
+    /// <remarks>
+    /// <c>ModuleSubmitData.ModuleName</c> で絞る実装だと、別モジュールの保存に混ざった
+    /// 自社情報を見落とす（qa/02 R16-16 と同じ型）。
+    /// </remarks>
+    [Fact]
+    public async Task 入れ物が別モジュールでも中の自社情報は見る()
+    {
+        var save = new SaveSpy();
+        var submit = new ModuleSubmitData
+        {
+            ModuleName = "JournalEntry",
+            Update = [Profile(corporateNumber: "1835678256246")],
+        };
+
+        await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => new CompanyProfileSubmitGate().SubmitAsync([submit], save.SaveAsync));
+
+        Assert.False(save.Called);
+    }
+
+    /// <summary>担当外のモジュールの保存には割り込まない。</summary>
+    [Fact]
+    public async Task 別のモジュールの保存は素通しする()
+    {
+        var save = new SaveSpy();
+        var other = new ModuleData { Name = "JournalEntry" };
+        other.Fields["CorporateNumber"] = new TextFieldData { Value = "12345" };
+
+        await new CompanyProfileSubmitGate().SubmitAsync(
+            [new ModuleSubmitData { ModuleName = "JournalEntry", Update = [other] }], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>引数を渡さなければ止まる。<b>引数名まで表明する。</b></summary>
+    [Fact]
+    public async Task 引数を渡さなければ止まる()
+    {
+        var gate = new CompanyProfileSubmitGate();
+
+        var missingData = await Assert.ThrowsAsync<ArgumentNullException>(
+            () => gate.SubmitAsync(null!, () => Task.FromResult(new List<ModuleSubmitResult>())));
+        Assert.Equal("transactionData", missingData.ParamName);
+
+        var missingSave = await Assert.ThrowsAsync<ArgumentNullException>(
+            () => gate.SubmitAsync([], null!));
+        Assert.Equal("save", missingSave.ParamName);
+    }
+
+    // --- 決算月（qa/03 L-28 の 3 例目） -------------------------------------------
+
+    /// <summary>
+    /// 月でない決算月は、利用者の語で断る。
+    /// </summary>
+    /// <remarks>
+    /// <b>13 を入れると定型文になっていた</b>（qa/03 L-28。2026-09-04 の探索的テストで実測）。
+    /// DDL の <c>CHECK</c> は止めるが、そこまで進むと利用者に見えるのは DB の失敗である。
+    /// </remarks>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(13)]
+    [InlineData(-1)]
+    [InlineData(1.5)]
+    public async Task 月でない決算月は断る(double month)
+    {
+        var save = new SaveSpy();
+        var gate = new CompanyProfileSubmitGate();
+
+        var thrown = await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => gate.SubmitAsync([Updating(Month((decimal)month))], save.SaveAsync));
+
+        Assert.Contains("「決算月」は 1 から 12 までの整数で入れてください", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(12)]
+    public async Task 月として正しい決算月は保存へ進む(int month)
+    {
+        var save = new SaveSpy();
+
+        await new CompanyProfileSubmitGate().SubmitAsync([Updating(Month(month))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>決算月を触っていない保存は、決算月を見ない（差分に載らない欄は「変えていない」）。</summary>
+    [Fact]
+    public async Task 決算月を触っていなければ見ない()
+    {
+        var save = new SaveSpy();
+
+        await new CompanyProfileSubmitGate().SubmitAsync([Updating(Profile(name: "株式会社アルタイル"))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// 決算月を空にした保存も、利用者の語で断る。
+    /// </summary>
+    /// <remarks>
+    /// <b>2026-09-09 の自己レビューで揃えた。</b> DB の <c>NOT NULL</c> に投げると定型文になり、
+    /// <b>「13 は利用者の語で断るのに、空は枠組みの言葉」という食い違いが同じ欄で起きる</b>。
+    /// </remarks>
+    [Fact]
+    public async Task 決算月が空なら断る()
+    {
+        var save = new SaveSpy();
+        var gate = new CompanyProfileSubmitGate();
+
+        var thrown = await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => gate.SubmitAsync([Updating(Month(null))], save.SaveAsync));
+
+        Assert.Contains("「決算月」を入れてください", thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>決算月の欄が数値でない要求も断る（検査できない値を通すのは fail-open である）。</summary>
+    [Fact]
+    public async Task 決算月の欄が数値でなければ断る()
+    {
+        var save = new SaveSpy();
+        var data = new ModuleData { Name = CompanyProfileSubmitGate.ModuleName };
+        data.Fields["FiscalYearEndMonth"] = new TextFieldData { Value = "3" };
+
+        await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => new CompanyProfileSubmitGate().SubmitAsync([Updating(data)], save.SaveAsync));
+
+        Assert.False(save.Called);
+    }
+}

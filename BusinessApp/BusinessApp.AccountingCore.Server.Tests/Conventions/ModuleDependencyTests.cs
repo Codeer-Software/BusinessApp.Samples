@@ -3,6 +3,7 @@ namespace BusinessApp.AccountingCore.Server.Tests.Conventions;
 using System.Text.RegularExpressions;
 
 using BusinessApp.TestSupport;
+using BusinessApp.AccountingCore.Server.Shared.Infrastructure;
 
 /// <summary>
 /// サーバ層のどこが<b>取引先部品を名指ししてよいか</b>（ADR-0025 §4・ADR-0029 §2）。
@@ -34,7 +35,7 @@ public class ModuleDependencyTests
     /// </remarks>
     private static readonly Dictionary<string, string> FoldersAllowedToUsePartners = new(StringComparer.Ordinal)
     {
-        [""] = "保存の入口。取引先部品の関門を 1 つずつ数えず、部品の入口を 1 本呼ぶ（依存の向きは ADR-0025 §4）",
+        ["Shared"] = "保存の入口（Shared/Presentation）。取引先部品の関門を 1 つずつ数えず、部品の入口を 1 本呼ぶ（依存の向きは ADR-0025 §4）",
         ["Journals"] = "帳簿の記載事項①（相手方の氏名又は名称）と登録番号を、計上時に取引先から写す（ADR-0018）",
         ["Settings"] = "自社の法人番号の判定に、取引先部品の CorporateNumber を使う（qa/02 R26-32 で「出さない」と決めた）",
     };

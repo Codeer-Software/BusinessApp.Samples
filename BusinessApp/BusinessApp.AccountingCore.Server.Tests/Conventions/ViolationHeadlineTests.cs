@@ -2,8 +2,10 @@ namespace BusinessApp.AccountingCore.Server.Tests.Conventions;
 
 using System.Text.RegularExpressions;
 
-using BusinessApp.AccountingCore.Server.Journals;
 using BusinessApp.TestSupport;
+using BusinessApp.AccountingCore.Server.Journals.Application;
+using BusinessApp.AccountingCore.Server.Settings.Application;
+using BusinessApp.AccountingCore.Server.Shared.Presentation;
 
 /// <summary>
 /// 差し戻しの文は、<b>見出しが言う結果を繰り返さない</b>（docs/21 §2-6）。
