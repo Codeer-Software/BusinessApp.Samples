@@ -42,11 +42,10 @@ namespace BusinessApp.Server.Services
         //同じ保存で送られてきた明細がまだ見えず、貸借一致を判定できない。
         //
         //関門が保存そのものを包む。順番も入れ子も AccountingSubmitPipeline が持つので、
-        //ここから呼び忘れも並べ替えもできない。
-        //差し戻しは例外ではなく ExceptionMessage で返す——CLB がその 1 枚だけをトーストにし、この保存ごと巻き戻す
-        //（例外で返すと「更新に失敗しました」がもう 1 枚出る。ADR-0051）。
+        //ここから呼び忘れも並べ替えもできない。違反があれば関門が例外を投げ、この保存ごと巻き戻る。
+        //画面に出る文言は型で決まる（利用者向けの差し戻しはそのまま、それ以外は定型文。ADR-0051）。
         public override Task<List<ModuleSubmitResult>> SubmitAsync(Guid transactionId, List<ModuleSubmitData> transactionData)
-            => _accounting.SubmitAsResultAsync(transactionData, () => base.SubmitAsync(transactionId, transactionData));
+            => _accounting.SubmitAsync(transactionData, () => base.SubmitAsync(transactionId, transactionData));
 
         protected override async Task<string> AddAsync(Guid transactionId, Guid moduleSubmitId, ModuleData data)
         {

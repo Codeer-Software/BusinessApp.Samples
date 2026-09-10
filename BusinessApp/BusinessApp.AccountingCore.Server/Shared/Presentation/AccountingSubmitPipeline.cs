@@ -60,49 +60,19 @@ public sealed class AccountingSubmitPipeline(
                PartnerSubmitPipeline.Create(dbAccessor, dataSourceName),
                onSaveFailure);
 
-    /// <summary>
-    /// <b>CLB へ返す形</b>で保存を包む。差し戻しも想定外の失敗も、例外ではなく <c>ModuleSubmitResult.ExceptionMessage</c> で返す。
-    /// 本番の入口（<c>CustomizedModuleDataIO</c>）はこちらを呼ぶ。
-    /// </summary>
+    /// <summary>保存を包む。<paramref name="save"/> は CLB 本来の保存処理。</summary>
     /// <remarks>
-    /// <para><b>差し戻しを例外で CLB に渡すと、トーストが 2 枚出る</b>——関門の文言と、CLB 自身の「更新に失敗しました」
-    /// （qa/02 R25-08）。結果の <c>ExceptionMessage</c> で返すと CLB は<b>その 1 枚だけ</b>を出し、
-    /// <b>その保存で書いた分を巻き戻す</b>（2026-09-10 実測 1.3.20。qa/01 F-42。ADR-0051）。</para>
-    /// <para><b>利用者に見せてよい文言かどうかは型で決める</b>（<see cref="RejectedException"/>）。それ以外の例外は
-    /// 開発者向けの文言なので、<see cref="SaveFailureMessage"/> の定型文に差し替えて原文をログへ回す
-    /// （ホストの例外ハンドラは <c>Message</c> をそのまま画面に出す。qa/02 R57-35）。</para>
-    /// <para><see cref="SubmitAsync"/>（例外のまま返す形）を残すのは、テストと <c>DbTransactionScope</c> が
-    /// 例外で巻き戻す前提で組まれているからである。本番はこちら 1 本。</para>
-    /// </remarks>
-    public async Task<List<ModuleSubmitResult>> SubmitAsResultAsync(
-        IReadOnlyList<ModuleSubmitData> transactionData,
-        Func<Task<List<ModuleSubmitResult>>> save)
-    {
-        try
-        {
-            return await SubmitAsync(transactionData, save);
-        }
-        catch (RejectedException rejected)
-        {
-            // **結果は 1 件でよい。** 行ごとに `SourceId` を付けて返しても、明細だけの保存で CLB がもう 1 枚出すのは変わらない
-            // （2026-09-10 実測 1.3.20。qa/01 F-42）。
-            return [new ModuleSubmitResult { ExceptionMessage = rejected.Message }];
-        }
-        catch (Exception unexpected) when (unexpected is not ArgumentNullException)
-        {
-            // **スタックまで渡す。** 利用者には定型文だけを見せるので、ログにしか手掛かりが残らない。
-            onSaveFailure?.Invoke(unexpected.ToString());
-            return [new ModuleSubmitResult { ExceptionMessage = SaveFailureMessage.Text }];
-        }
-    }
-
-    /// <summary>保存を包む。<paramref name="save"/> は CLB 本来の保存処理。<b>差し戻しは例外のまま</b>。</summary>
-    /// <remarks>
-    /// <b>いちばん外で、保存の失敗を利用者の語に差し替える</b>（<see cref="SaveFailureMessage"/>）。
+    /// <para><b>いちばん外で、保存の失敗を利用者の語に差し替える</b>（<see cref="SaveFailureMessage"/>）。
     /// 関門が拾えなかった失敗はここまで DB の言葉のまま上がってきて、CLB がそれをトーストに出す
-    /// （qa/01 F-16）。差し替えを内側の関門に置くと、関門を 1 つ足すたびに置き場所を考えることになる。
-    /// 読めない型（<see cref="UnreadableFieldException"/>）などの想定外の例外はそのまま投げる——
-    /// 定型文への差し替えは <see cref="SubmitAsResultAsync"/> が 1 か所で行う。
+    /// （qa/01 F-16）。差し替えを内側の関門に置くと、関門を 1 つ足すたびに置き場所を考えることになる。</para>
+    /// <para><b>利用者に見せてよい文言かどうかは型で決める</b>（<see cref="RejectedException"/>。ADR-0051）。
+    /// 差し戻しはそのまま投げる（CLB がその文言をトーストに出し、保存ごと巻き戻す）。<b>それ以外の例外は全部</b>、
+    /// 開発者向けの文言なので <see cref="SaveFailureMessage"/> の定型文に差し替えて原文をログへ回す——
+    /// ホストの例外ハンドラは型を見ずに <c>Message</c> をそのまま画面に出す（qa/02 R57-35）。
+    /// 読めない型（<see cref="UnreadableFieldException"/>）も、DB の生の失敗も、<c>ArgumentNullException</c> も同じ扱い。
+    /// このパスに <c>CancellationToken</c> は流れないので、握る対象を絞らない。</para>
+    /// <para><b>差し戻しを結果（<c>ModuleSubmitResult.ExceptionMessage</c>）で返す形は採らない</b>——巻き戻しを CLB 固有の挙動に
+    /// 頼ることになり、例外で巻き戻す前提のテストと本番の機構が食い違う（ADR-0051 の「検討したが採らなかった案」）。</para>
     /// </remarks>
     public async Task<List<ModuleSubmitResult>> SubmitAsync(
         IReadOnlyList<ModuleSubmitData> transactionData,
@@ -116,15 +86,30 @@ public sealed class AccountingSubmitPipeline(
         // 片方が空文字・片方が NULL で「変わった」と読んでしまう。
         BlankTextNormalizer.ToNull(transactionData);
 
-        var results = await journals.SubmitAsync(
-            transactionData,
-            () => companyProfile.SubmitAsync(
+        List<ModuleSubmitResult> results;
+        try
+        {
+            results = await journals.SubmitAsync(
                 transactionData,
-                () => masters.SubmitAsync(
+                () => companyProfile.SubmitAsync(
                     transactionData,
-                    () => masterValues.SubmitAsync(
+                    () => masters.SubmitAsync(
                         transactionData,
-                        () => partners.SubmitAsync(transactionData, save)))));
+                        () => masterValues.SubmitAsync(
+                            transactionData,
+                            () => partners.SubmitAsync(transactionData, save)))));
+        }
+        catch (RejectedException)
+        {
+            throw;
+        }
+        catch (Exception unexpected)
+        {
+            // **投げ直す例外に内側を残さない**——ホストの例外ハンドラは InnerException の文言まで連ねて返す。
+            // **スタックまで渡す。** 利用者には定型文だけを見せるので、ログにしか手掛かりが残らない。
+            onSaveFailure?.Invoke(unexpected.ToString());
+            throw new InvalidOperationException(SaveFailureMessage.Text);
+        }
 
         return SaveFailureMessage.ToUserLanguage(results, onSaveFailure);
     }
