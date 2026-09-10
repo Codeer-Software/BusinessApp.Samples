@@ -1,41 +1,26 @@
--- 008 マスタのコードの書式（docs/12 §2-1・ADR-0047）
+-- 0031 コードの書式の断りを「だ・である」に揃え、空の条件を先頭にする
 --
--- コードを持つ 6 つの表すべてに、同じ規則を当てる。
--- 半角英数字とハイフン・アンダーバーだけ。記号は先頭・末尾に置けず、連続もできない。長さは 1〜20。
--- 断りの文言（条件ごと・順・呼び名・調）の規則は docs/12 §2-1。
---
--- **CHECK ではなくトリガで書く。** CHECK を後から足すには表を作り直すしかなく、
--- accounts は journal_lines から参照され、既にトリガも持っているので、作り直しは危険に見合わない。
--- トリガなら追加で配れる（005 のマスタの守りと同じ形）。
---
--- **この 1 ファイルにまとめる理由は、トリガの作られる順である。** 004 の末尾に足すと、
--- 既存 DB へ配る側（migrations）では 005 のトリガより後に作られ、正典と順が食い違う。
--- 同値テストは表ごとのトリガの作られた順まで見る（MigrationEquivalenceTests）。
---
--- **前後の空白を落とすのは関門（C# の MasterCode）の仕事**である。ここへ来る値は落とした後の姿で、
--- 空白が残っていれば「使えない字」として断る——字種の GLOB がすべての空白を拾う。
---
--- **文言は条件ごとに 1 つ。順・呼び名・調は docs/12 §2-1 が持つ**（ここに写さない。2026-09-10）。
--- WHEN 節は 1 本の式のまま——`MasterCodeGuardTests` が規則の写しを持たずに WHEN 節を読み、
--- 本文の条件の OR と同値であることも確かめる。
---
--- **最後の 2 つは、GLOB が読めない値のためにある。**
---
--- **BLOB は TEXT の列にそのまま入る**（STRICT ではないので affinity が効かない。
--- 数値は text へ変換されるが、BLOB だけは BLOB のまま残る。2026-09-09 に実測）。
--- **BLOB の `x'4142'` と TEXT の `'AB'` は別の値**なので、COLLATE NOCASE の一意索引でも
--- ぶつからず、**見た目が同じ 2 行が並ぶ**——[qa/03 L-32](../../docs/qa/03_テストで漏らした実例.md) を
--- 別の入口から開け直すことになる。しかも GLOB は BLOB に対して「使える字」と答える。
--- **`typeof` で断る**（NULL は列の NOT NULL が「入れてください」の側で断るので、ここでは見ない）。
---
--- **NUL の条件は、値が TEXT であることを前提にしている。** SQLite の LENGTH と GLOB は文字列の途中の U+0000 で止まるので、
--- 'A' || char(0) || 'B' のような値は上の 6 条件を全部すり抜ける（2026-09-09 に実測。3.53.1）。
--- **値が TEXT なら**バイト数（BLOB へ写した長さ）と文字数が食い違えば ASCII でない——半角英数だけを通す規則と同じことを、
--- GLOB が読めない領域まで含めて言い直している。**関門は U+0000 を「目に見えない文字」として断る**ので、
--- ここが効くのは取込・CLI・SQL の直打ちだけである（それがこのトリガの持ち場でもある）。
---
--- 大小を無視した重複は、末尾の一意索引が止める。COLLATE NOCASE が畳むのは ASCII の英字だけだが、
--- 字種を半角英数に絞ってあるので過不足なく噛み合う。
+-- 正典は Designer/ddl/008_master_code_format.sql（12 本）。文言の規則は docs/12 §2-1。WHEN 節は変えていない。
+-- 0029 の直後の直し（自己レビュー ラウンド 72）。変えた 12 本と、同じ表でそれより後に作られた 5 本（取引先）を、
+-- 正典の順で落として作り直す。
+
+DROP TRIGGER trg_fiscal_years_code_format_insert;
+DROP TRIGGER trg_fiscal_years_code_format_update;
+DROP TRIGGER trg_tax_categories_code_format_insert;
+DROP TRIGGER trg_tax_categories_code_format_update;
+DROP TRIGGER trg_accounts_code_format_insert;
+DROP TRIGGER trg_accounts_code_format_update;
+DROP TRIGGER trg_sub_accounts_code_format_insert;
+DROP TRIGGER trg_sub_accounts_code_format_update;
+DROP TRIGGER trg_departments_code_format_insert;
+DROP TRIGGER trg_departments_code_format_update;
+DROP TRIGGER trg_partners_code_format_insert;
+DROP TRIGGER trg_partners_code_format_update;
+DROP TRIGGER trg_partners_meaning_frozen_when_posted;
+DROP TRIGGER trg_partners_no_replace_used_insert;
+DROP TRIGGER trg_partners_no_replace_used_update;
+DROP TRIGGER trg_partners_corporate_number_text_insert;
+DROP TRIGGER trg_partners_corporate_number_text_update;
 
 CREATE TRIGGER trg_fiscal_years_code_format_insert
 BEFORE INSERT ON fiscal_years
@@ -373,11 +358,54 @@ BEGIN
      WHERE LENGTH(NEW.code) > 20;
 END;
 
--- 大小を無視した重複を止める。**保存される字は入力のまま**で、畳むのは判定だけである（ADR-0047 の決定 7）。
--- 列の UNIQUE（バイト列で見る）は残す——外すには表の作り直しが要り、得るのは重複した制約 1 本の削除だけ。
-CREATE UNIQUE INDEX ux_fiscal_years_code_nocase ON fiscal_years (code COLLATE NOCASE);
-CREATE UNIQUE INDEX ux_tax_categories_code_nocase ON tax_categories (code COLLATE NOCASE);
-CREATE UNIQUE INDEX ux_accounts_code_nocase ON accounts (code COLLATE NOCASE);
-CREATE UNIQUE INDEX ux_sub_accounts_code_nocase ON sub_accounts (account_id, code COLLATE NOCASE);
-CREATE UNIQUE INDEX ux_departments_code_nocase ON departments (code COLLATE NOCASE);
-CREATE UNIQUE INDEX ux_partners_code_nocase ON partners (code COLLATE NOCASE);
+CREATE TRIGGER trg_partners_meaning_frozen_when_posted
+BEFORE UPDATE OF code ON partners
+FOR EACH ROW WHEN NEW.code IS NOT OLD.code
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳が使っている取引先のコードは変更できない。新しい取引先を作る。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.partner_id = OLD.id AND e.status = 'posted')
+        OR EXISTS (SELECT 1 FROM journal_entries e
+                    WHERE e.partner_id = OLD.id AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_partners_no_replace_used_insert
+BEFORE INSERT ON partners
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳が使っている取引先は置き換えられない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.partner_id = NEW.id AND e.status = 'posted')
+        OR EXISTS (SELECT 1 FROM journal_entries e
+                    WHERE e.partner_id = NEW.id AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_partners_no_replace_used_update
+BEFORE UPDATE OF id ON partners
+FOR EACH ROW WHEN NEW.id IS NOT OLD.id
+BEGIN
+    SELECT RAISE(ABORT, '計上済みの仕訳が使っている取引先は置き換えられない。')
+     WHERE EXISTS (SELECT 1 FROM journal_lines l
+                     JOIN journal_entries e ON e.id = l.journal_entry_id
+                    WHERE l.partner_id IN (OLD.id, NEW.id) AND e.status = 'posted')
+        OR EXISTS (SELECT 1 FROM journal_entries e
+                    WHERE e.partner_id IN (OLD.id, NEW.id) AND e.status = 'posted');
+END;
+
+CREATE TRIGGER trg_partners_corporate_number_text_insert
+BEFORE INSERT ON partners
+FOR EACH ROW
+WHEN typeof(NEW.corporate_number) = 'blob'
+BEGIN
+    SELECT RAISE(ABORT, '法人番号は 13 桁の数字で入れる。');
+END;
+
+CREATE TRIGGER trg_partners_corporate_number_text_update
+BEFORE UPDATE OF corporate_number ON partners
+FOR EACH ROW
+WHEN typeof(NEW.corporate_number) = 'blob'
+BEGIN
+    SELECT RAISE(ABORT, '法人番号は 13 桁の数字で入れる。');
+END;

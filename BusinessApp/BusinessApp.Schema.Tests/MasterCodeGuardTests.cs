@@ -54,13 +54,56 @@ public class MasterCodeGuardTests
     {
         using var db = SchemaSeed.Create();
 
-        var clauses = Tables.SelectMany(row => new[] { "insert", "update" }
-            .Select(kind => (Table: (string)row[0], Kind: kind,
-                             Clause: WhenClause(db, (string)row[0], kind))))
+        // **WHEN 節だけでなく本文（条件ごとの RAISE）も揃っていること。** 表名・ラベル・イベント句を伏せて全文を比べる——
+        // 1 表の本文だけ条件を打ち間違えても、WHEN が同じなら見えない（2026-09-10 の自己レビュー）。
+        var definitions = Tables.SelectMany(row => new[] { "insert", "update" }
+            .Select(kind => Definition(db, (string)row[0], kind)
+                .Replace($"trg_{row[0]}_code_format_{kind}", "trg_T_code_format_K", StringComparison.Ordinal)
+                .Replace($" ON {row[0]}", " ON T", StringComparison.Ordinal)
+                .Replace(kind == "insert" ? "BEFORE INSERT" : "BEFORE UPDATE OF code", "EVENT", StringComparison.Ordinal)
+                .Replace($"「{Labels[(string)row[0]]}」", "「L」", StringComparison.Ordinal)))
             .ToList();
 
-        Assert.Equal(12, clauses.Count);
-        Assert.All(clauses, c => Assert.Equal(clauses[0].Clause, c.Clause));
+        Assert.Equal(12, definitions.Count);
+        Assert.All(definitions, d => Assert.Equal(definitions[0], d));
+    }
+
+    /// <summary>
+    /// <b>WHEN 節と、本文の条件の OR は同値である。</b> WHEN で入ったのにどの RAISE にも当たらない値があると、
+    /// トリガは黙って通す——一番怖い形（2026-09-10 の自己レビュー）。全符号位置と形の検体の両方で見る。
+    /// </summary>
+    [Fact]
+    public void WHEN節と本文の条件は同値である()
+    {
+        using var db = SchemaSeed.Create();
+        var when = WhenClause(db, "accounts");
+        var body = string.Join(" OR ", BodyConditions(db, "accounts").Select(c => $"({c})"));
+
+        // 全符号位置（「A ＋ 字 ＋ B」）
+        var mismatched = TestDatabase.Query(
+            db,
+            $"""
+            WITH RECURSIVE code(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM code WHERE n < {(int)char.MaxValue})
+            SELECT n FROM code
+             WHERE (n < 55296 OR n > 57343)
+               AND NOT (({when.Replace("NEW.code", "('A' || char(n) || 'B')", StringComparison.Ordinal)})
+                        IS ({body.Replace("NEW.code", "('A' || char(n) || 'B')", StringComparison.Ordinal)}))
+            """);
+        Assert.Empty(mismatched);
+
+        // 形の検体（境界・空・BLOB・NUL）
+        foreach (var literal in new[]
+        {
+            "'1100'", "'-A'", "'A-'", "'A--B'", "''", "'" + new string('A', 20) + "'", "'" + new string('A', 21) + "'",
+            "x'4142'", "x'41004200'", "('A' || char(0) || 'B')", "'１１００'", "'a b'",
+        })
+        {
+            var same = TestDatabase.ScalarOf<long>(
+                db,
+                $"SELECT ({when.Replace("NEW.code", literal, StringComparison.Ordinal)})"
+                + $" IS ({body.Replace("NEW.code", literal, StringComparison.Ordinal)})");
+            Assert.True(same == 1, $"WHEN と本文が食い違う値: {literal}");
+        }
     }
 
     /// <summary>断りの文言も 12 本で揃っていて、書式の説明を含む。</summary>
@@ -245,38 +288,49 @@ public class MasterCodeGuardTests
         Assert.Contains("半角の英数字と「-」「_」", thrown.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>コードを持つ表 × 追加/更新 × 形。</summary>
+    public static TheoryData<string, string, string, string> Shapes
+    {
+        get
+        {
+            var data = new TheoryData<string, string, string, string>();
+            foreach (var table in Tables.Select(row => (string)row[0]))
+            {
+                foreach (var kind in new[] { "insert", "update" })
+                {
+                    data.Add(table, kind, "", "が空である。");
+                    data.Add(table, kind, "１１００", "に使えない字が入っている。");
+                    data.Add(table, kind, "-A", "の先頭に「-」「_」は置けない。");
+                    data.Add(table, kind, "A-", "の末尾に「-」「_」は置けない。");
+                    data.Add(table, kind, "A--B", "の「-」「_」は続けて使えない。");
+                    data.Add(table, kind, "ABCDEFGHIJKLMNOPQRSTU", "は 20 文字以内。");
+                }
+            }
+
+            return data;
+        }
+    }
+
     /// <summary>
-    /// <b>文言は条件ごとに分かれ、欄の呼び名は画面のラベルである</b>（qa/02 R57-04。docs/21 §2-6）。
-    /// 4 つの条件を 1 本の文言で断ると、取込や <c>sql</c> CLI で流した人はどこが悪いか特定できない。
-    /// 順は関門（<c>MasterCode.DescribeProblem</c>）と同じ——字種 → 先頭 → 末尾 → 連続 → 長さ。
+    /// <b>文言は条件ごとに 1 つで、欄の呼び名は画面のラベルである</b>（docs/12 §2-1）。
+    /// 条件の順と調も docs/12 が持つ——ここは「その条件でその文が鳴る」ことだけを見る。
     /// </summary>
     [Theory]
-    [InlineData("１１００", "に使えない字が入っています")]
-    [InlineData("-A", "の先頭に「-」「_」は置けません")]
-    [InlineData("A-", "の末尾に「-」「_」は置けません")]
-    [InlineData("A--B", "の「-」「_」は続けて使えません")]
-    [InlineData("ABCDEFGHIJKLMNOPQRSTU", "は 20 文字以内です")]
-    [InlineData("", "を入れてください")]
-    public void 書式の断りは条件ごとに分かれ_欄の呼び名は画面のラベルである(string code, string expected)
+    [MemberData(nameof(Shapes))]
+    public void 書式の断りは条件ごとに分かれ_欄の呼び名は画面のラベルである(string table, string kind, string code, string expected)
     {
-        var labels = new Dictionary<string, string>
+        using var db = SchemaSeed.Create();
+        var literal = "'" + code + "'";
+        if (kind == "update")
         {
-            ["fiscal_years"] = "年度コード",
-            ["tax_categories"] = "税区分コード",
-            ["accounts"] = "科目コード",
-            ["sub_accounts"] = "補助科目コード",
-            ["departments"] = "部門コード",
-            ["partners"] = "取引先コード",
-        };
-
-        foreach (var table in Tables.Select(row => (string)row[0]))
-        {
-            using var db = SchemaSeed.Create();
-
-            var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Insert(table, code)));
-
-            Assert.Contains($"「{labels[table]}」{expected}", thrown.Message, StringComparison.Ordinal);
+            TestDatabase.Execute(db, Insert(table, "Z999"));
         }
+
+        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(
+            db,
+            kind == "insert" ? Insert(table, code) : $"UPDATE {table} SET code = {literal} WHERE code = 'Z999'"));
+
+        Assert.Contains($"「{Labels[table]}」{expected}", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -296,17 +350,44 @@ public class MasterCodeGuardTests
         Assert.Equal("Z999a", TestDatabase.ScalarOf<string>(db, $"SELECT code FROM {table} WHERE code LIKE 'Z999%'"));
     }
 
-    /// <summary>稼働しているトリガの <c>WHEN</c> 節。<b>規則の写しを持たないための口</b>。</summary>
-    private static string WhenClause(SqliteConnection db, string table, string kind = "insert")
+    /// <summary>画面のラベル（欄の呼び名の正典はデザインの <c>DisplayName</c>。docs/21 §2-6）。</summary>
+    private static readonly Dictionary<string, string> Labels = new(StringComparer.Ordinal)
     {
-        var definition = TestDatabase.ScalarOf<string>(
+        ["fiscal_years"] = "年度コード",
+        ["tax_categories"] = "税区分コード",
+        ["accounts"] = "科目コード",
+        ["sub_accounts"] = "補助科目コード",
+        ["departments"] = "部門コード",
+        ["partners"] = "取引先コード",
+    };
+
+    /// <summary>稼働しているトリガの定義文。</summary>
+    private static string Definition(SqliteConnection db, string table, string kind)
+        => TestDatabase.ScalarOf<string>(
             db,
             "SELECT sql FROM sqlite_master WHERE type = 'trigger'"
             + $" AND name = 'trg_{table}_code_format_{kind}'");
-        var when = Regex.Match(definition, @"WHEN\s+(.+?)\s*BEGIN", RegexOptions.Singleline);
+
+    /// <summary>稼働しているトリガの <c>WHEN</c> 節。<b>規則の写しを持たないための口</b>。</summary>
+    private static string WhenClause(SqliteConnection db, string table, string kind = "insert")
+    {
+        var when = Regex.Match(Definition(db, table, kind), @"WHEN\s+(.+?)\s*BEGIN", RegexOptions.Singleline);
 
         Assert.True(when.Success, "トリガの WHEN 節を読めない。定義の書き方を変えたら、ここも直す。");
         return when.Groups[1].Value;
+    }
+
+    /// <summary>本文の各 <c>RAISE</c> に付いた <c>WHERE</c> の条件（並び順のまま）。</summary>
+    private static IReadOnlyList<string> BodyConditions(SqliteConnection db, string table, string kind = "insert")
+    {
+        var body = Regex.Match(Definition(db, table, kind), @"BEGIN\s+(.+)\s*END", RegexOptions.Singleline);
+        Assert.True(body.Success, "トリガの本文を読めない。定義の書き方を変えたら、ここも直す。");
+
+        var conditions = Regex.Matches(body.Groups[1].Value, @"WHERE\s+(.+?);", RegexOptions.Singleline)
+            .Select(m => m.Groups[1].Value)
+            .ToList();
+        Assert.Equal(6, conditions.Count);
+        return conditions;
     }
 
     /// <summary>表ごとに要る列だけを埋めて 1 行入れる。</summary>
