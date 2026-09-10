@@ -62,9 +62,17 @@ public sealed class AccountingSubmitPipeline(
 
     /// <summary>保存を包む。<paramref name="save"/> は CLB 本来の保存処理。</summary>
     /// <remarks>
-    /// <b>いちばん外で、保存の失敗を利用者の語に差し替える</b>（<see cref="SaveFailureMessage"/>）。
+    /// <para><b>いちばん外で、保存の失敗を利用者の語に差し替える</b>（<see cref="SaveFailureMessage"/>）。
     /// 関門が拾えなかった失敗はここまで DB の言葉のまま上がってきて、CLB がそれをトーストに出す
-    /// （qa/01 F-16）。差し替えを内側の関門に置くと、関門を 1 つ足すたびに置き場所を考えることになる。
+    /// （qa/01 F-16）。差し替えを内側の関門に置くと、関門を 1 つ足すたびに置き場所を考えることになる。</para>
+    /// <para><b>利用者に見せてよい文言かどうかは型で決める</b>（<see cref="RejectedException"/>。ADR-0051）。
+    /// 差し戻しはそのまま投げる（CLB がその文言をトーストに出し、保存ごと巻き戻す）。<b>それ以外の例外は全部</b>、
+    /// 開発者向けの文言なので <see cref="SaveFailureMessage"/> の定型文に差し替えて原文をログへ回す——
+    /// ホストの例外ハンドラは型を見ずに <c>Message</c> をそのまま画面に出す（qa/02 R57-35）。
+    /// 読めない型（<see cref="UnreadableFieldException"/>）も、DB の生の失敗も、<c>ArgumentNullException</c> も同じ扱い。
+    /// このパスに <c>CancellationToken</c> は流れないので、握る対象を絞らない。</para>
+    /// <para><b>差し戻しを結果（<c>ModuleSubmitResult.ExceptionMessage</c>）で返す形は採らない</b>——巻き戻しを CLB 固有の挙動に
+    /// 頼ることになり、例外で巻き戻す前提のテストと本番の機構が食い違う（ADR-0051 の「検討したが採らなかった案」）。</para>
     /// </remarks>
     public async Task<List<ModuleSubmitResult>> SubmitAsync(
         IReadOnlyList<ModuleSubmitData> transactionData,
@@ -91,15 +99,15 @@ public sealed class AccountingSubmitPipeline(
                             transactionData,
                             () => partners.SubmitAsync(transactionData, save)))));
         }
-        catch (UnreadableFieldException unreadable)
+        catch (RejectedException)
         {
-            // **欄の型が読めないのは利用者の誤りではない**ので、利用者には定型文だけを見せ、
-            // 中身はホストのログへ回す（<see cref="SaveFailureMessage"/> と同じ分担）。
-            // **投げ直す例外に内側を残さない**——ホストの例外ハンドラは
-            // InnerException の文言まで連ねて返すので、残すと結局そのまま画面に出る。
-            // **スタックまで渡す。** 内側を捨てた例外を投げ直すので、
-            // ホスト側の例外ログには「どの関門で読めなかったか」が残らない。
-            onSaveFailure?.Invoke(unreadable.ToString());
+            throw;
+        }
+        catch (Exception unexpected)
+        {
+            // **投げ直す例外に内側を残さない**——ホストの例外ハンドラは InnerException の文言まで連ねて返す。
+            // **スタックまで渡す。** 利用者には定型文だけを見せるので、ログにしか手掛かりが残らない。
+            onSaveFailure?.Invoke(unexpected.ToString());
             throw new InvalidOperationException(SaveFailureMessage.Text);
         }
 

@@ -43,6 +43,7 @@ namespace BusinessApp.Server.Services
         //
         //関門が保存そのものを包む。順番も入れ子も AccountingSubmitPipeline が持つので、
         //ここから呼び忘れも並べ替えもできない。違反があれば関門が例外を投げ、この保存ごと巻き戻る。
+        //画面に出る文言は型で決まる（利用者向けの差し戻しはそのまま、それ以外は定型文。ADR-0051）。
         public override Task<List<ModuleSubmitResult>> SubmitAsync(Guid transactionId, List<ModuleSubmitData> transactionData)
             => _accounting.SubmitAsync(transactionData, () => base.SubmitAsync(transactionId, transactionData));
 

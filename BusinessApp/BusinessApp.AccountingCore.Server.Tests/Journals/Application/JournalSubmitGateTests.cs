@@ -366,6 +366,7 @@ public class JournalSubmitGateTests
         Assert.Equal(EntryStatus.Posted, (await server.EntryStore.LoadAsync(new JournalEntryId(1))).Status);
     }
 
+    /// <summary>開発者向けの文言（仮 ID）は利用者には定型文で、原文はログへ（ADR-0051）。</summary>
     [Fact]
     public async Task 読み替えられない_ID_は止める()
     {
@@ -375,7 +376,8 @@ public class JournalSubmitGateTests
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
             () => server.SubmitAsync([SubmitData.Adding(entry)], NothingSaved));
 
-        Assert.Contains(TemporaryId, error.Message, StringComparison.Ordinal);
+        Assert.Equal(SaveFailureMessage.Text, error.Message);
+        Assert.Contains(TemporaryId, Assert.Single(server.SaveFailureLog), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -408,8 +410,9 @@ public class JournalSubmitGateTests
                     SubmitData.Result(TemporaryId, "2"),
                 })));
 
-        // 先勝ちで捨てると、片方が黙って別の伝票に化ける。
-        Assert.Contains(TemporaryId, error.Message, StringComparison.Ordinal);
+        // 先勝ちで捨てると、片方が黙って別の伝票に化ける。文言は開発者向けなので、利用者には定型文（ADR-0051）。
+        Assert.Equal(SaveFailureMessage.Text, error.Message);
+        Assert.Contains(TemporaryId, Assert.Single(server.SaveFailureLog), StringComparison.Ordinal);
     }
 
     /// <summary>

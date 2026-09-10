@@ -1,5 +1,7 @@
 namespace BusinessApp.Partners.Server;
 
+using BusinessApp.ServerSupport;
+
 /// <summary>
 /// 登録の保存が関門で止められたときの例外。保存全体を巻き戻す。
 /// </summary>
@@ -11,7 +13,7 @@ namespace BusinessApp.Partners.Server;
 /// <para><b>文言に改行を入れない。</b> トースト内の文字列は改行できない（CLB の仕様。qa/01 D-12）。</para>
 /// </remarks>
 public sealed class PartnerRegistrationRejectedException(string reason)
-    : Exception($"{Headline}。{reason}")
+    : RejectedException($"{Headline}。{reason}")
 {
     /// <summary>登録番号の登録を止めたときの見出し。</summary>
     public const string Headline = "登録できません";

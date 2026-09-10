@@ -1,6 +1,7 @@
 namespace BusinessApp.AccountingCore.Server.Journals.Application;
 
 using BusinessApp.AccountingCore.Shared;
+using BusinessApp.ServerSupport;
 
 /// <summary>
 /// 利用者の操作を差し戻すときの例外。保存全体を巻き戻す。
@@ -17,7 +18,7 @@ using BusinessApp.AccountingCore.Shared;
 /// </remarks>
 public sealed class JournalPostingRejectedException(
     IReadOnlyList<Violation> violations, string headline, Exception? inner = null)
-    : Exception(BuildMessage(violations, headline), inner)
+    : RejectedException(BuildMessage(violations, headline), inner)
 {
     /// <summary>計上を止めたときの見出し。</summary>
     public const string PostingHeadline = "計上できません";

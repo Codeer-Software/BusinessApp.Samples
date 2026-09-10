@@ -1,5 +1,7 @@
 namespace BusinessApp.AccountingCore.Server.Masters.Application;
 
+using BusinessApp.ServerSupport;
+
 /// <summary>
 /// マスタの保存が関門で止められたときの例外。保存全体を巻き戻す。
 /// </summary>
@@ -9,7 +11,7 @@ namespace BusinessApp.AccountingCore.Server.Masters.Application;
 /// <para><b>文言に改行を入れない。</b> トースト内の文字列は改行できない（CLB の仕様。qa/01 D-12）。</para>
 /// </remarks>
 public sealed class MasterRejectedException(string reason)
-    : Exception($"{Headline}。{reason}")
+    : RejectedException($"{Headline}。{reason}")
 {
     /// <summary>マスタの登録を止めたときの見出し。</summary>
     public const string Headline = "登録できません";

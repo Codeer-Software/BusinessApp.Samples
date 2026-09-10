@@ -9,6 +9,7 @@ using BusinessApp.AccountingCore.Server.Journals.Application;
 using BusinessApp.AccountingCore.Server.Masters.Application;
 using BusinessApp.AccountingCore.Server.Settings.Application;
 using BusinessApp.AccountingCore.Server.Shared.Presentation;
+using BusinessApp.ServerSupport;
 
 /// <summary>
 /// 保存の関門のつなぎ方（<see cref="AccountingSubmitPipeline"/>）。
@@ -203,6 +204,66 @@ public class AccountingSubmitPipelineTests
             [SaveFailureMessage.Text, string.Empty],
             results.Select(r => r.ExceptionMessage ?? string.Empty));
         Assert.Equal(["", "1"], results.Select(r => r.DestinationId ?? string.Empty));
+    }
+
+    // --- 画面に出る文言は型で決まる（ADR-0051）------------------------------------------------
+
+    /// <summary>
+    /// <b>差し戻し（<see cref="RejectedException"/>）はそのまま投げる。</b> 文言は関門のもの（利用者の語）で、保存には渡らず、ログにも残さない。
+    /// </summary>
+    [Fact]
+    public async Task 差し戻しは利用者の語のまま投げ_保存には渡らない()
+    {
+        using var server = new AccountingServer();
+        var entry = SubmitData.NewEntryWithout("@temporary:0f0a", "TransactionDate");
+        var saved = false;
+
+        var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.Pipeline.SubmitAsync(
+                [SubmitData.Adding(entry)], () => { saved = true; return Task.FromResult(new List<ModuleSubmitResult>()); }));
+
+        Assert.StartsWith("保存できません。①", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("取引日", thrown.Message, StringComparison.Ordinal);
+        Assert.IsAssignableFrom<RejectedException>(thrown);
+        Assert.False(saved);
+        Assert.Empty(server.SaveFailureLog);
+    }
+
+    /// <summary>
+    /// <b>差し戻し以外の例外は、利用者には定型文だけを見せる</b>（開発者向けの文言を画面に出さない。qa/02 R57-35）。
+    /// 原文はスタックごとログへ。内側の例外は残さない（ホストの例外ハンドラが連ねて出す）。
+    /// <c>ArgumentNullException</c> も同じ——「呼び手の誤り」でも利用者には英語のまま届く。
+    /// </summary>
+    [Theory]
+    [InlineData("invalid-operation")]
+    [InlineData("argument-null")]
+    public async Task 想定外の失敗は定型文で投げ直し_原文はログに残る(string shape)
+    {
+        using var server = new AccountingServer();
+        var entry = SubmitData.NewEntry("@temporary:0f0a", status: "draft");
+        Exception raised = shape == "argument-null"
+            ? new ArgumentNullException("lines")
+            : new InvalidOperationException("仮 ID @temporary:0f0a に本物の ID が 2 つ対応している");
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => server.Pipeline.SubmitAsync([SubmitData.Adding(entry)], () => throw raised));
+
+        Assert.Equal(SaveFailureMessage.Text, thrown.Message);
+        Assert.Null(thrown.InnerException);
+        var logged = Assert.Single(server.SaveFailureLog);
+        Assert.Contains(raised.GetType().Name, logged, StringComparison.Ordinal);
+        Assert.Contains(raised.Message, logged, StringComparison.Ordinal);
+    }
+
+    /// <summary>引数の欠けそのものは呼び手の誤りなので、関門に入る前に止める（定型文にしない）。</summary>
+    [Fact]
+    public async Task 保存内容を渡さなければ止まる()
+    {
+        using var server = new AccountingServer();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => server.Pipeline.SubmitAsync(null!, () => Task.FromResult(new List<ModuleSubmitResult>())));
+        Assert.Empty(server.SaveFailureLog);
     }
 
     /// <summary>
