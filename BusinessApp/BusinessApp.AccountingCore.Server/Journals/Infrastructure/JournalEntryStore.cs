@@ -152,61 +152,61 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
     }
 
     /// <summary>
-    /// この原仕訳を取り消した反対仕訳の計上日。<b>まだ取り消されていなければ null。</b>
+    /// この原仕訳を取り消した<b>計上済みの</b>反対仕訳。<b>まだ取り消されていなければ null。</b>
     /// </summary>
     /// <remarks>
-    /// 二重取消の検出（<c>null</c> かどうか）と、再計上が取消より前に載るのを防ぐ判定
-    /// （日付の比較）の両方に使う。「取り消されたか」と「いつ取り消されたか」を
-    /// 別々に問い合わせると、間で食い違った状態を作れてしまう。
+    /// 二重取消の検出（<c>null</c> かどうか）・再計上が取消より前に載るのを防ぐ判定（計上日）・
+    /// 訂正のやり直しが返す取消（識別子）・詳細画面の断り（伝票番号）を、<b>同じ 1 行の 1 回の読みで</b>賄う。
+    /// 「取り消されたか」「いつか」「どれか」を別々に問い合わせると、間で食い違った状態を作れてしまう。
     /// <para>反対仕訳は原仕訳 1 本につき 1 本まで（部分 UNIQUE インデックス）なので、
     /// 計上済みの行は多くとも 1 件しか無い。</para>
     /// </remarks>
-    public async Task<DateOnly?> FindReversedOnAsync(JournalEntryId originalId)
+    public async Task<PostedReversal?> FindReversalAsync(JournalEntryId originalId)
     {
         var rows = await QueryAsync(
             """
-            select posting_date from journal_entries
+            select id, entry_no, posting_date from journal_entries
              where original_entry_id = @p1 and entry_type = 'reversal' and status = 'posted'
             """,
             originalId.Value);
 
-        return rows.Count == 0 ? null : DbValue.ToDate(rows[0]["posting_date"]);
+        // 計上済みには伝票番号が必ずある（DDL の CHECK）。
+        return rows.Count == 0
+            ? null
+            : new PostedReversal(
+                new JournalEntryId(DbValue.ToLong(rows[0]["id"])),
+                (int)DbValue.ToLong(rows[0]["entry_no"]),
+                DbValue.ToDate(rows[0]["posting_date"]));
     }
 
+    /// <summary>この原仕訳を取り消した反対仕訳の計上日。<b>まだ取り消されていなければ null。</b>（<see cref="FindReversalAsync"/> の計上日だけ）</summary>
+    public async Task<DateOnly?> FindReversedOnAsync(JournalEntryId originalId)
+        => (await FindReversalAsync(originalId))?.PostedOn;
+
     /// <summary>
-    /// この原仕訳を取り消した・訂正した、<b>計上済みの</b>伝票の番号。無ければ null。
+    /// この原仕訳を訂正した<b>計上済みの</b>再計上の伝票番号。無ければ null。
     /// </summary>
     /// <remarks>
-    /// <para>詳細画面が「この伝票は取り消されています（取消伝票 12）」と出すために使う
-    /// （ADR-0027 §3）。<b>一覧は同じ事実を SQL で引く</b>——どちらも
-    /// 「取消伝票のほうが原仕訳を指している」逆引きで、原仕訳の行は自分が
-    /// 取り消されたことを知らない（ADR-0027 §2）。</para>
+    /// <para>詳細画面が「この伝票は訂正されています（取消伝票 12 ／ 訂正の伝票 13）」と出すために使う
+    /// （ADR-0027 §3。取消の側は <see cref="FindReversalAsync"/>）。<b>一覧は同じ事実を SQL で引く</b>——どちらも
+    /// 「訂正の伝票のほうが原仕訳を指している」逆引きで、原仕訳の行は自分が
+    /// 訂正されたことを知らない（ADR-0027 §2）。</para>
     /// <para><b>下書きは数えない。</b> 訂正の再計上は下書きのまま返る（ADR-0015）ので、
     /// 数えると<b>訂正の途中で放棄した伝票が「訂正済み」に見える</b>。
-    /// 途中で放棄して取消だけが残るのは正当な状態である。</para>
-    /// <para>計上済みの取消・訂正は原仕訳 1 本につき 1 本まで（部分 UNIQUE インデックス）なので、
-    /// どちらも多くとも 1 件しか無い。</para>
+    /// 途中で放棄して取消だけが残るのは正当な状態である。下書きの有無は <see cref="HasCorrectionDraftAsync"/>。</para>
+    /// <para>計上済みの再計上は原仕訳 1 本につき 1 本まで（部分 UNIQUE インデックス）で、
+    /// 計上済みには伝票番号が必ずある（DDL の CHECK）ので、<b>null でなければ「訂正済み」</b>と読める。</para>
     /// </remarks>
-    public async Task<AmendmentEntryNumbers> FindAmendmentEntryNosAsync(JournalEntryId originalId)
-        => new(
-            await AmendmentEntryNoAsync(
-                """
-                select entry_no from journal_entries
-                 where original_entry_id = @p1 and entry_type = 'reversal' and status = 'posted'
-                """,
-                originalId),
-            await AmendmentEntryNoAsync(
-                """
-                select entry_no from journal_entries
-                 where original_entry_id = @p1 and entry_type = 'correction' and status = 'posted'
-                """,
-                originalId));
-
-    private async Task<int?> AmendmentEntryNoAsync(string sql, JournalEntryId originalId)
+    public async Task<int?> FindCorrectionEntryNoAsync(JournalEntryId originalId)
     {
-        var rows = await QueryAsync(sql, originalId.Value);
+        var rows = await QueryAsync(
+            """
+            select entry_no from journal_entries
+             where original_entry_id = @p1 and entry_type = 'correction' and status = 'posted'
+            """,
+            originalId.Value);
 
-        return rows.Count == 0 ? null : DbValue.ToNullableInt(rows[0]["entry_no"]);
+        return rows.Count == 0 ? null : (int)DbValue.ToLong(rows[0]["entry_no"]);
     }
 
     /// <summary>
@@ -255,15 +255,21 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
     }
 
     /// <summary>この原仕訳を訂正する計上済みの再計上が既にあるか（二重訂正の検出）。</summary>
-    public async Task<bool> HasCorrectionAsync(JournalEntryId originalId)
+    public Task<bool> HasCorrectionAsync(JournalEntryId originalId) => HasCorrectionAsync(originalId, "posted");
+
+    /// <summary>この原仕訳を訂正する再計上の<b>下書き</b>がまだあるか（訂正のやり直しの検出。ADR-0052）。</summary>
+    public Task<bool> HasCorrectionDraftAsync(JournalEntryId originalId) => HasCorrectionAsync(originalId, "draft");
+
+    private async Task<bool> HasCorrectionAsync(JournalEntryId originalId, string status)
     {
-        var rows = await QueryAsync(
+        var rows = await dbAccessor.QueryAsync(
+            dataSourceName,
             """
             select 1 from journal_entries
-             where original_entry_id = @p1 and entry_type = 'correction' and status = 'posted'
+             where original_entry_id = @p1 and entry_type = 'correction' and status = @p2
              limit 1
             """,
-            originalId.Value);
+            new() { { "@p1", Param(originalId.Value) }, { "@p2", Param(status) } });
 
         return rows.Count > 0;
     }
@@ -446,6 +452,12 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
 /// <param name="ReversalEntryNo">取り消した反対仕訳の伝票番号。</param>
 /// <param name="CorrectionEntryNo">訂正の再計上の伝票番号。</param>
 public readonly record struct AmendmentEntryNumbers(int? ReversalEntryNo, int? CorrectionEntryNo);
+
+/// <summary>原仕訳を取り消した計上済みの反対仕訳（<see cref="JournalEntryStore.FindReversalAsync"/>）。</summary>
+/// <param name="Id">反対仕訳の識別子。訂正のやり直しは取消を作り直さずにこれを返す（ADR-0052）。</param>
+/// <param name="EntryNo">反対仕訳の伝票番号。詳細画面の断りに出す。</param>
+/// <param name="PostedOn">反対仕訳の計上日。再計上はこの日より前に載せられない。</param>
+public readonly record struct PostedReversal(JournalEntryId Id, int EntryNo, DateOnly PostedOn);
 
 /// <summary>保存されている明細の識別子と行番号。</summary>
 public readonly record struct StoredLineNo(long LineId, int LineNo);

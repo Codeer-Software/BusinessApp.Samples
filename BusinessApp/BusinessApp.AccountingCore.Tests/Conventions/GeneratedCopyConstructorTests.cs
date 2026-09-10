@@ -38,6 +38,7 @@ public class GeneratedCopyConstructorTests
         _ = new PostingResult([]) with { };
         _ = new ReversalResult([]) with { };
         _ = new CorrectionStartResult([]) with { };
+        _ = new CorrectionResumeResult([]) with { };
         _ = AccountingFixture.Calendar().FindFiscalYear(AccountingFixture.FiscalYear)! with { };
         _ = AccountingFixture.Departments[0] with { };
         _ = AccountingFixture.SubAccounts[0] with { };

@@ -156,6 +156,8 @@ public record AmendRequest([property: JsonPropertyName("originalEntryId")] strin
 /// 空文字なら「無い」と、画面が 1 つの見方で判定できる。
 /// </param>
 /// <param name="CorrectionEntryNo">既に訂正されているなら、その再計上の伝票番号。無ければ空文字。</param>
+/// <param name="CorrectionResumes">「訂正する」がやり直し（再計上の下書きだけを起こす）になるか（ADR-0052）。</param>
+/// <param name="CorrectionDraftExists">訂正の下書きが残っているか。取消済みの伝票の断りに足す（同上）。</param>
 public record AmendResult(
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("openEntryId")] long OpenEntryId,
@@ -166,7 +168,9 @@ public record AmendResult(
     [property: JsonPropertyName("canCorrect")] bool CanCorrect = false,
     [property: JsonPropertyName("canDuplicate")] bool CanDuplicate = false,
     [property: JsonPropertyName("reversalEntryNo")] string ReversalEntryNo = "",
-    [property: JsonPropertyName("correctionEntryNo")] string CorrectionEntryNo = "")
+    [property: JsonPropertyName("correctionEntryNo")] string CorrectionEntryNo = "",
+    [property: JsonPropertyName("correctionResumes")] bool CorrectionResumes = false,
+    [property: JsonPropertyName("correctionDraftExists")] bool CorrectionDraftExists = false)
 {
     /// <summary>成功したときの文字列（画面はこれと一致するかで判定する）。</summary>
     public const string Succeeded = "ok";
@@ -204,7 +208,8 @@ public record AmendResult(
     public static AmendResult Available(AmendmentAvailability available)
         => new(Succeeded, 0, 0, available.Reason, [],
                available.CanReverse, available.CanCorrect, available.CanDuplicate,
-               EntryNoText(available.ReversalEntryNo), EntryNoText(available.CorrectionEntryNo));
+               EntryNoText(available.ReversalEntryNo), EntryNoText(available.CorrectionEntryNo),
+               available.CorrectionResumes, available.CorrectionDraftExists);
 
     /// <summary>伝票番号を画面へ渡す形にする。<b>無いことは空文字で表す</b>（上の注記）。</summary>
     private static string EntryNoText(int? entryNo)

@@ -191,7 +191,7 @@ public class JournalAmendmentEndpointTests
     }
 
     [Fact]
-    public async Task 取り消し済みならできないと返す()
+    public async Task 取り消し済みなら取消はできず訂正はやり直しだと返す()
     {
         using var server = new AccountingServer();
         // **識別子と伝票番号をずらす**（既定ではどちらも 1 から並び、取り違えを検出できない）。
@@ -203,11 +203,12 @@ public class JournalAmendmentEndpointTests
 
         Assert.Equal(AmendResult.Succeeded, result.Status);
 
-        // **2 つを別々に見る。** 今はどちらも false だが、
-        // 「片方だけできる状態が将来生まれうるから 2 つに分けた」のが設計意図である。
+        // **2 つを別々に見る。** 取り消しただけの伝票は、取消はできず訂正はやり直しになる（ADR-0052）——
+        // 「片方だけできる状態」が実際に生まれた。
         Assert.False(result.CanReverse);
-        Assert.False(result.CanCorrect);
-        Assert.NotEqual(string.Empty, result.Message);
+        Assert.True(result.CanCorrect);
+        Assert.True(result.CorrectionResumes);
+        Assert.Equal(string.Empty, result.Message);
 
         // **サービスが引いた番号が、この入口を通って出ること。**
         // ここを見ていないと、`AvailabilityAsync` が結果を組み直すときに
@@ -299,7 +300,7 @@ public class JournalAmendmentEndpointTests
     /// <para>元にできる種別は取消・訂正の対象にできる種別と同じ（ADR-0048 の決定 6。2026-09-10 に
     /// 取消を外した）。画面は「複製する」を出さない。</para>
     /// <para><b>「取消伝票」と「取消済みの原仕訳」は別物</b>で、後者は複製できる
-    /// （下の <see cref="取消済みの原仕訳は複製だけできる"/>）。2 本を並べるのは、
+    /// （下の <see cref="取消済みの原仕訳は複製と訂正のやり直しができる"/>）。2 本を並べるのは、
     /// 取り違えたまま集合を広げた実例があるから（qa/03 L-40）。</para>
     /// </remarks>
     [Fact]
@@ -330,8 +331,9 @@ public class JournalAmendmentEndpointTests
     /// 訂正の下書きを消したあとの作り直しが、この場面である（ADR-0048 の状況）。
     /// </remarks>
     [Fact]
-    public async Task 取消済みの原仕訳は複製だけできる()
+    public async Task 取消済みの原仕訳は複製と訂正のやり直しができる()
     {
+        // 取り消しただけの原仕訳は、複製（ADR-0048）に加えて訂正のやり直し（ADR-0052）もできる。取消はできない。
         using var server = new AccountingServer();
         var original = Original(server);
         await server.Amendment.ReverseAsync(server.Text(original.Value));
@@ -341,7 +343,8 @@ public class JournalAmendmentEndpointTests
         Assert.Equal(AmendResult.Succeeded, available.Status);
         Assert.True(available.CanDuplicate);
         Assert.False(available.CanReverse);
-        Assert.False(available.CanCorrect);
+        Assert.True(available.CanCorrect);
+        Assert.True(available.CorrectionResumes);
     }
 
     /// <summary>複製できない種別は、可否でも false を返す（画面がボタンを出さない）。</summary>
@@ -583,7 +586,7 @@ public class JournalAmendmentEndpointTests
         // 1 つ落ちても改名されてもコンパイルは通り、画面が黙って値を読めなくなる。
         Assert.Equal(
             ["status", "openEntryId", "reversalId", "message", "violations", "canReverse", "canCorrect",
-             "canDuplicate", "reversalEntryNo", "correctionEntryNo"],
+             "canDuplicate", "reversalEntryNo", "correctionEntryNo", "correctionResumes", "correctionDraftExists"],
             root.EnumerateObject().Select(property => property.Name));
         Assert.Equal(
             ["code", "message", "lineNo"],
@@ -615,6 +618,18 @@ public class JournalAmendmentEndpointTests
         // **無いことは空文字で表す**（画面が 1 つの見方で判定できるように）。
         Assert.Equal("12", available.RootElement.GetProperty("reversalEntryNo").GetString());
         Assert.Equal(string.Empty, available.RootElement.GetProperty("correctionEntryNo").GetString());
+        Assert.False(available.RootElement.GetProperty("correctionResumes").GetBoolean());
+        Assert.False(available.RootElement.GetProperty("correctionDraftExists").GetBoolean());
+
+        // やり直し・下書きの有無も**落とさずに写す**（ADR-0052。片方だけ写す形にすると画面の断りが黙って消える）。
+        using var resuming = JsonDocument.Parse(JsonSerializer.Serialize(AmendResult.Available(
+            new AmendmentAvailability(false, true, string.Empty, 12, null, true, CorrectionResumes: true))));
+        Assert.True(resuming.RootElement.GetProperty("correctionResumes").GetBoolean());
+        Assert.False(resuming.RootElement.GetProperty("correctionDraftExists").GetBoolean());
+        using var drafted = JsonDocument.Parse(JsonSerializer.Serialize(AmendResult.Available(
+            new AmendmentAvailability(false, false, "理由", 12, null, true, CorrectionDraftExists: true))));
+        Assert.False(drafted.RootElement.GetProperty("correctionResumes").GetBoolean());
+        Assert.True(drafted.RootElement.GetProperty("correctionDraftExists").GetBoolean());
     }
 
     /// <summary>

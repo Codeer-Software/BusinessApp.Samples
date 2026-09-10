@@ -151,6 +151,13 @@ internal sealed class AccountingServer : IDisposable
     public JournalAmendmentService AmendmentService { get; }
 
     /// <summary>
+    /// <b>別の日の</b>「訂正する」「取り消す」。<see cref="Now"/> の翌日にやり直す、といった検体のために、
+    /// 時計だけを差し替えた同じ配線を作る（DB・認証は共有）。
+    /// </summary>
+    public JournalAmendmentService AmendmentServiceAt(DateTimeOffset now)
+        => JournalAmendmentService.Create(Accessor, SqliteDbAccessor.DataSourceName, new FixedTimeProvider(now), Authentication);
+
+    /// <summary>
     /// 「訂正する」「取り消す」の入口。<b>コントローラが呼ぶのと同じもの</b>で、
     /// 識別子の解釈・トランザクション・結果への写像まで含む（ADR-0016）。
     /// </summary>

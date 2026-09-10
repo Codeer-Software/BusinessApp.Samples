@@ -12,6 +12,10 @@
 // 画面だけが古いまま残る（自己レビュー R77）。try/finally は使えない（qa/01 B-01）ので NavigateTo の直前で立てる。
 var leavingByScript = false;
 
+// 「訂正する」が訂正のやり直し（取消は済んでいて、再計上の下書きだけを起こす。ADR-0052）になるか。
+// サーバが可否と一緒に返す（JournalAmendmentEndpoint の correctionResumes）。確認の文を出し分けるためだけに持つ。
+var correctionResumes = false;
+
 void Detail_OnAfterInitialization()
 {
     // **初期値を先に入れる。** あとの ApplyPostedLock は状態を読んで表示を決めるので、
@@ -157,9 +161,11 @@ void ApplyAmendmentAvailability()
     CorrectButton.IsVisible = $"{result.JsonObject.canCorrect}".ToLower() == "true";
     ReverseButton.IsVisible = $"{result.JsonObject.canReverse}".ToLower() == "true";
     DuplicateButton.IsVisible = $"{result.JsonObject.canDuplicate}".ToLower() == "true";
+    correctionResumes = $"{result.JsonObject.correctionResumes}".ToLower() == "true";
 
     var noticed = ShowAmendmentNotice(
-        $"{result.JsonObject.reversalEntryNo}", $"{result.JsonObject.correctionEntryNo}");
+        $"{result.JsonObject.reversalEntryNo}", $"{result.JsonObject.correctionEntryNo}",
+        $"{result.JsonObject.correctionDraftExists}".ToLower() == "true");
 
     // **理由を出すのは計上済みのときだけ。** 下書きでは「まだ計上されていません。下書きは削除してください」
     // が必ず返る——**これから書く人に削除を勧める**ことになるし、明細を 1 行直すと
@@ -196,16 +202,26 @@ void ApplyAmendmentAvailability()
 //
 // **無いことは空文字で返る**（サーバが数値ではなく文字列で返す。JournalAmendmentEndpoint）。
 // 判定を 1 つの見方（空かどうか）に揃えてある。
-// **引数は文字列で受ける。** CLB のスクリプトはツリーウォーク型インタプリタなので、
-// 枠組みの型（WebApiResult）を引数に取る形は避け、読み出しは呼び出し側に寄せる。
+// **枠組みの型は受けない。** CLB のスクリプトはツリーウォーク型インタプリタなので、
+// 枠組みの型（WebApiResult）を引数に取る形は避け、読み出しは呼び出し側に寄せる（文字列と bool だけを渡す）。
 // **戻り値は「断りを出したか」。** 呼び出し側が、同じ事実を理由としてもう一度書かないために使う。
-bool ShowAmendmentNotice(string reversalNo, string correctionNo)
+// **訂正の下書きが残っているときは、その行き先も言う**——取消済みの伝票で「訂正する」が出るか出ないかは
+// 下書きの有無で決まる（ADR-0052）ので、出ない理由を押す前に見せる（docs/21 §1）。
+bool ShowAmendmentNotice(string reversalNo, string correctionNo, bool correctionDraftExists)
 {
     if (!string.IsNullOrEmpty(correctionNo))
     {
         // 訂正されている伝票は、必ず取り消されてもいる。**両方の行き先を出す。**
         AmendmentNoticeLabel.Text =
             $"この伝票は訂正されています（取消伝票 {reversalNo} ／ 訂正の伝票 {correctionNo}）。";
+    }
+    else if (!string.IsNullOrEmpty(reversalNo) && correctionDraftExists)
+    {
+        // 下書きには伝票番号が無く、一覧の逆引き（「取消・訂正の伝票」の列）も計上済みしか指さないので、
+        // 探し方を検索欄のラベル（「状態」「種別」）で言う。
+        AmendmentNoticeLabel.Text =
+            $"この伝票は取り消されています（取消伝票 {reversalNo}）。"
+            + "訂正の下書きがあるので、振替伝票の一覧で「状態」を「下書き」、「種別」を「訂正」に絞って開き、直してください。";
     }
     else if (!string.IsNullOrEmpty(reversalNo))
     {
@@ -230,8 +246,8 @@ void DeleteButton_OnClick()
     // 再計上の側だけが無くなる）。通常の下書きと同じ文で確かめると、それを知らずに消す（docs/21 §1）。
     // 文を選ぶだけで、帰結の判断はサーバ（ADR-0015・ADR-0048）のもの。帰結の文言が増えるなら availability API へ移す。
     var message = EntryType.Value == EntryTypes.Correction
-        ? "この訂正の下書きを削除します。元の伝票は取り消されたままになり、この取引は帳簿に載りません。"
-          + "記し直すときは、元の伝票を開いて「複製する」を押してください。元に戻せません。よろしいですか？"
+        ? "この訂正の下書きを削除します。元に戻せません。元の伝票は取り消されたままになり、この取引は帳簿に載りません。"
+          + "記し直すときは、元の伝票を開いてもう一度「訂正する」を押してください。よろしいですか？"
         : "この下書きを削除します。元に戻せません。よろしいですか？";
 
     if (MessageBox.ShowWithTitle("削除の確認", message, "はい", "いいえ") != "はい")
@@ -396,6 +412,18 @@ void PostButton_OnClick()
 // すべてサーバ側の AccountingCore が決める。ここがするのは、頼むことと開くことだけ。
 void CorrectButton_OnClick()
 {
+    // 取消済みの伝票では取消を作らない——文もそう言う。判断はサーバ（correctionResumes）のもので、ここは文を選ぶだけ。
+    // **「やり直す」とは言わない。** 取り消しただけの伝票にも同じ道が効く（ADR-0015・ADR-0052）ので、
+    // 「やり直す訂正」が無い人にも通る文にする。通常の訂正と同じ書き出しで、違い（取消を作らない）だけを言う。
+    // done は「いま開いているのは何か」を言う（Amend の注記）。取消が増えていないことも 1 語で返す。
+    if (correctionResumes)
+    {
+        Amend("correct", "訂正",
+            "この伝票を訂正します。取消は既に計上されているので作らず、内容を写した訂正の下書きだけを開きます。よろしいですか？",
+            "いま開いているのは訂正の下書きです。取消は増えていません。内容を直して計上してください。");
+        return;
+    }
+
     Amend("correct", "訂正",
         "この伝票を訂正します。取消を計上し、内容を写した訂正の下書きを開きます。よろしいですか？",
         "取消を計上しました。いま開いているのは訂正の下書きです。内容を直して計上してください。");

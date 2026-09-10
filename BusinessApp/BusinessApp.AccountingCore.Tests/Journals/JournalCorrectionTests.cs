@@ -408,6 +408,127 @@ public class JournalCorrectionTests
     private static string Message(IReadOnlyList<Violation> violations, string code)
         => violations.Single(v => v.Code == code).Message;
 
+    // --- 訂正をやり直す（ADR-0052） ---
+
+    /// <summary>既定は「取消と同じ日にやり直す」（訂正の下書きを消してすぐ、が普通の姿）。</summary>
+    private static CorrectionResumeContext ResumeContext(
+        bool reversed = true, bool alreadyCorrected = false, bool hasDraft = false, DateOnly? reversedOn = null)
+        => new(reversed ? reversedOn ?? CorrectedOn : null, alreadyCorrected, hasDraft, AccountingFixture.FiscalYear);
+
+    /// <summary>
+    /// <b>取消が済んでいれば、再計上の下書きだけを起こせる。</b> 訂正の下書きを消してしまった利用者の受け皿。
+    /// </summary>
+    [Fact]
+    public void 取消済みなら再計上の下書きだけができる()
+    {
+        var original = Posted();
+
+        var result = JournalCorrection.Resume(original, CorrectedOn, EnteredAt, ResumeContext());
+
+        Assert.True(result.Resumed);
+        var draft = result.Draft!;
+        Assert.Equal(EntryType.Correction, draft.EntryType);
+        Assert.Equal(EntryStatus.Draft, draft.Status);
+        Assert.Equal(original.Id, draft.OriginalEntryId);
+        Assert.Equal(original.TransactionDate, draft.TransactionDate);
+        Assert.Equal(CorrectedOn, draft.PostingDate);
+        Assert.Equal(original.Lines, draft.Lines);
+        // **Start が作る再計上と同じ姿である**（同じ関数で作る）。明細の並びは参照が違うので別に見た。
+        Assert.Equal(Correction(original: original) with { Lines = draft.Lines }, draft);
+    }
+
+    /// <summary>取消が無いのに再計上だけを起こすと、取引が帳簿に二重に載る。</summary>
+    [Fact]
+    public void 取り消されていなければやり直せない()
+    {
+        var result = JournalCorrection.Resume(Posted(), CorrectedOn, EnteredAt, ResumeContext(reversed: false));
+
+        Assert.False(result.Resumed);
+        Assert.Equal(
+            "元の伝票がまだ取り消されていません。訂正は取消と再計上の組で行います。",
+            Message(result.Violations, JournalViolationCodes.OriginalNotReversed));
+    }
+
+    /// <summary>
+    /// 取消より前の日に再計上を起こすと、その間だけ二重計上になる。**計上の関門と同じ規則**を押す前に見る
+    /// （ここで通して計上で断ると、押せるのに必ず断られるボタンになる。docs/21 §1）。
+    /// </summary>
+    [Fact]
+    public void 取消より前の日にはやり直せない()
+    {
+        var result = JournalCorrection.Resume(
+            Posted(), CorrectedOn, EnteredAt, ResumeContext(reversedOn: CorrectedOn.AddDays(1)));
+
+        Assert.False(result.Resumed);
+        Assert.Equal(
+            "訂正の計上日（2026/06/10）が、元の伝票を取り消した日（2026/06/11）より前になっています。",
+            Message(result.Violations, JournalViolationCodes.CorrectionBeforeReversal));
+    }
+
+    /// <summary>境界。取消の翌日にやり直すのが本番の姿（取消と同じ日は既定の検体が見ている）。</summary>
+    [Fact]
+    public void 取消の翌日にはやり直せる()
+    {
+        var result = JournalCorrection.Resume(
+            Posted(), CorrectedOn, EnteredAt, ResumeContext(reversedOn: CorrectedOn.AddDays(-1)));
+
+        Assert.True(result.Resumed);
+        Assert.Equal(CorrectedOn, result.Draft!.PostingDate);
+    }
+
+    [Fact]
+    public void 訂正の下書きが残っていればやり直せない()
+    {
+        var result = JournalCorrection.Resume(Posted(), CorrectedOn, EnteredAt, ResumeContext(hasDraft: true));
+
+        Assert.False(result.Resumed);
+        Assert.Equal(
+            "この伝票には訂正の下書きが既にあります。振替伝票の一覧から、その下書きを開いて直してください。",
+            Message(result.Violations, JournalViolationCodes.CorrectionDraftExists));
+    }
+
+    [Fact]
+    public void 計上済みの訂正があればやり直せない()
+    {
+        var result = JournalCorrection.Resume(Posted(), CorrectedOn, EnteredAt, ResumeContext(alreadyCorrected: true));
+
+        Assert.False(result.Resumed);
+        Assert.Equal(
+            "この伝票は既に訂正されています。やり直すときは、その訂正の伝票を訂正してください。",
+            Message(result.Violations, JournalViolationCodes.AlreadyCorrected));
+    }
+
+    /// <summary>原仕訳の側の規則は Start と同じ（下書きは対象外）。</summary>
+    [Fact]
+    public void 下書きはやり直せない()
+    {
+        var result = JournalCorrection.Resume(
+            Posted() with { Status = EntryStatus.Draft }, CorrectedOn, EnteredAt, ResumeContext());
+
+        Assert.False(result.Resumed);
+        Assert.Contains(result.Violations, v => v.Code == JournalViolationCodes.AmendmentTargetNotPosted);
+    }
+
+    [Fact]
+    public void やり直しの違反は全件返す()
+    {
+        var result = JournalCorrection.Resume(
+            Posted(), CorrectedOn, EnteredAt, ResumeContext(reversed: false, alreadyCorrected: true, hasDraft: true));
+
+        Assert.Equal(
+            [
+                JournalViolationCodes.OriginalNotReversed,
+                JournalViolationCodes.AlreadyCorrected,
+                JournalViolationCodes.CorrectionDraftExists,
+            ],
+            result.Violations.Select(v => v.Code));
+    }
+
+    [Fact]
+    public void やり直しの原仕訳がnullなら例外()
+        => Assert.Throws<ArgumentNullException>(
+            () => JournalCorrection.Resume(null!, CorrectedOn, EnteredAt, ResumeContext()));
+
     [Fact]
     public void 違反は全件返す()
     {
