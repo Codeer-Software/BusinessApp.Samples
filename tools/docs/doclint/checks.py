@@ -25,7 +25,7 @@ ALL_CHECKS = (
     "check_front_matter", "check_links", "check_superseded_links", "check_body",
     "check_adr_ledger", "check_docs_index", "check_code_references",
     "check_section_references", "check_updated_freshness", "check_updated_history",
-    "check_article_notation", "check_dated_switches",
+    "check_article_notation", "check_dated_switches", "check_law_abbreviations",
 )
 
 
@@ -648,6 +648,72 @@ def check_article_notation(docs: List[Doc], findings: List[Finding]) -> Tuple[in
                              "{}行目: 条項は 80 §3 の記法で書きます（条＝アラビア数字／項＝丸数字／"
                              "号＝漢数字）。直すか、80 §3-1 の 4 つに当たるなら行に {} を書く: {}"
                              .format(i + 1, ARTICLE_IGNORE, "・".join(hits))))
+    return scanned, ignored
+
+
+# --- 他法を改正する法律・政令・省令の略称（80 §2。開発者の指示。2026-09-11） ----------
+# 「所得税法等の一部を改正する法律」は歴史上無数にあり、同じ年に複数あることもある。
+# だから「○年改正法」「改正令」のような略称は使わず、略すなら「所税法等一部改正法（平成28年法律第15号）」の
+# ように**法令番号を必ず添える**。通達が「改正法」と略せるのは前後の文脈があるからで、引いて使うときは文脈が違う。
+# 拒む形は 4 つ——①年＋改正法（`28年改正法`・`令和8年改正法`・`平成15年改正省令`・`令和元年改正政令`）  # lint-docs:abbrev-ok 検体
+# ②法令名の無い裸の略称＋附則（`改正法附則`・`改正令附則`・`改正規則附則`）  # lint-docs:abbrev-ok 検体
+# ③法令名の直後の改正法（`金商法改正法`）  # lint-docs:abbrev-ok 検体
+# ④法令番号を添えていない「一部改正法」（`所税法等一部改正法附則 52`——括弧書きの番号を落とすと鳴る。**規則の核心はここ**）。  # lint-docs:abbrev-ok 検体
+# **逐語引用などは、行に `lint-docs:abbrev-ok 理由` を書いて外す**——**理由の無い印は効かない**（切替の印と同じ。
+# 外してよい理由の型は 80 §2 が持つ）。汎用の `lint-docs:ignore` でも黙る（機械は区別しない。節への参照の検査まで黙るので使わない）。
+#
+# **この関門の限界**（過大に表明しない）:
+# - 「改正法」「改正令」を単独で（附則を伴わずに）名前として使う行は拾えない——普通名詞の「改正法」と字面で区別できない
+# - 元号のアルファベット略記（`H28改正法`）は拾わない（本書群では使っていない）
+# - 法令番号を添えた略称が**正しい番号か**は見ない（人が 80 §2 と突き合わせる）
+# - 印の理由の中身は見ない（有無だけ）
+_AMEND_KIND = r"(?:財務省令|省令|政令|規則|法律|法|令)"
+_LAW_NUM_PAREN = (r"（(?:明治|大正|昭和|平成|令和)\s*[0-9０-９]+\s*年[^）]{0,20}第\s*[0-9０-９]+\s*号）")
+BANNED_LAW_ABBREV_RE = re.compile(
+    r"(?:平成|令和|昭和)?\s*(?:[0-9０-９]+|元)\s*年\s*\**改正" + _AMEND_KIND + r"(?!人税)"
+    r"|(?<!一部)(?<!被)改正" + _AMEND_KIND + r"\**\s*\**附則"
+    r"|[一-龥]{1,8}法改正" + _AMEND_KIND +
+    r"|一部改正" + _AMEND_KIND + r"(?!\s*" + _LAW_NUM_PAREN + r")")
+ABBREV_IGNORE = "lint-docs:abbrev-ok"
+# 印の後ろに理由（空白＋ 1 字以上。`-->` は理由ではない）が要る。切替の印と同じ形
+ABBREV_IGNORE_RE = re.compile(re.escape(ABBREV_IGNORE) + r"[ \t]+(?!--)\S")
+
+
+def banned_law_abbreviations(line: str) -> List[str]:
+    """80 §2 が禁じる改正法の略称の字面を返す（純粋関数）。"""
+    return [m.group(0).strip() for m in BANNED_LAW_ABBREV_RE.finditer(line)]
+
+
+def check_law_abbreviations(docs: List[Doc], findings: List[Finding],
+                            targets: Optional[ScanTargets] = None) -> Tuple[int, int]:
+    """「○年改正法」「改正法附則」「○○法改正法」「番号の無い一部改正法」を error にし、`(走査した行数, 外した行数)` を返す。  # lint-docs:abbrev-ok 規則そのものの説明
+
+    走査の範囲と作法は `check_article_notation` と同じ（`.md` はフロントマターも見る。コードも歩く。
+    コードフェンスの中は見ない）。**2 つ返すのも同じ理由**——0 に落ちたら「違反が無い」ではなく配線を疑う。
+    `targets` はテストのための注入口（この検査自身の検体を除いて数えるため）。
+    """
+    scanned = 0
+    ignored = 0
+    for rel, lines in (targets if targets is not None else iter_scan_targets(docs, include_md=True)):
+        in_fence = False
+        for i, line in enumerate(lines):
+            if rel.endswith(".md") and FENCE_RE.match(line):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
+            scanned += 1
+            hits = banned_law_abbreviations(line)
+            if not hits:
+                continue
+            if INLINE_IGNORE in line or ABBREV_IGNORE_RE.search(line):
+                ignored += 1
+                continue
+            findings.append((SEV_ERROR, rel,
+                             "{}行目: 他法を改正する法律・政令・省令を「○年改正法」「改正令」のような略称で呼びません"
+                             "（80 §2）。80 §2 で定義した略称（「所税法等一部改正法（平成28年法律第15号）」の形。"
+                             "法令番号を必ず添える）に書き換えるか、逐語引用なら行に「{} 理由」を書く: {}"
+                             .format(i + 1, ABBREV_IGNORE, "・".join(hits))))
     return scanned, ignored
 
 

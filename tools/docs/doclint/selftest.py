@@ -11,6 +11,7 @@
   4. 定義した検査が全部 `ALL_CHECKS` に載り、`main` から**正しい引数で**呼ばれているか
   5. `article_notation_violations` が `5 条 1 項` を拾い、**公布番号と「12 項目」を拾わない**か  # lint-docs:article-ok
   6. `check_dated_switches` が発効日前は数えるだけで、発効日以後は error にし、印で外れるか
+  7. `banned_law_abbreviations` が `28年改正法`・`改正令附則` を拾い、**法令番号つきの略称と普通名詞を拾わない**か  # lint-docs:abbrev-ok 検体
 """
 
 from __future__ import annotations
@@ -21,9 +22,9 @@ import re
 from typing import Dict, List
 
 from . import checks
-from .checks import (ALL_CHECKS, ARTICLE_IGNORE, DATED_SWITCHES, SWITCH_IGNORE, Finding,
-                     article_notation_violations, check_superseded_links, dated_switch_hits,
-                     successor_of, updated_violation)
+from .checks import (ABBREV_IGNORE, ALL_CHECKS, ARTICLE_IGNORE, DATED_SWITCHES, SWITCH_IGNORE, Finding,
+                     article_notation_violations, banned_law_abbreviations, check_superseded_links,
+                     dated_switch_hits, successor_of, updated_violation)
 from .model import (ADR_LEDGER, DOCS_INDEX, Doc, INLINE_IGNORE, LINE_LIMIT, SEV_ERROR,
                     SEV_WARN, body_of, load_docs, parse_front_matter)
 
@@ -34,9 +35,13 @@ CLI_SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 REQUIRED_CALLS = ("check_superseded_links(d, docs_by_rel, findings)",
                   "scanned_notation, ignored_notation = check_article_notation(docs, findings)",
                   "remaining_switch, ignored_switch = check_dated_switches(docs, findings, today=today)",
+                  "scanned_abbrev, ignored_abbrev = check_law_abbreviations(docs, findings)",
+                  "改正法の略称: {} 行を走査し {} 行を印で外した",
+                  # `format` の引数列。末尾だけ照合すると、切替の 2 値を 0 に差し替えても通る（R82）
+                  "scanned_notation, ignored_notation, remaining_switch, ignored_switch,",
                   # 要約行の印字。消すと「0 に落ちたら疑う」の設計が黙って死ぬ
                   "条番号の切替: 旧の字面が {} 行（印で外した {} 行）",
-                  "remaining_switch, ignored_switch))")
+                  "scanned_abbrev, ignored_abbrev))")
 
 
 def _fake(rel: str, meta: Dict[str, str], body: List[str]) -> Doc:
@@ -459,6 +464,99 @@ def _check_article_notation_forms() -> List[str]:
     return ng
 
 
+def _check_law_abbreviation_forms() -> List[str]:
+    """改正法の略称の判定と、検査そのものが空回りしていないか（80 §2。開発者の指示。2026-09-11）。
+
+    **返り値を完全一致で表明する**（`_check_article_notation_forms` と同じ理由）。
+    **拾ってはいけない形が本体**——法令番号を添えた略称と、普通名詞の「改正法」「改正省令」を鳴らすと、
+    正しい書き方まで直させることになる。
+    """
+    ng = []
+    cases = [
+        # --- 拾うべき形 -------------------------------------------------------
+        ("経過措置（28年改正法附則 52・53）", ["28年改正法"]),                        # lint-docs:abbrev-ok 検体
+        ("経過措置（28 年改正法附則 52・53）", ["28 年改正法"]),                      # 空白あり lint-docs:abbrev-ok 検体
+        ("**令和8年改正法**（所得税法等の一部を改正する法律）", ["令和8年改正法"]),   # 元号つき lint-docs:abbrev-ok 検体
+        ("平成15年改正省令附則 2 の旧経過措置", ["平成15年改正省令"]),               # 省令 lint-docs:abbrev-ok 検体
+        ("令和元年改正法附則", ["令和元年改正法"]),                                  # 元年 lint-docs:abbrev-ok 検体
+        ("令和8年改正政令", ["令和8年改正政令"]),                                    # 政令 lint-docs:abbrev-ok 検体
+        ("平成28年改正規則", ["平成28年改正規則"]),                                  # 規則 lint-docs:abbrev-ok 検体
+        ("平成28年改正財務省令", ["平成28年改正財務省令"]),                          # 財務省令 lint-docs:abbrev-ok 検体
+        ("帳簿のみで仕入税額控除可（改正令附則24の2①）", ["改正令附則"]),           # 裸の略称＋附則 lint-docs:abbrev-ok 検体
+        ("旧 2 は改正法附則 34 ①一", ["改正法附則"]),                                # 同上 lint-docs:abbrev-ok 検体
+        ("改正政令附則 2", ["改正政令附則"]),                                        # 同上（政令） lint-docs:abbrev-ok 検体
+        ("**改正法**附則 34", ["改正法**附則"]),                                     # 強調記号で分断 lint-docs:abbrev-ok 検体
+        ("金商法改正法の施行の日の属する年", ["金商法改正法"]),                       # 法令名の直後 lint-docs:abbrev-ok 検体
+        ("| 法律 | **２８年改正法** |", ["２８年改正法"]),                            # 全角数字 lint-docs:abbrev-ok 検体
+        ("所税法等一部改正法附則 52・53", ["一部改正法"]),                            # **番号の無い一部改正法（規則の核心）** lint-docs:abbrev-ok 検体
+        ("消税規則一部改正省令附則 2", ["一部改正省令"]),                            # 同上（省令） lint-docs:abbrev-ok 検体
+        ("所税法等一部改正法の 2 本", ["一部改正法"]),                                # 同上（附則なし） lint-docs:abbrev-ok 検体
+        # --- 拾ってはいけない形（**こちらが本体**） ---------------------------
+        ("所税法等一部改正法（平成28年法律第15号）附則 52・53", []),                   # 法令番号つきの略称
+        ("消税令等一部改正令（平成28年政令第148号）附則 24 の 2 ①", []),              # 同上（政令）
+        ("消税規則一部改正省令（平成15年財務省令第92号）附則 2", []),                 # 同上（省令）
+        ("所税法等一部改正法（令和8年法律第12号）", []),                              # 同上（附則なし）
+        ("所得税法等の一部を改正する法律（令和8年法律第12号）", []),                   # 正式名称
+        ("改正法の附則は被改正法の側に載る", []),                                     # 普通名詞
+        ("被改正法附則 52", []),                                                      # 被改正法
+        ("電帳規則の改正省令は存在しない", []),                                       # 普通名詞
+        ("令和8年改正法人税法 22", []),                                               # 改正法人税法
+        ("令和8年度税制改正の大綱（令和7年12月26日閣議決定）", []),                    # 年度＋改正
+        ("令和 7 年度改正（本体はデジタルシームレス保存の新設）", []),                 # 同上
+        ("金融商品取引法を改正する法律（法令番号は未確認）", []),                       # 言い換えた形
+        ("`<法令ID>_<施行日>_<改正法令ID>` の形", []),                                # e-Gov の ID
+    ]
+    for line, want in cases:
+        got = banned_law_abbreviations(line)
+        if got != want:
+            ng.append("banned_law_abbreviations: 期待 {} / 実際 {}: {}".format(want, got, line))
+
+    # --- 検査そのもの（走査・印の相互作用・複数ヒット・フロントマター・フェンス） ------
+    # 行番号を完全一致で表明する（`_check_dated_switch_forms` と同じ作法。壊れ方と区別が付く形にする）
+    findings: List[Finding] = []
+    doc = _fake("docs/x.md", {"title": "28年改正法の経過措置", "status": "current"},               # 2 行目 lint-docs:abbrev-ok 検体
+                ["ふつうの行",                                                                    # 5
+                 "28年改正法附則 52",                                                             # 6 lint-docs:abbrev-ok 検体
+                 "28年改正法附則 52  <!-- {} 検体 -->".format(ABBREV_IGNORE),                     # 7 印（理由あり）lint-docs:abbrev-ok 検体
+                 "28年改正法附則 52  <!-- {} -->".format(ABBREV_IGNORE),                          # 8 **理由の無い印は効かない** lint-docs:abbrev-ok 検体
+                 "28年改正法附則 52  <!-- {} 検体 -->".format(INLINE_IGNORE),                     # 9 汎用の印でも黙る lint-docs:abbrev-ok 検体
+                 "改正法附則 34  <!-- {} 検体 -->".format(ARTICLE_IGNORE),                        # 10 **条項の印では黙らない** lint-docs:abbrev-ok 検体
+                 "28年改正法附則 52・改正令附則 24",                                              # 11 同じ行に 2 つ lint-docs:abbrev-ok 検体
+                 "```", "28年改正法附則 52", "```"])                                            # フェンスの中は見ない lint-docs:abbrev-ok 検体
+    scanned, ignored = checks.check_law_abbreviations([doc], findings, targets=[("docs/x.md", doc.lines)])
+    mine = [f for f in findings if f[1] == "docs/x.md"]
+    got_lines = sorted(int(re.match(r"(\d+)行目", m).group(1)) for _, _, m in mine if re.match(r"(\d+)行目", m))
+    if got_lines != [2, 6, 8, 10, 11]:
+        ng.append("check_law_abbreviations: 鳴った行が違う: 期待 [2, 6, 8, 10, 11] / 実際 {}".format(got_lines))
+    for sev, _, msg in mine:
+        if sev != SEV_ERROR:
+            ng.append("check_law_abbreviations: severity が {} になっている".format(sev))
+        if ABBREV_IGNORE not in msg or "80 §2" not in msg:
+            ng.append("check_law_abbreviations: 外し方か規則の置き場が指摘文に出ていない: " + msg)
+    two = [m for _, _, m in mine if m.startswith("11行目")]
+    if not two or "28年改正法・改正令附則" not in two[0]:  # lint-docs:abbrev-ok 検体
+        ng.append("check_law_abbreviations: 同じ行の 2 つの字面が指摘文に並んでいない: {}".format(two))
+    if ignored != 2:
+        ng.append("check_law_abbreviations: 印で外した行が 2 でない（理由あり＋汎用）: {}".format(ignored))
+    if scanned != 11:  # フロントマター 4 ＋ 本文 7（フェンスの 3 行は数えない）
+        ng.append("check_law_abbreviations: 走査した行が 11 でない: {}".format(scanned))
+
+    # **実データで件数のラチェットを持つ**（配線が死んだら 0 に落ちる）。この検査自身の検体（tools/）は除く
+    real, _ = load_docs()
+    real_targets = [t for t in checks.iter_scan_targets(real, include_md=True) if not t[0].startswith("tools/")]
+    real_findings: List[Finding] = []
+    real_scanned, real_ignored = checks.check_law_abbreviations(real, real_findings, targets=real_targets)
+    if real_scanned < 5000:
+        ng.append("check_law_abbreviations: 実データの走査が {} 行しかない（対象が痩せた）".format(real_scanned))
+    # 実測 11 行（2026-09-11。tools/ を除く——qa/02 の当時の記録 7・05 の 2・80 と 00 README の規則の説明 2）。
+    # 半分以下に落ちたら印の判定が死んだ、倍以上なら印をばら撒いた。動かすときは理由をここに書く
+    if not 5 <= real_ignored <= 25:
+        ng.append("check_law_abbreviations: 実データ（tools/ を除く）で印を読めた行が {}（5〜25 の外。判定が死んだか、ばら撒いた）".format(real_ignored))
+    if real_findings:
+        ng.append("check_law_abbreviations: 実データに違反が {} 件ある".format(len(real_findings)))
+    return ng
+
+
 # 切替ごとの検体（入力, 拾うべき字面）。**`DATED_SWITCHES` に行を足したらここにも足す**（無いと赤）。
 # 拾ってはいけない形がこちらの本体——電帳規則の別の項、別の法令の同じ項、新の表記
 SWITCH_CASES = {
@@ -598,7 +696,7 @@ def selftest() -> int:
     ng: List[str] = []
     for part in (_check_updated_violation, _check_superseded_links, _check_other_checks,
                  _check_section_ref_forms, _check_article_notation_forms, _check_dated_switch_forms,
-                 _check_real_data, _check_wiring):
+                 _check_law_abbreviation_forms, _check_real_data, _check_wiring):
         ng.extend(part())
     for msg in ng:
         print("NG  " + msg)

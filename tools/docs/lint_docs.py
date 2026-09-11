@@ -4,7 +4,7 @@
 
 仕様書: docs/00_ドキュメント規約/
 
-長期開発でドキュメントが腐り、肥大化するのを防ぐ。検査するのは次の 7 点である。
+長期開発でドキュメントが腐り、肥大化するのを防ぐ。検査するのは次の 8 点である。
   1. 読まなくていい文書を判別できるか（フロントマターと status）
   2. 索引・ADR 台帳と実ファイルが食い違っていないか
   3. current でない文書をコード（コメント）が参照していないか
@@ -18,6 +18,8 @@
      **防げるのは表記ゆれ側だけ**で、「置換してはいけない箇所まで置換する」型は防げない）
   7. 日付で発効する条番号の切替が残っていないか（2027-01-01 の電帳規則 5 ⑤ → 5 ④）  # lint-docs:switch-ok 改番の事実
      （開発者の指示。2026-09-06。手順を文章で持ったまま 4 回落ちた。30 日前までは件数を印字するだけ）
+  8. 他法を改正する法律を「○年改正法」「改正令」のような略称で呼んでいないか（80 §2）
+     （開発者の指示。2026-09-11。同名の改正法が無数にあるので、略すなら法令番号を必ず添える）
 
 中身は `doclint/` パッケージが持つ（model / checks / selftest）。
 本ファイルは CLI と、検査の呼び出し順だけを持つ。
@@ -48,8 +50,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from doclint.checks import (Finding, check_adr_ledger, check_article_notation,  # noqa: E402
                             check_body, check_code_references, check_dated_switches,
-                            check_docs_index, check_front_matter, check_links, check_section_references,
-                            check_superseded_links, check_updated_freshness,
+                            check_docs_index, check_front_matter, check_law_abbreviations, check_links,
+                            check_section_references, check_superseded_links, check_updated_freshness,
                             check_updated_history)
 from doclint.model import REFERENCE_PREFIXES, SEV_ERROR, SEV_WARN, Doc, load_docs  # noqa: E402
 from doclint.selftest import selftest  # noqa: E402
@@ -116,6 +118,7 @@ def main() -> int:
     check_updated_history(docs, findings)
     scanned_notation, ignored_notation = check_article_notation(docs, findings)
     remaining_switch, ignored_switch = check_dated_switches(docs, findings, today=today)
+    scanned_abbrev, ignored_abbrev = check_law_abbreviations(docs, findings)
 
     errors = [f for f in findings if f[0] == SEV_ERROR]
     warns = [f for f in findings if f[0] == SEV_WARN]
@@ -131,9 +134,11 @@ def main() -> int:
     # 「配線が死んだ・印が広がった」を疑う（印で外した行も並べて出す理由）
     print("検査文書数: {} / error: {} / warn: {} / superseded 宛リンク: {} 件を検査 / "
           "条項の記法: {} 行を走査し {} 行を印で外した / "
-          "条番号の切替: 旧の字面が {} 行（印で外した {} 行）"
+          "条番号の切替: 旧の字面が {} 行（印で外した {} 行） / "
+          "改正法の略称: {} 行を走査し {} 行を印で外した"
           .format(len(docs), len(errors), len(warns), seen_superseded_links,
-                  scanned_notation, ignored_notation, remaining_switch, ignored_switch))
+                  scanned_notation, ignored_notation, remaining_switch, ignored_switch,
+                  scanned_abbrev, ignored_abbrev))
     return 1 if errors or others else 0
 
 
