@@ -11,7 +11,7 @@ using BusinessApp.AccountingCore.Shared;
 /// 値の根拠は docs/research/2026-08-23_消費税インボイス制度.md §1-1。
 /// 出典: https://www.nta.go.jp/taxes/shiraberu/zeimokubetsu/shohi/keigenzeiritsu/pdf/qa/01-15.pdf 、
 /// https://www.mof.go.jp/tax_policy/tax_reform/outline/fy2026/08taikou_04.htm （確認日 2026-08-23）
-/// 根拠法: 28 年改正法附則 52・53、令和 8 年法律第 12 号（令和 8 年 3 月 31 日成立・公布）。
+/// 根拠法: 所税法等一部改正法（平成28年法律第15号）附則 52・53、所税法等一部改正法（令和8年法律第12号）（令和 8 年 3 月 31 日成立・公布）。
 /// </remarks>
 public static class StatutoryData
 {
