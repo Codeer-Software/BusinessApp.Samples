@@ -265,6 +265,18 @@ public static class TestDatabase
         };
     }
 
+    /// <summary>
+    /// クエリモジュールの SQL を<b>本文で</b>読む。<b>行動テストはこちらを通す。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>読み込みを 1 箇所に集めるためにある。</b> 各テストが <c>File.ReadAllText</c> を
+    /// 自分で書くと、<b>後から「読んだ SQL に手を入れる」道具を足せない</b>
+    /// ——SQL ミューテーション（<c>docs/qa/05_観点網羅の計器.md</c> §3）の注入点は、
+    /// <b>読む場所が 1 つであることの上にしか作れない</b>
+    /// （制約ノックアウトが環境変数 1 本に集めたのと同じ形。ADR-0053）。
+    /// </remarks>
+    public static string QuerySql(string moduleName) => File.ReadAllText(QuerySqlOf(moduleName));
+
     public static void Execute(SqliteConnection connection, string sql)
     {
         using var command = connection.CreateCommand();

@@ -10,7 +10,7 @@ using Microsoft.Data.Sqlite;
 /// <para><see cref="QueryModuleTests"/> は宣言と SQL の整合しか見ない。
 /// <b>条件が効いているかは、値を入れて行数を数えないと分からない。</b>
 /// `&gt;=` と `&gt;` の取り違え、`date()` の掛け忘れ、`p_blank_field` の分岐名の綴り違いは、
-/// どれも例外にならず<b>静かに 0 件や全件</b>を返す（qa/03 L-15 の型）。</para>
+/// どれも例外にならず<b>静かに 0 件や全件</b>を返す（qa/03 の L-12・L-19・L-20）。</para>
 /// <para>ここが守るのは制度要件そのものである——電帳規則 5 ⑤一ハの (2) 範囲・(3) 組み合わせ、
 /// 電帳通達 8-13 の空値検索、8-14 の記録項目、8-15 の課税期間ごとの範囲指定。</para>
 /// </remarks>
@@ -391,7 +391,7 @@ public class JournalBookQueryTests
     private static IReadOnlyList<Row> Run(SqliteConnection db, params (string Name, object Value)[] parameters)
     {
         using var command = db.CreateCommand();
-        command.CommandText = File.ReadAllText(TestDatabase.QuerySqlOf("JournalBook"));
+        command.CommandText = TestDatabase.QuerySql("JournalBook");
 
         foreach (var name in Parameters)
         {

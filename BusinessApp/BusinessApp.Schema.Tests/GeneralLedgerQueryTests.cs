@@ -10,7 +10,7 @@ using Microsoft.Data.Sqlite;
 /// <para><see cref="QueryModuleTests"/> は宣言と SQL の整合しか見ない。
 /// 元帳が持つ計算——<b>相手勘定科目</b>（法税規則 55 ②）と<b>期間内累計</b>——は、
 /// 値を入れて数えないと合っているか分からない。どちらも間違えても例外にならず、
-/// <b>それらしい数字が静かに出る</b>（qa/03 L-15 の型）。</para>
+/// <b>それらしい数字が静かに出る</b>（qa/03 の L-12・L-19・L-20）。</para>
 /// <para>とくに累計の符号は、科目区分だけで決めると評価勘定で必ず誤る（docs/15 §1）。
 /// 4 つの組み合わせ（科目区分が借方側か × 評価勘定か）をすべて通す。</para>
 /// </remarks>
@@ -572,7 +572,7 @@ public class GeneralLedgerQueryTests
     private static IReadOnlyList<Row> Run(SqliteConnection db, params (string Name, object Value)[] parameters)
     {
         using var command = db.CreateCommand();
-        command.CommandText = File.ReadAllText(TestDatabase.QuerySqlOf("GeneralLedger"));
+        command.CommandText = TestDatabase.QuerySql("GeneralLedger");
 
         foreach (var name in Parameters)
         {
