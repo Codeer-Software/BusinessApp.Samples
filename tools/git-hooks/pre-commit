@@ -48,6 +48,11 @@ echo "[pre-commit] 5/8 CLB デザインの検査"
 python tools/clb/lint_design.py --selftest
 python tools/clb/lint_design.py
 
+# SQL ミューテーションの掃引そのものは載せない（5 分かかる。ADR-0056 決定 7）が、
+# **変異点の数え方を守る検査だけは載せる**——0.1 秒で済み、
+# **ここが壊れると掃引が「生き残り 0」という最良の報告を返す**。
+python tools/clb/sql_mutate.py --selftest
+
 echo "[pre-commit] 6/8 テスト・カバレッジ・スキーマ"
 dotnet test BusinessApp.slnx --nologo -v q
 

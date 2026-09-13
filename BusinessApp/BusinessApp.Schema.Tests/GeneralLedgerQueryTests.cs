@@ -14,6 +14,7 @@ using Microsoft.Data.Sqlite;
 /// <para>とくに累計の符号は、科目区分だけで決めると評価勘定で必ず誤る（docs/15 §1）。
 /// 4 つの組み合わせ（科目区分が借方側か × 評価勘定か）をすべて通す。</para>
 /// </remarks>
+[Collection(QuerySqlCollection.Name)]
 public class GeneralLedgerQueryTests
 {
     /// <summary>

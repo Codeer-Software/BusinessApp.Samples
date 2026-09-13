@@ -16,6 +16,7 @@ using Microsoft.Data.Sqlite;
 /// <para>だから<b>本物の DDL に本物の SQL を流して</b>突き合わせる。
 /// 帳簿は今後増えるので、モジュールを列挙して全部にかける。</para>
 /// </remarks>
+[Collection(QuerySqlCollection.Name)]
 public class QueryModuleTests
 {
     /// <summary>システムが束縛する予約パラメータ。宣言しないのが正しい。</summary>
