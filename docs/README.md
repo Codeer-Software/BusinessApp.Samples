@@ -52,7 +52,7 @@ related: [00_ドキュメント規約/README.md, 21_画面の原則.md, 32_調�
 | デザインの静的検査 | `designcheck` CLI（`../Designer/CLAUDE.md`） |
 | 公開前チェック | `python tools/docs/lint_secrets.py` |
 | ドキュメント規約の検査 | `python tools/docs/lint_docs.py` |
-| SQL・DDL テストの強さを測る | [qa/05_観点網羅の計器（計画）](qa/05_観点網羅の計器.md)。**入っているのは制約ノックアウトだけ**（[ADR-0053](decisions/0053-制約ノックアウトはDDLを1つずつ外し振る舞いのテストだけで赤になるかを見る.md)。**Claude の判断で、開発者は未承認**） |
+| SQL・DDL テストの強さを測る | [qa/05_観点網羅の計器（計画）](qa/05_観点網羅の計器.md)。**入っているのは制約ノックアウト（[ADR-0053](decisions/0053-制約ノックアウトはDDLを1つずつ外し振る舞いのテストだけで赤になるかを見る.md)）と、不変条件の ID トレーサビリティ（[ADR-0054](decisions/0054-不変条件のIDはカタログの側から数えテストが触れていないものを報告する.md)）**。**どちらも Claude の判断で、開発者は未承認** |
 | デプロイして実機で確認する | [31_検証のルール](31_検証のルール.md) → `pwsh -NoProfile -File tools/clb/deploy.ps1` → [tools/README](../tools/README.md) |
 
 ## 3. 説明する
