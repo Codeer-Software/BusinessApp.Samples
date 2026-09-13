@@ -722,11 +722,43 @@ def _check_link_label_forms() -> List[str]:
     return ng
 
 
+def _check_question_forms() -> List[str]:
+    """閉じた問いへの参照の検体。
+
+    **この検査は 2026-09-13 に足した**——開発者の答えを反映して 3 つの問いを消した回に、
+    それを指す参照が 6 か所残った（qa/02 のラウンド 87）。
+    [30 §11](../../docs/30_作業のルール.md) が番号の使い回しを禁じているので、
+    **無い番号は必ず腐った参照**である。**規約を壊す最短の書き方を検体に持つ。**
+    """
+    ng = []
+    defined = {"11", "21"}
+    cases = [
+        # (行, 鳴る番号)
+        ("上限は [05 の Q-20](05_開発者への問い.md) で諮っている", ["20"]),
+        ("Q-23 の ① と Q-09 の答え", ["23", "09"]),
+        ("| 何を決めたか | Q-24 |", ["24"]),
+        ("Q-21 が決まった回に Q-99 も見る", ["99"]),
+        ("列の作り替えは Q-9 で諮った", ["9"]),
+        # 当たってはいけない形
+        ("いまも生きている [05 の Q-21](05_開発者への問い.md)", []),
+        ("**問い（旧 Q-20）は 05 から消した**", []),
+        ("旧Q-23 の ③ は 12 が引き取った", []),
+        ("番号 `Q-nn` は使い回さない", []),
+        ("消税軽減Q&A（制度）問 3", []),
+        ("Q-11 と Q-21 の 2 つが残る", []),
+    ]
+    for line, want in cases:
+        got = checks.dangling_questions(line, defined)
+        if got != want:
+            ng.append("check_question_numbers: {!r} は {} のはずが {}".format(line, want, got))
+    return ng
+
+
 def selftest() -> int:
     ng: List[str] = []
     for part in (_check_updated_violation, _check_superseded_links, _check_other_checks,
                  _check_section_ref_forms, _check_article_notation_forms, _check_dated_switch_forms,
-                 _check_law_abbreviation_forms, _check_link_label_forms,
+                 _check_law_abbreviation_forms, _check_link_label_forms, _check_question_forms,
                  _check_real_data, _check_wiring):
         ng.extend(part())
     for msg in ng:
