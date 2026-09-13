@@ -3,7 +3,7 @@ title: ドキュメント索引
 status: current
 scope: 全体
 audience: [開発, 営業]
-updated: 2026-09-13
+updated: 2026-09-14
 supersedes: []
 related: [00_ドキュメント規約/README.md, 21_画面の原則.md, 32_調査のルール.md]
 ---
@@ -52,7 +52,7 @@ related: [00_ドキュメント規約/README.md, 21_画面の原則.md, 32_調�
 | デザインの静的検査 | `designcheck` CLI（`../Designer/CLAUDE.md`） |
 | 公開前チェック | `python tools/docs/lint_secrets.py` |
 | ドキュメント規約の検査 | `python tools/docs/lint_docs.py` |
-| SQL・DDL テストの強さを測る | [qa/05_観点網羅の計器（計画）](qa/05_観点網羅の計器.md) |
+| SQL・DDL テストの強さを測る | [qa/05_観点網羅の計器（計画）](qa/05_観点網羅の計器.md)。**入っているのは制約ノックアウトだけ**（[ADR-0053](decisions/0053-制約ノックアウトはDDLを1つずつ外し振る舞いのテストだけで赤になるかを見る.md)。**Claude の判断で、開発者は未承認**） |
 | デプロイして実機で確認する | [31_検証のルール](31_検証のルール.md) → `pwsh -NoProfile -File tools/clb/deploy.ps1` → [tools/README](../tools/README.md) |
 
 ## 3. 説明する

@@ -43,6 +43,7 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
         "BusinessApp.AccountingCore.Server",
         "BusinessApp.AccountingCore.Server.Tests",
         "BusinessApp.AccountingCore.Tests",
+        "BusinessApp.KnockoutCli",
         "BusinessApp.Partners",
         "BusinessApp.Partners.Server",
         "BusinessApp.Partners.Server.Tests",
