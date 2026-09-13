@@ -58,9 +58,9 @@ $modulesRoot = Join-Path $repoRoot 'Designer' 'Design' 'Modules'
 # **モジュールを足したら、ここにも行を足す。** 表に無いモジュールは
 # 「点 1 以上・生き残り 0」で判定するので、**足した日に必ず赤くなる**。
 $ratchet = @{
-    'GeneralLedger'           = @{ Points = 93; MaxSurvivors = 18 }
+    'GeneralLedger'           = @{ Points = 93; MaxSurvivors = 5 }
     'JournalBook'             = @{ Points = 81; MaxSurvivors = 4 }
-    'JournalEntryList'        = @{ Points = 80; MaxSurvivors = 56 }
+    'JournalEntryList'        = @{ Points = 80; MaxSurvivors = 4 }
     'PartnerRegistrationList' = @{ Points = 22; MaxSurvivors = 3 }
 }
 
