@@ -99,6 +99,11 @@ public static class SchemaKnockout
             ["MasterCodeGuardTests.形の規則もトリガと関門で一致する"] = "トリガの WHEN 節を読む",
             ["JournalDescriptionGuardTests.トリガが空とみなす字は_char_IsWhiteSpace_と過不足なく一致する"] =
                 "トリガの定義文を読む",
+            ["DateFormatGuardTests.日付の列を持つ表すべてに追加と更新のトリガがある"] =
+                "date_format のトリガ 10 本の名前の実在を表明する",
+            ["DateFormatGuardTests.DATEで宣言した列は1つ残らず見張られている"] =
+                "トリガの定義文から date(NEW.…) の列名を拾う",
+            ["DateFormatGuardTests.条件はどこも同じ字である"] = "トリガの定義文を読む",
         };
 
     /// <summary>

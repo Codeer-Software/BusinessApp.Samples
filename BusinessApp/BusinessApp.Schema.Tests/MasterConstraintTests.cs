@@ -309,30 +309,12 @@ public class MasterConstraintTests
 
     // ---- partner_invoice_registrations ----
 
-    /// <summary><b>同じ取引先・同じ登録番号・同じ開始日の登録は 2 つ持てない。</b></summary>
-    /// <remarks>
-    /// <para><b>開始日は日付として読めない値にしてある。</b> ISO の日付だと
-    /// <c>ux_partner_invoice_registrations_valid_from</c>（<c>(partner_id, date(valid_from))</c>）が
-    /// <b>先に拒むので、表の <c>UNIQUE</c> には届かない</b>——名前が主張することを検査できない
-    /// （2026-09-13。qa/03 の L-45 と同じ形）。</para>
-    /// <para><b>この検体が通ること自体が、守りの穴を示している。</b>
-    /// <c>date('20260401')</c> は NULL で、<b>一意索引は NULL 同士を別物として扱う</b>ので、
-    /// 日付として読めない値では**式索引も期間の重なりのトリガも効かない**。
-    /// 塞ぎ方は <c>Designer/ddl/README.md</c> の保留リストに置いた——
-    /// <b>塞いだ日には、この検体も書き換わる</b>。</para>
-    /// </remarks>
-    [Fact]
-    public void 登録は取引先と登録番号と開始日の組を重複できない()
-    {
-        using var db = SchemaSeed.Create();
-        TestDatabase.Execute(db,
-            "INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from) VALUES (1, 'T1234567890123', '20260401');");
-
-        Rejected.ByUnique(
-            db,
-            "INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from) VALUES (1, 'T1234567890123', '20260401');",
-            "partner_invoice_registrations.partner_id, partner_invoice_registrations.registration_no");
-    }
+    // **表の `UNIQUE (partner_id, registration_no, valid_from)` を撃つ検体は書けない。**
+    // 2026-09-14 に日付の守り（011_date_format）が入り、**開始日が ISO の年月日に揃った**ので、
+    // **表の UNIQUE が拒む組はすべて ux_partner_invoice_registrations_valid_from も拒む**
+    // （同じ valid_from なら同じ date(valid_from)）。**それまでは `'20260401'` のような
+    // 日付として読めない値だけが表の UNIQUE に届いていた**が、その値はもう入らない。
+    // 表の UNIQUE は**論理的に冗長**になり、制約ノックアウトでは殺せない（qa/02 のラウンド 89）。
 
     /// <summary>
     /// <b>同じ取引先で同じ開始日の登録は、番号が違っても 2 つ持てない</b>
