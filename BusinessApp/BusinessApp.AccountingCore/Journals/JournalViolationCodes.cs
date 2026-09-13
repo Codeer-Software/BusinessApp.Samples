@@ -132,7 +132,7 @@ public static class JournalViolationCodes
     public const string SubAccountNotAllowed = "E-SUBACCOUNT-NOT-ALLOWED";
 
     /// <summary>
-    /// 取引先を要する科目なのに、伝票にも明細にも取引先が無い（docs/10 §6-2）。
+    /// 取引先を要する科目なのに、伝票にも明細にも取引先が無い（docs/15 §1-2）。
     /// </summary>
     /// <remarks>
     /// <b>相手方を欠いた行は「相手方別」のどの帳簿にも載らない</b>——売掛金・買掛金は
@@ -144,7 +144,7 @@ public static class JournalViolationCodes
     /// <summary>取引先が取引先マスタに無い。</summary>
     public const string PartnerUnknown = "E-PARTNER-UNKNOWN";
 
-    /// <summary>無効にした取引先を新たな計上に使おうとした（科目・補助科目・部門と同じ形。docs/10 §6-3）。</summary>
+    /// <summary>無効にした取引先を新たな計上に使おうとした（科目・補助科目・部門と同じ形。docs/15 §1-3）。</summary>
     public const string PartnerInactive = "E-PARTNER-INACTIVE";
 
     /// <summary>部門がマスタに無い。</summary>

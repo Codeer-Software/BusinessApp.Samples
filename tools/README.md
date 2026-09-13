@@ -3,7 +3,7 @@ title: tools — 開発スクリプト
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-09-08
+updated: 2026-09-13
 supersedes: []
 related: [../docs/README.md]
 ---
@@ -31,7 +31,7 @@ related: [../docs/README.md]
 | [`clb/lint_design.py`](clb/lint_design.py) | **CLB デザインの静的検査**。`designcheck` が緑でも壊れるもの（[qa/01](../docs/qa/01_CLB静かな失敗.md)）のうち JSON とスクリプトで判るものを検出する。`--selftest` で**検査そのものを検査する**（関門を殺す・error を warn に格下げする・`main()` の配線を消す・検体を空にする・**言うべき直し方を薄める**、の 5 通りで鳴ることを確かめてある） |
 | [`clb/scaffold_module.py`](clb/scaffold_module.py) | モジュール定義の足場作り。生成後は `Design/Modules/*.mod.json` が正典 |
 | [`git-hooks/pre-commit`](git-hooks/pre-commit) | コミット前の検証。`git config core.hooksPath tools/git-hooks` で有効にする |
-| [`docs/lint_docs.py`](docs/lint_docs.py) | **ドキュメント規約の検査**（[docs/00 §6](../docs/00_ドキュメント規約/README.md)）。フロントマター・リンク切れ・索引の突合・**current でない文書へのコード参照**・**`current` の本文から `superseded` へのリンク**・**節への参照の指し先に節が実在するか**・**`updated:` の鮮度**（作業ツリーと履歴の両方）・**条項を [80 §3](../docs/80_参照法令一覧.md) の記法で書いているか**・**日付で発効する条番号の切替が残っていないか**（30 日前までは件数を印字するだけ、30 日前から warn、発効日以後は error。[ADR-0043](../docs/decisions/0043-日付で発効する条番号の切替を機械の関門に置き除外は行の印で表す.md)）。`--selftest` で検査そのものを検査する |
+| [`docs/lint_docs.py`](docs/lint_docs.py) | **ドキュメント規約の検査**（[docs/00 §6](../docs/00_ドキュメント規約/README.md)）。フロントマター・リンク切れ・索引の突合・**current でない文書へのコード参照**・**`current` の本文から `superseded` へのリンク**・**節への参照の指し先に節が実在するか**・**リンクの札と行き先の文書番号が一致するか**・**`updated:` の鮮度**（作業ツリーと履歴の両方）・**条項を [80 §3](../docs/80_参照法令一覧.md) の記法で書いているか**・**日付で発効する条番号の切替が残っていないか**（30 日前までは件数を印字するだけ、30 日前から warn、発効日以後は error。[ADR-0043](../docs/decisions/0043-日付で発効する条番号の切替を機械の関門に置き除外は行の印で表す.md)）。`--selftest` で検査そのものを検査する |
 | [`docs/doclint/`](docs/doclint/__init__.py) | 上の中身。`model.py`（設定値・`Doc`・git・読み込み）／`checks.py`（検査の本数は数えない。**正典は `ALL_CHECKS`** で、`selftest.py` が突合する）／`selftest.py`（関門の検査）。**入口は `lint_docs.py` のまま** |
 | [`docs/lint_secrets.py`](docs/lint_secrets.py) | **公開リポジトリ向けの混入検査**。追跡ファイルに絶対パス・ユーザー名・接続文字列・API キー・秘密鍵が無いかを検査する |
 | [`docs/lint_secrets_allow.txt`](docs/lint_secrets_allow.txt) | 上記の誤検知抑制リスト |
@@ -52,9 +52,14 @@ Python の依存が恒常的に増えてきたら、そのとき `pyproject.toml
 ## よく使うコマンド
 
 ```powershell
-# 消す（ごみ箱へ送る。rm は使わない。docs/30 §10）
+# 消す（ごみ箱へ送る。rm は使わない。docs/30 §10）。複数指定・ワイルドカード可
 pwsh -NoProfile -File tools/claude/trash.ps1 <パス> [<パス> ...]
-pwsh -NoProfile -File tools/claude/trash.ps1 -DryRun <パス>
+pwsh -NoProfile -File tools/claude/trash.ps1 -DryRun <パス>        # 何が消えるかだけ見る
+
+# 稼働 DB を退避する・戻す・一覧する（docs/30 §10）
+pwsh -NoProfile -File tools/clb/db_snapshot.ps1 -Save -Name <名前>     # 省略すると snapshot_<日時>
+pwsh -NoProfile -File tools/clb/db_snapshot.ps1 -Restore -Name <名前>  # サーバを止めてから
+pwsh -NoProfile -File tools/clb/db_snapshot.ps1 -List
 
 # デザインを稼働サーバへ反映（designcheck を通してから実行する）
 pwsh -NoProfile -File tools/clb/deploy.ps1
@@ -78,6 +83,18 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -Query "SELECT COUNT(*) FROM accounts;"
 pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 ```
 
+**ごみ箱と退避の扱い**（いつ使ってよいか・何を守るかの規則は [docs/30 §10](../docs/30_作業のルール.md)）。
+
+- **ごみ箱から戻すのはエクスプローラで行う。** `trash.ps1` に復元機能は無い
+- **`-Name` は半角英数で始まる 64 文字以内**（`[0-9A-Za-z][0-9A-Za-z._-]*`）。日本語・空白・`/` は断る。
+  **同名の退避があれば上書きせず断る**
+- **`db_snapshot.ps1` はパスを受け取る引数を持たない。** だから関門は、この道具への言及では
+  保護対象の名前を探さない（[ADR-0046](../docs/decisions/0046-稼働DBの退避と復元を戻せる道具に閉じる.md) の決定 7）——
+  `-Name` に保護対象と同じ字を書いても確認は出ない
+- **`-Restore` はサーバを止めてから**（道具が断る）。**どのみち戻したあとはサーバとデザイナの再起動が要る**——
+  CLB は列定義を static にキャッシュするため
+- **戻したら `migrate.ps1 -Verify` を打つ。** 古い退避を戻すとスキーマが巻き戻り、適用済みの記録と食い違う
+
 **コミット前フックが 8 段を自動で流す**（`tools/git-hooks/pre-commit`。段の正典はこの表）。
 
 | 段 | 中身 |
@@ -86,7 +103,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 | 2 | 失うことを止める道具 3 つの自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる） |
 | 3 | `lint_secrets.py`（秘密・絶対パスの混入） |
 | 4 | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
-| 5 | `lint_design.py`（CLB デザインの静的検査） |
+| 5 | `lint_design.py --selftest` → `lint_design.py`（CLB デザインの静的検査） |
 | 6 | `dotnet test`（テスト・カバレッジ・スキーマ） |
 | 7 | `migrate.ps1 -Verify`（稼働 DB とスキーマ正典の同値。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
 | 8 | `dotnet stryker`（ミューテーション。**5 プロジェクト**——会計コアの純粋層とサーバ層、取引先部品の純粋層とサーバ層、共有インフラ。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)・[ADR-0025 §6](../docs/decisions/0025-取引先を部品として分ける.md)） |

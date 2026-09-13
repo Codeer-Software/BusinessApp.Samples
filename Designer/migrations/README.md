@@ -3,7 +3,7 @@ title: migrations — 既存 DB への配達物
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-09-10
+updated: 2026-09-13
 supersedes: []
 related: [../ddl/README.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---
@@ -20,6 +20,11 @@ pwsh -NoProfile -File tools/clb/migrate.ps1 -Verify   # 稼働 DB と ddl/ の�
 ```
 
 適用後は**サーバとデザイナの再起動が要る**（列定義が static にキャッシュされるため）。
+
+
+**適用済みのファイルに書いてある文書の節番号は、当時のものである**（[docs/00 §4-12-1](../../docs/00_ドキュメント規約/本文.md) の
+「鳴らないもの 3」）。凍結してあるので直せないし、**直さないのが正しい**——
+いまの節を知りたいときは [docs/README](../../docs/README.md) から引く。
 
 ## スキーマを変えるときの手順
 

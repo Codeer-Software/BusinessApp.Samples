@@ -180,7 +180,7 @@ REQUIRED_EXEMPTIONS = {
                                           "1.3.20 では NOT NULL のまま明細の追加も計上も通っている（実測。"
                                           "H-02 は前回プロジェクト由来の未確認）",
     ("JournalLine", "line_no"): "行番号は親の画面が自動で採る",
-    ("PartnerInvoiceRegistration", "partner_id"): "URL の ?partner で決まり、画面は表示だけ（13 §3-4）",
+    ("PartnerInvoiceRegistration", "partner_id"): "URL の ?partner で決まり、画面は表示だけ（14 §4）",
 }
 
 
@@ -196,7 +196,7 @@ MARK_WITHOUT_REQUIRED = {
     ("TaxCategory", "RateKind"):
         "税率区分は課税区分が課税売上・課税仕入のときだけ必須（docs/11 §1。関門 MasterSubmitGate）",
     ("JournalEntry", "Partner"):
-        "伝票の取引先は「取引先を要する」科目の明細があるときだけ、計上に必須（docs/10 §6-2。計上の関門）",
+        "伝票の取引先は「取引先を要する」科目の明細があるときだけ、計上に必須（docs/15 §1-2。計上の関門）",
 }
 
 
@@ -733,7 +733,7 @@ def check_child_detail_screens(modules, frames, scripts, findings):
     保存は DB に拒まれ、**生の SQLite の文言がトーストに出る**（qa/01 F-16）。
 
     **登録そのものは禁じない。** `PartnerInvoiceRegistration` は 2026-09-02 に
-    正面の到達先へ昇格し、URL の `?partner=` から親 FK を入れている（13 §3-4）。
+    正面の到達先へ昇格し、URL の `?partner=` から親 FK を入れている（14 §4）。
     **要求するのは「親 FK に値が入る経路があること」**だけである。
 
     **新規作成できる子だけを見る。** 親の詳細に埋め込んだクエリモジュール

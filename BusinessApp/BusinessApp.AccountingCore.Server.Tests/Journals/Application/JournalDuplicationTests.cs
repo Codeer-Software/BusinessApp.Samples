@@ -146,7 +146,7 @@ public class JournalDuplicationTests
     /// 本文の無い訂正の摘要は、引き継ぐものが無いので<b>空</b>になる。
     /// </summary>
     /// <remarks>
-    /// <b>空文字ではなく NULL</b>（docs/10 §4-4）。<b>計上には摘要が要る</b>ので、
+    /// <b>空文字ではなく NULL</b>（docs/20 §7）。<b>計上には摘要が要る</b>ので、
     /// 利用者はここで何の取引かを書くことになる——それが正しい。
     /// </remarks>
     [Fact]

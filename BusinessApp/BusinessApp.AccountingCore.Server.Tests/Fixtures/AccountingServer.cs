@@ -311,7 +311,7 @@ internal sealed class AccountingServer : IDisposable
         return new JournalEntryId(Scalar<long>("select last_insert_rowid()"));
     }
 
-    /// <summary>SQL の文字列リテラル。<b>null は NULL に落とす</b>（空文字にしない。docs/10 §4-4）。</summary>
+    /// <summary>SQL の文字列リテラル。<b>null は NULL に落とす</b>（空文字にしない。docs/20 §7）。</summary>
     private static string TextLiteral(string? value)
         => value is null ? "null" : $"'{value.Replace("'", "''", StringComparison.Ordinal)}'";
 
@@ -543,7 +543,7 @@ internal sealed class AccountingServer : IDisposable
     }
 
     /// <summary>
-    /// <b>取引先を要する科目に取引先の無い計上済みの伝票</b>を 1 件作る（docs/10 §6-2）。
+    /// <b>取引先を要する科目に取引先の無い計上済みの伝票</b>を 1 件作る（docs/15 §1-2）。
     /// </summary>
     /// <remarks>
     /// <b>いまの製品では作れない形である。</b> 規則より前に計上された行が稼働 DB に実在し

@@ -26,6 +26,7 @@ ALL_CHECKS = (
     "check_adr_ledger", "check_docs_index", "check_code_references",
     "check_section_references", "check_updated_freshness", "check_updated_history",
     "check_article_notation", "check_dated_switches", "check_law_abbreviations",
+    "check_link_label_targets",
 )
 
 
@@ -358,6 +359,70 @@ def section_refs(rel, line, docs_entries=()):
         target = docs_num_target(m.group(1), docs_entries)
         out.append((target or "docs/" + m.group(1), [m.group(2)]))
     return out
+
+
+# --- リンクの札と行き先の文書番号（00 §4-12-1 の「鳴らないもの 1」） ---
+# 札に `13 §4` と書いてあるのに行き先が別の文書、という形を捕まえる。
+# **節を別の文書へ出した回に必ず出る**——番号だけ置換して URL を直し忘れると、
+# 指し先の文書に**その節が実在してしまう**ので `check_section_references` は緑のまま通り、
+# 読者だけが別の内容に着地する（2026-09-13 に 3 本出た。qa/02 のラウンド 86）。
+LABEL_DOC_NUMBER = re.compile(r"^(?:docs/)?([0-9]{2})(?=[ _\]]|$)")
+LINKS_WITH_LABEL = re.compile(r"\[([^\]]+)\]\(([^)#]+?)(?:#[^)]*)?\)")
+
+
+def check_link_label_targets(docs: List[Doc], findings: List[Finding]) -> None:
+    """リンクの**札に書いた文書番号**と、**行き先のファイル名の番号**が一致するかを見る。
+
+    `check_links`（ファイルの実在）も `check_section_references`（節の実在）も、
+    **札と行き先がちぐはぐな形は通してしまう**。[00 §4-12-1](../../docs/00_ドキュメント規約/本文.md) が
+    「鳴らないもの 1」と名指ししていた穴で、**節を別の文書へ出す回に必ず出る**。
+
+    見るのは「札が文書番号で始まるリンク」だけである（`[13 §4](…)` `[docs/14 §4](…)`
+    `[15_記帳の枠組み](…)`）。行き先が `docs/NN_….md` に解決できないものは見ない
+    ——番号で引く作りではない文書を巻き込まないため。
+    歴史として食い違わせる行には lint-docs:ignore を書く。
+    """
+    for rel in run_git(["ls-files"]):
+        rel_posix = rel.replace(os.sep, "/")
+        if not rel_posix.endswith(CODE_EXTENSIONS + (".md",)):
+            continue
+        if excluded_from_code_check(rel_posix):
+            continue
+        try:
+            with open(os.path.join(REPO_ROOT, rel), "r", encoding="utf-8", errors="replace") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            continue
+        for i, line in enumerate(lines):
+            if INLINE_IGNORE in line:
+                continue
+            for label, target in LINKS_WITH_LABEL.findall(line):
+                pair = link_label_mismatch(rel_posix, label, target)
+                if pair is None:
+                    continue
+                findings.append((SEV_ERROR, rel_posix,
+                                 "{}行目: 札は {} なのに行き先は {} です"
+                                 "（節を別の文書へ出した取り残し。札か行き先を直すか、"
+                                 "歴史として要る行に {} を書く）"
+                                 .format(i + 1, pair[0], pair[1], INLINE_IGNORE)))
+
+
+def link_label_mismatch(from_rel: str, label: str, target: str):
+    """札の文書番号と行き先の文書番号が食い違っていれば `(札, 行き先)` を返す。
+
+    **判定だけを切り出してある**（`--selftest` がここを直に叩く）。
+    見ないもの——札が文書番号で始まらない／外部 URL／行き先が `docs/NN_….md` でない。
+    """
+    m = LABEL_DOC_NUMBER.match(label.strip().lstrip("`"))
+    if m is None or target.strip().startswith(("http", "mailto:", "#")):
+        return None
+    resolved = resolve(Doc(from_rel, [], {}, 0), target.strip())
+    if not resolved.startswith("docs/"):
+        return None
+    dest = re.match(r"([0-9]{2})_", os.path.basename(resolved))
+    if dest is None or dest.group(1) == m.group(1):
+        return None
+    return m.group(1), dest.group(1)
 
 
 def check_section_references(docs: List[Doc], findings: List[Finding]) -> None:

@@ -806,7 +806,7 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// （2026-09-02 の自己レビュー）。<c>date.ToString("yyyy年M月d日")</c> は
     /// 利用者に見せる文言なのに、補間ではないので当たらなかった。
     /// <b>第 2 引数に <see cref="System.Globalization.CultureInfo"/> を渡した形は機械に渡す値</b>
-    /// （SQL・CSV）なので、そちらは対象外にする——docs/21 §2-5 が決めた書き分けそのものである。
+    /// （SQL・CSV）なので、そちらは対象外にする——docs/20 §6 が決めた書き分けそのものである。
     /// </remarks>
     private static IEnumerable<SyntaxNode> CultureLessDateFormats(SyntaxNode root)
         => root.DescendantNodes()

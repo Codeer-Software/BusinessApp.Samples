@@ -692,11 +692,42 @@ def _check_dated_switch_forms() -> List[str]:
     return ng
 
 
+def _check_link_label_forms() -> List[str]:
+    """札と行き先の文書番号の突き合わせ（`check_link_label_targets`）を、当たる形と当たらない形で表明する。
+
+    **この検査は 2026-09-13 に足した**——節を別の文書へ出した回に、札だけ新番号へ直して
+    行き先を残した形が 3 本出た（qa/02 のラウンド 86）。指し先の文書にその節が実在してしまうので、
+    `check_section_references` は緑のまま通る。**規約を壊す最短の書き方を検体に持つ。**
+    """
+    ng = []
+    cases = [
+        # (元の文書, 札, 行き先, 鳴るか)
+        ("docs/a.md", "15 §1-2", "10_会計ドメイン設計.md", True),
+        ("docs/a.md", "docs/14 §4", "13_取引先設計.md", True),
+        ("Designer/seed/README.md", "docs/15 §4-1", "../../docs/10_会計ドメイン設計.md", True),
+        ("docs/a.md", "15_記帳の枠組み", "10_会計ドメイン設計.md", True),
+        ("docs/a.md", "`13 §4`", "10_会計ドメイン設計.md", True),
+        # 当たってはいけない形
+        ("docs/a.md", "15 §1-2", "15_記帳の枠組み.md", False),
+        ("docs/a.md", "ADR-0013", "decisions/0013-x.md", False),
+        ("docs/a.md", "取引先の設計", "13_取引先設計.md", False),
+        ("docs/a.md", "13 §4", "https://example.com/13", False),
+        ("docs/a.md", "80 §3", "../tools/README.md", False),
+    ]
+    for from_rel, label, target, want in cases:
+        got = checks.link_label_mismatch(from_rel, label, target) is not None
+        if got != want:
+            ng.append("check_link_label_targets: [{}]({}) は {} はず".format(
+                label, target, "鳴る" if want else "鳴らない"))
+    return ng
+
+
 def selftest() -> int:
     ng: List[str] = []
     for part in (_check_updated_violation, _check_superseded_links, _check_other_checks,
                  _check_section_ref_forms, _check_article_notation_forms, _check_dated_switch_forms,
-                 _check_law_abbreviation_forms, _check_real_data, _check_wiring):
+                 _check_law_abbreviation_forms, _check_link_label_forms,
+                 _check_real_data, _check_wiring):
         ng.extend(part())
     for msg in ng:
         print("NG  " + msg)

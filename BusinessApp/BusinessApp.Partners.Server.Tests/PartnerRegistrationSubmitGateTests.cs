@@ -8,10 +8,10 @@ using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
 
 /// <summary>
-/// 登録を保存するときの関門（docs/13 §3-2）。
+/// 登録を保存するときの関門（docs/14 §2）。
 /// </summary>
 /// <remarks>
-/// <b>止めるのは docs/13 §3-5 の不変条件（書式・付け替え・二重登録・期間・削除・取引先の実在）</b>。
+/// <b>止めるのは docs/14 §5 の不変条件（書式・付け替え・二重登録・期間・削除・取引先の実在）</b>。
 /// ここを通った番号は、計上のときにそのまま明細へ焼き込まれる（計上済みは不変）。
 /// </remarks>
 public class PartnerRegistrationSubmitGateTests
@@ -385,7 +385,7 @@ public class PartnerRegistrationSubmitGateTests
         Assert.True(save.Called);
     }
 
-    // --- 同じ保存の中の二重登録（登録の入力を取引先の詳細に置いたので実際に起こる。docs/13 §3-4）---
+    // --- 同じ保存の中の二重登録（登録の入力を取引先の詳細に置いたので実際に起こる。docs/14 §4）---
 
     /// <summary>
     /// <b>同じ保存に、同じ取引先の同じ日から始まる登録が 2 件</b>。どちらも DB にまだ無い。
@@ -453,7 +453,7 @@ public class PartnerRegistrationSubmitGateTests
     }
 
     /// <summary>同じ相手でも、始まる日が違えば通す（登録 → 取消 → 再登録の履歴）。</summary>
-    /// <remarks>先の登録は閉じておく——終わりのない行のあとに行は作れない（docs/13 §3-5 R-I5）。</remarks>
+    /// <remarks>先の登録は閉じておく——終わりのない行のあとに行は作れない（docs/14 §5 R-I5）。</remarks>
     [Fact]
     public async Task 同じ相手でも始まる日が違えば通す()
     {
@@ -519,7 +519,7 @@ public class PartnerRegistrationSubmitGateTests
         Assert.False(save.Called);
     }
 
-    // --- 取引先の付け替え（docs/13 §3-4）---
+    // --- 取引先の付け替え（docs/14 §4）---
 
     /// <summary>
     /// <b>既にある登録の取引先を、別の相手へ付け替える保存を止める。</b>
@@ -725,10 +725,10 @@ public class PartnerRegistrationSubmitGateTests
     /// <b>この保存で日付が動く行は、保存済みの値で数えない。</b>
     /// </remarks>
     /// <remarks>
-    /// <para>期間ごと入れ替える——登録年月日だけ入れ替えると期間が壊れる（docs/13 §3-5 R-I2）。</para>
+    /// <para>期間ごと入れ替える——登録年月日だけ入れ替えると期間が壊れる（docs/14 §5 R-I2）。</para>
     /// <para><b>ここで表明しているのは関門の判定（最終状態が正しければ通す）だけ</b>である。
     /// DB の一意索引・トリガは文単位で検査するので、1 回の保存で実際に入れ替えられるかは
-    /// **文の順序に依存する**（docs/13 §3-5 の帰結）。画面は 1 行ずつ保存するのでこの形は出ない。
+    /// **文の順序に依存する**（docs/14 §5 の帰結）。画面は 1 行ずつ保存するのでこの形は出ない。
     /// 複数行を 1 保存で送る取込（フェーズ 6）の設計時に、実際の保存で確かめる。</para>
     /// </remarks>
     [Fact]
@@ -749,7 +749,7 @@ public class PartnerRegistrationSubmitGateTests
         Assert.True(save.Called);
     }
 
-    // --- 期間の不変条件（docs/13 §3-5 R-I1・R-I2・R-I4・R-I5）---
+    // --- 期間の不変条件（docs/14 §5 R-I1・R-I2・R-I4・R-I5）---
 
     /// <summary>新規の行に登録年月日が無ければ、言葉で断る（DB の NOT NULL を生で見せない）。</summary>
     [Fact]
@@ -824,7 +824,7 @@ public class PartnerRegistrationSubmitGateTests
         Assert.False(save.Called);
     }
 
-    /// <summary>登録と同じ日に終わる行は通す（同日はあり得るか未確認なので許す——docs/13 §3-2）。</summary>
+    /// <summary>登録と同じ日に終わる行は通す（同日はあり得るか未確認なので許す——docs/14 §2）。</summary>
     [Fact]
     public async Task 登録と同じ日に終わる新規は通す()
     {
@@ -895,7 +895,7 @@ public class PartnerRegistrationSubmitGateTests
 
     /// <summary>
     /// <b>前の登録が終わった日に次が始まる再登録（隣接）は通す。</b>
-    /// 計上時の引き当ては「終わりの日を含み、同日は新しいほうを採る」（docs/13 §3-5）。
+    /// 計上時の引き当ては「終わりの日を含み、同日は新しいほうを採る」（docs/14 §5）。
     /// </summary>
     [Fact]
     public async Task 前の登録が終わった日に始まる再登録は通す()
@@ -1139,7 +1139,7 @@ public class PartnerRegistrationSubmitGateTests
         Assert.False(save.Called);
     }
 
-    // --- 取引先の実在（docs/13 §3-5 R-I9）と行の削除（R-I8）---
+    // --- 取引先の実在（docs/14 §5 R-I9）と行の削除（R-I8）---
 
     /// <summary>実在しない取引先への新規の行を、言葉で断る（外部キーの生エラーにしない）。</summary>
     [Fact]

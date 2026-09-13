@@ -80,7 +80,7 @@ WHERE e.status = 'posted'
        OR l.item_description LIKE
           '%' || replace(replace(replace(@p_keyword, '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
   -- 電帳通達 8-13「検索項目について記録事項がない電磁的記録を検索できる機能」。
-  -- **空文字も「無い」として扱う。** 本来は NULL の 1 通りに寄せる方針だが（docs/10 §4-4）、
+  -- **空文字も「無い」として扱う。** 本来は NULL の 1 通りに寄せる方針だが（docs/20 §7）、
   -- 画面から空文字が入る経路が塞ぎ切れていないうちは、両方を拾わないと取りこぼす。
   AND (@p_blank_field IS NULL OR @p_blank_field = ''
        OR (@p_blank_field = 'partner'

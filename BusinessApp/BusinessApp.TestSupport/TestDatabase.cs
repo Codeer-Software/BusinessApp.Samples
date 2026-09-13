@@ -128,7 +128,7 @@ public static class TestDatabase
 
         // 取引先を要する科目に取引先の無い計上済みの明細も、いまは作れない。
         // **規則より前に計上された行が稼働 DB に実在し**（件数と数え方は qa/04）、
-        // **それらを取り消せることが免除の根拠**なので、検体が要る（docs/10 §6-2）。
+        // **それらを取り消せることが免除の根拠**なので、検体が要る（docs/15 §1-2）。
         "trg_journal_entries_partner_presence_when_posted",
     ];
 

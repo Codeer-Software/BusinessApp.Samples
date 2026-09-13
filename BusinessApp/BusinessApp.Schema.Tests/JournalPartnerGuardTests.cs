@@ -5,7 +5,7 @@ using BusinessApp.TestSupport;
 using Microsoft.Data.Sqlite;
 
 /// <summary>
-/// 取引先を要する科目の明細は、取引先が無いままでは計上できない（docs/10 §6-2）。
+/// 取引先を要する科目の明細は、取引先が無いままでは計上できない（docs/15 §1-2）。
 /// </summary>
 /// <remarks>
 /// <para><b>相手方を欠いた行は「相手方別」のどの帳簿にも載らない</b>（電帳規則 5 ① の括弧書き。docs/40 §4-1）。
@@ -154,7 +154,7 @@ public class JournalPartnerGuardTests
     [Fact]
     public void 要しない科目に取引先が付いていても計上できる()
     {
-        // **片側だけの規則である**（補助科目の 2 値と違う。docs/10 §6-2）——
+        // **片側だけの規則である**（補助科目の 2 値と違う。docs/15 §1-2）——
         // 取引先は科目に属さないので、どの科目の行にも意味のある相手方がありうる。
         // **ここが赤くなったら、対称な規則を足してしまっている。**
         using var db = Draft(OtherPartner);

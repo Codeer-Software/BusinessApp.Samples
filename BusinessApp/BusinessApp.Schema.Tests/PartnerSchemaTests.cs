@@ -57,7 +57,7 @@ public class PartnerSchemaTests
     [InlineData("123456789012")]     // 12 桁
     [InlineData("12345678901234")]   // 14 桁
     [InlineData("123456789012a")]    // 数字でない
-    [InlineData("")]                 // **空文字も拒む。** 「無い」は NULL で表す（docs/10 §4-4）
+    [InlineData("")]                 // **空文字も拒む。** 「無い」は NULL で表す（docs/20 §7）
     public void 法人番号は13桁の数字でなければ書けない(string invalid)
     {
         using var db = Seeded();
@@ -186,7 +186,7 @@ public class PartnerSchemaTests
             """);
     }
 
-    // --- 期間の重なり（docs/13 §3-5 R-I4・R-I5。トリガ。2026-09-02）---
+    // --- 期間の重なり（docs/14 §5 R-I4・R-I5。トリガ。2026-09-02）---
     // 本線の関門は PartnerRegistrationSubmitGate。ここは API を迂回した経路への最後の守りが
     // 実際に書き込みを拒むことを検査する。
 
@@ -214,7 +214,7 @@ public class PartnerSchemaTests
             """));
     }
 
-    /// <summary>隣接（前の行の終わりの日＝次の行の登録年月日）は書ける（docs/13 §3-5。正常形かは未確認）。</summary>
+    /// <summary>隣接（前の行の終わりの日＝次の行の登録年月日）は書ける（docs/14 §5。正常形かは未確認）。</summary>
     [Fact]
     public void 前の登録が終わった日に始まる再登録は書ける()
     {

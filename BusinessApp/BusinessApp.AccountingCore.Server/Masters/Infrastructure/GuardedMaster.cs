@@ -18,7 +18,7 @@ namespace BusinessApp.AccountingCore.Server.Masters.Infrastructure;
 /// <param name="EntryColumn">
 /// <b>伝票（<c>journal_entries</c>）の側でもこのマスタを指す列</b>（取引先だけ）。
 /// <b>明細が空なら伝票の値が実効値になる</b>ので、明細だけを数えると
-/// 「伝票にだけ取引先を入れた計上済みの伝票」を取りこぼす（docs/10 §6-2 の実効値）。
+/// 「伝票にだけ取引先を入れた計上済みの伝票」を取りこぼす（docs/15 §1-2 の実効値）。
 /// </param>
 public sealed record GuardedMaster(
     string ModuleName,
@@ -42,7 +42,7 @@ public sealed record GuardedMaster(
 public sealed record GuardedColumn(string FieldName, string Column, string Label);
 
 /// <summary>
-/// <b>緩める向きだけを拒む列</b>（オフ → オンは通す。docs/10 §6-2）。
+/// <b>緩める向きだけを拒む列</b>（オフ → オンは通す。docs/15 §1-2）。
 /// </summary>
 /// <remarks>
 /// <para><b>「使用中は変えられない」（<see cref="GuardedMaster.Columns"/>）とは別の規則である。</b>

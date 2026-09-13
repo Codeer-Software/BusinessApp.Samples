@@ -81,7 +81,7 @@ public sealed class AccountingSubmitPipeline(
         ArgumentNullException.ThrowIfNull(transactionData);
         ArgumentNullException.ThrowIfNull(save);
 
-        // **いちばん先に、空白だけの文字の欄を NULL へ寄せる**（docs/10 §4-4）。
+        // **いちばん先に、空白だけの文字の欄を NULL へ寄せる**（docs/20 §7）。
         // 関門より後ろに置くと、関門が「触った値」と「保存されている値」を比べるときに
         // 片方が空文字・片方が NULL で「変わった」と読んでしまう。
         BlankTextNormalizer.ToNull(transactionData);

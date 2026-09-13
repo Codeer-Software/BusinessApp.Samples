@@ -14,7 +14,7 @@ using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 public class JournalPosterTests
 {
     /// <summary>
-    /// <b>無効にした取引先は、新たな計上に使えない</b>（docs/10 §6-2）。
+    /// <b>無効にした取引先は、新たな計上に使えない</b>（docs/15 §1-2）。
     /// </summary>
     /// <remarks>
     /// 本番の配線（<c>JournalPoster.Create</c>）で、計上の直前に取引先の目録が足されることを見る——

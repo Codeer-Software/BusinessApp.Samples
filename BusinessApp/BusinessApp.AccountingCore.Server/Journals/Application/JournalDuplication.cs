@@ -65,7 +65,7 @@ public static class JournalDuplication
 
             // **訂正の接頭辞は落とす**（ADR-0048 の決定 4）。写すと「伝票番号 44 の訂正」と名乗る
             // 通常の伝票ができ、**していない訂正を帳簿に書く**ことになる。
-            // **本文が空なら NULL**——空文字を残すと空値検索が取りこぼす（docs/10 §4-4）。
+            // **本文が空なら NULL**——空文字を残すと空値検索が取りこぼす（docs/20 §7）。
             // 計上には摘要が要るので、利用者はそこで何の取引かを書く（それが正しい）。
             Description = AmendmentRules.Body(original) is { Length: > 0 } body ? body : null,
             PartnerId = original.PartnerId,
@@ -101,7 +101,7 @@ public static class JournalDuplication
                     // 登録番号を引く日が取引日になる（<c>LedgerSnapshotWriter.TaxPointOf</c>）——
                     // つまり**写しても、既定の伝票では取引日に従う**。
                     // **入っている値は「取引の事実」である**——支払日で起票した未払金の決済や
-                    // 締め日基準の一括計上では、取引日と課税仕入れの日がずれる（docs/13 の保留リスト）。
+                    // 締め日基準の一括計上では、取引日と課税仕入れの日がずれる（docs/14 の保留リスト）。
                     // 落とすと同じ取引なのに課税仕入れの日が黙って変わり、
                     // **画面にこの欄が無い**ので利用者は入れ直せない（2026-09-09 の自己レビュー）。
                     TaxPoint = line.TaxPoint,

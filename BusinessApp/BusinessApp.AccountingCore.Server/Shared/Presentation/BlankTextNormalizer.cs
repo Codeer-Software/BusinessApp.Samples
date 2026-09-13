@@ -4,7 +4,7 @@ using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
 
 /// <summary>
-/// 空にした文字の欄を、空文字ではなく NULL で保存する（docs/10 §4-4）。
+/// 空にした文字の欄を、空文字ではなく NULL で保存する（docs/20 §7）。
 /// </summary>
 /// <remarks>
 /// <para><b>CLB の既定は空文字である</b>（<c>TextEditEmptyType: StringEmpty</c>。qa/01 A-11）。
@@ -15,7 +15,7 @@ using Codeer.LowCode.Blazor.Repository.Data;
 /// <b>値を消したときは効く</b>（2026-09-08 に実測）が、<c>ShouldTrimAfterEdit</c> が作る空文字は素通りする。
 /// <b>だからサーバ側で寄せる</b>——<c>InvoiceRegistrationNumber.Normalize</c> と同じ置き方である。</para>
 /// <para><b>空白だけの値も空とみなす。</b> 半角空白・全角空白・タブ・改行を落として空になるなら、
-/// 利用者は空のつもりで入れている（docs/10 §4-4 の摘要と同じ判定）。</para>
+/// 利用者は空のつもりで入れている（docs/20 §7 の摘要と同じ判定）。</para>
 /// <para><b>関門より先に走らせる。</b> 関門が「触った値」と「保存されている値」を比べるとき、
 /// 片方が空文字・片方が NULL だと「変わった」と読んでしまう。</para>
 /// <para><b>必須の欄が空のまま届く経路は、ここでは断らない。</b> 欄ごとの関門の仕事である

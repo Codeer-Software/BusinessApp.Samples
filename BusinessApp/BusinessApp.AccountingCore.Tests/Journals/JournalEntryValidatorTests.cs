@@ -340,7 +340,7 @@ public class JournalEntryValidatorTests
     [Fact]
     public void 補助科目を使わない科目の明細に補助科目は付けられない()
     {
-        // **補助科目は 2 値**（ADR-0038 §3・docs/10 §6）。
+        // **補助科目は 2 値**（ADR-0038 §3・docs/15 §1）。
         // 現金は「補助科目を使う」がオフなので、補助科目を付けたまま計上できない。
         // **この形は開発機に実在する**（規則より前に計上された明細 1 行。伝票 36）。
         var entry = SubAccountOnUnusedAccount();
@@ -430,7 +430,7 @@ public class JournalEntryValidatorTests
     [Fact]
     public void 取引先を要する科目に取引先がなければ計上できない()
     {
-        // **相手方を欠いた行は「相手方別」のどの帳簿にも載らない**（docs/40 §4-1・docs/10 §6-2）。
+        // **相手方を欠いた行は「相手方別」のどの帳簿にも載らない**（docs/40 §4-1・docs/15 §1-2）。
         var entry = ReceivableWithoutPartner();
 
         var violation = AssertViolation(JournalViolationCodes.PartnerRequired, Validate(entry));
@@ -642,7 +642,7 @@ public class JournalEntryValidatorTests
     public void 取消と訂正では無効なマスタでも止めない(EntryType entryType)
     {
         // **後からマスタを無効にしたせいで、訂正も取消もできない仕訳が帳簿に残ってはいけない**
-        // （docs/10 §6・ADR-0004）。新たな計上には使えないが、どちらも過去を打ち消す・直す操作である。
+        // （docs/15 §1・ADR-0004）。新たな計上には使えないが、どちらも過去を打ち消す・直す操作である。
         //
         // **訂正を含めるのは 2026-08-25 の自己レビューで直した。** 訂正は取消を先に計上してから
         // 再計上の下書きを開くので（ADR-0015）、ここが Error だと
@@ -864,7 +864,7 @@ public class JournalEntryValidatorTests
             () => JournalEntryValidator.ValidateForPosting(AccountingFixture.CashSale(Ordinary), null!));
     }
 
-    // --- 取引先の実在と有効（docs/10 §6-2。科目・補助科目・部門と同じ形） --------------------------
+    // --- 取引先の実在と有効（docs/15 §1-2。科目・補助科目・部門と同じ形） --------------------------
 
     /// <summary>マスタに無い取引先は、明細の行番号つきで断る。</summary>
     [Fact]
