@@ -46,6 +46,11 @@ WHERE (@p_partner_id IS NULL OR @p_partner_id = '' OR r.partner_id = @p_partner_
        OR date(r.valid_from) <= date(@p_valid_from_to))
 -- 取引先ごとに、登録の**古い順**に並べる（登録 → 取消 → 再登録の履歴がその順に読める）。
 -- **取引先コードで並べる。識別子で並べない**（代理キーは順序を持たない。qa/03 L-19）。
--- 同じ取引先に同じ日から始まる登録は 1 件だけなので（ux_partner_invoice_registrations_valid_from）、
--- この 2 つで並びは一意に決まる。
-ORDER BY p.code, date(r.valid_from)
+--
+-- **末尾の id は同着の解き方である**（順序の意味ではない。JournalEntryList と同じ作法）。
+-- 同じ取引先に同じ日から始まる登録は ux_partner_invoice_registrations_valid_from が 1 件に縛るが、
+-- **その索引は date(valid_from) が NULL の行を重複とみなさない**（一意索引は NULL 同士を別物として扱う）。
+-- いまは 011 のトリガが日付として読めない値を入口で断っているので NULL にはならないが、
+-- **並びの決定性を他の守りに預けない**——この一覧はページ送り（QueryPagingType: System）で
+-- LIMIT/OFFSET が付くので、同着があると行が重複したり落ちたりする。
+ORDER BY p.code, date(r.valid_from), r.id
