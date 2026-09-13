@@ -1,5 +1,7 @@
 namespace BusinessApp.Schema.Tests;
 
+using System.Globalization;
+
 using BusinessApp.TestSupport;
 using Microsoft.Data.Sqlite;
 
@@ -223,6 +225,12 @@ public class GeneralLedgerQueryTests
         Assert.Equal(
             [50, 1000, 3000, 100, 800],
             Run(db).Where(r => r.AccountCode == "4000").Select(r => r.RunningTotal));
+
+        // **減価償却費（費用）も同じく積み直す。** 第 18 期 500 → 第 19 期 **800 から**。
+        // **これが無いと、`IN ('revenue', 'expense')` から 'expense' を落としても誰も赤くならない。**
+        Assert.Equal(
+            [500, 800],
+            Run(db).Where(r => r.AccountCode == "5300").Select(r => r.RunningTotal));
     }
 
     /// <summary>
@@ -307,17 +315,6 @@ public class GeneralLedgerQueryTests
         // 05-20 以降だけを見ると、現金は 3,000 → 2,700 になる（1,000 は範囲外）。
         var rows = Run(db, ("@p_account_id", 1L), ("@p_transaction_date_from", "2026-05-20"));
         Assert.Equal([3000, 2700], rows.Select(r => r.RunningTotal));
-    }
-
-    [Theory]
-    [InlineData(1000, 3000, 5)]
-    [InlineData(1001, 3000, 2)]
-    [InlineData(3001, 9999, 0)]
-    public void 金額の範囲は両端を含む(long min, long max, int expected)
-    {
-        using var db = Create();
-
-        Assert.Equal(expected, Run(db, ("@p_amount_min", min), ("@p_amount_max", max)).Count);
     }
 
     [Fact]
@@ -429,6 +426,262 @@ public class GeneralLedgerQueryTests
         Assert.Empty(Run(db, ("@p_fiscal_year_id", 99L)));
     }
 
+    /// <summary>
+    /// <b>16 列すべてを、行まるごと突き合わせる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>列の取り違えは、これでしか捕まらない。</b> <c>QueryModuleTests</c> が見るのは
+    /// <b>別名だけ</b>である。<b>値が全部埋まった行と、任意の列が全部 NULL の行の 2 本</b>を見る
+    /// ——埋まった行だけだと、NULL を読む経路が一度も通らない。
+    /// </remarks>
+    [Fact]
+    public void 十六列がそれぞれの列の値を返す()
+    {
+        using var db = Create();
+
+        var rows = Run(db);
+
+        // 1 番の 1 行目: 部門も取引先も内容も摘要も入っている。
+        Assert.Equal(
+            new Row(1, 1, "1100", "現金", null, "第 18 期（2026 年度）", "2026-05-10", "normal",
+                    "売上高", null, "株式会社取引先", 1000, null, 1000, "商品 A", "5 月の売上"),
+            rows.Single(row => row.EntryNo == 1 && row.AccountCode == "1100"));
+
+        // 2 番の 3 行目（買掛金）: 部門も取引先も内容も摘要も無い。
+        Assert.Equal(
+            new Row(2, 2, "2000", "買掛金", null, "第 18 期（2026 年度）", "2026-05-20", "normal",
+                    "現金", null, null, null, 1000, 1000, null, null),
+            rows.Single(row => row.AccountCode == "2000"));
+    }
+
+    // --- 2026-09-14 に足したぶん（SQL ミューテーションの掃引が報告した 18 点を撃つ。ADR-0056）---
+
+    /// <summary>
+    /// <b>相手勘定科目は、同じ科目が複数行あっても「諸口」にしない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>判定は <c>COUNT(DISTINCT o.account_id)</c> である。
+    /// <b><c>DISTINCT</c> を落とすと、反対側に同じ科目が 2 行ある伝票で「諸口」に化ける</b>——
+    /// <b>法税規則 55 ② の法定記載事項（相手勘定科目）が誤る</b>。</para>
+    /// <para><b>いままでの検体では捕まらなかった。</b> 反対側が 2 行ある伝票はあったが、
+    /// <b>どちらも別々の科目</b>だったので <c>COUNT</c> でも <c>COUNT(DISTINCT)</c> でも 2 になる。
+    /// <b>同じ科目 2 行は DB が普通に作れる</b>（<c>UNIQUE (journal_entry_id, line_no)</c> は禁じていない）
+    /// ——部門や取引先や税区分だけが違う明細である。</para>
+    /// </remarks>
+    [Fact]
+    public void 相手勘定科目は同じ科目が二行あっても諸口にしない()
+    {
+        using var db = Create();
+        PostExtra(db, """
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (90, 1, 'debit', 1, 8000, 1);
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (90, 2, 'credit', 2, 5000, 1);
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
+                VALUES (90, 3, 'credit', 2, 2, 3000, 1);
+            """);
+
+        var borrowed = Run(db, ("@p_entry_no_min", 90L), ("@p_entry_no_max", 90L))
+            .Single(row => row.Debit == 8000);
+
+        Assert.Equal("売上高", borrowed.CounterAccountName);
+    }
+
+    /// <summary>金額の範囲は両端を含む。</summary>
+    /// <remarks>
+    /// <b>返った行を名指しで表明する</b>（qa/03 の L-46）。件数だけだと、
+    /// <b>境界を外しても別の行が入れ替わりで入って件数が一致する</b>ことがある。
+    /// </remarks>
+    [Theory]
+    [InlineData(1000L, 1000L, "1:-/1000 1:1000/- 2:-/1000")]
+    [InlineData(1001L, null, "2:-/2000 2:3000/-")]
+    [InlineData(null, 999L, "3:-/500 3:500/- 4:-/300 4:300/-")]
+    [InlineData(500L, 500L, "3:-/500 3:500/-")]
+    [InlineData(9999L, null, "")]
+    public void 金額の範囲は両端を含む(long? min, long? max, string expected)
+    {
+        using var db = Create();
+
+        Assert.Equal(expected, Lines(Run(db, ("@p_amount_min", min!), ("@p_amount_max", max!))));
+    }
+
+    /// <summary>伝票番号の範囲は両端を含む。</summary>
+    [Theory]
+    [InlineData(1L, 1L, "1:-/1000 1:1000/-")]
+    [InlineData(2L, 3L, "2:-/1000 2:-/2000 2:3000/- 3:-/500 3:500/-")]
+    [InlineData(4L, null, "4:-/300 4:300/-")]
+    [InlineData(null, 1L, "1:-/1000 1:1000/-")]
+    public void 伝票番号の範囲は両端を含み返る行まで決まる(long? min, long? max, string expected)
+    {
+        using var db = Create();
+
+        Assert.Equal(expected, Lines(Run(db, ("@p_entry_no_min", min!), ("@p_entry_no_max", max!))));
+    }
+
+    /// <summary>
+    /// <b>取引年月日の範囲は両端を含み、列にも検索値にも時刻が付いていて構わない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>2 つの向きが逆に効く。</b> 列に時刻が付いていると<b>終わりの境界</b>が落ち、
+    /// 検索値に時刻が付いていると<b>始まりの境界</b>が落ちる（ADR-0055 の実測で証明した）。
+    /// <b>4 通りの組み合わせを全部通す。</b>
+    /// </remarks>
+    [Theory]
+    [InlineData("2026-05-26", "2026-05-26", "2026-05-26")]
+    [InlineData("2026-05-26 00:00:00", "2026-05-26", "2026-05-26")]
+    [InlineData("2026-05-26", "2026-05-26 00:00:00", "2026-05-26 00:00:00")]
+    [InlineData("2026-05-26 00:00:00", "2026-05-26 00:00:00", "2026-05-26 00:00:00")]
+    public void 取引年月日は時刻が付いていても日付として比べられる(string stored, string from, string to)
+    {
+        using var db = Create();
+        PostExtra(db, """
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (90, 1, 'debit', 1, 8000, 1);
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (90, 2, 'credit', 2, 8000, 1);
+            """, transactionDate: stored);
+
+        Assert.Equal(
+            "90:-/8000 90:8000/-",
+            Lines(Run(db, ("@p_transaction_date_from", from), ("@p_transaction_date_to", to))));
+    }
+
+    /// <summary>
+    /// 検索欄が空のときは絞り込まない。<b>NULL と空文字の両方</b>で。
+    /// </summary>
+    /// <remarks>
+    /// CLB は空の検索欄を <b>NULL または空文字</b>で束縛する（_specs/QueryAndSql.md）。
+    /// <b>片方しか見ていないと、空欄のまま検索したときに 0 件になる</b>——
+    /// 画面は「該当なし」を出すので、静かな失敗になる。<b>13 本のパラメータ全部に渡す。</b>
+    /// </remarks>
+    [Fact]
+    public void 検索欄が空文字でも絞り込まない()
+    {
+        using var db = Create();
+
+        var all = Lines(Run(db));
+
+        Assert.NotEmpty(all);
+        Assert.Equal(all, Lines(Run(db, [.. Parameters.Select(name => (name, (object)string.Empty))])));
+    }
+
+    /// <summary>
+    /// <b>補助科目で絞れる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>この条件は入れた日から一度も撃たれていなかった</b>——検体に補助科目のある明細が無く、
+    /// <c>l.sub_account_id = @p</c> の枝に 1 度も入っていない（2026-09-14 の掃引）。
+    /// </remarks>
+    [Fact]
+    public void 補助科目で絞れる()
+    {
+        using var db = Create();
+        // **補助科目を使う科目を新しく作る。** 既にある科目を「使う」に変えることはできない
+        // ——**計上済みの明細が使っている科目の意味は変えられない**（ADR-0038。
+        // `trg_accounts_meaning_frozen_when_posted` が拒む）。
+        // **付ける先も「使う」科目でなければならない**
+        // （`trg_journal_entries_sub_account_presence_when_posted` の 2 本目の RAISE）。
+        TestDatabase.Execute(db, """
+            INSERT INTO accounts (code, name, category, uses_sub_account) VALUES ('1200', '当座預金', 'asset', 1);
+            INSERT INTO sub_accounts (account_id, code, name)
+                SELECT id, 'S01', '甲銀行' FROM accounts WHERE code = '1200';
+            INSERT INTO sub_accounts (account_id, code, name)
+                SELECT id, 'S02', '乙銀行' FROM accounts WHERE code = '1200';
+            """);
+        PostExtra(db, """
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, sub_account_id, amount, tax_category_id)
+                SELECT 90, 1, 'debit', a.id, s.id, 8000, 1
+                  FROM accounts a JOIN sub_accounts s ON s.account_id = a.id
+                 WHERE a.code = '1200' AND s.code = 'S01';
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (90, 2, 'credit', 2, 8000, 1);
+            """);
+
+        var first = TestDatabase.ScalarOf<long>(db, "SELECT id FROM sub_accounts WHERE code = 'S01'");
+        var second = TestDatabase.ScalarOf<long>(db, "SELECT id FROM sub_accounts WHERE code = 'S02'");
+
+        var picked = Run(db, ("@p_sub_account_id", first));
+
+        Assert.Equal("90:8000/-", Lines(picked));
+        // **絞り込めたことは、その値が画面に出ることを保証しない。**
+        // 結合の先を取り違えていれば、絞り込みは効いても名前は空で返る。
+        Assert.Equal("甲銀行", Assert.Single(picked).SubAccountName);
+        Assert.Equal(string.Empty, Lines(Run(db, ("@p_sub_account_id", second))));
+    }
+
+    /// <summary>
+    /// 計上済みの伝票を 1 本足す（伝票番号は 90 番）。
+    /// </summary>
+    /// <remarks>
+    /// <b>既存の検体を動かさない。</b> `Book` を書き換えると、
+    /// **いまある 25 本の期待値を全部読み直すことになる**。
+    /// </remarks>
+    private static void PostExtra(
+        SqliteConnection db, string lines, string transactionDate = "2026-05-25", long id = 90)
+    {
+        TestDatabase.Execute(db, $"""
+            INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+                VALUES ({id}, 1, '{transactionDate}', '2026-05-30', 'draft', 'normal', '足した伝票 {id}', '2026-05-30 10:00:00');
+            {lines.Replace("{id}", id.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)}
+            UPDATE journal_entries SET status = 'posted', entry_no = {id}, posted_at = '2026-05-30 11:00:00' WHERE id = {id};
+            """);
+    }
+
+    /// <summary>
+    /// <b>並びは日付として比べる。文字列としてではない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>DATE 列は <c>'YYYY-MM-DD'</c> でも <c>'YYYY-MM-DD 00:00:00'</c> でも入る
+    /// （011 のトリガは 5 書式を受理する）。**本番で CLB が書くのは後者**（qa/01 の A-04）。
+    /// <b>同じ日に両方の形が並ぶと、<c>date()</c> を外した瞬間に順序が入れ替わる</b>——
+    /// 文字列としては <c>'2026-06-01'</c> のほうが短いぶん前に来るからである。</para>
+    /// <para><b>検体が裸の日付だけだと、この違いは永久に見えない</b>——
+    /// 掃引は <c>ORDER BY</c> と窓の <c>date(</c> を「生き残り」と報告し、
+    /// **等価だと思い込むことになる**（2026-09-14 の自己レビュー）。</para>
+    /// </remarks>
+    [Fact]
+    public void 帳簿の並びは日付として比べる()
+    {
+        using var db = Create();
+
+        // 同じ取引日の 2 本。**時刻つきのほうが伝票番号は小さい。**
+        PostExtra(db, """
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES ({id}, 1, 'debit', 1, 91, 1);
+            """, transactionDate: "2026-06-01 00:00:00", id: 91);
+        PostExtra(db, """
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES ({id}, 1, 'debit', 1, 92, 1);
+            """, transactionDate: "2026-06-01", id: 92);
+
+        var cash = Run(db).Where(row => row.AccountCode == "1100").ToList();
+
+        // 日付として比べれば同着になり、伝票番号の小さいほうが先。
+        // 文字列で比べると、時刻の無い 92 番が先に来る。
+        Assert.Equal([1, 2, 4, 91, 92], cash.Select(row => row.EntryNo));
+
+        // **累計も同じ順で積む**（窓の ORDER BY も `date()` を通している）。
+        // 順が入れ替わると、途中の 2,791 が 2,792 になる。
+        Assert.Equal([1000, 4000, 3700, 3791, 3883], cash.Select(row => row.RunningTotal));
+    }
+
+    /// <summary>
+    /// 返った行を <c>&lt;伝票番号&gt;:&lt;借方&gt;/&lt;貸方&gt;</c> の集合にする（<b>並べ替える</b>）。
+    /// </summary>
+    /// <remarks>
+    /// <b>件数ではなく、どの行が返ったかを表明するため</b>にある（qa/03 の L-46）。
+    /// <b>並びは見ない</b>——元帳の並び（科目ごと・日付順・累計）は
+    /// <c>累計は取引日の順に積み上がる</c> などが専門に見ている。
+    /// **ここで並びまで固定すると、絞り込みのテストが並びの変更で落ちる**。
+    /// </remarks>
+    private static string Lines(IEnumerable<Row> rows)
+        => string.Join(" ", rows
+            .Select(row => $"{row.EntryNo}:{Amount(row.Debit)}/{Amount(row.Credit)}")
+            .OrderBy(text => text, StringComparer.Ordinal));
+
+    private static string Amount(long? value)
+        => value?.ToString(CultureInfo.InvariantCulture) ?? "-";
+
     // --- 実行の土台 ---
 
     private static SqliteConnection Create()
@@ -512,7 +765,19 @@ public class GeneralLedgerQueryTests
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (8, 2, 'credit', 2, 50, 1);
 
+        -- 9) **第 19 期の減価償却費。** 費用科目が年度をまたぐ行はこれが唯一で、
+        --    これが無いと `PARTITION BY` の `IN ('revenue', 'expense')` から
+        --    **'expense' を落としても誰も赤くならない**（2026-09-14 の自己レビュー）。
+        INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+            VALUES ('第 19 期の減価償却', (SELECT id FROM fiscal_years WHERE code = 'FY19'),
+                    '2027-05-25', '2027-05-25', 'draft', 'normal', '2027-05-25 10:00:00');
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (9, 1, 'debit', 6, 800, 1);
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (9, 2, 'credit', 3, 800, 1);
+
         -- 伝票番号は会計年度の中の連番（I-17）。年度が変われば 1 番から採り直す。
+        UPDATE journal_entries SET status = 'posted', entry_no = 3, posted_at = '2027-05-25 10:00:00' WHERE id = 9;
         UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2027-04-10 10:00:00' WHERE id = 6;
         UPDATE journal_entries SET status = 'posted', entry_no = 2, posted_at = '2027-04-20 10:00:00' WHERE id = 7;
         UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2025-05-10 10:00:00' WHERE id = 8;
@@ -563,22 +828,40 @@ public class GeneralLedgerQueryTests
         UPDATE journal_entries SET status = 'posted', entry_no = 7, posted_at = '2026-06-01 10:00:00' WHERE id = 8;
         """;
 
+    /// <summary>SQL が返す 16 列。<b>1 つも省かない</b>（省いた列は誰も見ていないことになる）。</summary>
+    /// <remarks>
+    /// <b>列の取り違えは、行まるごとの表明でしか捕まらない。</b>
+    /// <c>QueryModuleTests</c> が見るのは<b>別名だけ</b>なので、
+    /// <c>e.posting_date AS transaction_date</c> と書いても宣言とは一致する。
+    /// <b>とくに <c>entry_id</c> は画面のリンク先</b>（`GeneralLedger.mod.json` の
+    /// <c>IdVariable = EntryId.Value</c>）で、取り違えると<b>別の伝票が開く</b>。
+    /// </remarks>
     private sealed record Row(
-        string AccountCode, string FiscalYearLabel, int EntryNo, string? CounterAccountName,
-        long? Debit, long? Credit, long RunningTotal);
+        long EntryId, int EntryNo, string AccountCode, string AccountName, string? SubAccountName,
+        string FiscalYearLabel, string TransactionDate, string EntryType, string? CounterAccountName,
+        string? DepartmentName, string? PartnerName, long? Debit, long? Credit, long RunningTotal,
+        string? ItemDescription, string? Description);
 
     /// <summary>
     /// 元帳の SQL を<b>本物のまま</b>流す。渡さなかったパラメータは NULL（＝条件なし）。
     /// </summary>
-    private static IReadOnlyList<Row> Run(SqliteConnection db, params (string Name, object Value)[] parameters)
+    private static IReadOnlyList<Row> Run(SqliteConnection db, params (string Name, object? Value)[] parameters)
     {
+        // **知らないパラメータ名を黙って捨てない。** 綴りを誤ると
+        // **その条件が無いものとして流れ、「絞り込まれないこと」を見るテストが間違った理由で緑になる**。
+        var unknown = parameters.Select(p => p.Name).Where(name => !Parameters.Contains(name)).ToList();
+        Assert.True(
+            unknown.Count == 0,
+            $"この SQL に無いパラメータを渡している: {string.Join(" / ", unknown)}");
+
         using var command = db.CreateCommand();
         command.CommandText = TestDatabase.QuerySql("GeneralLedger");
 
         foreach (var name in Parameters)
         {
-            var (givenName, givenValue) = parameters.FirstOrDefault(p => p.Name == name);
-            command.Parameters.AddWithValue(name, givenName is null ? DBNull.Value : givenValue);
+            // **片側だけ渡す検体があるので、値が null なら「渡していない」と同じに扱う。**
+            var (_, givenValue) = parameters.FirstOrDefault(p => p.Name == name);
+            command.Parameters.AddWithValue(name, givenValue ?? DBNull.Value);
         }
 
         using var reader = command.ExecuteReader();
@@ -586,16 +869,32 @@ public class GeneralLedgerQueryTests
         while (reader.Read())
         {
             rows.Add(new Row(
-                reader.GetString(reader.GetOrdinal("account_code")),
-                reader.GetString(reader.GetOrdinal("fiscal_year_label")),
+                reader.GetInt64(reader.GetOrdinal("entry_id")),
                 reader.GetInt32(reader.GetOrdinal("entry_no")),
-                Nullable(reader, "counter_account_name") is int counter ? reader.GetString(counter) : null,
+                reader.GetString(reader.GetOrdinal("account_code")),
+                reader.GetString(reader.GetOrdinal("account_name")),
+                Text(reader, "sub_account_name"),
+                reader.GetString(reader.GetOrdinal("fiscal_year_label")),
+                reader.GetString(reader.GetOrdinal("transaction_date")),
+                reader.GetString(reader.GetOrdinal("entry_type")),
+                Text(reader, "counter_account_name"),
+                Text(reader, "department_name"),
+                Text(reader, "partner_name"),
                 Nullable(reader, "debit_amount") is int debit ? reader.GetInt64(debit) : null,
                 Nullable(reader, "credit_amount") is int credit ? reader.GetInt64(credit) : null,
-                reader.GetInt64(reader.GetOrdinal("running_total"))));
+                reader.GetInt64(reader.GetOrdinal("running_total")),
+                Text(reader, "item_description"),
+                Text(reader, "description")));
         }
 
         return rows;
+    }
+
+    private static string? Text(SqliteDataReader reader, string column)
+    {
+        var ordinal = reader.GetOrdinal(column);
+
+        return reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
     }
 
     /// <summary>値が入っている列の位置。NULL なら <c>null</c>。</summary>
