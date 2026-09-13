@@ -294,7 +294,7 @@ public class JournalSubmitGateTests
     [Fact]
     public async Task 取引先を要する科目の明細は関門が止める()
     {
-        // **関門が DDL のトリガより先に鳴ることを、通しで表明する**（docs/10 §6-2）。
+        // **関門が DDL のトリガより先に鳴ることを、通しで表明する**（docs/15 §1-2）。
         // ここが無いと、利用者に届くのは生の `SQLite Error 19` になる——
         // この製品は同じ形で 3 回踏んでいる（qa/03 L-16・L-28・L-30）。
         using var server = new AccountingServer();

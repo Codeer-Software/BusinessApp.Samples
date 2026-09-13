@@ -4,7 +4,7 @@ using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Shared;
 
 /// <summary>
-/// 検証・集計に必要な範囲の勘定科目（docs/10 §6）。
+/// 検証・集計に必要な範囲の勘定科目（docs/15 §1）。
 /// 画面表示のための属性（決算書表示区分・並び順など）はここに持ち込まない。
 /// </summary>
 /// <param name="Id">科目の識別子（DB の主キー）。</param>
@@ -12,16 +12,16 @@ using BusinessApp.AccountingCore.Shared;
 /// <param name="Name">科目名。</param>
 /// <param name="Category">科目区分。部門の要否と決算振替がこれに依存する。</param>
 /// <param name="DefaultTaxCategoryId">
-/// 入力時の初期値としての税区分。<b>値が入っていない行の穴埋めに使わない</b>（docs/10 §6）。
+/// 入力時の初期値としての税区分。<b>値が入っていない行の穴埋めに使わない</b>（docs/15 §1）。
 /// </param>
 /// <param name="UsesSubAccount">
 /// 補助科目を使う科目か。<b>2 値である</b>——使う科目では補助科目が必須で、
 /// 使わない科目は補助科目を<b>持てない</b>（ADR-0038 §3）。
 /// </param>
 /// <param name="RequiresPartner">
-/// 取引先を要する科目か（docs/10 §6-2）。
+/// 取引先を要する科目か（docs/15 §1-2）。
 /// <b>片側だけの規則である</b>——要する科目では取引先が必須だが、
-/// 要しない科目でも取引先は付けてよい（補助科目の 2 値と違う。理由は docs/10 §6-2）。
+/// 要しない科目でも取引先は付けてよい（補助科目の 2 値と違う。理由は docs/15 §1-2）。
 /// </param>
 /// <param name="IsContra">
 /// 評価勘定（控除科目）か。減価償却累計額・貸倒引当金・売上値引戻り高・期末棚卸高のように、

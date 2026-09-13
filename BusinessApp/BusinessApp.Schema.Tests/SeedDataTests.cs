@@ -168,7 +168,7 @@ public class SeedDataTests
     }
 
     /// <summary>
-    /// <b>「取引先を要する」が立っている科目</b>（docs/10 §6-2）。
+    /// <b>「取引先を要する」が立っている科目</b>（docs/15 §1-2）。
     /// </summary>
     /// <remarks>
     /// <b>この 6 行が、優良な電子帳簿の「相手方別に記載する」への当てはめの証跡そのものである</b>
@@ -251,7 +251,7 @@ public class SeedDataTests
 
     /// <summary>
     /// 個別対応方式では用途区分を取引ごとに選ぶ。既定値で埋めると
-    /// 「値は入っているが意味がない」状態を作る（docs/10 §9-1）。
+    /// 「値は入っているが意味がない」状態を作る（docs/15 §4-1）。
     /// </summary>
     [Fact]
     public void 用途区分の既定値は入れていない()
@@ -275,7 +275,7 @@ public class SeedDataTests
         }
     }
 
-    /// <summary>コードの先頭桁と科目区分が体系どおりに対応している（docs/10 §6）。</summary>
+    /// <summary>コードの先頭桁と科目区分が体系どおりに対応している（docs/15 §1）。</summary>
     [Theory]
     [InlineData("1", "asset")]
     [InlineData("2", "liability")]
@@ -330,7 +330,7 @@ public class SeedDataTests
 
     /// <summary>
     /// 判断が分かれる科目には既定税区分を入れない。既定値があると間違ったまま通ってしまう
-    /// （docs/10 §6「値が入っていない行の穴埋めに使わない」）。
+    /// （docs/15 §1「値が入っていない行の穴埋めに使わない」）。
     /// </summary>
     [Theory]
     [InlineData("4290")]  // 雑収入

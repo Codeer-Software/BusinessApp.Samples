@@ -5,7 +5,7 @@ using BusinessApp.TestSupport;
 using Microsoft.Data.Sqlite;
 
 /// <summary>
-/// 補助科目は 2 値である（ADR-0038 §3・docs/10 §6）。
+/// 補助科目は 2 値である（ADR-0038 §3・docs/15 §1）。
 /// </summary>
 /// <remarks>
 /// <para><b>使う科目では補助科目が要り、使わない科目は持てない。</b>

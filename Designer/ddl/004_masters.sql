@@ -14,7 +14,7 @@ CREATE TABLE accounts (
     category                    TEXT NOT NULL CHECK (category IN (
                                     'asset', 'liability', 'equity', 'revenue', 'expense')),
 
-    -- 決算書表示区分。科目区分とは別物で、「財務諸表のどこに並べるか」だけを表す（docs/10 §6）。
+    -- 決算書表示区分。科目区分とは別物で、「財務諸表のどこに並べるか」だけを表す（docs/15 §1）。
     statement_section           TEXT,
 
     -- 入力時の初期値。**値が入っていない行の穴埋めに使わない**（前回プロジェクトの実測で事故った）。
@@ -40,7 +40,7 @@ CREATE TABLE accounts (
     updater                     INTEGER,
     optimistic_locking          INTEGER NOT NULL DEFAULT 0,
 
-    -- 取引先を要する科目か（docs/10 §6-2）。売掛金・買掛金・売上げのように、
+    -- 取引先を要する科目か（docs/15 §1-2）。売掛金・買掛金・売上げのように、
     -- **相手方別に記載する帳簿が要る**科目では、取引先の無い行を計上させない
     -- （電帳規則 5 ① の括弧書き。docs/40 §4-1）。守るのは
     -- trg_journal_entries_partner_presence_when_posted と計上の関門（E-PARTNER-REQUIRED）。
@@ -80,7 +80,7 @@ CREATE TABLE departments (
     name                        TEXT NOT NULL,
 
     -- 「全社共通」。利用者が意図して選ぶときだけ使う枠であり、
-    -- 空欄の穴埋めには使わない（docs/10 §9-1）。
+    -- 空欄の穴埋めには使わない（docs/15 §4-1）。
     is_company_wide             INTEGER NOT NULL DEFAULT 0 CHECK (is_company_wide IN (0, 1)),
 
     is_active                   INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
@@ -172,5 +172,5 @@ BEGIN
 END;
 
 -- 適格請求書発行事業者としての登録状況はここに列で持たない。
--- 登録・取消には日付があり、1 列では「いつ時点で登録事業者だったか」を表せない（docs/13 §3-1）。
+-- 登録・取消には日付があり、1 列では「いつ時点で登録事業者だったか」を表せない（docs/14 §1）。
 -- 有効期間つきの partner_invoice_registrations は 006_partner_registrations.sql が持つ。

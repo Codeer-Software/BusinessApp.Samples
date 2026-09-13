@@ -19,7 +19,7 @@ public static class AccountingFixture
     public static readonly AccountId Cash = new(1);
     /// <summary>
     /// 貸方の相手方に使う科目。<b>「取引先を要する」がオフの科目にしてある</b>——
-    /// 買掛金は初期データで<b>オン</b>なので（docs/10 §6-2）、それを相手方に使うと
+    /// 買掛金は初期データで<b>オン</b>なので（docs/15 §1-2）、それを相手方に使うと
     /// <b>本番なら違反する伝票</b>を「通る」検体として書くことになる（qa/03 L-17 の型）。
     /// </summary>
     public static readonly AccountId OtherPayable = new(2);
@@ -31,7 +31,7 @@ public static class AccountingFixture
     /// <summary>補助科目を使うが、<b>選べる補助科目が 1 つも無い</b>科目（無効なものだけがある）。</summary>
     public static readonly AccountId CurrentAccount = new(7);
 
-    /// <summary><b>取引先を要する</b>科目（docs/10 §6-2）。</summary>
+    /// <summary><b>取引先を要する</b>科目（docs/15 §1-2）。</summary>
     public static readonly AccountId AccountsReceivable = new(8);
     public static readonly AccountId UnknownAccount = new(999);
 

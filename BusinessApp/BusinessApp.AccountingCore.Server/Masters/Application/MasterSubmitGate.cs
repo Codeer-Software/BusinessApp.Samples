@@ -175,7 +175,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             : Convert.ToString(stored["code"], CultureInfo.InvariantCulture);
     }
 
-    /// <summary>「全社共通」の部門は 1 つだけ（docs/10 §9-1）。</summary>
+    /// <summary>「全社共通」の部門は 1 つだけ（docs/15 §4-1）。</summary>
     /// <remarks>
     /// 見るのは DB に保存済みの行だけである。<b>同じ保存に「全社共通」の行を 2 つ載せる経路（取込・API）は関門では数えず、
     /// DDL の部分 UNIQUE インデックス（<c>ux_departments_company_wide</c>）が定型文で拒む</b>——画面は 1 行ずつしか保存しない。

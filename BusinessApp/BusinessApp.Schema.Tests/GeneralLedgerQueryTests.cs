@@ -11,7 +11,7 @@ using Microsoft.Data.Sqlite;
 /// 元帳が持つ計算——<b>相手勘定科目</b>（法税規則 55 ②）と<b>期間内累計</b>——は、
 /// 値を入れて数えないと合っているか分からない。どちらも間違えても例外にならず、
 /// <b>それらしい数字が静かに出る</b>（qa/03 L-15 の型）。</para>
-/// <para>とくに累計の符号は、科目区分だけで決めると評価勘定で必ず誤る（docs/10 §6）。
+/// <para>とくに累計の符号は、科目区分だけで決めると評価勘定で必ず誤る（docs/15 §1）。
 /// 4 つの組み合わせ（科目区分が借方側か × 評価勘定か）をすべて通す。</para>
 /// </remarks>
 public class GeneralLedgerQueryTests
@@ -161,7 +161,7 @@ public class GeneralLedgerQueryTests
         Assert.Equal(1000, credit.Credit);
     }
 
-    // --- 期間内累計（docs/10 §6 の通常残高）---
+    // --- 期間内累計（docs/15 §1 の通常残高）---
 
     /// <summary>
     /// <b>累計は科目ごとに積み上がる。</b> 科目で区切らずに積むと、

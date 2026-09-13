@@ -46,7 +46,7 @@ public sealed class MasterUsageStore(IDbAccessor accessor, string dataSourceName
     /// <para><b>数える単位はマスタで違う</b>（<see cref="GuardedMaster.UsageUnit"/>）。
     /// 会計コアの 4 マスタは<b>仕訳明細の行</b>を数える——明細でしか選べないからである。</para>
     /// <para><b>取引先だけは振替伝票の枚数を数える。</b> 取引先は伝票にも明細にも入り、
-    /// <b>明細が空なら伝票の値が実効値になる</b>（docs/10 §6-2）。
+    /// <b>明細が空なら伝票の値が実効値になる</b>（docs/15 §1-2）。
     /// 明細だけを数えると「伝票にだけ取引先を入れた計上済みの伝票」を取りこぼし、
     /// 行を数えると同じ伝票を何度も数えて「3 行で使われています」と言ってしまう。</para>
     /// </remarks>

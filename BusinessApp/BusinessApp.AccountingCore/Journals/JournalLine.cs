@@ -20,7 +20,7 @@ public sealed record JournalLine
 
     public SubAccountId? SubAccountId { get; init; }
 
-    /// <summary>部門。損益科目では必須（I-13）。空欄を「全社共通」で穴埋めしない（docs/10 §9-1）。</summary>
+    /// <summary>部門。損益科目では必須（I-13）。空欄を「全社共通」で穴埋めしない（docs/15 §4-1）。</summary>
     public DepartmentId? DepartmentId { get; init; }
 
     public PartnerId? PartnerId { get; init; }

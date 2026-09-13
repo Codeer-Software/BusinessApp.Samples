@@ -5,7 +5,7 @@ using Codeer.LowCode.Blazor.Repository.Data;
 using BusinessApp.AccountingCore.Server.Shared.Presentation;
 
 /// <summary>
-/// 空にした文字の欄は、空文字ではなく NULL で保存する（docs/10 §4-4）。
+/// 空にした文字の欄は、空文字ではなく NULL で保存する（docs/20 §7）。
 /// </summary>
 /// <remarks>
 /// <b>見た目は空なのに空値検索が取りこぼす</b>のを止めるための正規化である

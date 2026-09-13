@@ -96,7 +96,7 @@ public class MasterMeaningGateTests
     }
 
     /// <summary>
-    /// <b>「取引先を要する」をオフにすると差し戻される</b>（docs/10 §6-2。<b>一方通行の列</b>）。
+    /// <b>「取引先を要する」をオフにすると差し戻される</b>（docs/15 §1-2。<b>一方通行の列</b>）。
     /// </summary>
     /// <remarks>
     /// <b>止めないと、二層の守りをまとめて外せる</b>——オフにして計上し、また戻せば、
@@ -126,7 +126,7 @@ public class MasterMeaningGateTests
     /// </summary>
     /// <remarks>
     /// <b>ここが赤くなったら、規則を後から採り入れられなくしている</b>——
-    /// 立てたいのは計上済みの明細がある科目（売掛金・買掛金）である（docs/10 §6-2）。
+    /// 立てたいのは計上済みの明細がある科目（売掛金・買掛金）である（docs/15 §1-2）。
     /// </remarks>
     [Fact]
     public async Task 使用中の科目でも取引先を必須にはできる()
@@ -622,7 +622,7 @@ public class MasterMeaningGateTests
                 guarded.Groups["columns"].Value.Split(',').Select(c => c.Trim()).Order());
             Assert.Contains($"l.{master.LineColumn} = OLD.id", frozen, StringComparison.Ordinal);
 
-            // **伝票にも入る列は、伝票の側も数える**（取引先だけ。docs/10 §6-2）。
+            // **伝票にも入る列は、伝票の側も数える**（取引先だけ。docs/15 §1-2）。
             // 明細しか見ないトリガは、伝票にだけ取引先を入れた計上済みの伝票を取りこぼす
             // ——関門は数えるので、画面は断るのに DB は通す（守りが 1 層に落ちる。2026-09-09 の自己レビュー）。
             if (master.EntryColumn is string entryColumn)
@@ -630,7 +630,7 @@ public class MasterMeaningGateTests
                 Assert.Contains($"e.{entryColumn} = OLD.id", frozen, StringComparison.Ordinal);
             }
 
-            // **一方通行の列は、緩める向きだけを見る別のトリガが守る**（docs/10 §6-2）。
+            // **一方通行の列は、緩める向きだけを見る別のトリガが守る**（docs/15 §1-2）。
             // 意味の凍結のトリガに混ぜると、オンにする向きまで止まる。
             foreach (var column in master.OneWay.Select(o => o.Column))
             {
@@ -665,7 +665,7 @@ public class MasterMeaningGateTests
     /// <c>WHEN</c> 節の脱落を実際に見逃した（qa/03 L-37）。
     /// <c>MasterCodeGuardTests.トリガ12本は同じ条件を持つ</c> と同じ形で、<b>全文で突き合わせる</b>。</para>
     /// <para><b>取引先だけは外す。</b> 明細だけでなく伝票の側も数えるので、
-    /// EXISTS が 1 つ多い（docs/10 §6-2）。その差は
+    /// EXISTS が 1 つ多い（docs/15 §1-2）。その差は
     /// <see cref="関門とトリガは同じ列を守る"/> と <c>MasterMeaningGuardTests</c> の振る舞いの検体が見る。</para>
     /// </remarks>
     [Theory]
@@ -737,7 +737,7 @@ public class MasterMeaningGateTests
     }
 
     /// <summary>
-    /// <b>伝票にだけ入れた取引先も数える</b>（明細が空なら伝票の値が実効値になる。docs/10 §6-2）。
+    /// <b>伝票にだけ入れた取引先も数える</b>（明細が空なら伝票の値が実効値になる。docs/15 §1-2）。
     /// </summary>
     /// <remarks>
     /// <b>明細だけを数えると、この経路を取りこぼす。</b> 取引先は伝票にも明細にも入るので、

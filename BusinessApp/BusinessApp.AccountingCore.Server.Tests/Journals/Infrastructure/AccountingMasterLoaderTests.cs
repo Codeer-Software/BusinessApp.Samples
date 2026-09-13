@@ -105,7 +105,7 @@ public class AccountingMasterLoaderTests
         Assert.True(allowance.IsContra);
         Assert.Equal(DebitCredit.Credit, allowance.NormalBalance);
 
-        // 取引先を要するのは相手方別の帳簿が要る科目だけである（docs/10 §6-2）。
+        // 取引先を要するのは相手方別の帳簿が要る科目だけである（docs/15 §1-2）。
         Assert.False(cash.RequiresPartner);
         Assert.True(context.Accounts.Find(server.AccountOf("1300"))!.RequiresPartner);
     }
