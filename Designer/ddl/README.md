@@ -60,6 +60,8 @@ dotnet test BusinessApp.slnx
 | 007 | [`007_auth.sql`](007_auth.sql) | 利用者アカウント（**認証部品のテーブル**。本体は CLB のもので、役割の列だけを間借りする——[ADR-0032](../../docs/decisions/0032-認証部品のapp_usersを正典に迎え入れる.md)） |
 | 008 | [`008_master_code_format.sql`](008_master_code_format.sql) | **マスタのコードの書式**（6 つの表に同じ規則。docs/12 §2-1・[ADR-0047](../../docs/decisions/0047-マスタのコードは空白を落とす以外書き換えず字種で断る.md)）。**1 ファイルにまとめてあるのはトリガの作られる順のため**——表の定義の隣に置くと、既存 DB へ配る側で 005 のトリガより後になり、正典と順が食い違う |
 | 009 | [`009_partner_meaning.sql`](009_partner_meaning.sql) | **使用中の取引先はコードを変えられない**（会計コアの 4 マスタと揃える。[ADR-0047](../../docs/decisions/0047-マスタのコードは空白を落とす以外書き換えず字種で断る.md) の決定 9）。**取引先だけは伝票（`journal_entries.partner_id`）も見る**——明細が空なら伝票の値が実効値になるから |
+| 010 | [`010_natural_key_text.sql`](010_natural_key_text.sql) | **自然キーになる列に BLOB を入れさせない**（`partners.corporate_number`・`app_users.user_name`）。**BLOB は TEXT の列にそのまま残り、`'admin'` とぶつからない**——008 でコードの 6 表を塞いだのと同じ穴 |
+| 011 | [`011_date_format.sql`](011_date_format.sql) | **日付の列は年月日として読める値だけを受け取る**（5 表 12 列）。**1 ファイルにまとめてあるのは 008 と同じくトリガの作られる順のため**——`fiscal_years` は 008 にトリガを持つので 002 の末尾には置けない |
 
 各テーブルの扱い（所有・誰が編集するか・版と削除）は [docs/12_マスタ台帳](../../docs/12_マスタ台帳.md) が持つ。
 
@@ -118,6 +120,7 @@ dotnet test BusinessApp.slnx
 | 使用中の科目で「取引先を要する」をオフにできない（[15 §1-2](../../docs/15_記帳の枠組み.md)。**一方通行**。オンはいつでも通る。**使用中になるまでは働かない**——残余は 15 §1-2） | `BEFORE UPDATE OF requires_partner` のトリガ（`OLD = 1 AND NEW = 0` のときだけ鳴る） | `MasterMeaningGate` の一方通行の列 |
 | マスタのコードの書式（[docs/12 §2-1](../../docs/12_マスタ台帳.md)・[ADR-0047](../../docs/decisions/0047-マスタのコードは空白を落とす以外書き換えず字種で断る.md)） | 6 表の `BEFORE INSERT` / `BEFORE UPDATE OF code` トリガ（**`CHECK` ではない**——後から足すには表の作り直しが要る）。**大小を無視した重複は `UNIQUE ... COLLATE NOCASE` の索引** | `MasterCode`（**前後の空白を落とすのはこちらだけ**。トリガは落とした後の姿を見る） |
 | 単一法人（[ADR-0005](../../docs/decisions/0005-単一法人に徹する.md)） | `CHECK (id = 1)` | — |
+| **日付の列は年月日として読める値だけを受け取る**（5 表 12 列。[011](011_date_format.sql)） | `BEFORE INSERT` / `BEFORE UPDATE OF <列>` のトリガ（**`CHECK` ではない**——後から足すには表の作り直しが要る）。**NULL は通す** | `DbValue.ParseDateTime`（**読み出しの側**。5 書式の `TryParseExact`）。**受理する集合は両側で同じでなければならない**——DB が広いと、読んだ瞬間に落ちる行が作れる（`DateFormatGuardTests` が毎回突き合わせる） |
 
 **摘要の「空白」の範囲を、関門とトリガで同じにしてある理由は
 [10 §4-2-1](../../docs/10_会計ドメイン設計.md) が持つ**（両方向の同値は `JournalDescriptionGuardTests` が見る）。
@@ -125,6 +128,8 @@ dotnet test BusinessApp.slnx
 **トリガ・インデックスは、このファイルの末尾に足す**——マイグレーションは既存 DB の末尾に作るので、
 途中に置くと**同じ表のトリガの作られた順が正典と食い違う**（理由と守り方は
 [migrations/README](../migrations/README.md)）。
+**表が既に後ろの番号のファイルにトリガを持っているときは、この規則が「その表の定義のファイル」を禁じる側に働く**
+——そのときは **008・011 のように、規則ごと後ろの番号のファイルにまとめる**。
 
 行をまたぐ判定・マスタを引く判定は DB の `CHECK` では書けないので、`JournalEntryValidator` だけが担保する。
 
@@ -163,21 +168,12 @@ CLB の予約名 `LogicalDelete` は**どのテーブルにも置かない**。
   その筋書きを再現するテストが無い（いまの検体は 1 接続の逐次実行）。
   **道具は既にある**——`TestDatabase.Connect(existing)`（同じインメモリ DB への 2 本目の接続）は**呼び出し元が 0 件**である。
   **制約ノックアウトでは原理的に見えない**（逐次の検体でも同じ索引に当たる）。**フェーズ 3 の着手前**
-- 2026-09-13 **日付として読めない値が、日付の守りをすり抜ける**。**次にこのフォルダを触る回**（マイグレーションが 1 本要る）
-  - `date(x)` は読めない値に **NULL** を返し、**一意索引は NULL 同士を別物として扱う**——
-    `ux_partner_invoice_registrations_valid_from` は `'20260401'` のような値では**重複を止めない**（2026-09-13 実測）。
-    期間の重なりを見るトリガも、比較が全部 NULL になって鳴らない
-  - **文字列のまま比べている日付の CHECK が 3 本ある**（`002` の 2 本・`006` の 1 本）。
-    `('2026-06-30', '2026-6-1')` は辞書順で `start_date <= end_date` が真になり、**終わりが始まりより前の期間が通る**
-  - **直し方はトリガである。** SQLite は `ALTER TABLE` で `CHECK` を足せず、表の作り直しが要る——
-    一方、**日付として読めない値を入口で拒むトリガなら `CREATE TRIGGER` だけで配れる**
-    （`trg_*_code_format_*` と同じ形）。日付の列が ISO で揃えば、**文字列のままの比較も正しくなる**
-  - 当てる列: `partner_invoice_registrations.valid_from`・`.ended_on`、`accounting_periods.start_date`・`.end_date`、
-    `fiscal_years.start_date`・`.end_date`・`.premium_ledger_from`、`journal_entries.transaction_date`・`.posting_date`
-  - **CLB が書く `"2023-10-01 00:00:00"` は通る**（`date()` が読めるため）。**既存データに当たるかの確認が要る**
 
-**他の制約に包まれた冗長な制約が 8 本あり、制約ノックアウトでは永久に殺せない**
-（[ADR-0053](../../docs/decisions/0053-制約ノックアウトはDDLを1つずつ外し振る舞いのテストだけで赤になるかを見る.md)）。
-**保留にしない**——このうち 6 本（列の `UNIQUE`）は
+**他の制約に包まれた冗長な制約が 7 本あり、制約ノックアウトでは永久に殺せない**
+（[ADR-0053](../../docs/decisions/0053-制約ノックアウトはDDLを1つずつ外し振る舞いのテストだけで赤になるかを見る.md)。上限の正典は `tools/clb/knockout.ps1`）。
+**保留にしない**——**6 本（マスタのコードの列の `UNIQUE`）**は
 [008](008_master_code_format.sql) が「**外すには表の作り直しが要り、得るのは重複した制約 1 本の削除だけ**」として
-**残すと決めてある**。残る 2 本（`journal_entries.status` と `journal_lines.is_tax_line` の区分値の `CHECK`）も同じ理由である。
+**残すと決めてある**。
+**7 本目は `partner_invoice_registrations` の表の `UNIQUE (partner_id, registration_no, valid_from)`** で、
+**011 が入って日付が ISO に揃った日に包まれた**——それまでは日付として読めない値だけが
+この `UNIQUE` に届いていた（[qa/02 のラウンド 89](../../docs/qa/02_自己レビュー記録.md)）。

@@ -49,8 +49,12 @@ internal static class Rejected
         => Because(db, sql, ForeignKey, expected: null);
 
     /// <summary>トリガで拒まれること。<paramref name="message"/> は <c>RAISE(ABORT, …)</c> の文言の一部。</summary>
-    public static void ByTrigger(SqliteConnection db, string sql, string message)
-        => Because(db, sql, Trigger, message);
+    /// <param name="label">
+    /// 検体の呼び名。<b>落ちたときの説明に出る</b>——`[Theory]` の値だけだと、
+    /// 何を撃ったつもりだったのかが読み取れないことがある（`'2026-04-01' || char(0) || 'zzz'` など）。
+    /// </param>
+    public static void ByTrigger(SqliteConnection db, string sql, string message, string? label = null)
+        => Because(db, sql, Trigger, message, label);
 
     /// <summary><c>NOT NULL</c> で拒まれること。</summary>
     public static void ByNotNull(SqliteConnection db, string sql, string column)
@@ -60,17 +64,21 @@ internal static class Rejected
     public static void ByPrimaryKey(SqliteConnection db, string sql, string columns)
         => Because(db, sql, PrimaryKey, columns);
 
-    private static void Because(SqliteConnection db, string sql, int extendedErrorCode, string? expected)
+    private static void Because(
+        SqliteConnection db, string sql, int extendedErrorCode, string? expected, string? label = null)
     {
+        var what = label is null ? string.Empty : $"（{label}）";
         var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, sql));
 
         Assert.True(
             thrown.SqliteExtendedErrorCode == extendedErrorCode,
-            $"{extendedErrorCode} で拒まれるはずが {thrown.SqliteExtendedErrorCode} だった: {thrown.Message}");
+            $"{extendedErrorCode} で拒まれるはずが {thrown.SqliteExtendedErrorCode} だった{what}: {thrown.Message}");
 
         if (expected is not null)
         {
-            Assert.Contains(expected, thrown.Message, StringComparison.Ordinal);
+            Assert.True(
+                thrown.Message.Contains(expected, StringComparison.Ordinal),
+                $"断りの文言に「{expected}」が無い{what}: {thrown.Message}");
         }
     }
 }

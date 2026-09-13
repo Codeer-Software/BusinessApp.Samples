@@ -51,7 +51,7 @@ param(
     # **-Only / -Kind で絞ったときは 0 に落とす**（下で上書きする）——
     # 絞った掃引は「足したテストがその点を殺せるか」を見る用途で、
     # **全点の上限をそのまま当てると、生き残っても成功で返ってしまう**。
-    [int]$MaxSurvivors = 6
+    [int]$MaxSurvivors = 7
 )
 
 $ErrorActionPreference = 'Stop'
