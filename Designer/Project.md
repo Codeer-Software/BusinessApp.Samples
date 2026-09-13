@@ -4,9 +4,9 @@ status: current
 scope: 会計コア
 audience: [開発]
 growth: append
-updated: 2026-09-11
+updated: 2026-09-13
 supersedes: []
-related: [CLAUDE.md, ../docs/README.md, ../docs/21_画面の原則.md, ../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md]
+related: [CLAUDE.md, ../docs/README.md, ../docs/22_層と実行場所.md, ../docs/21_画面の原則.md, ../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md]
 ---
 # Project.md（CLB デザインプロジェクト固有ルール）
 
@@ -95,7 +95,9 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/21_画面の原則.md, ../docs/d
 - 損益科目の仕訳行には部門が必須（貸借科目の行は任意）
 - 税率・控除割合・閾値は**マスタ参照**。ハードコード禁止
 - **会計ロジックは CLB スクリプトに書かない。** `AccountingCore`（C#）に置く
-  （`../docs/decisions/0008-CLBとCSharpライブラリの責務分担.md`）
+  （`../docs/decisions/0008-CLBとCSharpライブラリの責務分担.md`）。
+  **どの層に何を置き、どこで実行するかの正典は [`../docs/22_層と実行場所.md`](../docs/22_層と実行場所.md)**
+  ——一覧を標準で作るかクエリモジュールにするか、サーバ処理を Web API に置くかも、そちらが持つ
 
 ## デプロイ手順
 
