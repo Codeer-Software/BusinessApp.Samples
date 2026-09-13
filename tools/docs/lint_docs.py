@@ -50,7 +50,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from doclint.checks import (Finding, check_adr_ledger, check_article_notation,  # noqa: E402
                             check_body, check_code_references, check_dated_switches,
-                            check_docs_index, check_front_matter, check_law_abbreviations, check_link_label_targets, check_links,
+                            check_docs_index, check_front_matter, check_law_abbreviations, check_link_label_targets, check_links, check_question_numbers,
                             check_section_references, check_superseded_links, check_updated_freshness,
                             check_updated_history)
 from doclint.model import REFERENCE_PREFIXES, SEV_ERROR, SEV_WARN, Doc, load_docs  # noqa: E402
@@ -115,6 +115,7 @@ def main() -> int:
     check_code_references(docs, findings)
     check_section_references(docs, findings)
     check_link_label_targets(docs, findings)
+    check_question_numbers(docs, findings)
     check_updated_freshness(docs, findings)
     check_updated_history(docs, findings)
     scanned_notation, ignored_notation = check_article_notation(docs, findings)

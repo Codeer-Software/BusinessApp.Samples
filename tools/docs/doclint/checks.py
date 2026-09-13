@@ -26,7 +26,7 @@ ALL_CHECKS = (
     "check_adr_ledger", "check_docs_index", "check_code_references",
     "check_section_references", "check_updated_freshness", "check_updated_history",
     "check_article_notation", "check_dated_switches", "check_law_abbreviations",
-    "check_link_label_targets",
+    "check_link_label_targets", "check_question_numbers",
 )
 
 
@@ -423,6 +423,64 @@ def link_label_mismatch(from_rel: str, label: str, target: str):
     if dest is None or dest.group(1) == m.group(1):
         return None
     return m.group(1), dest.group(1)
+
+
+QUESTION_DOC = "docs/05_開発者への問い.md"
+QUESTION_HEADING = re.compile(r"^##[ 	]+Q-([0-9]+)(?![0-9])", re.M)
+QUESTION_REFERENCE = re.compile(r"(旧[ 	]*)?Q-([0-9]+)(?![0-9])")
+# 閉じた番号を指してよい 2 つ。改正法の略称の外し方（00 §6）と同じ切り方である
+# ——**当時の記録**（qa/02）と**検査の検体**（tools/docs/）
+QUESTION_CHECK_EXEMPT = ("docs/qa/02_自己レビュー記録.md", "tools/docs/")
+
+
+def check_question_numbers(docs: List[Doc], findings: List[Finding]) -> None:
+    """**閉じた問い（`Q-nn`）を指したままの参照**を error にする。
+
+    [30 §11](../../docs/30_作業のルール.md) は**番号を使い回さない**と決めているので、
+    [05](../../docs/05_開発者への問い.md) に無い `Q-nn` は**必ず腐った参照**である
+    ——別の問いに着地することは無い代わりに、**どこにも着地しない**。
+    答えを反映して問いを消す回に毎回出る型で、2026-09-13 の回では 6 か所残った
+    （qa/02 のラウンド 87）。
+
+    **`旧 Q-20` のように「旧」を付けた行は当たらない**——閉じたことを述べる記述はそのまま要る。
+    丸ごと外すのは **`docs/qa/02_自己レビュー記録.md`（当時の記録）と `tools/docs/`（検査の検体）**だけ。
+    """
+    try:
+        with open(os.path.join(REPO_ROOT, QUESTION_DOC), "r", encoding="utf-8") as f:
+            defined = set(QUESTION_HEADING.findall(f.read()))
+    except OSError:
+        findings.append((SEV_ERROR, QUESTION_DOC, "問いの一覧を読めないので Q-nn の参照を検査できていない"))
+        return
+    if not defined:
+        findings.append((SEV_ERROR, QUESTION_DOC, "`## Q-nn` の見出しが 1 つも無い（**0 本は緑ではない**）"))
+        return
+
+    for rel in run_git(["ls-files"]):
+        rel_posix = rel.replace(os.sep, "/")
+        if not rel_posix.endswith(CODE_EXTENSIONS + (".md",)):
+            continue
+        if rel_posix.startswith(QUESTION_CHECK_EXEMPT) or excluded_from_code_check(rel_posix):
+            continue
+        try:
+            with open(os.path.join(REPO_ROOT, rel), "r", encoding="utf-8", errors="replace") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            continue
+        for i, line in enumerate(lines):
+            if INLINE_IGNORE in line:
+                continue
+            for num in dangling_questions(line, defined):
+                findings.append((SEV_ERROR, rel_posix,
+                                 "{}行目: Q-{} は {} に無い問いです"
+                                 "（閉じた問いは番号を使い回さない。決着した先へ張り替えるか、"
+                                 "閉じたことを述べるなら「旧 Q-{}」と書く）"
+                                 .format(i + 1, num, QUESTION_DOC, num)))
+
+
+def dangling_questions(line: str, defined) -> List[str]:
+    """行の中で、**`defined` に無い `Q-nn`** を拾う（「旧」付きは拾わない）。"""
+    return [num for old, num in QUESTION_REFERENCE.findall(line)
+            if not old and num not in defined]
 
 
 def check_section_references(docs: List[Doc], findings: List[Finding]) -> None:
