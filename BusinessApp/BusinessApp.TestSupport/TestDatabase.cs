@@ -27,20 +27,36 @@ public static class TestDatabase
     /// 別の DB になるので、同時実行（2 接続が同じ行を取り合う）を検査できない。
     /// 名前はテストごとに変えて、テスト同士が干渉しないようにする。
     /// </remarks>
-    public static SqliteConnection Create() => CreateFromFiles(DdlFiles());
+    /// <remarks>
+    /// <b>制約ノックアウトの掃引中だけ、制約を 1 つ外した DB を返す</b>（ADR-0053 決定 4）。
+    /// <see cref="SchemaKnockout.EnvironmentVariable"/> が設定されていなければ何も起きないので、
+    /// <b>通常のテストの経路に分岐は増えない</b>。
+    /// </remarks>
+    public static SqliteConnection Create()
+    {
+        var knockout = SchemaKnockout.Requested;
+        return knockout is null ? CreateFromFiles(DdlFiles()) : SchemaKnockout.CreateWithout(knockout);
+    }
 
     /// <summary>
     /// 指定した SQL ファイルを順に適用した接続を返す。マイグレーションの同値検査
     /// （baseline ＋ migrations の再生。ADR-0020）が使う。
     /// </summary>
     public static SqliteConnection CreateFromFiles(IEnumerable<string> sqlFiles)
+        => CreateFromSql(sqlFiles.Select(File.ReadAllText));
+
+    /// <summary>
+    /// 指定した SQL 本文を順に適用した接続を返す。<b>制約を 1 つ外した DDL を流すために要る</b>
+    /// （ADR-0053。ファイルに書き出さずにそのまま流す）。
+    /// </summary>
+    public static SqliteConnection CreateFromSql(IEnumerable<string> sqlTexts)
     {
         var name = $"testdb-{Guid.NewGuid():N}";
         var connection = Connect(name);
 
-        foreach (var file in sqlFiles)
+        foreach (var sql in sqlTexts)
         {
-            Execute(connection, File.ReadAllText(file));
+            Execute(connection, sql);
         }
 
         return connection;
@@ -79,6 +95,15 @@ public static class TestDatabase
         var definition = ScalarOf<string>(
             connection,
             $"SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = '{triggerName}'");
+
+        // **制約ノックアウトが同じトリガを外している回は、外れている状態で進む**（ADR-0053）。
+        // ここで投げると「検体が作れなかった赤」になり、掃引はそれを
+        // **「テストが見張っている」と数えてしまう**——決定 2 が避けたい形そのものである。
+        if (string.IsNullOrEmpty(definition) && SchemaKnockout.Requested == $"trigger:{triggerName}")
+        {
+            Execute(connection, sql);
+            return;
+        }
 
         // 名前を打ち間違えると、外れないまま静かに通ってしまう（=> 検体が作れず別の理由で落ちる）。
         if (string.IsNullOrEmpty(definition))
@@ -189,6 +214,9 @@ public static class TestDatabase
         => Directory.GetFiles(directory, "*.sql")
             .OrderBy(Path.GetFileName, StringComparer.Ordinal)
             .ToList();
+
+    /// <summary>リポジトリのルート。<b>テストのソースそのものを走査する検査</b>が使う。</summary>
+    public static string RepositoryDirectory { get; } = RepositoryRoot();
 
     public static string DdlDirectory { get; } = Path.Combine(RepositoryRoot(), "Designer", "ddl");
 

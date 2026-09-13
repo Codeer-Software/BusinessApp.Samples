@@ -3,7 +3,7 @@ title: ADR-0021 C# は読みやすさを損なわない範囲で最新の記法�
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-09-06
+updated: 2026-09-14
 supersedes: []
 related: [0012-テスト方針とカバレッジのゲート.md, 0008-CLBとCSharpライブラリの責務分担.md]
 ---
@@ -50,7 +50,7 @@ related: [0012-テスト方針とカバレッジのゲート.md, 0008-CLBとCSha
 
 ### 3. スコープ
 
-- **対象**: 自作の C#（`AccountingCore` 系・`TestSupport`・`Schema.Tests`・`SchemaVerifyCli`）。
+- **対象**: 自作の C#（`AccountingCore` 系・`TestSupport`・`Schema.Tests`・`SchemaVerifyCli`・`KnockoutCli`）。
   ここにはビルドの関門（§4-1）を敷く
 - **対象外**: **CLB スクリプト（`*.mod.cs`）**。ツリーウォーク型インタプリタが対応する
   範囲しか書けない（[ADR-0008](0008-CLBとCSharpライブラリの責務分担.md)）。新記法を持ち込まない

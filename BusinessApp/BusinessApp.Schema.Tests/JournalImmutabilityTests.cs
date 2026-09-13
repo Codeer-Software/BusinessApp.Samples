@@ -43,18 +43,52 @@ public class JournalImmutabilityTests
         Assert.Equal(0L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM journal_entries"));
     }
 
+    /// <remarks>
+    /// <b>どのトリガが鳴ったかまで表明する。</b> 例外の型だけだと、
+    /// <c>DELETE FROM journal_entries</c> は<b>トリガを外しても子明細の外部キーが代わりに拒む</b>ので、
+    /// 「見張っている」ことの証拠にならない（2026-09-14 の制約ノックアウトで生き残った。qa/03 の L-45）。
+    /// </remarks>
     [Theory]
-    [InlineData("UPDATE journal_entries SET description = '改ざん' WHERE id = 1")]
-    [InlineData("UPDATE journal_entries SET status = 'draft' WHERE id = 1")]
-    [InlineData("DELETE FROM journal_entries WHERE id = 1")]
-    [InlineData("UPDATE journal_lines SET amount = 1 WHERE journal_entry_id = 1")]
-    [InlineData("UPDATE journal_lines SET account_id = 2 WHERE journal_entry_id = 1")]
-    [InlineData("DELETE FROM journal_lines WHERE journal_entry_id = 1")]
-    public void 計上済みの仕訳は変更も削除もできない(string sql)
+    [InlineData("UPDATE journal_entries SET description = '改ざん' WHERE id = 1", "計上済みの仕訳は変更できない。")]
+    [InlineData("UPDATE journal_entries SET status = 'draft' WHERE id = 1", "計上済みの仕訳は変更できない。")]
+    [InlineData("DELETE FROM journal_entries WHERE id = 1", "計上済みの仕訳は削除できない。")]
+    // **その場の更新は「移動できない」のほうが鳴る。** どちらのトリガも WHEN が真になり
+    // （OLD も NEW も同じ計上済みの伝票）、**後に作られたほうから鳴る**（発火順は SQLite の仕様上 undefined。
+    // 実測は 2026-09-14）。**`trg_journal_lines_posted_no_update` を単独で撃つ検体は下にある。**
+    [InlineData("UPDATE journal_lines SET amount = 1 WHERE journal_entry_id = 1", "計上済みの仕訳へ明細を移動できない。")]
+    [InlineData("UPDATE journal_lines SET account_id = 2 WHERE journal_entry_id = 1", "計上済みの仕訳へ明細を移動できない。")]
+    [InlineData("DELETE FROM journal_lines WHERE journal_entry_id = 1", "計上済みの仕訳明細は削除できない。")]
+    public void 計上済みの仕訳は変更も削除もできない(string sql, string message)
     {
         using var db = SchemaSeed.CreateWithPostedEntry();
 
-        Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, sql));
+        Rejected.ByTrigger(db, sql, message);
+    }
+
+    /// <summary>
+    /// <b>計上済みの伝票から明細を引き抜けない</b>（<c>trg_journal_lines_posted_no_update</c>）。
+    /// </summary>
+    /// <remarks>
+    /// <b>このトリガを単独で撃てるのは、この形だけである。</b> その場の更新では
+    /// <c>trg_journal_lines_no_move_into_posted</c> が先に鳴って隠れてしまう（上の検体）。
+    /// <b>行き先を下書きにすると、NEW 側の WHEN が偽になり、OLD 側だけが残る。</b>
+    /// </remarks>
+    [Fact]
+    public void 計上済みの伝票から明細を下書きへ移せない()
+    {
+        using var db = SchemaSeed.CreateWithPostedEntry();
+        TestDatabase.Execute(db, """
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('6 月分の現金売上', 1, '2026-06-20', '2026-06-20', 'draft', 'normal', '2026-06-20 10:00:00');
+            """);
+
+        Rejected.ByTrigger(
+            db,
+            """
+            UPDATE journal_lines SET journal_entry_id = (SELECT MAX(id) FROM journal_entries)
+             WHERE journal_entry_id = 1 AND line_no = 1;
+            """,
+            "計上済みの仕訳明細は変更できない。");
     }
 
     [Fact]
@@ -348,4 +382,94 @@ public class JournalImmutabilityTests
         {AmendmentDraft(id, entryType, originalEntryId)}
         UPDATE journal_entries SET status = 'posted', entry_no = {entryNo}, posted_at = '2026-05-21 10:00:00' WHERE id = {id};
         """;
+
+    /// <summary>
+    /// <b>入力年月日は下書きの間も変えられない</b>（<c>trg_journal_entries_entered_at_immutable</c>）。
+    /// </summary>
+    /// <remarks>
+    /// 「通常の業務処理期間の経過後に入力した事実を確認できる」という優良な電子帳簿の要件は、
+    /// <b>この値が動かないことで初めて成り立つ</b>（根拠の条番号は DDL の注記が持つ）。
+    /// <b>2026-09-13 の制約ノックアウトの初回掃引で「誰も見張っていない」と出た</b>（qa/02 のラウンド 88）。
+    /// </remarks>
+    [Fact]
+    public void 入力年月日は下書きでも変えられない()
+    {
+        using var db = SchemaSeed.Create();
+        TestDatabase.Execute(db, SchemaSeed.Draft);
+
+        Rejected.ByTrigger(
+            db,
+            "UPDATE journal_entries SET entered_at = '2026-06-01 10:00:00' WHERE id = 1;",
+            "入力年月日は変更できない。");
+    }
+
+    /// <summary>
+    /// <b>仕訳の種別は変えられない</b>（<c>trg_journal_entries_entry_type_immutable</c>）。
+    /// </summary>
+    /// <remarks>
+    /// 変えられると、<b>通常の伝票を後から別の意味に化けさせる</b>経路ができる。
+    /// 種別を変えたいときは下書きを作り直す。
+    ///
+    /// <b>検体に <c>reversal</c> を使わない。</b> 原仕訳を伴わない <c>reversal</c> は
+    /// <c>CHECK (entry_type NOT IN ('correction', 'reversal') OR original_entry_id IS NOT NULL)</c> が
+    /// 先に弾くので、<b>トリガを外しても赤いまま</b>になり、このトリガを見張ったことにならない
+    /// （2026-09-13 に掃引で確かめた）。原仕訳を要さない種別で撃つ。
+    /// </remarks>
+    [Fact]
+    public void 仕訳の種別は下書きでも変えられない()
+    {
+        using var db = SchemaSeed.Create();
+        TestDatabase.Execute(db, SchemaSeed.Draft);
+
+        Rejected.ByTrigger(
+            db,
+            "UPDATE journal_entries SET entry_type = 'opening' WHERE id = 1;",
+            "仕訳の種別は変更できない。");
+    }
+
+    /// <summary>
+    /// <b>原仕訳を指せるのは訂正・取消だけ</b>（I-06 の逆向き）。
+    /// </summary>
+    /// <remarks>
+    /// <b>通常の伝票が原仕訳を持てると、「取り消された」の判定が壊れる</b>——
+    /// 取消でない伝票が原仕訳を指しているだけで、元の伝票が取消済みに見えてしまう。
+    /// <b>トリガは INSERT と UPDATE で 2 本あるので検体も 2 つ要る</b>
+    /// （qa/03 の L-44 と同じ型——同じ規則を 2 つの経路に当てるときは、対で持つ）。
+    /// </remarks>
+    [Fact]
+    public void 通常の伝票は原仕訳を指せない()
+    {
+        using var db = SchemaSeed.Create();
+        TestDatabase.Execute(db, SchemaSeed.Draft);
+
+        Rejected.ByTrigger(
+            db,
+            """
+            INSERT INTO journal_entries (description, fiscal_year_id, original_entry_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, 1, '2026-05-21', '2026-05-21', 'draft', 'normal', '2026-05-21 10:00:00');
+            """,
+            "原仕訳を指定できるのは訂正・取消だけ。");
+    }
+
+    /// <summary>上と対。<b>後から原仕訳を付けても止まる。</b></summary>
+    /// <remarks>
+    /// <b>自分自身を指す検体は使わない。</b> <c>CHECK (original_entry_id IS NULL OR original_entry_id &lt;&gt; id)</c> が
+    /// 先に弾くので、<b>トリガを外しても赤いまま</b>になる（2026-09-13 に掃引で確かめた）。
+    /// 別の伝票を指す。
+    /// </remarks>
+    [Fact]
+    public void 通常の伝票に後から原仕訳を付けられない()
+    {
+        using var db = SchemaSeed.Create();
+        TestDatabase.Execute(db, SchemaSeed.Draft);
+        TestDatabase.Execute(db, """
+            INSERT INTO journal_entries (id, description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES (2, '6 月分の現金売上', 1, '2026-06-20', '2026-06-20', 'draft', 'normal', '2026-06-20 10:00:00');
+            """);
+
+        Rejected.ByTrigger(
+            db,
+            "UPDATE journal_entries SET original_entry_id = 1 WHERE id = 2;",
+            "原仕訳を指定できるのは訂正・取消だけ。");
+    }
 }

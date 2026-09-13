@@ -61,16 +61,29 @@ public class SchemaConstraintTests
             """));
     }
 
-    /// <summary>I-17 伝票番号を再利用しない。</summary>
+    /// <summary>
+    /// 計上済みの行は直に INSERT できない（<c>trg_journal_entries_no_posted_insert</c>）。
+    /// </summary>
+    /// <remarks>
+    /// <b>このテストは元は「同じ会計年度で伝票番号は重複できない」という名前だった。</b>
+    /// ところが <c>status = 'posted'</c> の直 INSERT はこのトリガが先に止めるので、
+    /// <c>UNIQUE (fiscal_year_id, entry_no)</c> には届いていなかった——
+    /// <b>制約を外しても緑のまま</b>だと制約ノックアウトが示した（qa/03 の L-45）。
+    /// 名前を実際に検査しているものに改め、伝票番号の重複は
+    /// <c>JournalConstraintTests</c> が正規の経路（下書き → 計上）で見る。
+    /// </remarks>
     [Fact]
-    public void 同じ会計年度で伝票番号は重複できない()
+    public void 計上済みの伝票を直に作ることはできない()
     {
         using var db = SchemaSeed.CreateWithPostedEntry();
 
-        Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
+        Rejected.ByTrigger(
+            db,
+            """
             INSERT INTO journal_entries (description, fiscal_year_id, entry_no, transaction_date, posting_date, status, entry_type, entered_at, posted_at)
-                VALUES ('5 月分の現金売上', 1, 1, '2026-05-21', '2026-05-21', 'posted', 'normal', '2026-05-21 10:00:00', '2026-05-21 10:00:00');
-            """));
+                VALUES ('5 月分の現金売上', 1, 2, '2026-05-21', '2026-05-21', 'posted', 'normal', '2026-05-21 10:00:00', '2026-05-21 10:00:00');
+            """,
+            "仕訳は下書きとして作る。");
     }
 
     [Fact]

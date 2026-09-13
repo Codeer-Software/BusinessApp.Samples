@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 制約ノックアウトの掃引が要る 2 つ（外す点の一覧と、殺し手から外すテストの filter 式）を
+       標準出力に書くだけの道具（ADR-0053）。掃引そのものは tools/clb/knockout.ps1 が回す。
+       正典は BusinessApp.TestSupport の SchemaKnockout で、ここは印字しかしない——
+       駆動役（PowerShell）に列挙を写すと、DDL の書き方が増えた日に写しだけが古くなる。 -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BusinessApp.TestSupport\BusinessApp.TestSupport.csproj" />
+  </ItemGroup>
+
+</Project>

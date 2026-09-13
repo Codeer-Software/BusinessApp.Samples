@@ -25,6 +25,7 @@
   <Folder Name="/Tools/">
     <Project Path="BusinessApp/BusinessApp.Designer/BusinessApp.Designer.csproj" />
     <Project Path="BusinessApp/BusinessApp.LicenseRegisterCli/BusinessApp.LicenseRegisterCli.csproj" />
+    <Project Path="BusinessApp/BusinessApp.KnockoutCli/BusinessApp.KnockoutCli.csproj" />
     <Project Path="BusinessApp/BusinessApp.SchemaVerifyCli/BusinessApp.SchemaVerifyCli.csproj" />
   </Folder>
   <Folder Name="/WebApp/">

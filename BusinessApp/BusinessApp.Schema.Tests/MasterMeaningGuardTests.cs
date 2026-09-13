@@ -257,6 +257,52 @@ public class MasterMeaningGuardTests
         Assert.Equal(1L, TestDatabase.ScalarOf<long>(db, "SELECT account_id FROM journal_lines WHERE id = 1"));
     }
 
+    /// <summary>
+    /// <b>部門・補助科目・税区分も、使用中の id は動かせない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>勘定科目の検体しか無く、この 3 本は 2026-09-14 の掃引まで誰も見張っていなかった</b>
+    /// （qa/02 のラウンド 88）。**同じ規則を n 個の表に当てるときは、検体も n 個要る**（qa/03 の L-44 の型）。
+    /// </remarks>
+    [Theory]
+    [InlineData("departments", "部門", "2")]
+    [InlineData("sub_accounts", "補助科目", "1")]
+    [InlineData("tax_categories", "税区分", "1")]
+    public void 使用中のマスタのidは動かせない(string table, string label, string used)
+    {
+        using var db = PostedWithSubAccount();
+
+        Rejected.ByTrigger(
+            db,
+            $"UPDATE {table} SET id = 99 WHERE id = {used}",
+            $"計上済みの仕訳明細が使っている{label}を上書きできない。");
+    }
+
+    /// <summary>
+    /// 補助科目・部門・税区分を付けた明細を持つ、計上済みの伝票 1 本。
+    /// </summary>
+    /// <remarks>
+    /// <b>付けるのは計上の前である。</b> 計上済みの明細は動かせないので（I-05）、
+    /// 後から付けようとすると<b>別のトリガが鳴って、検体が作れないまま赤になる</b>。
+    /// </remarks>
+    private static SqliteConnection PostedWithSubAccount()
+    {
+        var db = SchemaSeed.Create();
+        TestDatabase.Execute(db, """
+            INSERT INTO sub_accounts (account_id, code, name) VALUES (1, 'S01', '小口現金');
+            UPDATE accounts SET uses_sub_account = 1 WHERE id = 1;
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('5 月分の現金売上', 1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, sub_account_id, department_id, amount, tax_category_id)
+                SELECT MAX(id), 1, 'debit', 1, (SELECT id FROM sub_accounts WHERE code = 'S01'), 2, 100000, 1 FROM journal_entries;
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, department_id, amount, tax_category_id)
+                SELECT MAX(id), 2, 'credit', 2, 2, 100000, 1 FROM journal_entries;
+            UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-05-20 10:00:00'
+             WHERE id = (SELECT MAX(id) FROM journal_entries);
+            """);
+        return db;
+    }
+
     /// <summary>補助科目の REPLACE も同じ（計上済みの明細を持つ検体が別なので分けてある）。</summary>
     [Fact]
     public void 使用中の補助科目をREPLACEで置き換えられない()
