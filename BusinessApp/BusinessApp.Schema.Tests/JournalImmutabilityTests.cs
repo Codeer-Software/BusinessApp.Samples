@@ -368,6 +368,75 @@ public class JournalImmutabilityTests
             $"SELECT COUNT(*) FROM journal_entries WHERE entry_type = '{entryType}' AND status = 'posted'"));
     }
 
+    /// <summary>
+    /// <b>I-02 計上済みの仕訳は、帳簿ぜんたいで数えても借方合計＝貸方合計。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>I-01（伝票ごとの貸借一致）の帰結だが、破れ方が違う。</b>
+    /// 伝票ごとに合っていても、<b>明細が伝票をまたいで動いた・計上済みの行が消えた</b>ときは
+    /// <b>帳簿ぜんたいの合計だけが狂う</b>——I-01 を見るテストは 1 本も赤くならない。</para>
+    /// <para><b>これを見張っているのは不変性のトリガ（I-05）である。</b>
+    /// 貸借一致そのものに DB 側の担保は無い（行をまたぐので <c>CHECK</c> では書けない。
+    /// <c>Designer/ddl/README.md</c> の二重防御の表）。だから
+    /// <b>「合計を数えるだけ」のテストは何も見張っていない</b>——自分で入れた行を自分で数え直すだけになる
+    /// （<b>最初にそう書いた。</b>2026-09-14 の自己レビューで気づいた。qa/02 のラウンド 90）。
+    /// <b>断られる経路を 1 本ずつ撃ち、断られたあとに合計が動いていないことまで見る。</b></para>
+    /// <para><b>検体は、通ってしまったら合計が必ず狂う形にしてある</b>——
+    /// 下書きの明細は 999 円で、計上済みの 100,000 円と重ならない。
+    /// <b>どのトリガを 1 本外しても、この 1 本が赤くなる。</b></para>
+    /// </remarks>
+    [Theory]
+    // 下書きの明細を計上済みへ付け替える（通れば貸方だけが 100,999 になる）。
+    [InlineData(
+        "UPDATE journal_lines SET journal_entry_id = 1 WHERE journal_entry_id = 2",
+        "計上済みの仕訳へ明細を移動できない。")]
+    // 計上済みの明細を下書きへ逃がす（通れば借方だけが 0 になる）。
+    [InlineData(
+        "UPDATE journal_lines SET journal_entry_id = 2 WHERE journal_entry_id = 1 AND line_no = 1",
+        "計上済みの仕訳明細は変更できない。")]
+    // 計上済みの明細を消す（通れば貸方だけが 0 になる）。
+    [InlineData(
+        "DELETE FROM journal_lines WHERE journal_entry_id = 1 AND line_no = 2",
+        "計上済みの仕訳明細は削除できない。")]
+    // 金額をその場で書き換える。**鳴るのは「移動できない」のほう**——
+    // どちらのトリガも WHEN が真になり、発火順は SQLite の仕様上 undefined である（上の Theory と同じ）。
+    [InlineData(
+        "UPDATE journal_lines SET amount = 1 WHERE journal_entry_id = 1 AND line_no = 1",
+        "計上済みの仕訳へ明細を移動できない。")]
+    // 計上済みの伝票に明細を足す（通れば借方だけが増える）。
+    [InlineData(
+        """
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (1, 3, 'debit', 1, 777, 1);
+        """,
+        "計上済みの仕訳に明細を追加できない。")]
+    // 計上済みの伝票ごと消す（通れば両方 0 になる）。
+    [InlineData(
+        "DELETE FROM journal_entries WHERE id = 1",
+        "計上済みの仕訳は削除できない。")]
+    public void 計上済みの仕訳は帳簿ぜんたいでも貸借が一致する(string sql, string message)
+    {
+        using var db = WithPostedAndDraft();
+
+        Rejected.ByTrigger(db, sql, message);
+
+        var debit = TestDatabase.ScalarOf<long>(db, PostedTotalOf("debit"));
+        var credit = TestDatabase.ScalarOf<long>(db, PostedTotalOf("credit"));
+
+        // **0 と 0 の一致は何も言っていない。** 計上済みの明細が残っていることまで見る。
+        Assert.Equal(PostedAmount, debit);
+        Assert.Equal(debit, credit);
+    }
+
+    /// <summary><see cref="SchemaSeed.Draft"/> が入れる計上済みの明細 1 行の金額。</summary>
+    private const long PostedAmount = 100000L;
+
+    private static string PostedTotalOf(string debitCredit) => $"""
+        SELECT COALESCE(SUM(l.amount), 0) FROM journal_lines l
+          JOIN journal_entries e ON e.id = l.journal_entry_id
+         WHERE e.status = 'posted' AND l.debit_credit = '{debitCredit}';
+        """;
+
     private static string ReversalDraft(int id) => AmendmentDraft(id, "reversal");
 
     private static string Reversal(int id, int entryNo) => Amendment(id, entryNo, "reversal");
