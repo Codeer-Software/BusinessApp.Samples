@@ -269,13 +269,91 @@ public static class TestDatabase
     /// クエリモジュールの SQL を<b>本文で</b>読む。<b>行動テストはこちらを通す。</b>
     /// </summary>
     /// <remarks>
-    /// <b>読み込みを 1 箇所に集めるためにある。</b> 各テストが <c>File.ReadAllText</c> を
-    /// 自分で書くと、<b>後から「読んだ SQL に手を入れる」道具を足せない</b>
-    /// ——SQL ミューテーション（<c>docs/qa/05_観点網羅の計器.md</c> §3）の注入点は、
-    /// <b>読む場所が 1 つであることの上にしか作れない</b>
-    /// （制約ノックアウトが環境変数 1 本に集めたのと同じ形。ADR-0053）。
+    /// <para><b>読み込みを 1 箇所に集めてある。</b> 各テストが <c>File.ReadAllText</c> を
+    /// 自分で書くと、<b>注入が効くテストと効かないテストが混ざり、
+    /// 生き残りの数が「殺せなかった」のか「注入が届かなかった」のか分からなくなる</b>
+    /// （制約ノックアウトが環境変数 1 本に集めたのと同じ理由。ADR-0053）。</para>
+    /// <para><b>SQL ミューテーション（ADR-0056）の注入点である。</b>
+    /// <see cref="SqlMutationVariable"/> が立っているときだけ、
+    /// <b>その 1 箇所を置き換えた SQL を返す</b>。立っていなければ原本をそのまま返す。</para>
     /// </remarks>
-    public static string QuerySql(string moduleName) => File.ReadAllText(QuerySqlOf(moduleName));
+    public static string QuerySql(string moduleName)
+    {
+        var sql = File.ReadAllText(QuerySqlOf(moduleName));
+        var mutation = Environment.GetEnvironmentVariable(SqlMutationVariable);
+
+        // **空白だけの値も「立っていない」と読む。** シェルによっては、消したつもりの変数が
+        // 空文字で残る（`SchemaKnockout.Requested` と同じ作法）。
+        //
+        // **ただし値は切り詰めない。** 最後の欄（原文）は `DISTINCT ` のように
+        // **末尾に空白を持つことがあり、切り詰めると照合が必ず外れる**
+        // ——実際に `Trim()` を入れた回に、カナリアがそれを捕まえた（qa/02 のラウンド 92）。
+        return string.IsNullOrWhiteSpace(mutation) ? sql : Mutate(sql, moduleName, mutation);
+    }
+
+    /// <summary>SQL ミューテーションの注入に使う環境変数（ADR-0056）。</summary>
+    public const string SqlMutationVariable = "SQL_MUTATION";
+
+    /// <summary>
+    /// <c>&lt;モジュール名&gt;:&lt;開始位置&gt;:&lt;長さ&gt;:&lt;置換後&gt;:&lt;原文&gt;</c> を当てる。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>位置で指す。</b> 同じ字面が何度も出るからである——
+    /// <c>date(</c> も <c>OR</c> も 1 本の SQL に何十個もあり、字面では 1 つを名指せない。
+    /// <b>置換後は空でよい</b>（<c>DISTINCT</c> の削除など）。
+    /// <b>置換後に <c>:</c> を入れてはいけない</b>——最後の欄（原文）だけが <c>:</c> を含んでよい。</para>
+    /// <para><b>位置だけでは足りない。</b> 数える側（<c>sql_mutate.py</c>）と読む側（ここ）が
+    /// <b>同じ文字列を見ている保証は無い</b>——BOM が 1 つ付いただけ、改行が <c>CRLF</c> になっただけで
+    /// <b>全部の位置が 1 文字ずれる</b>。ずれた置換は<b>構文として通ることがあり、
+    /// 結果が変わって赤くなり、掃引はそれを「殺した」と数える</b>。
+    /// だから<b>原文まで運ばせて、そこに本当にその字があるかを確かめる</b>。</para>
+    /// <para><b>名指されたモジュール以外は素通しする。</b> 1 回の掃引で流すテストが
+    /// 2 つ以上のモジュールに触ることがあり、<b>全部に当てると「どれが殺したか」が分からなくなる</b>。</para>
+    /// <para><b>形が壊れていたら黙って素通ししない。</b>
+    /// <b>注入が届いていないのに緑を返す</b>のが、この手の道具で最も危ない壊れ方である
+    /// ——掃引はそれを「テストが見張っている」と数えてしまう。</para>
+    /// <para><b>ファイルを書き換えない。</b> 掃引の途中で止めると<b>壊れた SQL が追跡下に残る</b>——
+    /// 環境変数なら、プロセスが終われば何も残らない。</para>
+    /// </remarks>
+    public static string Mutate(string sql, string moduleName, string? mutation)
+    {
+        ArgumentNullException.ThrowIfNull(sql);
+        ArgumentNullException.ThrowIfNull(moduleName);
+        var parts = (mutation ?? string.Empty).Split(':', 5);
+
+        if (parts.Length != 5
+            || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var start)
+            || !int.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture, out var length))
+        {
+            throw new ArgumentException(
+                $"{SqlMutationVariable} の形が違う: '{mutation}'"
+                + "（<モジュール名>:<開始位置>:<長さ>:<置換後>:<原文> である）", nameof(mutation));
+        }
+
+        if (!string.Equals(parts[0], moduleName, StringComparison.Ordinal))
+        {
+            return sql;
+        }
+
+        // **足し算で書かない。** `start` が大きいと桁が溢れて負になり、この検査を素通りする。
+        if (start > sql.Length - length)
+        {
+            throw new ArgumentException(
+                $"{SqlMutationVariable} が {moduleName} の外を指している: {start}+{length}"
+                + $"（全体で {sql.Length} 文字）", nameof(mutation));
+        }
+
+        var found = sql.Substring(start, length);
+        if (!string.Equals(found, parts[4], StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"{SqlMutationVariable} が {moduleName} の別の場所を指している。"
+                + $"位置 {start} にあるのは '{found}' で、当てるはずの '{parts[4]}' ではない"
+                + "（SQL を直したあとに掃引を流し直していないか、読み方がずれている）。", nameof(mutation));
+        }
+
+        return sql[..start] + parts[3] + sql[(start + length)..];
+    }
 
     public static void Execute(SqliteConnection connection, string sql)
     {

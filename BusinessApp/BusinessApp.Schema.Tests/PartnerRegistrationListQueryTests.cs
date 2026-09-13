@@ -15,6 +15,7 @@ using Microsoft.Data.Sqlite;
 /// <para><b>この一覧は 2 週間、その検査を持っていなかった</b>——
 /// <see cref="QueryBehaviorCoverageTests"/> を入れた日に見つかった（qa/02 のラウンド 91）。</para>
 /// </remarks>
+[Collection(QuerySqlCollection.Name)]
 public class PartnerRegistrationListQueryTests
 {
     /// <summary>

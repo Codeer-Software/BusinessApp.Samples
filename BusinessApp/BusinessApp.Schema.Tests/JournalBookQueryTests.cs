@@ -14,6 +14,7 @@ using Microsoft.Data.Sqlite;
 /// <para>ここが守るのは制度要件そのものである——電帳規則 5 ⑤一ハの (2) 範囲・(3) 組み合わせ、
 /// 電帳通達 8-13 の空値検索、8-14 の記録項目、8-15 の課税期間ごとの範囲指定。</para>
 /// </remarks>
+[Collection(QuerySqlCollection.Name)]
 public class JournalBookQueryTests
 {
     /// <summary>
@@ -196,18 +197,71 @@ public class JournalBookQueryTests
 
     // --- 空値検索（電帳通達 8-13）---
 
+    /// <summary>
+    /// <b>返った行を名指しで表明する。件数だけ見ない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>件数は「どの行か」を捨てた要約である。</b> 検体は「条件を満たす行」と「満たさない行」が
+    /// どちらも 2 行なので、<b>SQL の <c>IS NULL</c> を <c>IS NOT NULL</c> に反転すると
+    /// 返る行がそっくり入れ替わるのに、件数は同じまま</b>——**テストは緑を返していた**
+    /// （2026-09-14 に SQL ミューテーションの掃引で見つけた。qa/03 の L-46）。
+    /// </remarks>
     [Theory]
-    [InlineData("partner", 2)]            // 取引先が無いのは 2 番の 2 行
-    [InlineData("department", 3)]         // 部門があるのは 1 番の 1 行目だけ
-    [InlineData("description", 2)]        // 摘要が無いのは 2 番
-    [InlineData("item_description", 3)]   // 内容があるのは 1 番の 1 行目だけ
-    [InlineData("sub_account", 4)]        // 補助科目はどこにも無い
-    public void 記録事項がない行を探せる(string field, int expected)
+    [InlineData("partner", "2-1 2-2")]                 // 取引先が無いのは 2 番の 2 行
+    [InlineData("department", "1-2 2-1 2-2")]          // 部門があるのは 1 番の 1 行目だけ
+    [InlineData("description", "2-1 2-2")]             // 摘要が無いのは 2 番
+    [InlineData("item_description", "1-2 2-1 2-2")]    // 内容があるのは 1 番の 1 行目だけ
+    [InlineData("sub_account", "1-1 1-2 2-1 2-2")]     // 補助科目はどこにも無い
+    public void 記録事項がない行を探せる(string field, string expected)
     {
         // **候補値の綴りが 1 つでもずれると 0 件が静かに返る。** 5 値すべてを通す。
         using var db = Create();
 
-        Assert.Equal(expected, Run(db, ("@p_blank_field", field)).Count);
+        Assert.Equal(expected, Joined(Run(db, ("@p_blank_field", field))));
+    }
+
+    /// <summary>
+    /// <b>勘定科目で絞れる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>この条件は入れた日から一度も撃たれていなかった</b>——
+    /// `@p_account_id` を渡すテストが 1 本も無く、**条件を丸ごと壊しても全テストが緑**だった
+    /// （2026-09-14 の掃引。qa/02 のラウンド 92）。
+    /// </remarks>
+    [Fact]
+    public void 勘定科目で絞れる()
+    {
+        using var db = Create();
+
+        Assert.Equal("1-1 2-1", Joined(Run(db, ("@p_account_id", 1L))));
+        Assert.Equal("1-2 2-2", Joined(Run(db, ("@p_account_id", 2L))));
+    }
+
+    /// <summary>
+    /// <b>取引年月日は、列にも検索値にも時刻が付いていて構わない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>DATE 列の正規形は <c>'YYYY-MM-DD 00:00:00'</c>（qa/01 の A-04）だが、
+    /// <b>保存された値も検索欄から来る値も、時刻が付いているとは限らない</b>。
+    /// <b>4 通りの組み合わせを全部通す</b>——片側にしか <c>date()</c> が無いと、
+    /// <b>その組み合わせのときだけ境界の 1 日が落ちる</b>。</para>
+    /// <para><b>2 つの向きが逆に効く。</b> 列に時刻が付いていると<b>終わりの境界</b>が落ち、
+    /// 検索値に時刻が付いていると<b>始まりの境界</b>が落ちる。
+    /// <b>片方だけの検体では、もう片方の <c>date()</c> を外しても緑のまま</b>だった（同じ掃引）。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData("2026-05-10", "2026-05-10", "2026-05-10")]
+    [InlineData("2026-05-10 00:00:00", "2026-05-10", "2026-05-10")]
+    [InlineData("2026-05-10", "2026-05-10 00:00:00", "2026-05-10 00:00:00")]
+    [InlineData("2026-05-10 00:00:00", "2026-05-10 00:00:00", "2026-05-10 00:00:00")]
+    public void 取引年月日は時刻が付いていても日付として比べられる(string stored, string from, string to)
+    {
+        // **計上したあとは直せない**ので、計上より前に入れる。
+        using var db = Create($"UPDATE journal_entries SET transaction_date = '{stored}' WHERE id = 1");
+
+        Assert.Equal(
+            "1-1 1-2",
+            Joined(Run(db, ("@p_transaction_date_from", from), ("@p_transaction_date_to", to))));
     }
 
     [Fact]
@@ -384,6 +438,16 @@ public class JournalBookQueryTests
     }
 
     private sealed record Row(long EntryId, string FiscalYearLabel, long LineNo, string? PartnerName);
+
+    /// <summary>
+    /// 返った行を <c>&lt;伝票&gt;-&lt;行&gt;</c> の並びにする。
+    /// </summary>
+    /// <remarks>
+    /// <b>件数ではなく、どの行が返ったかを表明するため</b>にある（qa/03 の L-46）。
+    /// <b>並びも一緒に固定される</b>ので、<c>ORDER BY</c> の取り違えもここで落ちる。
+    /// </remarks>
+    private static string Joined(IEnumerable<Row> rows)
+        => string.Join(" ", rows.Select(row => $"{row.EntryId}-{row.LineNo}"));
 
     /// <summary>
     /// 仕訳帳の SQL を<b>本物のまま</b>流す。渡さなかったパラメータは NULL（＝条件なし）。
