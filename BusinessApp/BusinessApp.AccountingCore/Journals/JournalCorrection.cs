@@ -122,7 +122,10 @@ public static class JournalCorrection
             EnteredAt = enteredAt,
             // 原仕訳をそのまま写す。**正しい姿ではなく、直す前の姿を出す。**
             // 利用者は誤っている箇所だけを直せばよく、打ち直しにならない。
-            Lines = [.. original.Lines],
+            // **「内容」だけは上限に収める**——長い行をそのまま写すと DDL が拒み、
+            // **その伝票を永久に訂正できなくなる**（ADR-0004。取消と同じ手当て）。
+            Lines = [.. original.Lines.Select(
+                line => line with { ItemDescription = JournalLineRules.ShortenCopiedText(line.ItemDescription) })],
             // **投入元の情報は写す。** 一意なのは冪等キーだけで（I-14）、それだけを落とせばよい。
             // 落としてしまうと、投入元の部品は自分が投げた伝票の訂正を帳簿から辿れなくなる。
             SourceComponent = original.SourceComponent,

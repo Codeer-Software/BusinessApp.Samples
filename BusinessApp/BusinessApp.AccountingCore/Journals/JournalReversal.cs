@@ -85,8 +85,17 @@ public static class JournalReversal
     }
 
     /// <summary>明細の貸借を入れ替える。金額・科目・部門・税区分はそのまま写す。</summary>
+    /// <remarks>
+    /// <b>「内容」だけは上限に収める</b>（<see cref="JournalLineRules.ShortenCopiedText"/>）。
+    /// <b>上限を置く前に計上された長い行をそのまま写すと、DDL が拒んで
+    /// その伝票を永久に取り消せなくなる</b>（ADR-0004）。
+    /// </remarks>
     private static JournalLine Reverse(JournalLine line)
-        => line with { DebitCredit = line.DebitCredit.Opposite() };
+        => line with
+        {
+            DebitCredit = line.DebitCredit.Opposite(),
+            ItemDescription = JournalLineRules.ShortenCopiedText(line.ItemDescription),
+        };
 
 }
 

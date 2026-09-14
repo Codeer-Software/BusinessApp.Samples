@@ -186,7 +186,7 @@
       "DbColumn": "description",
       "IsMultiline": false,
       "IsAutoFitRows": false,
-      "Placeholder": "取引の内容",
+      "Placeholder": "取引の内容（200 文字以内）",
       "TextEditEmptyType": "Null",
       "ShouldTrimAfterEdit": true,
       "AutoTab": false,

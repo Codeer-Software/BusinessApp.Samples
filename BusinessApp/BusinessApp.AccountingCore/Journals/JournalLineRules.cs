@@ -1,5 +1,8 @@
 namespace BusinessApp.AccountingCore.Journals;
 
+using System.Globalization;
+using System.Text;
+
 /// <summary>
 /// 仕訳明細の 1 行だけで決まる規則と、そのとき利用者へ返す文言。
 /// </summary>
@@ -35,6 +38,150 @@ public static class JournalLineRules
     /// </remarks>
     public static bool IsStorableLineNo(decimal value)
         => value >= 1m && value <= int.MaxValue && value == decimal.Truncate(value);
+
+    /// <summary>
+    /// 摘要と明細の「内容」の上限（docs/10 §4-2-1。<b>開発者の決定。2026-09-13</b>）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>どちらも同じ 200 文字なので、定数は 1 つである。</b>
+    /// 別々に持つと、片方だけ動いたときに「なぜ違うのか」の説明が要る。</para>
+    /// <para><b>DDL のトリガが同じ上限を持つ</b>（<c>Designer/ddl/013_journal_text_length.sql</c>）。
+    /// <b>3 者一致は <c>FieldLengthConsistencyTests</c> が見る</b>（docs/20 §4）。</para>
+    /// <para><b>マスタ側の <c>MasterTextLength</c> とは別の定数である。</b>
+    /// あちらは <c>ServerSupport</c> にあり、<b>純粋層からは参照できない</b>（docs/22）。
+    /// 数が同じ 200 でも、<b>決めた文書も動く理由も違う</b>（docs/10 §4-2-1 と docs/12 §2-2）。</para>
+    /// </remarks>
+    public const int TextMaxLength = 200;
+
+    /// <summary>
+    /// <b>Unicode の符号点で数えた長さ。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b><c>string.Length</c> を使わない。</b> あれは UTF-16 の符号単位を数えるので
+    /// 🙂 や 𠮟 を 2 と数えるが、<b>SQLite の <c>LENGTH()</c> は 1 と数える</b>——
+    /// <b>関門が断った値を DDL が通す</b>（あるいはその逆）ずれが生まれる（docs/12 §2-2 と同じ判断）。
+    /// </remarks>
+    public static int CountCharacters(string? value)
+    {
+        var count = 0;
+        if (value is not null)
+        {
+            foreach (var _ in value.EnumerateRunes())
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// <b>上限に収まる長さへ詰めた姿。</b> 収まっていればそのまま返す。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>利用者が書いた文を詰めるためのものではない。</b> 使うのは
+    /// <b>サーバが組み立てる文</b>（取消・訂正の摘要と、写した明細の「内容」）だけである。
+    /// <b>原文は原仕訳にそのまま残る</b>（辿るのは <c>original_entry_id</c>）。
+    /// <b>だから <c>internal</c> にしてある</b>——外へ出すと、次に摘要を扱う誰かが
+    /// 利用者の入力に当てる（docs/21 §0 が禁じた「黙って直す」形）。</para>
+    /// <para><b>詰めたことが分かるように末尾へ「…」を置く。</b> 黙って切ると、
+    /// 読む人には最初からその文だったように見える（docs/21 §0 が「いちばん悪い」と名指しした形）。</para>
+    /// <para><b>符号点の境目で切る。</b> UTF-16 の単位で切ると、
+    /// <b>サロゲートペアの片割れだけが残って壊れた字になる</b>。</para>
+    /// </remarks>
+    /// <param name="value">詰める文。</param>
+    /// <param name="maxLength">詰めた後の上限（<b>「…」を含む</b>）。1 以上。</param>
+    internal static string Shorten(string value, int maxLength)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxLength, 1);
+
+        if (CountCharacters(value) <= maxLength)
+        {
+            return value;
+        }
+
+        var kept = new StringBuilder();
+        var count = 0;
+        foreach (var rune in value.EnumerateRunes())
+        {
+            if (count == maxLength - 1)
+            {
+                break;
+            }
+
+            kept.Append(rune);
+            count++;
+        }
+
+        return kept.Append('…').ToString();
+    }
+
+    /// <summary>
+    /// <b>サーバが写す文を、列の上限に収めた姿。</b> 収まっていればそのまま返す。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>取消と訂正は、原仕訳の明細の「内容」をそのまま写す</b>
+    /// （<see cref="JournalReversal"/>・<see cref="JournalCorrection"/>）。
+    /// <b>上限より長い行が 1 本でも残っていると、写した先でトリガが拒む</b>——
+    /// <b>その伝票は取消も訂正も永久にできなくなる</b>（ADR-0004 が認めた唯一の訂正手段が塞がる）。
+    /// 長い行が残りうるのは<b>上限を置く前に計上された伝票</b>で、計上済みは変えられない（I-05）。</para>
+    /// <para><b>写す側は、どの層のものでもこれを通すこと。</b></para>
+    /// <para><b>摘要と同じ手当てである</b>（<see cref="AmendmentRules.Describe"/>）。
+    /// 詰めたことは末尾の「…」で分かり、<b>原文は原仕訳にそのまま残る</b>。</para>
+    /// </remarks>
+    public static string? ShortenCopiedText(string? value)
+        => value is null || CountCharacters(value) <= TextMaxLength ? value : Shorten(value, TextMaxLength);
+
+    /// <summary>
+    /// サーバが摘要に付ける前置き（「伝票番号 N の取消: 」）の<b>最長</b>。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>「伝票番号 」5 ＋ 番号 10 ＋ 「 の」2 ＋ 「取消」2 ＋ 「: 」2 = 21。</b>
+    /// 番号は <c>int</c> なので 10 桁を超えない。</para>
+    /// <para><b>実際の番号の桁で計算しない。</b> そうすると<b>番号が桁を増やすたびに
+    /// 本文が 1 文字ずつ削れる</b>——訂正を重ねると戻らない形で短くなる（計上済みは不変。I-05）。
+    /// <b>どの番号でも同じ姿になるほうがよい。</b></para>
+    /// <para><b>この数が実際の前置きを下回っていないことは <c>AmendmentRulesTests</c> が見る。</b></para>
+    /// </remarks>
+    public const int AmendmentPrefixMaxLength = 21;
+
+    /// <summary>文言に入れる数。<b>不変文化で書く</b>（桁区切りを入れない）。</summary>
+    /// <remarks>
+    /// <b>桁区切りの入る文化では「1,000 文字以内」になり、DDL の数と見比べられなくなる</b>
+    /// （<c>MasterTextLength</c> と同じ作法）。
+    /// </remarks>
+    private static string Count(int value) => value.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>画面のラベル。<b>差し戻しの文に入る</b>ので、1 か所で持つ（docs/21 §2-6）。</summary>
+    /// <remarks>
+    /// <b>文言の中と、関門へ渡す引数の 2 か所に書くと、長さの断りと
+    /// 目に見えない字の断りで別の語になる</b>（同じ欄なのに）。
+    /// </remarks>
+    public const string DescriptionLabel = "摘要";
+
+    /// <summary>明細の「内容」のラベル。</summary>
+    public const string ItemDescriptionLabel = "内容";
+
+    /// <summary>摘要が長すぎる（<see cref="JournalViolationCodes.DescriptionTooLong"/>）。</summary>
+    /// <remarks>
+    /// <b>いま何文字あるかまで言う</b>（docs/21 §2）。上限だけを言われても、
+    /// 貼り付けた利用者にはどれだけ削ればよいか分からない。
+    /// <b>「計上できません」を入れない</b>——見出しが言う（docs/21 §2-6）。
+    /// </remarks>
+    public static string DescriptionTooLong(int length)
+        => $"「{DescriptionLabel}」は {Count(TextMaxLength)} 文字以内です。いまは {Count(length)} 文字あります。短くしてください。";
+
+    /// <summary>明細の内容が長すぎる（<see cref="JournalViolationCodes.ItemDescriptionTooLong"/>）。</summary>
+    public static string ItemDescriptionTooLong(int length)
+        => $"「{ItemDescriptionLabel}」は {Count(TextMaxLength)} 文字以内です。いまは {Count(length)} 文字あります。短くしてください。";
+
+    /// <summary>摘要か内容に、数えられない字（U+0000）が入っている。</summary>
+    /// <remarks>
+    /// <b>DDL が断るので、関門も断る</b>（受理する集合を同じにする。qa/03 の L-14・L-48）。
+    /// </remarks>
+    public static string TextHasUnusableCharacter(string label, int position)
+        => $"「{label}」の {Count(position)} 文字目に、目に見えない文字が入っています。入力し直してください。";
 
     // --- 差し戻しの文言（ここが正典。両方の層がこれを使う）---
 

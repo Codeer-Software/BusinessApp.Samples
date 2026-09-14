@@ -63,6 +63,7 @@ dotnet test BusinessApp.slnx
 | 010 | [`010_natural_key_text.sql`](010_natural_key_text.sql) | **自然キーになる列に BLOB を入れさせない**（`partners.corporate_number`・`app_users.user_name`）。**BLOB は TEXT の列にそのまま残り、`'admin'` とぶつからない**——008 でコードの 6 表を塞いだのと同じ穴 |
 | 011 | [`011_date_format.sql`](011_date_format.sql) | **日付の列は年月日として読める値だけを受け取る**（5 表 12 列）。**1 ファイルにまとめてあるのは 008 と同じくトリガの作られる順のため**——`fiscal_years` は 008 にトリガを持つので 002 の末尾には置けない |
 | 012 | [`012_text_length.sql`](012_text_length.sql) | **マスタと取引先の文字の欄に上限を置く**（5 表 8 列。docs/12 §2-2）。**1 ファイルにまとめてあるのは 008・011 と同じくトリガの作られる順のため**。**数えられない値（BLOB・NUL を含む TEXT・壊れた UTF-8）は長さより先に断る** |
+| 013 | [`013_journal_text_length.sql`](013_journal_text_length.sql) | **伝票の摘要と明細の内容に上限を置く**（2 表 2 列。docs/10 §4-2-1）。**012 と条件の骨格はまったく同じ**で、`FieldLengthConsistencyTests` が 20 本を突き合わせる。**別のファイルにしてあるのは決めた文書が違うから**である |
 
 各テーブルの扱い（所有・誰が編集するか・版と削除）は [docs/12_マスタ台帳](../../docs/12_マスタ台帳.md) が持つ。
 
@@ -122,7 +123,7 @@ dotnet test BusinessApp.slnx
 | マスタのコードの書式（[docs/12 §2-1](../../docs/12_マスタ台帳.md)・[ADR-0047](../../docs/decisions/0047-マスタのコードは空白を落とす以外書き換えず字種で断る.md)） | 6 表の `BEFORE INSERT` / `BEFORE UPDATE OF code` トリガ（**`CHECK` ではない**——後から足すには表の作り直しが要る）。**大小を無視した重複は `UNIQUE ... COLLATE NOCASE` の索引** | `MasterCode`（**前後の空白を落とすのはこちらだけ**。トリガは落とした後の姿を見る） |
 | 単一法人（[ADR-0005](../../docs/decisions/0005-単一法人に徹する.md)） | `CHECK (id = 1)` | — |
 | **日付の列は年月日として読める値だけを受け取る**（5 表 12 列。[011](011_date_format.sql)） | `BEFORE INSERT` / `BEFORE UPDATE OF <列>` のトリガ（**`CHECK` ではない**——後から足すには表の作り直しが要る）。**NULL は通す** | `DbValue.ParseDateTime`（**読み出しの側**。5 書式の `TryParseExact`）。**受理する集合は両側で同じでなければならない**——DB が広いと、読んだ瞬間に落ちる行が作れる（`DateFormatGuardTests` が毎回突き合わせる） |
-| **文字の欄の上限**（5 表 8 列。[012](012_text_length.sql)。[docs/12 §2-2](../../docs/12_マスタ台帳.md)） | `BEFORE INSERT` / `BEFORE UPDATE OF <列>` のトリガ。**`LENGTH()` は符号点で数える**ので、**数えられない値は別の文言で断る**——BLOB（`typeof`）・**NUL を含む TEXT（`instr(CAST(x AS BLOB), x'00')`）**・壊れた UTF-8（`バイト数 > 4 × 符号点`）。**NUL をバイト数の比で探そうとして穴が開いた**（[qa/03 の L-48](../../docs/qa/03_テストで漏らした実例.md)）。**NULL は通す** | `MasterTextLength`（**関門が本体**。`string.Length` ではなく符号点で数えて DB と揃え、**U+0000 も同じように断る**）。**上限の数は C#・DDL・デザインの 3 か所にあり、`FieldLengthConsistencyTests` が毎回突き合わせる** |
+| **文字の欄の上限**（7 表 10 列。[012](012_text_length.sql)・[013](013_journal_text_length.sql)。[docs/12 §2-2](../../docs/12_マスタ台帳.md)・[docs/10 §4-2-1](../../docs/10_会計ドメイン設計.md)） | `BEFORE INSERT` / `BEFORE UPDATE OF <列>` のトリガ。**`LENGTH()` は符号点で数える**ので、**数えられない値は別の文言で断る**——BLOB（`typeof`）・**NUL を含む TEXT（`instr(CAST(x AS BLOB), x'00')`）**・壊れた UTF-8（`バイト数 > 4 × 符号点`）。**NUL をバイト数の比で探そうとして穴が開いた**（[qa/03 の L-48](../../docs/qa/03_テストで漏らした実例.md)）。**NULL は通す** | `MasterTextLength`（マスタと取引先）と `JournalLineRules`（伝票）——**関門が本体**。`string.Length` ではなく符号点で数えて DB と揃え、**U+0000 も同じように断る**。**定数を 2 つに分けてあるのは、決めた文書も動く理由も違うから**である。**上限の数は C#・DDL・デザインの 3 か所にあり、`FieldLengthConsistencyTests` が毎回突き合わせる** |
 
 **摘要の「空白」の範囲を、関門とトリガで同じにしてある理由は
 [10 §4-2-1](../../docs/10_会計ドメイン設計.md) が持つ**（両方向の同値は `JournalDescriptionGuardTests` が見る）。

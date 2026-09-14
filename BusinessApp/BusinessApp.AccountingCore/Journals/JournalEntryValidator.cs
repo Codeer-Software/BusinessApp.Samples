@@ -27,6 +27,7 @@ public static class JournalEntryValidator
         var violations = new List<Violation>();
         ValidateState(entry, violations);
         ValidateDescription(entry, violations);
+        ValidateItemDescriptions(entry, violations);
         ValidateStructure(entry, violations);
         ValidateDates(entry, context.Calendar, violations);
         ValidatePartners(entry, context.Partners, violations);
@@ -144,7 +145,39 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.DescriptionMissing,
-                "「摘要」が入っていません。何の取引かを書いてください。"));
+                $"「{JournalLineRules.DescriptionLabel}」が入っていません。何の取引かを書いてください。"));
+            return;
+        }
+
+        // **長さも計上の側で見る。** 保存の関門（`JournalSubmitRequirements`）は
+        // **差分に載った欄しか見ない**（qa/01 の F-12）ので、
+        // **上限を置く前に書かれた長い下書きは、保存せずに「計上する」を押すだけで計上でき、以後不変になる**
+        // （I-05）。**投入 API も同じ検証を通る**（docs/10 §10）。
+        var length = JournalLineRules.CountCharacters(entry.Description);
+        if (length > JournalLineRules.TextMaxLength)
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.DescriptionTooLong, JournalLineRules.DescriptionTooLong(length)));
+        }
+    }
+
+    /// <summary>明細の「内容」の長さ（docs/10 §4-2-1）。</summary>
+    /// <remarks>
+    /// <b>摘要と同じ理由で計上の側にも置く</b>（上の注記）。
+    /// <b>必須ではない</b>ので、見るのは長さだけである。
+    /// </remarks>
+    private static void ValidateItemDescriptions(JournalEntry entry, List<Violation> violations)
+    {
+        foreach (var line in entry.Lines)
+        {
+            var length = JournalLineRules.CountCharacters(line.ItemDescription);
+            if (length > JournalLineRules.TextMaxLength)
+            {
+                violations.Add(new Violation(
+                    JournalViolationCodes.ItemDescriptionTooLong,
+                    JournalLineRules.ItemDescriptionTooLong(length),
+                    line.LineNo));
+            }
         }
     }
 

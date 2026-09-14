@@ -141,6 +141,71 @@ public class JournalReversalPostingTests
         Assert.Equal("伝票番号 1 の取消: 5 月分の売上", (await server.EntryStore.LoadAsync(reversal)).Description);
     }
 
+    /// <summary>
+    /// <b>上限いっぱいの摘要を持つ伝票を取り消して、DB まで通る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>これがこの守りの目的そのものである。</b> 前置きのぶん超えた摘要は
+    /// DDL のトリガが拒み、<b>利用者には直す手立てが無い</b>（取消の摘要は画面から書けず、
+    /// 計上済みは変えられない）。<b>純粋層の文字列だけを見ても、DDL を通ることは分からない</b>
+    /// ——ここは実 DB へ書いて読み戻す（qa/03 の L-14 の処方）。
+    /// </remarks>
+    [Fact]
+    public async Task 上限いっぱいの摘要でも取消は_DB_まで通る()
+    {
+        using var server = new AccountingServer();
+        var original = server.InsertPosted(
+            1, "当月分の" + new string('あ', JournalLineRules.TextMaxLength - 6) + "末尾",
+            "2026-05-20", ("debit", "1100", 500), ("credit", "2200", 500));
+        var reversal = server.InsertReversalDraft(original);
+
+        await PostAsync(server, reversal);
+
+        var description = (await server.EntryStore.LoadAsync(reversal)).Description!;
+        Assert.StartsWith("伝票番号 1 の取消: 当月分の", description, StringComparison.Ordinal);
+        Assert.EndsWith("…", description, StringComparison.Ordinal);
+        Assert.DoesNotContain("末尾", description, StringComparison.Ordinal);
+        Assert.Equal(
+            (long)JournalLineRules.CountCharacters(description),
+            server.Scalar<long>($"SELECT LENGTH(description) FROM journal_entries WHERE id = {reversal.Value}"));
+    }
+
+    /// <summary>
+    /// <b>上限を超える「内容」を持つ伝票も取り消せる</b>（上限を置く前に計上された行）。
+    /// </summary>
+    /// <remarks>
+    /// <b>取消は明細をそのまま写す</b>ので、写した先で DDL が拒むと
+    /// <b>その伝票は永久に取り消せなくなる</b>（ADR-0004 が認めた唯一の訂正手段が塞がる）。
+    /// <b>検体は DDL を迂回して作る</b>——画面からも関門からも、いまは 201 字を入れられない。
+    /// </remarks>
+    [Fact]
+    public async Task 上限を超える内容を持つ伝票も取り消せる()
+    {
+        using var server = new AccountingServer();
+        var original = server.InsertPosted(
+            1, "5 月分の売上", "2026-05-20", ("debit", "1100", 500), ("credit", "2200", 500));
+
+        // **守りを外して検体を作る。** 規則より前に計上された行を再現している——
+        // いまは**長さのトリガも、計上済みの明細を触れない守りも**通れない。
+        // **外すのは検体を置くあいだだけ**で、取消そのものは本番と同じ道を通る。
+        var tooLong = new string('い', JournalLineRules.TextMaxLength + 50);
+        server.Execute("DROP TRIGGER trg_journal_lines_item_description_length_update");
+        server.Execute("DROP TRIGGER trg_journal_lines_no_move_into_posted");
+        server.Execute("DROP TRIGGER trg_journal_lines_posted_no_update");
+        server.Execute(
+            $"UPDATE journal_lines SET item_description = '{tooLong}' WHERE journal_entry_id = {original.Value}");
+
+        var reversal = server.InsertReversalDraft(original);
+        await PostAsync(server, reversal);
+
+        var lines = (await server.EntryStore.LoadAsync(reversal)).Lines;
+        Assert.All(
+            lines,
+            line => Assert.Equal(
+                JournalLineRules.TextMaxLength, JournalLineRules.CountCharacters(line.ItemDescription)));
+        Assert.All(lines, line => Assert.EndsWith("…", line.ItemDescription!, StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task 二重取消はできず_伝票も採番も残らない()
     {

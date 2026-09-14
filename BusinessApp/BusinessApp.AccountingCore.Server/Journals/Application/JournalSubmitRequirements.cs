@@ -1,5 +1,7 @@
 namespace BusinessApp.AccountingCore.Server.Journals.Application;
 
+using System.Text;
+
 using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Shared;
@@ -83,6 +85,89 @@ internal static class JournalSubmitRequirements
         return violations;
     }
 
+    /// <summary>
+    /// 文字の欄が <b>DDL の受け取れる形か</b>を見る（docs/10 §4-2-1・[013] のトリガ）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>断るのは長すぎるときと、数えられない字が入っているときだけである。</b>
+    /// 空を断るのは別の仕事——摘要は<b>計上のときだけ</b>必須で
+    /// （<c>JournalEntryValidator</c>）、明細の内容は必須ではない（docs/10 §4-2-1）。</para>
+    /// <para><b>下書き保存でも見る。</b> DDL のトリガに状態は関係ない。
+    /// <b>下書きに 500 文字入れて、計上のときに初めて断るのでは遅い。</b></para>
+    /// <para><b>更新は差分しか届かない</b>（qa/01 の F-12）ので、
+    /// <b>載っていない＝触っていない</b>として素通しする。</para>
+    /// <para><b>前後の空白を落とし、落とした姿を差分に書き戻す</b>（マスタの名前と同じ。ADR-0047 の決定 5）。
+    /// 画面も <c>ShouldTrimAfterEdit</c> で落とすが、<b>画面は経路の 1 本でしかない</b>——
+    /// 投入 API から <c>"␣␣␣" ＋ 198 字</c> が来たとき、<b>落とさないと「203 文字あります」と断る</b>。
+    /// <b>同じ値に 2 つの答えを返さない</b>（<c>MasterTextLength.Normalize</c> と揃えた）。</para>
+    /// <para><b>数えるのは <see cref="JournalLineRules.CountCharacters"/> 1 本である。</b>
+    /// ここで自前に数えると、<b>数え方を直したときに関門と <c>Shorten</c> が黙ってずれる</b>。</para>
+    /// </remarks>
+    private static void CheckText(
+        ModuleData data,
+        string fieldName,
+        string label,
+        string tooLongCode,
+        Func<int, string> tooLongMessage,
+        int? lineNo,
+        List<Violation> violations)
+    {
+        if (!data.Fields.TryGetValue(fieldName, out var found))
+        {
+            return;
+        }
+
+        if (found is not TextFieldData text)
+        {
+            throw UnreadableFieldException.For(data.Name, fieldName, found);
+        }
+
+        if (text.Value is not string value)
+        {
+            return;
+        }
+
+        // **`null` は `null` のままにする**（空文字を書き込むと「無いは NULL」が崩れる。docs/20 §7）。
+        var normalized = value.Trim();
+        text.Value = normalized;
+
+        // **U+0000 は DDL が断る**ので、ここでも断る（受理する集合を同じにする。qa/03 の L-14・L-48）。
+        if (UnusableAt(normalized) is int position)
+        {
+            violations.Add(new Violation(
+                JournalViolationCodes.TextNotStorable,
+                JournalLineRules.TextHasUnusableCharacter(label, position),
+                lineNo));
+            return;
+        }
+
+        var length = JournalLineRules.CountCharacters(normalized);
+        if (length > JournalLineRules.TextMaxLength)
+        {
+            violations.Add(new Violation(tooLongCode, tooLongMessage(length), lineNo));
+        }
+    }
+
+    /// <summary>数えられない字（U+0000）が何文字目にあるか。無ければ <c>null</c>。</summary>
+    /// <remarks>
+    /// <b>SQLite の <c>LENGTH()</c> は途中の U+0000 で止まる</b>ので、DDL はこれを断る
+    /// （<c>Designer/ddl/013_journal_text_length.sql</c>）。<b>関門も同じ集合を断る。</b>
+    /// </remarks>
+    private static int? UnusableAt(string value)
+    {
+        var position = 0;
+        foreach (var rune in value.EnumerateRunes())
+        {
+            position++;
+            if (rune.Value == 0)
+            {
+                return position;
+            }
+        }
+
+        return null;
+    }
+
     private static IEnumerable<(ModuleData Data, bool IsNew)> RowsIn(
         IReadOnlyList<ModuleSubmitData> transactionData)
         => transactionData.SelectMany(d => d.Add.Select(a => (a, true)))
@@ -97,6 +182,10 @@ internal static class JournalSubmitRequirements
                 violations.Add(new Violation(JournalViolationCodes.RequiredValueMissing, message));
             }
         }
+
+        CheckText(data, "Description", JournalLineRules.DescriptionLabel,
+                  JournalViolationCodes.DescriptionTooLong, JournalLineRules.DescriptionTooLong,
+                  null, violations);
 
         AddIfUndefinedChoice<EntryStatus>(data, "Status", JournalLineRules.StatusNotStorable, null, violations);
         AddIfUndefinedChoice<EntryType>(data, "EntryType", JournalLineRules.EntryTypeNotStorable, null, violations);
@@ -133,6 +222,10 @@ internal static class JournalSubmitRequirements
         {
             violations.Add(new Violation(AmountCodeOf(amount), AmountMessageOf(amount), lineNo));
         }
+
+        CheckText(data, "ItemDescription", JournalLineRules.ItemDescriptionLabel,
+                  JournalViolationCodes.ItemDescriptionTooLong, JournalLineRules.ItemDescriptionTooLong,
+                  lineNo, violations);
 
         if (NumberOf(data, "LineNo") is decimal no && !JournalLineRules.IsStorableLineNo(no))
         {
