@@ -1,17 +1,18 @@
 namespace BusinessApp.Schema.Tests;
 
+using BusinessApp.AccountingCore.Journals;
 using BusinessApp.ServerSupport;
 using BusinessApp.TestSupport;
 
 /// <summary>
-/// <b>文字の欄の上限を、DDL が最後に止める</b>（docs/12 §2-2）。
+/// <b>文字の欄の上限を、DDL が最後に止める</b>（マスタと取引先は docs/12 §2-2、伝票は docs/10 §4-2-1）。
 /// </summary>
 /// <remarks>
 /// <para><b>関門が本体で、ここは最後の守り</b>である（コードの 20 文字と同じ 2 段）。
 /// <b>アプリを迂回する経路</b>（CLI・取込・手打ちの SQL）にも効かせるために置く。</para>
 /// <para><b>3 者の数が一致することは <see cref="FieldLengthConsistencyTests"/> が見る。</b>
 /// ここが見るのは<b>振る舞い</b>——同じ値を C# と DDL が同じように扱うか、である。</para>
-/// <para><b>16 本のトリガを 1 本残らず撃つ。</b> 掃引（<c>knockout.ps1</c>）は
+/// <para><b>20 本のトリガを 1 本残らず撃つ。</b> 掃引（<c>knockout.ps1</c>）は
 /// <c>FieldLengthConsistencyTests</c> を殺し手から外している（定義文を読むだけで
 /// 振る舞いを見ていないから）ので、<b>ここで撃たないトリガは誰も見張っていない</b>
 /// ——自己レビューのラウンド 94 で、8 本が素通りだと 2 人に指摘された。</para>
@@ -19,23 +20,59 @@ using BusinessApp.TestSupport;
 public class TextLengthGuardTests
 {
     /// <summary>
-    /// 上限を持つ 8 つの列と、行を 1 本入れるのに要る他の列。
+    /// 上限を持つ 10 の列と、行を 1 本入れるのに要る他の列。
     /// </summary>
     /// <remarks>
     /// <b>母数は <see cref="FieldLengthConsistencyTests.TextLengthFields"/> と対になる。</b>
     /// 数が食い違ったら <see cref="トリガは母数のぶんだけある"/> が赤くなる。
     /// </remarks>
-    public static TheoryData<string, string, string, string, int, bool> Columns => new()
+    public static TheoryData<string, string, string, string, int, bool, string> Columns => new()
     {
-        { "accounts", "name", "code, category", "'X1', 'asset'", MasterTextLength.MasterName, false },
-        { "sub_accounts", "name", "account_id, code", "1, 'X1'", MasterTextLength.MasterName, false },
-        { "departments", "name", "code", "'X1'", MasterTextLength.MasterName, false },
-        { "tax_categories", "name", "code, taxation_type", "'X1', 'out_of_scope'", MasterTextLength.MasterName, false },
-        { "fiscal_years", "label", "code, start_date, end_date, status", "'X1', '2030-04-01', '2031-03-31', 'open'", MasterTextLength.MasterName, false },
-        { "partners", "name", "code", "'X1'", MasterTextLength.PartnerName, false },
-        { "partners", "name_kana", "code, name", "'X1', '検証'", MasterTextLength.PartnerName, true },
-        { "partners", "address", "code, name", "'X1', '検証'", MasterTextLength.Address, true },
+        { "accounts", "name", "code, category", "'X1', 'asset'", MasterTextLength.MasterName, false, "" },
+        { "sub_accounts", "name", "account_id, code", "1, 'X1'", MasterTextLength.MasterName, false, "" },
+        { "departments", "name", "code", "'X1'", MasterTextLength.MasterName, false, "" },
+        { "tax_categories", "name", "code, taxation_type", "'X1', 'out_of_scope'", MasterTextLength.MasterName, false, "" },
+        { "fiscal_years", "label", "code, start_date, end_date, status", "'X1', '2030-04-01', '2031-03-31', 'open'", MasterTextLength.MasterName, false, "" },
+        { "partners", "name", "code", "'X1'", MasterTextLength.PartnerName, false, "" },
+        { "partners", "name_kana", "code, name", "'X1', '検証'", MasterTextLength.PartnerName, true, "" },
+        { "partners", "address", "code, name", "'X1', '検証'", MasterTextLength.Address, true, "" },
+        {
+            "journal_entries", "description",
+            "fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at",
+            "1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00'",
+            JournalLineRules.TextMaxLength, true, ""
+        },
+        {
+            "journal_lines", "item_description",
+            "journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id",
+            "1, 1, 'debit', 1, 100, 1",
+            JournalLineRules.TextMaxLength, true, EntryForLines
+        },
     };
+
+    /// <summary>明細の親になる下書きを 1 本作る。</summary>
+    /// <remarks>
+    /// <b><see cref="SchemaSeed.Create"/> はマスタしか入れない</b>ので、
+    /// 明細を撃つ検体は親を自分で用意する。
+    /// <b><see cref="SchemaSeed.Draft"/> は明細まで入れてしまう</b>ので使えない
+    /// ——行番号がぶつかる。
+    /// </remarks>
+    private const string EntryForLines =
+        "INSERT INTO journal_entries"
+        + " (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)"
+        + " VALUES (1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');";
+
+    /// <summary>検体の土台。マスタと、必要なら親の行。</summary>
+    private static Microsoft.Data.Sqlite.SqliteConnection Prepared(string setup)
+    {
+        var db = SchemaSeed.Create();
+        if (setup.Length > 0)
+        {
+            TestDatabase.Execute(db, setup);
+        }
+
+        return db;
+    }
 
     /// <summary>上限ちょうどは通り、1 文字超えると断られる（<b>追加</b>）。</summary>
     /// <remarks>
@@ -44,19 +81,20 @@ public class TextLengthGuardTests
     [Theory]
     [MemberData(nameof(Columns))]
     public void 追加は上限ちょうどが通り一文字超えると断られる(
-        string table, string column, string others, string values, int max, bool nullable)
+        string table, string column, string others, string values, int max, bool nullable, string setup)
     {
         _ = nullable;
-        using var db = SchemaSeed.Create();
+        using var db = Prepared(setup);
+        var insert = $"INSERT INTO {table} ({others}, {column}) VALUES ({values}, ";
 
-        TestDatabase.Execute(
-            db, $"INSERT INTO {table} ({others}, {column}) VALUES ({values}, '{new string('あ', max)}');");
+        TestDatabase.Execute(db, $"{insert}'{new string('あ', max)}');");
+
+        // **入れた行を消してから 2 件目を撃つ。** 残したままだと、
+        // **一意の制約が先に鳴って、長さのトリガまで届かない**（同じコードや行番号になるため）。
+        TestDatabase.Execute(db, $"DELETE FROM {table} WHERE rowid = (SELECT MAX(rowid) FROM {table});");
 
         Rejected.ByTrigger(
-            db,
-            $"INSERT INTO {table} ({others}, {column}) VALUES ({Retry(values)}, '{new string('あ', max + 1)}');",
-            $"は {max} 文字以内。",
-            $"{table}.{column}");
+            db, $"{insert}'{new string('あ', max + 1)}');", $"は {max} 文字以内。", $"{table}.{column}");
     }
 
     /// <summary>直すときも同じ上限で断られる（<b>更新</b>）。</summary>
@@ -67,10 +105,10 @@ public class TextLengthGuardTests
     [Theory]
     [MemberData(nameof(Columns))]
     public void 更新も上限ちょうどが通り一文字超えると断られる(
-        string table, string column, string others, string values, int max, bool nullable)
+        string table, string column, string others, string values, int max, bool nullable, string setup)
     {
         _ = nullable;
-        using var db = SchemaSeed.Create();
+        using var db = Prepared(setup);
 
         // **狙う列も埋めて行を作る。** 名前は `NOT NULL` なので、空のまま行は作れない。
         TestDatabase.Execute(db, $"INSERT INTO {table} ({others}, {column}) VALUES ({values}, 'あ');");
@@ -94,10 +132,10 @@ public class TextLengthGuardTests
     [Theory]
     [MemberData(nameof(Columns))]
     public void NULLと空文字は長さの守りを通る(
-        string table, string column, string others, string values, int max, bool nullable)
+        string table, string column, string others, string values, int max, bool nullable, string setup)
     {
         _ = max;
-        using var db = SchemaSeed.Create();
+        using var db = Prepared(setup);
         TestDatabase.Execute(db, $"INSERT INTO {table} ({others}, {column}) VALUES ({values}, 'あ');");
 
         var where = $"WHERE rowid = (SELECT MAX(rowid) FROM {table})";
@@ -127,11 +165,11 @@ public class TextLengthGuardTests
     [Theory]
     [MemberData(nameof(Columns))]
     public void BLOBは断られる(
-        string table, string column, string others, string values, int max, bool nullable)
+        string table, string column, string others, string values, int max, bool nullable, string setup)
     {
         _ = max;
         _ = nullable;
-        using var db = SchemaSeed.Create();
+        using var db = Prepared(setup);
 
         Rejected.ByTrigger(
             db,
@@ -155,10 +193,10 @@ public class TextLengthGuardTests
     [Theory]
     [MemberData(nameof(Columns))]
     public void NULを混ぜて上限をすり抜けられない(
-        string table, string column, string others, string values, int max, bool nullable)
+        string table, string column, string others, string values, int max, bool nullable, string setup)
     {
         _ = nullable;
-        using var db = SchemaSeed.Create();
+        using var db = Prepared(setup);
 
         // **見える側は上限ちょうど**（`LENGTH()` からは合法に見える）。隠す側はその 3 倍。
         var hidden = System.Text.Encoding.UTF8.GetBytes(
@@ -245,7 +283,73 @@ public class TextLengthGuardTests
     }
 
     /// <summary>
-    /// <b>トリガは母数のぶんだけある</b>（8 列 × 追加・更新）。
+    /// <b>伝票の側も、関門と DDL が同じ値に同じ答えを返す</b>（qa/03 の L-14）。
+    /// </summary>
+    /// <remarks>
+    /// <b>上のマスタ側と同じ形を、<c>JournalLineRules</c> と 013 のトリガで通す。</b>
+    /// <b>規則が 2 つの型に分かれている</b>（純粋層は <c>ServerSupport</c> を参照できない。docs/22）ので、
+    /// <b>片方だけ直したときに気づける相手がここしかない</b>。
+    /// </remarks>
+    [Theory]
+    [InlineData("あ", true)]
+    [InlineData("  あ  ", true)]            // 前後の空白は落とす
+    [InlineData("あ い", true)]             // 字の間の空白は落とさない
+    [InlineData("あ\0い", false)]           // NUL は両方が断る
+    public void 伝票でも関門と_DDL_が同じ値に同じ答えを返す(string value, bool accepted)
+    {
+        using var db = SchemaSeed.Create();
+        TestDatabase.Execute(db, EntryForLines);
+
+        var normalized = value.Trim();
+        var gate = JournalLineRules.CountCharacters(normalized) <= JournalLineRules.TextMaxLength
+                   && !normalized.Contains('\0');
+
+        Assert.Equal(accepted, gate);
+
+        var hex = Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(normalized));
+        var update = "UPDATE journal_entries SET description = CAST(x'" + hex + "' AS TEXT)"
+                     + " WHERE rowid = (SELECT MAX(rowid) FROM journal_entries);";
+        if (accepted)
+        {
+            TestDatabase.Execute(db, update);
+        }
+        else
+        {
+            Rejected.ByTrigger(db, update, "「摘要」", value);
+        }
+    }
+
+    /// <summary>
+    /// <b>伝票の上限も、符号点で数える</b>（マスタ側と同じ判断）。
+    /// </summary>
+    [Theory]
+    [InlineData(200, true)]
+    [InlineData(201, false)]
+    public void 伝票の摘要も基本多言語面の外の字を一文字と数える(int count, bool accepted)
+    {
+        using var db = SchemaSeed.Create();
+        TestDatabase.Execute(db, EntryForLines);
+        var text = string.Concat(Enumerable.Repeat("\U0001F642", count));
+
+        Assert.Equal(count, JournalLineRules.CountCharacters(text));
+
+        var where = "WHERE rowid = (SELECT MAX(rowid) FROM journal_entries)";
+        var update = $"UPDATE journal_entries SET description = '{text}' {where};";
+        if (accepted)
+        {
+            TestDatabase.Execute(db, update);
+            Assert.Equal(
+                (long)count,
+                TestDatabase.ScalarOf<long>(db, $"SELECT LENGTH(description) FROM journal_entries {where}"));
+        }
+        else
+        {
+            Rejected.ByTrigger(db, update, $"は {JournalLineRules.TextMaxLength} 文字以内。");
+        }
+    }
+
+    /// <summary>
+    /// <b>トリガは母数のぶんだけある</b>（10 列 × 追加・更新）。
     /// </summary>
     /// <remarks>
     /// <b>母数が 2 つに割れていないことを見る。</b> <see cref="Columns"/> と
@@ -269,7 +373,4 @@ public class TextLengthGuardTests
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger'"
                 + " AND name LIKE 'trg_%_length_%'"));
     }
-
-    /// <summary>2 件目を入れる検体では、コードが重複しないようにずらす。</summary>
-    private static string Retry(string values) => values.Replace("'X1'", "'X2'", StringComparison.Ordinal);
 }

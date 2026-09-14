@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
+using BusinessApp.AccountingCore.Journals;
 using BusinessApp.Partners;
 using BusinessApp.ServerSupport;
 using BusinessApp.TestSupport;
@@ -87,7 +88,7 @@ public class FieldLengthConsistencyTests
     }
 
     /// <summary>
-    /// <b>文字の欄の上限</b>（docs/12 §2-2）を持つ 8 つの欄。
+    /// <b>文字の欄の上限</b>を持つ 10 の欄（マスタと取引先は docs/12 §2-2、伝票は docs/10 §4-2-1）。
     /// </summary>
     /// <remarks>
     /// <b>ここは手で書くが、手で保たない。</b> <see cref="上限を持たない文字の欄は理由つきで数え上げてある"/> が
@@ -104,6 +105,11 @@ public class FieldLengthConsistencyTests
         { "Partner", "partners", "Name", "name", MasterTextLength.PartnerName },
         { "Partner", "partners", "NameKana", "name_kana", MasterTextLength.PartnerName },
         { "Partner", "partners", "Address", "address", MasterTextLength.Address },
+
+        // **伝票の 2 欄だけ、上限を決めた文書も定数も違う**（docs/10 §4-2-1・`JournalLineRules`）。
+        // 数が同じ 200 でも、**動く理由が違うので写さない**。
+        { "JournalEntry", "journal_entries", "Description", "description", JournalLineRules.TextMaxLength },
+        { "JournalLine", "journal_lines", "ItemDescription", "item_description", JournalLineRules.TextMaxLength },
     };
 
     /// <summary>
@@ -128,8 +134,6 @@ public class FieldLengthConsistencyTests
             ["Partner.CorporateNumber"] = "同上",
             ["PartnerInvoiceRegistration.RegistrationNo"] = "T ＋ 13 桁ちょうど。別の規則",
             ["PartnerInvoiceRegistration.PublishedName"] = "公表システムの写しで、長さは相手が決める（05 の問い）",
-            ["JournalEntry.Description"] = "摘要は 200 文字と決まっている（docs/10 §4-2-1）。**実装は次の回**",
-            ["JournalLine.ItemDescription"] = "明細の内容も同じ（docs/10 §4-2-1）。**実装は次の回**",
             ["JournalEntry.PartnerNameSnapshot"] = "計上時の写しで、利用者は打たない（ADR-0018）",
             ["JournalLine.PartnerNameSnapshot"] = "同上",
             ["JournalLine.AppliedRuleVersion"] = "同上（適用した版の写し）",
@@ -211,7 +215,9 @@ public class FieldLengthConsistencyTests
             // （自己レビューのラウンド 94。2 人が独立に指摘）。
             var limits = Regex.Matches(definition, $@"LENGTH\(NEW\.{column}\)\s*>\s*(?<max>\d+)");
 
-            Assert.True(limits.Count >= 2, $"{table}.{column} の {kind} トリガの上限が {limits.Count} 箇所しかない");
+            // **ちょうど 2 箇所である**（`WHEN` 節と本文の `WHERE`）。`>=` にすると、
+            // **枝が 3 箇所に増えても緑**のままになる。
+            Assert.Equal(2, limits.Count);
             Assert.All(
                 limits,
                 limit => Assert.Equal(max.ToString(CultureInfo.InvariantCulture), limit.Groups["max"].Value));
@@ -382,16 +388,18 @@ public class FieldLengthConsistencyTests
     }
 
     /// <summary>
-    /// <b>16 本のトリガが同じ条件を持つ</b>（表名・列・呼び名・上限だけが違う）。
+    /// <b>20 本のトリガが同じ条件を持つ</b>（表名・列・呼び名・上限だけが違う）。
     /// </summary>
     /// <remarks>
     /// <para><b>上限の数だけを見ても足りない。</b> <c>typeof</c> の枝や NUL の枝を 1 本消しても、
-    /// <b>数の突き合わせは緑のまま</b>である——同じ規則を 8 列へ写すときに落ちるのはそこである
-    /// （qa/03 の L-37 の型。<c>MasterCodeGuardTests.トリガ12本は同じ条件を持つ</c> と同じ作法）。</para>
+    /// <b>数の突き合わせは緑のまま</b>である——同じ規則を 10 列へ写すときに落ちるのはそこである
+    /// （qa/03 の L-37 の型。<c>MasterCodeGuardTests.トリガ12本は同じ条件を持つ</c> と同じ作法）。
+    /// <b>012（マスタと取引先）と 013（伝票）をまたいで突き合わせる</b>——
+    /// <b>ファイルが分かれた瞬間に骨格がずれる</b>のが、この型のいちばん多い起き方である。</para>
     /// <para><b>表名・列・呼び名・上限を伏せてから比べる。</b> 残るのが骨格である。</para>
     /// </remarks>
     [Fact]
-    public void 文字の欄のトリガ16本は同じ条件を持つ()
+    public void 文字の欄のトリガ20本は同じ条件を持つ()
     {
         using var db = SchemaSeed.Create();
         var shapes = new Dictionary<string, List<string>>(StringComparer.Ordinal);

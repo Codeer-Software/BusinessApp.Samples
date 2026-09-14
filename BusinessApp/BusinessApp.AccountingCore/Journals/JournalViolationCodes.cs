@@ -46,6 +46,27 @@ public static class JournalViolationCodes
     public const string DescriptionMissing = "E-DESCRIPTION-EMPTY";
 
     /// <summary>
+    /// 摘要が上限（<see cref="JournalLineRules.TextMaxLength"/>）を超えている（docs/10 §4-2-1）。
+    /// </summary>
+    /// <remarks>
+    /// <b>空とは分ける。</b> 直し方が違う（書く／削る）ので、同じコードに寄せない
+    /// （この型の冒頭の規則）。
+    /// </remarks>
+    public const string DescriptionTooLong = "E-DESCRIPTION-TOO-LONG";
+
+    /// <summary>明細の「内容」が上限を超えている（docs/10 §4-2-1）。</summary>
+    public const string ItemDescriptionTooLong = "E-ITEM-DESCRIPTION-TOO-LONG";
+
+    /// <summary>
+    /// 摘要か内容に、<b>数えられない字（U+0000）</b>が入っている。
+    /// </summary>
+    /// <remarks>
+    /// <b>DDL が断る値を関門も断る</b>（qa/03 の L-14・L-48）。
+    /// 長さとは分ける——<b>削っても直らない</b>からである。
+    /// </remarks>
+    public const string TextNotStorable = "E-TEXT-NOT-STORABLE";
+
+    /// <summary>
     /// <b>DDL の <c>NOT NULL</c> に当たる項目が入っていない。</b>
     /// 伝票（取引日・計上日・会計年度）と明細（借方貸方・勘定科目・金額・行番号）の両方に使う。
     /// <b>税区分の欠落だけは <see cref="TaxCategoryMissing"/></b>——計上の検証が先に固有のコードを

@@ -65,6 +65,70 @@ public class JournalEntryValidatorTests
     // 「摘要が入っていれば通る」は `貸借が一致した仕訳は計上できる` が既に表明している
     // （検体は既定で摘要を持つ）ので、ここには置かない（ADR-0012 §2 の「カバレッジのためのテスト」）。
 
+    /// <summary>
+    /// <b>長すぎる摘要は計上できない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>保存の関門だけでは足りない。</b> あちらは<b>差分に載った欄しか見ない</b>（qa/01 の F-12）ので、
+    /// <b>上限を置く前に書かれた長い下書きは、保存せずに「計上する」を押すだけで計上でき、以後不変になる</b>
+    /// （I-05）。<b>投入 API も同じ検証を通る</b>（docs/10 §10）。</para>
+    /// <para><b>符号点で数える</b>——<c>string.Length</c> だと 🙂 が 2 になり、
+    /// SQLite の <c>LENGTH()</c> と食い違う。</para>
+    /// </remarks>
+    [Fact]
+    public void 長すぎる摘要は計上できない()
+    {
+        var entry = AccountingFixture.CashSale(Ordinary) with
+        {
+            Description = new string('あ', JournalLineRules.TextMaxLength + 31),
+        };
+
+        var violation = AssertViolation(JournalViolationCodes.DescriptionTooLong, Validate(entry));
+
+        Assert.Equal(JournalLineRules.DescriptionTooLong(231), violation.Message);
+    }
+
+    /// <summary>上限ちょうどの摘要は計上できる。</summary>
+    [Fact]
+    public void 上限ちょうどの摘要は計上できる()
+    {
+        var entry = AccountingFixture.CashSale(Ordinary) with
+        {
+            Description = new string('あ', JournalLineRules.TextMaxLength),
+        };
+
+        Assert.DoesNotContain(
+            Validate(entry), v => v.Code == JournalViolationCodes.DescriptionTooLong);
+    }
+
+    /// <summary>
+    /// <b>長すぎる明細の「内容」も計上できない</b>（何行目かを添える）。
+    /// </summary>
+    /// <remarks>
+    /// <b>「内容」は必須ではない</b>ので、見るのは長さだけである。
+    /// </remarks>
+    [Fact]
+    public void 長すぎる内容は行を添えて計上できない()
+    {
+        var entry = AccountingFixture.CashSale(Ordinary);
+        var broken = entry with
+        {
+            Lines =
+            [
+                entry.Lines[0] with
+                {
+                    ItemDescription = new string('い', JournalLineRules.TextMaxLength + 1),
+                },
+                entry.Lines[1],
+            ],
+        };
+
+        var violation = AssertViolation(JournalViolationCodes.ItemDescriptionTooLong, Validate(broken));
+
+        Assert.Equal(JournalLineRules.ItemDescriptionTooLong(201), violation.Message);
+        Assert.Equal(broken.Lines[0].LineNo, violation.LineNo);
+    }
+
     [Fact]
     public void 摘要の前後に空白があっても中身があれば計上できる()
     {

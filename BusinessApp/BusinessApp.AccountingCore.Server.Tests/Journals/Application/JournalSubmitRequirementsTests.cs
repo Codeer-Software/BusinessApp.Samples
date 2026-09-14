@@ -3,6 +3,7 @@ namespace BusinessApp.AccountingCore.Server.Tests.Journals.Application;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 using BusinessApp.AccountingCore.Shared;
+using BusinessApp.ServerSupport;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
 using Microsoft.Data.Sqlite;
@@ -29,6 +30,216 @@ public class JournalSubmitRequirementsTests
 
     private static List<string> MessagesOf(IReadOnlyList<Violation> violations)
         => violations.Select(v => v.Message).ToList();
+
+    // --- 文字の欄の上限（docs/10 §4-2-1）---------------------------------------
+
+    /// <summary>上限ちょうどの摘要は通る。</summary>
+    /// <remarks>
+    /// <b>両端を撃たないと <c>&gt;</c> と <c>&gt;=</c> の取り違えが見えない。</b>
+    /// </remarks>
+    [Fact]
+    public void 上限ちょうどの摘要は通る()
+    {
+        var entry = SubmitData.NewEntryWith(
+            "@temporary:1", "Description",
+            new TextFieldData { Value = new string('あ', JournalLineRules.TextMaxLength) });
+
+        Assert.Empty(JournalSubmitRequirements.Check(Adding(entry)));
+    }
+
+    /// <summary>
+    /// 上限を超えた摘要は、<b>いま何文字あるかまで言って</b>断る。
+    /// </summary>
+    /// <remarks>
+    /// <b>下書き保存でも見る。</b> DDL のトリガに伝票の状態は関係ない——
+    /// <b>下書きに 500 文字入れて、計上のときに初めて断るのでは遅い。</b>
+    /// </remarks>
+    [Fact]
+    public void 長すぎる摘要は断る()
+    {
+        var entry = SubmitData.NewEntryWith(
+            "@temporary:1", "Description",
+            new TextFieldData { Value = new string('あ', JournalLineRules.TextMaxLength + 1) });
+
+        var violations = JournalSubmitRequirements.Check(Adding(entry));
+
+        Assert.Equal([JournalViolationCodes.DescriptionTooLong], CodesOf(violations));
+        Assert.Equal([JournalLineRules.DescriptionTooLong(201)], MessagesOf(violations));
+        Assert.Null(violations[0].LineNo);
+    }
+
+    /// <summary>明細の「内容」も同じ上限で断り、<b>何行目かを添える</b>。</summary>
+    [Fact]
+    public void 長すぎる内容は行を添えて断る()
+    {
+        var line = SubmitData.LineWith(
+            3, "ItemDescription",
+            new TextFieldData { Value = new string('あ', JournalLineRules.TextMaxLength + 5) });
+
+        var violations = JournalSubmitRequirements.Check(Adding(line));
+
+        Assert.Equal([JournalViolationCodes.ItemDescriptionTooLong], CodesOf(violations));
+        Assert.Equal([JournalLineRules.ItemDescriptionTooLong(205)], MessagesOf(violations));
+        Assert.Equal(3, violations[0].LineNo);
+    }
+
+    /// <summary>
+    /// <b>基本多言語面の外の字も 1 文字と数える</b>（docs/12 §2-2 と同じ判断）。
+    /// </summary>
+    /// <remarks>
+    /// <c>string.Length</c> で数えると <b>🙂 が 2 になり、100 文字で断ってしまう</b>——
+    /// <b>SQLite の <c>LENGTH()</c> は 1 と数える</b>ので、DB が受け取る値を関門が拒む形になる。
+    /// </remarks>
+    [Fact]
+    public void 絵文字二百個の摘要は通る()
+    {
+        var entry = SubmitData.NewEntryWith(
+            "@temporary:1", "Description",
+            new TextFieldData
+            {
+                Value = string.Concat(Enumerable.Repeat("\U0001F642", JournalLineRules.TextMaxLength)),
+            });
+
+        Assert.Empty(JournalSubmitRequirements.Check(Adding(entry)));
+    }
+
+    /// <summary>
+    /// <b>目に見えない字（U+0000）は、長さより先に断る</b>（qa/03 の L-14・L-48）。
+    /// </summary>
+    /// <remarks>
+    /// <b>DDL が断る値を関門も断る。</b> 通すと利用者には定型文しか出ない（qa/03 の L-28）。
+    /// <b>長さとは分ける</b>——削っても直らないからである。
+    /// </remarks>
+    [Fact]
+    public void 摘要に目に見えない字が入っていれば断る()
+    {
+        var entry = SubmitData.NewEntryWith(
+            "@temporary:1", "Description", new TextFieldData { Value = "あい\0" + new string('う', 300) });
+
+        var violations = JournalSubmitRequirements.Check(Adding(entry));
+
+        Assert.Equal([JournalViolationCodes.TextNotStorable], CodesOf(violations));
+        Assert.Equal([JournalLineRules.TextHasUnusableCharacter("摘要", 3)], MessagesOf(violations));
+    }
+
+    /// <summary>空と <c>null</c> は長さの話ではない。</summary>
+    /// <remarks>
+    /// <b>摘要が必須なのは計上のときだけ</b>で、それは <c>JournalEntryValidator</c> が見る
+    /// （docs/10 §4-2-1）。<b>明細の「内容」は必須ですらない。</b>
+    /// </remarks>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void 空の摘要は長さの関門では断らない(string? value)
+    {
+        var entry = SubmitData.NewEntryWith("@temporary:1", "Description", new TextFieldData { Value = value });
+
+        Assert.Empty(JournalSubmitRequirements.Check(Adding(entry)));
+    }
+
+    /// <summary>触っていない欄は見ない（qa/01 の F-12）。</summary>
+    [Fact]
+    public void 摘要を触っていない更新は長さを見ない()
+    {
+        Assert.Empty(JournalSubmitRequirements.Check(
+            Updating(SubmitData.NewEntryWithout("1", "Description"))));
+    }
+
+    /// <summary>読めない型で届いた文字の欄は素通ししないで止める。</summary>
+    /// <remarks>
+    /// <b>黙って <c>null</c> にすると、長さの検査だけが丸ごと素通しになる</b>
+    /// ——しかもフィクスチャが自分で正しい型を組むのでテストは緑のままである。
+    /// </remarks>
+    [Fact]
+    public void 読めない型の摘要は止める()
+    {
+        var entry = SubmitData.NewEntryWith("@temporary:1", "Description", new NumberFieldData { Value = 1 });
+
+        Assert.Throws<UnreadableFieldException>(() => JournalSubmitRequirements.Check(Adding(entry)));
+    }
+
+    /// <summary>
+    /// <b>更新の差分に載った長すぎる摘要も断る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>追加だけを守る関門は、正しい値で作ってから壊す経路を残す。</b>
+    /// DDL は追加と更新の 2 本 1 組で守っているので、関門も両方を撃つ。
+    /// </remarks>
+    [Fact]
+    public void 更新で長すぎる摘要になれば断る()
+    {
+        var entry = SubmitData.NewEntryWith(
+            "1", "Description",
+            new TextFieldData { Value = new string('あ', JournalLineRules.TextMaxLength + 1) });
+
+        Assert.Equal(
+            [JournalViolationCodes.DescriptionTooLong],
+            CodesOf(JournalSubmitRequirements.Check(Updating(entry))));
+    }
+
+    /// <summary>
+    /// <b>絵文字 201 個は断る</b>（<c>string.Length</c> なら 402 になる）。
+    /// </summary>
+    /// <remarks>
+    /// <b>通る側だけを撃つと、数え方を <c>string.Length</c> に戻しても緑のまま</b>である
+    /// ——あちらは 200 個ですでに 400 と数えるので、201 個も断ってしまう。
+    /// <b>境界の両側を、符号単位と答えが割れる字で撃つ。</b>
+    /// </remarks>
+    [Fact]
+    public void 絵文字二百一個の摘要は断る()
+    {
+        var entry = SubmitData.NewEntryWith(
+            "@temporary:1", "Description",
+            new TextFieldData
+            {
+                Value = string.Concat(Enumerable.Repeat("\U0001F642", JournalLineRules.TextMaxLength + 1)),
+            });
+
+        var violations = JournalSubmitRequirements.Check(Adding(entry));
+
+        Assert.Equal([JournalViolationCodes.DescriptionTooLong], CodesOf(violations));
+        Assert.Equal([JournalLineRules.DescriptionTooLong(201)], MessagesOf(violations));
+    }
+
+    /// <summary>目に見えない字の断りにも、何行目かを添える。</summary>
+    /// <remarks>
+    /// <b>長さの枝だけ行を添えて、こちらを忘れると、同じ欄なのに片方だけ行が出ない。</b>
+    /// </remarks>
+    [Fact]
+    public void 内容の目に見えない字にも行を添える()
+    {
+        var line = SubmitData.LineWith(
+            3, "ItemDescription", new TextFieldData { Value = "あ\0い" });
+
+        var violations = JournalSubmitRequirements.Check(Adding(line));
+
+        Assert.Equal([JournalViolationCodes.TextNotStorable], CodesOf(violations));
+        Assert.Equal(
+            [JournalLineRules.TextHasUnusableCharacter(JournalLineRules.ItemDescriptionLabel, 2)],
+            MessagesOf(violations));
+        Assert.Equal(3, violations[0].LineNo);
+    }
+
+    /// <summary>
+    /// <b>前後の空白を落とし、落とした姿を差分に書き戻す</b>（マスタの名前と同じ）。
+    /// </summary>
+    /// <remarks>
+    /// <b>落とさないと、同じ値に 2 つの答えが出る</b>——
+    /// 投入 API から「空白 3 ＋ 198 字」が来たとき、
+    /// <c>MasterTextLength</c> は通し、こちらは「201 文字あります」と断ることになる。
+    /// </remarks>
+    [Fact]
+    public void 摘要の前後の空白は落として差分に書き戻す()
+    {
+        var entry = SubmitData.NewEntryWith(
+            "@temporary:1", "Description",
+            new TextFieldData { Value = "   " + new string('あ', JournalLineRules.TextMaxLength) + "   " });
+
+        Assert.Empty(JournalSubmitRequirements.Check(Adding(entry)));
+        Assert.Equal(
+            new string('あ', JournalLineRules.TextMaxLength),
+            ((TextFieldData)entry.Fields["Description"]).Value);
+    }
 
     // --- 明細 ---
 

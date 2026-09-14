@@ -67,7 +67,11 @@ public static class JournalDuplication
             // 通常の伝票ができ、**していない訂正を帳簿に書く**ことになる。
             // **本文が空なら NULL**——空文字を残すと空値検索が取りこぼす（docs/20 §7）。
             // 計上には摘要が要るので、利用者はそこで何の取引かを書く（それが正しい）。
-            Description = AmendmentRules.Body(original) is { Length: > 0 } body ? body : null,
+            // **上限に収める**——訂正の摘要は既に詰められていることがあり、
+            // 接頭辞を落とすとさらに短くなるだけだが、**長い原文をそのまま写す経路もある**
+            // （上限を置く前に計上された伝票）。写した先で DDL が拒むと複製だけが落ちる。
+            Description = JournalLineRules.ShortenCopiedText(
+                AmendmentRules.Body(original) is { Length: > 0 } body ? body : null),
             PartnerId = original.PartnerId,
             EnteredAt = enteredAt,
             Lines = [.. Copy(original.Lines)],
@@ -105,7 +109,8 @@ public static class JournalDuplication
                     // 落とすと同じ取引なのに課税仕入れの日が黙って変わり、
                     // **画面にこの欄が無い**ので利用者は入れ直せない（2026-09-09 の自己レビュー）。
                     TaxPoint = line.TaxPoint,
-                    ItemDescription = line.ItemDescription,
+                    // **上限に収める**（取消・訂正と同じ手当て。ADR-0004）。
+                    ItemDescription = JournalLineRules.ShortenCopiedText(line.ItemDescription),
                     BookOnlyDeduction = line.BookOnlyDeduction,
                 });
 }

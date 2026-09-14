@@ -102,6 +102,14 @@ internal static class SubmitData
     /// <summary>保存の差分に載る摘要。<b>層ごとに別の字にしてある</b>（qa/03 L-02）。</summary>
     public const string DefaultDescription = "7 月分の水道光熱費";
 
+    /// <summary>項目を 1 つ<b>差し替えた</b>新規の伝票（空にする・壊れた値を入れる・型を間違える）。</summary>
+    public static ModuleData NewEntryWith(string id, string fieldName, FieldDataBase value)
+    {
+        var data = NewEntry(id, status: "draft");
+        data.Fields[fieldName] = value;
+        return data;
+    }
+
     /// <summary>項目を 1 つ<b>差分から落とした</b>新規の伝票。</summary>
     public static ModuleData NewEntryWithout(string id, string fieldName)
     {

@@ -90,15 +90,36 @@ public static class AmendmentRules
     /// （実機で確認。2026-08-25）。摘要欄は取引の説明であって履歴ではなく、
     /// 履歴は <c>original_entry_id</c> で辿れる。<b>直前の接頭辞をすべて落として本文だけを引き継ぐ。</b></para>
     /// <para>伝票番号がある前提で書いてよい。無い伝票は <see cref="ValidateOriginal"/> が先に止めている。</para>
+    /// <para><b>上限（<see cref="JournalLineRules.TextMaxLength"/>）に収める。</b>
+    /// 前置きは 10 数文字あるので、<b>原仕訳の摘要が上限いっぱいだと、そのままでは超える</b>——
+    /// 超えた摘要は DDL のトリガが拒み、<b>利用者には直す手立てが無い</b>
+    /// （取消の摘要はサーバが作る。計上済みは変えられない）。</para>
+    /// <para><b>詰めるのは本文の側だけである。</b> 前置き（何の取消・訂正か）を落とすと、
+    /// <b>足された伝票だけを見て何が起きたかを追えなくなる</b>——この関数の本来の目的が消える。
+    /// <b>原文は原仕訳にそのまま残り</b>、<c>original_entry_id</c> で辿れる。</para>
     /// </remarks>
     internal static string Describe(JournalEntry original, AmendmentKind kind)
     {
+        var prefix = $"伝票番号 {original.EntryNo} の{kind.Noun}";
         var body = Body(original);
+        if (body.Length == 0)
+        {
+            return prefix;
+        }
 
-        return body.Length == 0
-            ? $"伝票番号 {original.EntryNo} の{kind.Noun}"
-            : $"伝票番号 {original.EntryNo} の{kind.Noun}: {body}";
+        // **本文に使える幅は、番号の桁によらず同じにする。**
+        // 実際の前置きの長さで計算すると、**番号が桁を増やすたびに本文が 1 文字ずつ削れる**
+        // ——訂正を重ねると戻らない（計上済みは不変。I-05）。
+        var room = JournalLineRules.TextMaxLength - JournalLineRules.AmendmentPrefixMaxLength;
+
+        return $"{prefix}{Separator}{JournalLineRules.Shorten(body, room)}";
     }
+
+    /// <summary>前置きと本文の区切り。<b>長さの見積り（<c>AmendmentPrefixMaxLength</c>）に含める。</b></summary>
+    /// <remarks>
+    /// <b>字数を別に書かない。</b> 区切りを変えた日に、引く数だけが取り残される。
+    /// </remarks>
+    private const string Separator = ": ";
 
     /// <summary>
     /// 摘要の<b>本文</b>（自分が付けた接頭辞を落とし、前後の空白も落とした姿）。空なら空文字。

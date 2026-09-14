@@ -90,6 +90,88 @@ public class JournalReversalTests
         Assert.Equal("伝票番号 1 の取消", result.Reversal!.Description);
     }
 
+    /// <summary>
+    /// <b>上限いっぱいの摘要を取り消しても、摘要は上限に収まる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>前置き（「伝票番号 1 の取消: 」）があるぶん、そのままでは超える。</b>
+    /// 超えた摘要は DDL のトリガが拒み、<b>利用者には直す手立てが無い</b>
+    /// ——取消の摘要は画面から書けず、計上済みは変えられない（ADR-0004）。</para>
+    /// <para><b>詰めるのは本文の側だけで、前置きは必ず残る。</b>
+    /// <b>原文は原仕訳にそのまま残り</b>、`original_entry_id` で辿れる。</para>
+    /// </remarks>
+    [Fact]
+    public void 上限いっぱいの摘要を取り消しても上限に収まる()
+    {
+        // **頭と尾を区別できる検体にする。** 同じ字で埋めると、
+        // 「頭を残した」「尾を残した」「埋めただけ」が全部同じ結果になる（qa/03 の L-02 の縮退）。
+        var full = Posted() with
+        {
+            Description = "当月分の" + new string('あ', JournalLineRules.TextMaxLength - 6) + "末尾",
+        };
+
+        var result = JournalReversal.Reverse(full, ReversedOn, EnteredAt, Context());
+
+        var description = result.Reversal!.Description!;
+        Assert.StartsWith("伝票番号 1 の取消: 当月分の", description, StringComparison.Ordinal);
+        Assert.EndsWith("…", description, StringComparison.Ordinal);
+        Assert.DoesNotContain("末尾", description, StringComparison.Ordinal);
+
+        // **前置きの実際の長さ ＋ 本文に使える固定幅**。上限は超えない。
+        Assert.Equal(
+            JournalLineRules.CountCharacters("伝票番号 1 の取消: ")
+                + JournalLineRules.TextMaxLength - JournalLineRules.AmendmentPrefixMaxLength,
+            JournalLineRules.CountCharacters(description));
+        Assert.True(JournalLineRules.CountCharacters(description) <= JournalLineRules.TextMaxLength);
+    }
+
+    /// <summary>
+    /// <b>前置きの見積り（<c>AmendmentPrefixMaxLength</c>）が、実際の前置きを下回らない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>見積りが足りないと、上限を 1 字超えた摘要が DDL に当たる</b>——
+    /// 止まるのは取消の途中で、利用者には定型文しか出ない。
+    /// <b>伝票番号がいちばん長いときで測る。</b>
+    /// </remarks>
+    [Fact]
+    public void 前置きの見積りは実際の前置きを下回らない()
+    {
+        var longest = Posted() with
+        {
+            EntryNo = int.MaxValue,
+            Description = new string('あ', JournalLineRules.TextMaxLength),
+        };
+
+        var description = JournalReversal.Reverse(longest, ReversedOn, EnteredAt, Context())
+            .Reversal!.Description!;
+
+        Assert.True(
+            JournalLineRules.CountCharacters(description) <= JournalLineRules.TextMaxLength,
+            $"前置きの見積りが足りない: {JournalLineRules.CountCharacters(description)} 文字になった");
+    }
+
+    /// <summary>
+    /// <b>本文に使える幅は、伝票番号の桁で変わらない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 実際の前置きの長さで計算すると、<b>番号が桁を増やすたびに本文が 1 文字ずつ削れる</b>
+    /// ——訂正を重ねると戻らない（計上済みは不変。I-05）。
+    /// </remarks>
+    [Fact]
+    public void 本文に使える幅は伝票番号の桁で変わらない()
+    {
+        var body = new string('あ', JournalLineRules.TextMaxLength);
+
+        var small = JournalReversal.Reverse(
+            Posted() with { EntryNo = 1, Description = body }, ReversedOn, EnteredAt, Context());
+        var large = JournalReversal.Reverse(
+            Posted() with { EntryNo = 1000000, Description = body }, ReversedOn, EnteredAt, Context());
+
+        Assert.Equal(
+            JournalLineRules.CountCharacters(small.Reversal!.Description!) - "1".Length,
+            JournalLineRules.CountCharacters(large.Reversal!.Description!) - "1000000".Length);
+    }
+
     [Fact]
     public void 下書きは取り消せない()
     {

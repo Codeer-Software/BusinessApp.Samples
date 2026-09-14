@@ -17,6 +17,12 @@
        向きは会計コア → 取引先の一方通行で、逆はコンパイラが禁じる（ADR-0029 §2）。
        NuGet はゼロのまま。ModuleDependencyTests が「参照はこの 1 本だけ」を検査する。 -->
   <ItemGroup>
+    <!-- **詰める道具（Shorten）を外へ出さないため。** 利用者の入力に当てられると、
+         打った文が黙って短くなる（docs/21 §0）。テストからは見えるようにする。 -->
+    <InternalsVisibleTo Include="BusinessApp.AccountingCore.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\BusinessApp.Partners\BusinessApp.Partners.csproj" />
   </ItemGroup>
 
