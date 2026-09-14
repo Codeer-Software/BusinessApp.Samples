@@ -9,6 +9,7 @@ using Microsoft.Data.Sqlite;
 /// </summary>
 /// <remarks>
 /// <para><b>相手方を欠いた行は「相手方別」のどの帳簿にも載らない</b>（電帳規則 5 ① の括弧書き。docs/40 §4-1）。
+/// <b>制度要件は docs/40 の F1'</b>（対象帳簿の全てを優良の要件で備え付ける）。
 /// 関門（<c>JournalEntryValidator</c> の <c>E-PARTNER-REQUIRED</c>）が本体で、ここは<b>関門が走らない経路</b>
 /// （CSV 取込・<c>sql</c> CLI・手作業の SQL）への最後の守りである。</para>
 /// <para><b>見るのは実効値である</b>——明細の取引先が空なら伝票のものが帳簿に載るので、
