@@ -92,7 +92,10 @@ public class SeedDataTests
         Assert.Equal(0L, outside);
     }
 
-    /// <summary>優良な電子帳簿は課税期間の初日から要件を満たす必要がある（電帳法 8 ④・電帳令 2）。</summary>
+    /// <summary>
+    /// 優良な電子帳簿は課税期間の初日から要件を満たす必要がある（電帳法 8 ④・電帳令 2）。
+    /// <b>docs/40 の F1</b>。
+    /// </summary>
     [Fact]
     public void 優良な電子帳簿の適用開始日が年度の開始日と一致している()
     {
@@ -172,7 +175,7 @@ public class SeedDataTests
     /// </summary>
     /// <remarks>
     /// <b>この 6 行が、優良な電子帳簿の「相手方別に記載する」への当てはめの証跡そのものである</b>
-    /// （docs/40 §4-1 はこの初期データを根拠に状態を書いている）。
+    /// （docs/40 §4-1 はこの初期データを根拠に状態を書いている。<b>docs/40 の F1'</b>）。
     /// <b>コードを 1 つ落としても UPDATE は 0 行更新で黙って通る</b>ので、ここで数と顔ぶれを固定する。
     /// </remarks>
     [Theory]

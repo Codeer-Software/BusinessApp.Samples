@@ -11,8 +11,12 @@ using Microsoft.Data.Sqlite;
 /// <b>条件が効いているかは、値を入れて行数を数えないと分からない。</b>
 /// `&gt;=` と `&gt;` の取り違え、`date()` の掛け忘れ、`p_blank_field` の分岐名の綴り違いは、
 /// どれも例外にならず<b>静かに 0 件や全件</b>を返す（qa/03 の L-12・L-19・L-20）。</para>
-/// <para>ここが守るのは制度要件そのものである——電帳規則 5 ⑤一ハの (2) 範囲・(3) 組み合わせ、
-/// 電帳通達 8-13 の空値検索、8-14 の記録項目、8-15 の課税期間ごとの範囲指定。</para>
+/// <para>ここが守るのは制度要件そのものである——<b>docs/40 の D1</b>（記録項目を検索条件にできる。
+/// 電帳通達 8-14）・<b>40 の D2</b>（記録事項がない記録も検索できる。電帳通達 8-13）・
+/// <b>40 の D3</b>（範囲指定と 2 項目の組み合わせ。電帳規則 5 ⑤一ハの (2)(3)・
+/// 電帳通達 8-15 と 8-16）。<b>範囲は 8-15、組合せは 8-16 である</b>——別の通達なので分けて書く。</para>
+/// <para><b>条番号ではなく項目 ID で引く。</b> 優良な電子帳簿の要件は 2027-01-01 に条番号が動く
+/// （[qa/05 §5](../../docs/qa/05_観点網羅の計器.md)）ので、<b>docs/40 の項目 ID を正とする</b>。</para>
 /// </remarks>
 [Collection(QuerySqlCollection.Name)]
 public class JournalBookQueryTests
@@ -78,7 +82,7 @@ public class JournalBookQueryTests
         Assert.DoesNotContain(3L, Run(db).Select(r => r.EntryId));
     }
 
-    // --- 取引年月日の範囲（電帳規則 5 ⑤一ハ(2)・電帳通達 8-14）---
+    // --- 取引年月日の範囲（電帳規則 5 ⑤一ハ(2)・電帳通達 8-15）---
 
     [Theory]
     [InlineData("2026-05-10", "2026-05-20", 4)]   // 両端を含む
@@ -103,7 +107,7 @@ public class JournalBookQueryTests
         Assert.Equal([2L, 2L], Run(db, ("@p_transaction_date_from", "2026-05-16")).Select(r => r.EntryId));
     }
 
-    // --- 取引金額の範囲（電帳通達 8-14）---
+    // --- 取引金額の範囲（電帳規則 5 ⑤一ハ(2)・電帳通達 8-15）---
 
     [Theory]
     [InlineData(1000, 5000, 4)]
@@ -118,7 +122,7 @@ public class JournalBookQueryTests
         Assert.Equal(expected, Run(db, ("@p_amount_min", min), ("@p_amount_max", max)).Count);
     }
 
-    // --- 伝票番号（電帳通達 8-14 (注) の一連番号による検索）---
+    // --- 伝票番号（電帳通達 8-14 (注) の一連番号による検索。docs/40 の D1）---
 
     [Theory]
     [InlineData(1, 2, 4)]
@@ -145,6 +149,7 @@ public class JournalBookQueryTests
     }
 
     /// <summary>
+    /// <b>docs/40 の C1</b>（個別転記——同一取引であることを示す一連番号等）。
     /// <b>伝票番号は会計年度の中の連番</b>なので、年度を指定しなければ同じ番号が複数の年度から出る。
     /// 年度と組み合わせれば 1 本に絞れる（電帳通達 8-15 の「課税期間ごとに」）。
     /// </summary>
@@ -170,12 +175,13 @@ public class JournalBookQueryTests
             ("@p_entry_no_min", 1L), ("@p_entry_no_max", 1L), ("@p_fiscal_year_id", 2L)).Select(r => r.EntryId));
     }
 
-    // --- 組み合わせ（電帳規則 5 ⑤一ハ(3)・電帳通達 8-15）---
+    // --- 組み合わせ（電帳規則 5 ⑤一ハ(3)・電帳通達 8-16）---
 
     [Fact]
     public void 課税期間と日付と金額を組み合わせられる()
     {
-        // 電帳通達 8-15「課税期間ごとに、日付又は金額の任意の範囲を指定して」。
+        // **範囲（8-15「課税期間ごとに、日付又は金額の任意の範囲を指定して」）と
+        // 組合せ（8-16「いずれの 2 の組合せによっても」）を同時に撃つ。**
         using var db = Create();
 
         var rows = Run(db,
@@ -332,6 +338,7 @@ public class JournalBookQueryTests
 
     /// <summary>
     /// 取引日 → <b>会計年度（開始日）</b> → 伝票番号 → 行番号の順。
+    /// <b>docs/40 の E2</b>（見読可能性——整然とした形式で画面へ出せる）の、画面の側。
     /// </summary>
     /// <remarks>
     /// <para>先頭が取引日なのは、仕訳帳が「取引の発生順に」記載する帳簿だからである
