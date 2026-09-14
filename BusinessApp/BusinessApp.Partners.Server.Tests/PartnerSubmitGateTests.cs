@@ -1137,4 +1137,243 @@ public class PartnerSubmitGateTests
 
         Assert.True(save.Called);
     }
+
+    // --- 文字の欄の上限（docs/12 §2-2） ---------------------------------------
+
+    /// <summary>検体の取引先に、文字の欄を 1 つ載せる。</summary>
+    /// <remarks>
+    /// <b><see cref="Partner"/> に引数を足さない。</b> 長さを見る欄は 3 つあり、
+    /// <b>どれか 1 つだけを載せた差分</b>（更新の実際の姿。qa/01 F-12）を組みたいからである。
+    /// </remarks>
+    private static ModuleData PartnerWith(string field, string value, long? id = null, string? code = "P900")
+    {
+        var data = Partner(id: id, code: code);
+        data.Fields[field] = new TextFieldData { Value = value };
+        return data;
+    }
+
+    /// <summary>
+    /// 上限を超えた欄は、<b>欄の呼び名と「いま何文字あるか」まで言って</b>断る。
+    /// </summary>
+    /// <remarks>
+    /// <b>3 つの欄を別々の語で断る。</b> 1 つの定型文にしないこと自体が qa/03 L-28 の直しである。
+    /// </remarks>
+    [Theory]
+    [InlineData("Name", "取引先名", 100)]
+    [InlineData("NameKana", "カナ", 100)]
+    [InlineData("Address", "所在地", 200)]
+    public async Task 長すぎる欄は呼び名といまの文字数で断る(string field, string label, int max)
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        var rejected = await RejectedAsync(
+            server, Adding(PartnerWith(field, new string('あ', max + 1))), save);
+
+        // **接頭の「登録できません。」はこの規則の持ち物ではない**ので、末尾だけを見る。
+        Assert.EndsWith(
+            $"「{label}」は {max} 文字以内です。いまは {max + 1} 文字あります。短くして入力し直してください。",
+            rejected.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>上限ちょうどは通り、<b>DB も受け取る</b>。</summary>
+    /// <remarks>
+    /// <b>関門の受理集合が DDL より広いと、通した値が定型文で落ちる</b>（qa/03 L-14 の型）。
+    /// <b>両端を撃たないと <c>&gt;</c> と <c>&gt;=</c> の取り違えが見えない。</b>
+    /// </remarks>
+    [Theory]
+    [InlineData("Name", "name", 100)]
+    [InlineData("NameKana", "name_kana", 100)]
+    [InlineData("Address", "address", 200)]
+    public async Task 上限ちょうどの欄は_DB_まで通る(string field, string column, int max)
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+        var value = new string('あ', max);
+
+        await Gate(server).SubmitAsync([Adding(PartnerWith(field, value))], save.SaveAsync);
+        Assert.True(save.Called);
+
+        // **`name` を撃つときは列を 2 回書かない。**
+        var columns = column == "name" ? "code, name" : $"code, name, {column}";
+        var values = column == "name" ? $"'P900', '{value}'" : $"'P900', '名前', '{value}'";
+        server.Execute($"insert into partners ({columns}) values ({values})");
+        Assert.Equal(
+            (long)max, server.Scalar<long>($"select length({column}) from partners where code = 'P900'"));
+    }
+
+    /// <summary>
+    /// <b>基本多言語面の外の字は 1 文字と数える</b>（docs/12 §2-2）。
+    /// </summary>
+    /// <remarks>
+    /// <c>string.Length</c> で数えると <b>🙂 が 2 になり、50 文字で断ってしまう</b>——
+    /// <b>SQLite の <c>LENGTH()</c> は 1 と数える</b>ので、DB が受け取る値を関門が拒む形になる。
+    /// </remarks>
+    [Fact]
+    public async Task 絵文字100個の取引先名は通る()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync(
+            [Adding(PartnerWith("Name", string.Concat(Enumerable.Repeat("\U0001F642", 100))))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>差分に載っていない欄は見ない（qa/01 F-12）。</summary>
+    /// <remarks>
+    /// <para><b>保存されている値を読み直して数えない。</b> 読み直すと、
+    /// <b>所在地を触っていない更新が所在地の長さで落ちる</b>ことになる。</para>
+    /// <para><b>上限より長い行は作れないので、検体には置けない</b>——DDL のトリガが追加を止める。
+    /// <b>上限を決める前から入っていた行</b>は移行（<c>0035_text_length.sql</c>）の手前で数え、
+    /// <b>更新のトリガは <c>BEFORE UPDATE OF &lt;列&gt;</c></b> なので、
+    /// その列を触らない限り後からでも直せる（そちらは <c>FieldLengthConsistencyTests</c> が見る）。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 差分に載っていない欄の長さは見ない()
+    {
+        using var server = new PartnerServer();
+        server.Execute(
+            $"insert into partners (code, name, address) values ('P001', '株式会社アルタイル', '{new string('あ', 200)}')");
+        var id = server.Scalar<long>("select id from partners where code = 'P001'");
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync([Updating(Partner(id: id, code: null))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>直す更新でも見る。</summary>
+    /// <remarks><b>追加だけを守る関門は、正しい値で作ってから壊す経路を残す。</b></remarks>
+    [Fact]
+    public async Task 所在地を長くする更新は断る()
+    {
+        using var server = new PartnerServer();
+        server.Execute("insert into partners (code, name) values ('P001', '株式会社アルタイル')");
+        var id = server.Scalar<long>("select id from partners where code = 'P001'");
+        var save = new SaveSpy();
+
+        var rejected = await RejectedAsync(
+            server, Updating(PartnerWith("Address", new string('あ', 201), id: id, code: null)), save);
+
+        Assert.EndsWith(
+            "「所在地」は 200 文字以内です。いまは 201 文字あります。短くして入力し直してください。",
+            rejected.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>空の欄をこの関門は断らない</b>（docs/12 §2-2）。
+    /// </summary>
+    /// <remarks>
+    /// <b>必須は画面の <c>IsRequired</c> と DB の <c>NOT NULL</c> の仕事である。</b>
+    /// </remarks>
+    [Fact]
+    public async Task 空の欄は長さの関門では断らない()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        await Gate(server).SubmitAsync([Adding(PartnerWith("Address", string.Empty))], save.SaveAsync);
+
+        Assert.True(save.Called);
+    }
+
+    /// <summary>
+    /// <b>前後の空白を落とし、落とした姿を差分に書き戻す</b>（ADR-0047 の決定 5 と同じ）。
+    /// </summary>
+    /// <remarks>
+    /// <b>比べるときだけ落とすと、関門が数えた長さと DDL が数える長さが食い違う</b>
+    /// （qa/03 の L-14。qa/02 の R45-02 で実際に踏んだ）。
+    /// <b>上限ちょうど＋空白</b>を撃つ——落としていなければ 101 文字で断られる。
+    /// </remarks>
+    [Fact]
+    public async Task 前後の空白は落として差分に書き戻す長さの欄()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+        var row = PartnerWith("Name", $"  {new string('あ', 100)}  ");
+
+        await Gate(server).SubmitAsync([Adding(row)], save.SaveAsync);
+
+        Assert.True(save.Called);
+        Assert.Equal(new string('あ', 100), ((TextFieldData)row.Fields["Name"]).Value);
+    }
+
+    /// <summary>
+    /// <b>目に見えない文字は関門が断る</b>——DDL が断るからである（qa/03 の L-14）。
+    /// </summary>
+    /// <remarks>
+    /// <b>関門が通すと、DDL が落として利用者には定型文しか出ない</b>（qa/03 の L-28）。
+    /// </remarks>
+    [Fact]
+    public async Task 所在地に目に見えない文字が入っていれば断る()
+    {
+        using var server = new PartnerServer();
+        var save = new SaveSpy();
+
+        var rejected = await RejectedAsync(server, Adding(PartnerWith("Address", "東京\0都")), save);
+
+        Assert.EndsWith(
+            "「所在地」の 3 文字目に、目に見えない文字が入っています。入力し直してください。",
+            rejected.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>断る順が画面の並びと同じである。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>画面は <b>取引先コード → 取引先名 → カナ → 種別 → 法人番号 → 所在地</b> の順に並ぶ。
+    /// (a) 型の関門は<b>理由を 1 つだけ返す</b>（docs/12 §2-1「即エラー。次へ進まない」）ので、
+    /// <b>順が画面と食い違うと、利用者は上と下を往復させられる</b>。</para>
+    /// <para><b>名前と法人番号を同時に壊して、先に名前が出ることを見る</b>——
+    /// 逆にすると、上にある欄が後から出る。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 断る順は画面の並びと同じである()
+    {
+        using var server = new PartnerServer();
+
+        var name = PartnerWith("Name", new string('あ', 101));
+        name.Fields["CorporateNumber"] = new TextFieldData { Value = WrongCheckDigit };
+        Assert.Contains(
+            "「取引先名」", (await RejectedAsync(server, Adding(name), new SaveSpy())).Message,
+            StringComparison.Ordinal);
+
+        // **所在地は法人番号より下にある**ので、法人番号が先に出る。
+        var address = PartnerWith("Address", new string('あ', 201));
+        address.Fields["CorporateNumber"] = new TextFieldData { Value = WrongCheckDigit };
+        Assert.Contains(
+            "法人番号", (await RejectedAsync(server, Adding(address), new SaveSpy())).Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>長さを見る 3 つの欄の型が、デザインで変わったらここで赤くなる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>呼び名も写しである</b>（docs/20 §4）。ずれると、画面に無い語を名指しして断ることになる。
+    /// </remarks>
+    [Theory]
+    [InlineData("Name", "name", "取引先名")]
+    [InlineData("NameKana", "name_kana", "カナ")]
+    [InlineData("Address", "address", "所在地")]
+    public void 長さを見る欄の呼び名と列はデザインと一致する(string field, string column, string label)
+    {
+        関門が読む欄の型はデザインと一致する(field, "TextFieldDesign");
+
+        var path = Directory
+            .EnumerateFiles(TestDatabase.ModulesDirectory, "Partner.mod.json", SearchOption.AllDirectories)
+            .Single();
+        using var design = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+
+        var found = design.RootElement.GetProperty("Fields").EnumerateArray()
+            .Single(f => f.GetProperty("Name").GetString() == field);
+
+        Assert.Equal(column, found.GetProperty("DbColumn").GetString());
+        Assert.Equal(label, found.GetProperty("DisplayName").GetString());
+    }
 }
