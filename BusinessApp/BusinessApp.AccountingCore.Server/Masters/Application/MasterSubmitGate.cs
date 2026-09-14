@@ -42,11 +42,14 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// </remarks>
     public static readonly IReadOnlyList<CodedMaster> Coded =
     [
-        new("Account", "accounts", "科目コード"),
-        new("SubAccount", "sub_accounts", "補助科目コード", new("account_id", "Account")),
-        new("Department", "departments", "部門コード"),
-        new("TaxCategory", "tax_categories", "税区分コード"),
-        new("FiscalYear", "fiscal_years", "年度コード"),
+        new("Account", "accounts", "科目コード", new("Name", "name", "科目名")),
+        new("SubAccount", "sub_accounts", "補助科目コード", new("Name", "name", "補助科目名"),
+            new("account_id", "Account")),
+        new("Department", "departments", "部門コード", new("Name", "name", "部門名")),
+        new("TaxCategory", "tax_categories", "税区分コード", new("Name", "name", "税区分名")),
+        // **会計年度の欄は `Name` ではなく `Label` である。** 決め打ちにすると、
+        // ここだけ関門が黙って素通しになる（旧 Q-20 の問いは会計年度を「マスタの名前」に含めていた）。
+        new("FiscalYear", "fiscal_years", "年度コード", new("Label", "label", "年度名")),
     ];
 
     /// <summary>部品の組み立て。</summary>
@@ -90,9 +93,49 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         }
 
         await RejectBadCodeAsync(master, data, id);
+        RejectLongText(master, data);
         await RejectSecondCompanyWideDepartmentAsync(master, data, id);
         await RejectInconsistentTaxCategoryAsync(master, data, id);
         await RejectSubAccountUnderPlainAccountAsync(master, data, transactionData);
+    }
+
+    /// <summary>名前の長さ（docs/12 §2-2）。</summary>
+    /// <remarks>
+    /// <para><b>断るのは長すぎるときと、数えられない字が入っているときだけである。</b>
+    /// 空を断るのは画面の <c>IsRequired</c> と DB の <c>NOT NULL</c> の仕事で、
+    /// <b>長さの関門が「空です」と言い出すと責任の境目がぼやける</b>。</para>
+    /// <para><b>更新は差分しか届かない</b>（qa/01 の F-12）ので、
+    /// <b>載っていない＝触っていない</b>として素通しする。</para>
+    /// <para><b>読む口は 1 つである。</b> 型で受けてから <c>ContainsKey</c> で見直す形にすると、
+    /// <b>「載っているのに読めない」という通らない枝</b>が残る（<c>PartnerSubmitGate</c> と同じ作法）。
+    /// <b>読めない型なら止める</b>——黙って <c>null</c> にすると、この検査だけが丸ごと素通しになる。</para>
+    /// <para><b>前後の空白を落とし、落とした姿を差分に書き戻す</b>（コードと同じ。ADR-0047 の決定 5）。
+    /// <b>比べるときだけ落とすと、関門が数えた長さと DDL が数える長さが食い違う</b>
+    /// （qa/03 の L-14 の型。qa/02 の R45-02 で実際に踏んだ）。</para>
+    /// </remarks>
+    private static void RejectLongText(CodedMaster master, ModuleData data)
+    {
+        if (!data.Fields.TryGetValue(master.Text.FieldName, out var found))
+        {
+            return;
+        }
+
+        if (found is not TextFieldData text)
+        {
+            throw UnreadableFieldException.For(data.Name, master.Text.FieldName, found);
+        }
+
+        // **`null` は `null` のままにする**（空文字を書き込むと「無いは NULL」が崩れる。docs/20 §7）。
+        if (text.Value is string value)
+        {
+            text.Value = MasterTextLength.Normalize(value);
+        }
+
+        if (MasterTextLength.DescribeProblem(
+                master.Text.Label, text.Value, MasterTextLength.MasterName) is string problem)
+        {
+            throw new MasterRejectedException(problem);
+        }
     }
 
     /// <summary>コードの書式と、大小を無視した重複（ADR-0047）。</summary>

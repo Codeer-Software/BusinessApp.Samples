@@ -87,6 +87,147 @@ public class FieldLengthConsistencyTests
     }
 
     /// <summary>
+    /// <b>文字の欄の上限</b>（docs/12 §2-2）を持つ 8 つの欄。
+    /// </summary>
+    /// <remarks>
+    /// <b>ここは手で書くが、手で保たない。</b> <see cref="上限を持たない文字の欄は理由つきで数え上げてある"/> が
+    /// <b>デザインにある文字の欄を総当たりして、この表にも除外の表にも無い欄を赤くする</b>——
+    /// <b>数を直書きして数え落とした</b>のが qa/02 のラウンド 89（日付の 3 列）で、同じ形をここで繰り返さない。
+    /// </remarks>
+    public static TheoryData<string, string, string, string, int> TextLengthFields => new()
+    {
+        { "Account", "accounts", "Name", "name", MasterTextLength.MasterName },
+        { "SubAccount", "sub_accounts", "Name", "name", MasterTextLength.MasterName },
+        { "Department", "departments", "Name", "name", MasterTextLength.MasterName },
+        { "TaxCategory", "tax_categories", "Name", "name", MasterTextLength.MasterName },
+        { "FiscalYear", "fiscal_years", "Label", "label", MasterTextLength.MasterName },
+        { "Partner", "partners", "Name", "name", MasterTextLength.PartnerName },
+        { "Partner", "partners", "NameKana", "name_kana", MasterTextLength.PartnerName },
+        { "Partner", "partners", "Address", "address", MasterTextLength.Address },
+    };
+
+    /// <summary>
+    /// <b>上限をまだ置いていない文字の欄</b>と、その理由（docs/12 §2-2 の「この表に無い文字の欄」）。
+    /// </summary>
+    /// <remarks>
+    /// <b>「置いていない」を明示に持つ。</b> 黙って外すと、
+    /// <b>数え落としたのか意図して外したのかが後から決まらない</b>。
+    /// </remarks>
+    private static readonly IReadOnlyDictionary<string, string> TextFieldsWithoutLimit =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Account.NameKana"] = "読みは表記より長いので、名前と同じ数にはできない（05 の問い）",
+            ["SubAccount.NameKana"] = "同上",
+            ["CompanyProfile.Name"] = "自社情報は 1 行しかなく、上限を決めていない（05 の問い）",
+            ["CompanyProfile.NameKana"] = "同上",
+            ["CompanyProfile.RepresentativeName"] = "同上",
+            ["CompanyProfile.PostalCode"] = "同上。書式の規則を先に決める話でもある",
+            ["CompanyProfile.Address"] = "同上",
+            ["CompanyProfile.PhoneNumber"] = "同上。書式の規則を先に決める話でもある",
+            ["CompanyProfile.CorporateNumber"] = "13 桁ちょうど。別の規則で、この表の下で突き合わせている",
+            ["Partner.CorporateNumber"] = "同上",
+            ["PartnerInvoiceRegistration.RegistrationNo"] = "T ＋ 13 桁ちょうど。別の規則",
+            ["PartnerInvoiceRegistration.PublishedName"] = "公表システムの写しで、長さは相手が決める（05 の問い）",
+            ["JournalEntry.Description"] = "摘要は 200 文字と決まっている（docs/10 §4-2-1）。**実装は次の回**",
+            ["JournalLine.ItemDescription"] = "明細の内容も同じ（docs/10 §4-2-1）。**実装は次の回**",
+            ["JournalEntry.PartnerNameSnapshot"] = "計上時の写しで、利用者は打たない（ADR-0018）",
+            ["JournalLine.PartnerNameSnapshot"] = "同上",
+            ["JournalLine.AppliedRuleVersion"] = "同上（適用した版の写し）",
+            ["JournalLine.BookOnlyDeduction"] = "同上",
+            ["JournalLine.EvidenceRef"] = "フェーズ 6（証憑の参照）。まだ画面が無い",
+            ["AppUser.ユーザー識別名"] = "認証部品のもの（ADR-0032）。会計コアは間借りしているだけ",
+            ["AppUser.表示名"] = "同上",
+        };
+
+    /// <summary>コードの欄は、別の規則（20 文字）で上のほうが突き合わせている。</summary>
+    private const string CodeFieldName = "Code";
+
+    /// <summary>
+    /// 文字の欄の上限は、<b>画面が文字で見せる</b>（docs/21 §1）。
+    /// </summary>
+    /// <remarks>
+    /// <b><c>MaxLength</c> は使わない。</b> HTML の <c>maxlength</c> になるので、
+    /// <b>長い名前を貼ると黙って切って保存する</b>——コードと同じ理由である
+    /// （docs/21 §0 が「いちばん悪い」と名指しした形。qa/01 の A-10）。
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(TextLengthFields))]
+    public void 文字の欄の上限は画面の文言と_CSharp_で一致する(
+        string module, string table, string field, string column, int max)
+    {
+        _ = table;
+        _ = column;
+        var design = FieldOf(module, field);
+
+        Assert.False(
+            design.TryGetProperty("MaxLength", out var maxLength) && maxLength.ValueKind == JsonValueKind.Number,
+            $"{module}.{field} に MaxLength がある。黙って切るので使わない（21 §1）");
+
+        // **単位まで込みで比べる。** 数だけを `Contains` で見ると、
+        // **30 に対して「300 文字以内」が通る**（数字が部分一致するから）。
+        Assert.Contains(
+            $"{max.ToString(CultureInfo.InvariantCulture)} 文字以内",
+            design.GetProperty("Placeholder").GetString(),
+            StringComparison.Ordinal);
+
+        // **画面でも前後の空白を落とす。** 落とさないと、貼り付けた値の末尾の空白が
+        // 上限に数えられ、**画面で数えた字数と断りの「いまは N 文字」が合わない**。
+        Assert.True(
+            design.GetProperty("ShouldTrimAfterEdit").GetBoolean(),
+            $"{module}.{field} の ShouldTrimAfterEdit が false（前後の空白が長さに数えられる）");
+    }
+
+    /// <summary>
+    /// 文字の欄の上限は、<b>DDL のトリガとも一致する</b>。
+    /// </summary>
+    /// <remarks>
+    /// <b>数を書き写さずに読む</b>——稼働しているトリガの定義から
+    /// <c>LENGTH(NEW.&lt;列&gt;) &gt; N</c> を拾う（コードの上限と同じ作法）。
+    /// <b>追加と更新の 2 本とも見る</b>——片方だけ緩めると、
+    /// <b>作るときは断られるのに、直すときは通る</b>という形になる。
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(TextLengthFields))]
+    public void 文字の欄の上限は_DDL_のトリガとも一致する(
+        string module, string table, string field, string column, int max)
+    {
+        _ = module;
+        _ = field;
+        using var db = SchemaSeed.Create();
+
+        foreach (var kind in new[] { "insert", "update" })
+        {
+            var definition = TestDatabase.ScalarOf<string>(
+                db,
+                "SELECT sql FROM sqlite_master WHERE type = 'trigger'"
+                + $" AND name = 'trg_{table}_{column}_length_{kind}'");
+
+            Assert.False(
+                string.IsNullOrEmpty(definition),
+                $"trg_{table}_{column}_length_{kind} が無い");
+
+            // **1 つ目だけを見ない。** トリガは `WHEN` 節と本文の `WHERE` で 2 度同じ数を書くので、
+            // **`Match` だと `WHEN` 側しか見えず、本文の数だけが化けても緑になる**
+            // （自己レビューのラウンド 94。2 人が独立に指摘）。
+            var limits = Regex.Matches(definition, $@"LENGTH\(NEW\.{column}\)\s*>\s*(?<max>\d+)");
+
+            Assert.True(limits.Count >= 2, $"{table}.{column} の {kind} トリガの上限が {limits.Count} 箇所しかない");
+            Assert.All(
+                limits,
+                limit => Assert.Equal(max.ToString(CultureInfo.InvariantCulture), limit.Groups["max"].Value));
+
+            // **更新は「その列を触ったときだけ」鳴らす。** `BEFORE UPDATE ON` にすると、
+            // **上限を決める前から入っていた長い行が、別の欄すら直せなくなる**
+            // （移行の手前で数えて直す猶予が無くなる。0035_text_length.sql の見出し）。
+            if (kind == "update")
+            {
+                Assert.Contains(
+                    $"BEFORE UPDATE OF {column} ON {table}", definition, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    /// <summary>
     /// 法人番号の桁数も、C# と DDL とデザインで一致する。
     /// </summary>
     /// <remarks>
@@ -121,6 +262,179 @@ public class FieldLengthConsistencyTests
 
             Assert.True(check.Success, $"{table} に法人番号の桁の CHECK が無い");
             Assert.Equal(CorporateNumber.Length, check.Groups["digits"].Value.Length / "[0-9]".Length);
+        }
+    }
+
+    /// <summary>
+    /// <b>デザインにある文字の欄は、上限を持つか、理由つきで外してあるかのどちらかである。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>母数を手で保たない。</b> 日付の守りでは列の数を直書きしていて
+    /// <b>3 列を数え落とし、守ったつもりの列が守られていなかった</b>（qa/02 のラウンド 89）。
+    /// 同じ形をここで繰り返さないために、<b>デザインの側から総当たりする</b>。</para>
+    /// <para><b>保存先を持つモジュールの欄だけを数える。</b> クエリモジュールは <c>DbTable</c> を持たず、
+    /// <b>検索欄は長さを保存しないので上限の話にならない</b>（末尾の空白は 05 の Q-25 が別に持つ）。</para>
+    /// <para><b>除外は「忘れた」ではなく「決めていない」の記録である。</b>
+    /// 理由が書けない欄は、除外してよい欄ではない。</para>
+    /// </remarks>
+    [Fact]
+    public void 上限を持たない文字の欄は理由つきで数え上げてある()
+    {
+        var limited = TextLengthFields
+            .Select(row => $"{row[0]}.{row[2]}")
+            .ToHashSet(StringComparer.Ordinal);
+        var missing = new List<string>();
+
+        foreach (var path in Directory.EnumerateFiles(
+                     TestDatabase.ModulesDirectory, "*.mod.json", SearchOption.AllDirectories))
+        {
+            using var design = JsonDocument.Parse(File.ReadAllText(path));
+            var module = design.RootElement.GetProperty("Name").GetString();
+
+            // **保存先の無いモジュールは数えない**（クエリモジュールは `DbTable` を持たない。
+            // 検索欄は長さを保存しないので、上限の話にならない）。
+            if (string.IsNullOrEmpty(design.RootElement.GetProperty("DbTable").GetString()))
+            {
+                continue;
+            }
+
+            foreach (var field in design.RootElement.GetProperty("Fields").EnumerateArray())
+            {
+                if (field.GetProperty("TypeFullName").GetString()
+                    != "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign")
+                {
+                    continue;
+                }
+
+                if (!field.TryGetProperty("DbColumn", out var column)
+                    || string.IsNullOrEmpty(column.GetString()))
+                {
+                    continue;
+                }
+
+                var name = field.GetProperty("Name").GetString();
+                var key = $"{module}.{name}";
+                if (name == CodeFieldName || limited.Contains(key) || TextFieldsWithoutLimit.ContainsKey(key))
+                {
+                    continue;
+                }
+
+                missing.Add(key);
+            }
+        }
+
+        Assert.True(
+            missing.Count == 0,
+            "文字の欄が母数からも除外の表からも漏れている（docs/12 §2-2 に書いてから、どちらかへ足すこと）: "
+                + string.Join(", ", missing.OrderBy(x => x, StringComparer.Ordinal)));
+    }
+
+    /// <summary>
+    /// <b>母数と除外の表の両方に居る欄は無い。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>片方へ移してもう片方から消し忘れると、どちらの表明も緑のまま</b>である——
+    /// <see cref="上限を持たない文字の欄は理由つきで数え上げてある"/> が見るのは
+    /// 「<b>どちらにも無い</b>」だけだからである。
+    /// <b>上限を置いた欄が「決めていない」と書かれたまま残る</b>と、次に読む人が誤る。
+    /// </remarks>
+    [Fact]
+    public void 母数と除外の表は重ならない()
+    {
+        var both = TextLengthFields
+            .Select(row => $"{row[0]}.{row[2]}")
+            .Where(TextFieldsWithoutLimit.ContainsKey)
+            .ToList();
+
+        Assert.True(
+            both.Count == 0,
+            "上限を置いた欄が除外の表にも残っている（除外の行を消すこと）: "
+                + string.Join(", ", both.OrderBy(x => x, StringComparer.Ordinal)));
+    }
+
+    /// <summary>
+    /// <b>除外の表に、もう無い欄が残っていない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>除外は放っておくと腐る。</b> 欄に上限を置いた日に行を消し忘れると、
+    /// <b>その欄は「決めていない」と書かれたまま守られている</b>ことになり、次に読む人が誤る。
+    /// </remarks>
+    [Fact]
+    public void 除外の表に居ない欄が残っていない()
+    {
+        var actual = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var path in Directory.EnumerateFiles(
+                     TestDatabase.ModulesDirectory, "*.mod.json", SearchOption.AllDirectories))
+        {
+            using var design = JsonDocument.Parse(File.ReadAllText(path));
+            var module = design.RootElement.GetProperty("Name").GetString();
+            foreach (var field in design.RootElement.GetProperty("Fields").EnumerateArray())
+            {
+                actual.Add($"{module}.{field.GetProperty("Name").GetString()}");
+            }
+        }
+
+        var stale = TextFieldsWithoutLimit.Keys.Where(k => !actual.Contains(k)).ToList();
+
+        Assert.True(
+            stale.Count == 0,
+            "除外の表に、デザインに無い欄が残っている: " + string.Join(", ", stale.OrderBy(x => x, StringComparer.Ordinal)));
+    }
+
+    /// <summary>
+    /// <b>16 本のトリガが同じ条件を持つ</b>（表名・列・呼び名・上限だけが違う）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>上限の数だけを見ても足りない。</b> <c>typeof</c> の枝や NUL の枝を 1 本消しても、
+    /// <b>数の突き合わせは緑のまま</b>である——同じ規則を 8 列へ写すときに落ちるのはそこである
+    /// （qa/03 の L-37 の型。<c>MasterCodeGuardTests.トリガ12本は同じ条件を持つ</c> と同じ作法）。</para>
+    /// <para><b>表名・列・呼び名・上限を伏せてから比べる。</b> 残るのが骨格である。</para>
+    /// </remarks>
+    [Fact]
+    public void 文字の欄のトリガ16本は同じ条件を持つ()
+    {
+        using var db = SchemaSeed.Create();
+        var shapes = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+
+        foreach (var row in TextLengthFields)
+        {
+            var (table, column, max) = ((string)row[1], (string)row[3], (int)row[4]);
+            foreach (var kind in new[] { "insert", "update" })
+            {
+                var name = $"trg_{table}_{column}_length_{kind}";
+                var definition = TestDatabase.ScalarOf<string>(
+                    db, $"SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = '{name}'");
+
+                Assert.False(string.IsNullOrEmpty(definition), $"{name} が無い");
+
+                // 表・列・上限・呼び名を伏せる。**伏せたあとに残るのが条件の骨格**である。
+                var shape = definition
+                    .Replace(table, "<表>", StringComparison.Ordinal)
+                    .Replace(column, "<列>", StringComparison.Ordinal)
+                    .Replace(max.ToString(CultureInfo.InvariantCulture), "<上限>", StringComparison.Ordinal);
+                shape = Regex.Replace(shape, "'「[^」]+」[^']*'", "'<文言>'");
+
+                if (!shapes.TryGetValue(kind, out var found))
+                {
+                    found = [];
+                    shapes[kind] = found;
+                }
+
+                found.Add(shape);
+            }
+        }
+
+        foreach (var (kind, found) in shapes)
+        {
+            Assert.Equal(TextLengthFields.Count(), found.Count);
+            Assert.All(found, shape => Assert.True(shape == found[0], $"{kind} のトリガの骨格が揃っていない"));
+
+            // **骨格に何が入っていなければならないか**を名指しで表明する
+            // （全部が同じでも、全部から同じ枝が抜けていれば揃ってはいる）。
+            Assert.Contains("instr(CAST(NEW.<列> AS BLOB), x'00') > 0", found[0], StringComparison.Ordinal);
+            Assert.Contains("typeof(NEW.<列>) = 'blob'", found[0], StringComparison.Ordinal);
+            Assert.Contains("LENGTH(CAST(NEW.<列> AS BLOB)) > 4 * LENGTH(NEW.<列>)", found[0], StringComparison.Ordinal);
+            Assert.Contains("LENGTH(NEW.<列>) > <上限>", found[0], StringComparison.Ordinal);
         }
     }
 

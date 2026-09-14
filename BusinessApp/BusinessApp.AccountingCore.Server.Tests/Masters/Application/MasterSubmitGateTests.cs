@@ -219,6 +219,244 @@ public class MasterSubmitGateTests
         Assert.Contains("「科目コード」を入れてください", thrown.Message, StringComparison.Ordinal);
     }
 
+    // --- 名前の長さ（docs/12 §2-2） --------------------------------------------------------
+
+    /// <summary>
+    /// 上限を超えた名前は、<b>欄の呼び名と「いま何文字あるか」まで言って</b>断る。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>断りは 4 つのマスタで別々の語になる</b>（「科目名」「補助科目名」「部門名」「税区分名」）。
+    /// <b>1 つの定型文にしないこと自体が qa/03 L-28 の直しである。</b></para>
+    /// <para><b>いま何文字あるかを言う。</b> 上限だけを言われても、
+    /// 貼り付けた利用者にはどれだけ削ればよいか分からない（docs/21 §2）。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData("Account", "科目名")]
+    [InlineData("Department", "部門名")]
+    [InlineData("TaxCategory", "税区分名")]
+    public async Task 長すぎる名前は欄の呼び名といまの文字数で断る(string module, string label)
+    {
+        using var server = new AccountingServer();
+
+        var thrown = await Rejected(
+            server,
+            Adding(module, New(module, Text("Code", "Z9"), Text("Name", new string('あ', 31)))));
+
+        // **接頭の「登録できません。」はこの規則の持ち物ではない**ので、末尾だけを見る。
+        Assert.EndsWith(
+            $"「{label}」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。",
+            thrown.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>補助科目も同じ上限で断る。<b>親を指すので別に書く。</b></summary>
+    [Fact]
+    public async Task 長すぎる補助科目名も断る()
+    {
+        using var server = new AccountingServer();
+
+        var thrown = await Rejected(
+            server,
+            Adding("SubAccount", New(
+                "SubAccount", Text("Code", "Z9"), Text("Name", new string('あ', 31)), Account(server, "1100"))));
+
+        Assert.EndsWith(
+            "「補助科目名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。",
+            thrown.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>上限ちょうどは通る。</summary>
+    /// <remarks>
+    /// <b>両端を撃たないと <c>&gt;</c> と <c>&gt;=</c> の取り違えが見えない。</b>
+    /// <b>DB まで通ることを見る</b>——関門の受理集合が DDL より広いと、
+    /// 通した値が定型文で落ちる（qa/03 L-14 の型）。
+    /// </remarks>
+    [Fact]
+    public async Task 上限ちょうどの名前は保存まで通る()
+    {
+        using var server = new AccountingServer();
+        var name = new string('あ', 30);
+
+        Assert.True(await Submit(server, Adding("Account", New("Account", Text("Code", "Z9"), Text("Name", name)))));
+
+        // **関門が通しただけでは足りない。** `Submit` の保存は偽物なので DB には 1 行も書かれない
+        // ——**同じ値を本当に書いて読み戻す**（qa/03 の L-14 の処方。自己レビューのラウンド 94）。
+        server.Execute($"INSERT INTO accounts (code, name, category) VALUES ('Z9', '{name}', 'asset');");
+        Assert.Equal(name, server.Scalar<string>("SELECT name FROM accounts WHERE code = 'Z9'"));
+    }
+
+    /// <summary>
+    /// <b>基本多言語面の外の字は 1 文字と数える</b>（docs/12 §2-2）。
+    /// </summary>
+    /// <remarks>
+    /// <c>string.Length</c> で数えると <b>🙂 が 2 になり、15 文字で断ってしまう</b>——
+    /// <b>SQLite の <c>LENGTH()</c> は 1 と数える</b>ので、DB が受け取る値を関門が拒む形になる。
+    /// </remarks>
+    [Fact]
+    public async Task 絵文字30個の名前は通る()
+    {
+        using var server = new AccountingServer();
+        var name = string.Concat(Enumerable.Repeat("\U0001F642", 30));
+
+        Assert.True(await Submit(server, Adding("Account", New("Account", Text("Code", "Z9"), Text("Name", name)))));
+
+        server.Execute($"INSERT INTO accounts (code, name, category) VALUES ('Z9', '{name}', 'asset');");
+        Assert.Equal(name, server.Scalar<string>("SELECT name FROM accounts WHERE code = 'Z9'"));
+        Assert.Equal(30L, server.Scalar<long>("SELECT LENGTH(name) FROM accounts WHERE code = 'Z9'"));
+    }
+
+    /// <summary>名前を触っていない更新は見ない（qa/01 F-12）。</summary>
+    /// <remarks>
+    /// <b>保存されている名前を読み直して数えると、上限を決める前に入った行が直せなくなる。</b>
+    /// </remarks>
+    [Fact]
+    public async Task 名前を触っていない更新は長さを見ない()
+    {
+        using var server = new AccountingServer();
+
+        Assert.True(await Submit(
+            server, Updating("Account", Row("Account", server.AccountOf("1100").Value, Text("Code", "1101")))));
+    }
+
+    /// <summary>名前を直す更新でも見る。</summary>
+    /// <remarks>
+    /// <b>追加だけを守る関門は、正しい値で作ってから壊す経路を残す。</b>
+    /// </remarks>
+    [Fact]
+    public async Task 名前を長くする更新は断る()
+    {
+        using var server = new AccountingServer();
+
+        var thrown = await Rejected(
+            server,
+            Updating("Account", Row("Account", server.AccountOf("1100").Value, Text("Name", new string('あ', 31)))));
+
+        Assert.EndsWith(
+            "「科目名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。",
+            thrown.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>空の名前をこの関門は断らない</b>（docs/12 §2-2）。
+    /// </summary>
+    /// <remarks>
+    /// <b>必須は画面の <c>IsRequired</c> と DB の <c>NOT NULL</c> の仕事である。</b>
+    /// <b>長さの関門が「空です」と言い出すと、責任の境目がぼやける</b>——
+    /// 同じ欄について 2 つの関門が別々の文言で断る形になる。
+    /// </remarks>
+    [Fact]
+    public async Task 空の名前は長さの関門では断らない()
+    {
+        using var server = new AccountingServer();
+
+        Assert.True(await Submit(
+            server, Adding("Account", New("Account", Text("Code", "Z9"), Text("Name", string.Empty)))));
+    }
+
+    /// <summary>
+    /// <b>会計年度の欄は <c>Name</c> ではなく <c>Label</c> である。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b><c>Name</c> 決め打ちにすると、会計年度だけ関門が黙って素通しになる</b>——
+    /// 作成の画面はまだ無い（フェーズ 4）が、<b>できた日に守りだけが漏れる</b>のを避ける
+    /// （コードの関門を先に置いてあるのと同じ理由）。
+    /// </remarks>
+    [Fact]
+    public async Task 会計年度は_Label_の長さを見る()
+    {
+        using var server = new AccountingServer();
+        Assert.Equal(
+            "Label", MasterSubmitGate.Coded.Single(m => m.ModuleName == "FiscalYear").Text.FieldName);
+
+        var thrown = await Rejected(
+            server,
+            Adding("FiscalYear", New("FiscalYear", Text("Code", "Z9"), Text("Label", new string('あ', 31)))));
+
+        Assert.EndsWith(
+            "「年度名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。",
+            thrown.Message,
+            StringComparison.Ordinal);
+
+        // **`Name` という欄は会計年度に無い**ので、そこへ入れても長さは見ない。
+        Assert.True(await Submit(
+            server, Adding("FiscalYear", New("FiscalYear", Text("Code", "Z8"), Text("Name", new string('あ', 300))))));
+    }
+
+    /// <summary>
+    /// <b>空にした名前は <c>null</c> のまま関門を通る</b>（docs/20 §7「無いは NULL」）。
+    /// </summary>
+    /// <remarks>
+    /// <b>空白だけの値は <c>BlankTextNormalizer</c> が先に <c>null</c> へ寄せる</b>ので、
+    /// <b>この形で関門へ届く</b>。<b>ここで空文字に書き換えると、空値検索が取りこぼす</b>
+    /// （qa/01 の A-11）。断るのは DB の <c>NOT NULL</c> の仕事である。
+    /// </remarks>
+    [Fact]
+    public async Task 名前が_null_で届いても書き換えない()
+    {
+        using var server = new AccountingServer();
+        var row = Row("Account", server.AccountOf("1100").Value, Text("Name", null));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => server.PipelineWithoutLog.SubmitAsync(
+                [Updating("Account", row)], () => throw new InvalidOperationException("保存まで来た")));
+
+        Assert.Null(((TextFieldData)row.Fields["Name"]).Value);
+    }
+
+    /// <summary>
+    /// <b>前後の空白を落とし、落とした姿を差分に書き戻す</b>（ADR-0047 の決定 5 と同じ）。
+    /// </summary>
+    /// <remarks>
+    /// <b>比べるときだけ落とすと、関門が数えた長さと DDL が数える長さが食い違う</b>
+    /// （qa/03 の L-14。qa/02 の R45-02 で実際に踏んだ）。
+    /// <b>上限ちょうど＋空白</b>を撃つ——落としていなければ 31 文字で断られる。
+    /// </remarks>
+    [Fact]
+    public async Task 名前の前後の空白は落として差分に書き戻す()
+    {
+        using var server = new AccountingServer();
+        var row = New("Account", Text("Code", "Z9"), Text("Name", $"  {new string('あ', 30)}  "));
+
+        Assert.True(await Submit(server, Adding("Account", row)));
+        Assert.Equal(new string('あ', 30), ((TextFieldData)row.Fields["Name"]).Value);
+    }
+
+    /// <summary>
+    /// <b>目に見えない文字は関門が断る</b>——DDL が断るからである（qa/03 の L-14）。
+    /// </summary>
+    /// <remarks>
+    /// <b>関門が通すと、DDL が落として利用者には定型文しか出ない</b>（qa/03 の L-28）。
+    /// </remarks>
+    [Fact]
+    public async Task 名前に目に見えない文字が入っていれば断る()
+    {
+        using var server = new AccountingServer();
+
+        var thrown = await Rejected(
+            server, Adding("Account", New("Account", Text("Code", "Z9"), Text("Name", "現\0金"))));
+
+        Assert.EndsWith(
+            "「科目名」の 2 文字目に、目に見えない文字が入っています。入力し直してください。",
+            thrown.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>名前が読めない型で届いたら止める。</summary>
+    /// <remarks>
+    /// <b>黙って通すと、長さの検査だけが丸ごと素通しになる</b>（<c>Boolean</c> と同じ理由）。
+    /// </remarks>
+    [Fact]
+    public async Task 名前が読めない型なら止める()
+    {
+        using var server = new AccountingServer();
+        var row = New("Account", Text("Code", "Z9"));
+        row.Fields["Name"] = new NumberFieldData { Value = 1 };
+
+        await AssertUnreadable(server, Adding("Account", row), "Name", "NumberFieldData");
+    }
+
     // --- 全社共通の部門（qa/03 L-28 の表の 2 例目） -----------------------------------------
 
     /// <summary>
@@ -426,6 +664,16 @@ public class MasterSubmitGateTests
                 .Single(f => f.GetProperty("Name").GetString() == "Code");
             Assert.Equal("code", code.GetProperty("DbColumn").GetString());
             Assert.Equal(master.CodeLabel, code.GetProperty("DisplayName").GetString());
+
+            // **文字の欄の欄名・列・呼び名も写しである**（docs/12 §2-2）。
+            // **欄名が `Name` とは限らない**（会計年度は `Label`）ので、記述子から引く。
+            if (master.Text is CodedText text)
+            {
+                var field = design.RootElement.GetProperty("Fields").EnumerateArray()
+                    .Single(f => f.GetProperty("Name").GetString() == text.FieldName);
+                Assert.Equal(text.Column, field.GetProperty("DbColumn").GetString());
+                Assert.Equal(text.Label, field.GetProperty("DisplayName").GetString());
+            }
 
             if (master.Parent is CodedParent parent)
             {

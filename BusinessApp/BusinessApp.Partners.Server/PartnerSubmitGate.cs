@@ -26,6 +26,19 @@ public sealed class PartnerSubmitGate(PartnerStore store)
 {
     public const string ModuleName = "Partner";
 
+    /// <summary>法人番号より上にある文字の欄（docs/12 §2-2）。</summary>
+    private static readonly (string Field, string Label, int Max)[] AboveCorporateNumber =
+    [
+        ("Name", "取引先名", MasterTextLength.PartnerName),
+        ("NameKana", "カナ", MasterTextLength.PartnerName),
+    ];
+
+    /// <summary>法人番号より下にある文字の欄（docs/12 §2-2）。</summary>
+    private static readonly (string Field, string Label, int Max)[] BelowCorporateNumber =
+    [
+        ("Address", "所在地", MasterTextLength.Address),
+    ];
+
     /// <summary>保存を包む。<paramref name="save"/> は CLB 本来の保存処理。</summary>
     public async Task<List<ModuleSubmitResult>> SubmitAsync(
         IReadOnlyList<ModuleSubmitData> transactionData,
@@ -75,12 +88,55 @@ public sealed class PartnerSubmitGate(PartnerStore store)
             throw new PartnerRejectedException("「取引先コード」を入れてください。");
         }
 
+        // **断る順は画面の並びに合わせる**（取引先コード → 取引先名 → カナ → 種別 → 法人番号 → 所在地）。
+        // (a) 型は 1 つずつしか返さない（docs/12 §2-1）ので、順が画面と食い違うと、
+        // **利用者は上と下を往復させられる**。
         await RejectBadCodeAsync(data);
+        RejectLongText(data, AboveCorporateNumber);
         RejectMalformedCorporateNumber(data);
+        RejectLongText(data, BelowCorporateNumber);
         await RejectSoleProprietorWithCorporateNumberAsync(data);
         await RejectMismatchedParentAsync(data);
         await RejectMismatchedChildrenAsync(data);
         await RejectDeepParentAsync(data);
+    }
+
+    /// <summary>名前・カナ・所在地の長さ（docs/12 §2-2）。</summary>
+    /// <remarks>
+    /// <para><b>断るのは長すぎるときと、数えられない字が入っているときだけである。</b>
+    /// 空を断るのは画面の <c>IsRequired</c> と DB の <c>NOT NULL</c> の仕事で、
+    /// <b>長さの関門が「空です」と言い出すと責任の境目がぼやける</b>。</para>
+    /// <para><b>更新は差分しか届かない</b>（qa/01 の F-12）ので、
+    /// <b>載っていない＝触っていない</b>として素通しする。</para>
+    /// <para><b>欄の呼び名は画面の <c>DisplayName</c> の写しである</b>
+    /// （docs/20 §4 の「已むを得ない重複」。ずれていないことは <c>PartnerSubmitGateTests</c> が見る）。</para>
+    /// <para><b>前後の空白を落とし、落とした姿を差分に書き戻す</b>（コードと同じ。ADR-0047 の決定 5）。
+    /// <b>比べるときだけ落とすと、関門が数えた長さと DDL が数える長さが食い違う</b>
+    /// （qa/03 の L-14 の型。qa/02 の R45-02 で実際に踏んだ）。</para>
+    /// </remarks>
+    private static void RejectLongText(ModuleData data, (string Field, string Label, int Max)[] fields)
+    {
+        foreach (var (field, label, max) in fields)
+        {
+            // **読む口は 1 つにする。** `ContainsKey` で見てから `Field` で読む形にすると、
+            // **通らない枝（載っているのに null）が 1 本残る**——型が読めないときは
+            // `Field` が止めるので、`null` は「載っていない」だけを意味する。
+            if (Field<TextFieldData>(data, field) is not TextFieldData text)
+            {
+                continue;
+            }
+
+            // **`null` は `null` のままにする**（空文字を書き込むと「無いは NULL」が崩れる。docs/20 §7）。
+            if (text.Value is string value)
+            {
+                text.Value = MasterTextLength.Normalize(value);
+            }
+
+            if (MasterTextLength.DescribeProblem(label, text.Value, max) is string problem)
+            {
+                throw new PartnerRejectedException(problem);
+            }
+        }
     }
 
     /// <summary>
