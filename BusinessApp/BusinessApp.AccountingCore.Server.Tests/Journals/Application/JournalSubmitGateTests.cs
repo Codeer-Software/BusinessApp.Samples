@@ -156,6 +156,58 @@ public class JournalSubmitGateTests
     }
 
     /// <summary>
+    /// <b>同じ規則を、明細の行にも当てる</b>（qa/03 L-44。2026-09-16 に塞いだ）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>伝票の行にしか当てていなかった。</b> 明細の <c>PartnerNameSnapshot</c> は
+    /// <b>帳簿の法定記載事項</b>（ADR-0018）で、<b>画面も計上済みの行の表示に使う</b>（ADR-0062）。
+    /// 落とさないと、Web API へ送りつけた文字列がそのまま画面の字になる
+    /// （<c>partner_id</c> と食い違ったまま、利用者には見分けられない）。</para>
+    /// <para><c>RegistrationNoSnapshot</c> は<b>いまどの画面にも欄が無い</b>が、
+    /// 集合に入れてあることをここで表明する——<b>欄を足した日に黙って空く</b>のを避けるためである。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData("PartnerNameSnapshot", "text")]
+    [InlineData("RegistrationNoSnapshot", "text")]
+    [InlineData("Creator", "link")]
+    [InlineData("CreatedAt", "datetime")]
+    public async Task システムが決める欄は明細に送られてきても採らない(string field, string kind)
+    {
+        using var server = new AccountingServer();
+
+        var line = SubmitData.Line();
+        line.Fields[field] = Forged(kind);
+
+        await server.SubmitAsync([SubmitData.Updating(line)], NothingSaved);
+
+        Assert.False(line.Fields.ContainsKey(field));
+    }
+
+    /// <summary>
+    /// <b>伝票と明細が同じ束で来ても、両方から落とす</b>（qa/03 L-44 が処方した 3 検体の 3 つ目）。
+    /// </summary>
+    /// <remarks>
+    /// <b>片方だけを見るテストは、片方だけ直した実装で緑になる。</b>
+    /// 伝票と明細は同じ <c>ModuleSubmitData</c> に混ざって届く（qa/01 F-11）ので、
+    /// <b>本番と同じ形</b>——1 つの束に両方——で表明する。
+    /// </remarks>
+    [Fact]
+    public async Task 伝票と明細が同じ束で来ても写しは両方から落ちる()
+    {
+        using var server = new AccountingServer();
+
+        var entry = SubmitData.Entry("1");
+        var line = SubmitData.Line();
+        entry.Fields["PartnerNameSnapshot"] = Forged("text");
+        line.Fields["PartnerNameSnapshot"] = Forged("text");
+
+        await server.SubmitAsync([SubmitData.Updating(entry, line)], NothingSaved);
+
+        Assert.False(entry.Fields.ContainsKey("PartnerNameSnapshot"));
+        Assert.False(line.Fields.ContainsKey("PartnerNameSnapshot"));
+    }
+
+    /// <summary>
     /// <b>楽観ロックは捨てない。</b> 利用者が決める値ではないが、
     /// <b>画面が持ってくるべき値</b>で、捨てると CLB の同時更新の検出が働かなくなる。
     /// </summary>
@@ -309,7 +361,7 @@ public class JournalSubmitGateTests
         var thrown = await Assert.ThrowsAsync<JournalPostingRejectedException>(() => PostSavedAsync(server, id));
 
         Assert.Contains(JournalViolationCodes.PartnerRequired, thrown.Violations.Select(v => v.Code));
-        Assert.Contains("勘定科目「未払金」は「取引先を要する」がオンです。伝票の「取引先」を選んでください。",
+        Assert.Contains("勘定科目「未払金」は「取引先を要する」がオンです。伝票の「取引先」か、この行の「取引先」を選んでください。",
             thrown.Message, StringComparison.Ordinal);
         // **下書きのままである**（計上の巻き戻し。ADR-0004）。
         Assert.Equal("draft", server.Scalar<string>($"select status from journal_entries where id = {id.Value}"));

@@ -39,7 +39,7 @@ public class JournalPosterTests
 
         Assert.Contains(thrown.Violations, v => v.Code == JournalViolationCodes.PartnerInactive);
         Assert.Contains(
-            "取引先「取引をやめた先」は無効なので、新しい計上には使えません。別の取引先を選ぶか、取引先の画面で有効に戻してください。",
+            "取引先「取引をやめた先」は無効なので、新しい計上には使えません。別の取引先を選ぶか、取引先マスタで有効に戻してください。",
             thrown.Message, StringComparison.Ordinal);
         Assert.Equal("draft", server.Scalar<string>($"select status from journal_entries where id = {id.Value}"));
     }

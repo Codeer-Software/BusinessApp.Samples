@@ -501,7 +501,7 @@ public class JournalEntryValidatorTests
 
         Assert.Equal(1, violation.LineNo);
         Assert.Equal(
-            "勘定科目「売掛金」は「取引先を要する」がオンです。伝票の「取引先」を選んでください。",
+            "勘定科目「売掛金」は「取引先を要する」がオンです。伝票の「取引先」か、この行の「取引先」を選んでください。",
             violation.Message);
     }
 
@@ -960,7 +960,7 @@ public class JournalEntryValidatorTests
         var violation = AssertViolation(JournalViolationCodes.PartnerInactive, violations);
         Assert.Null(violation.LineNo);
         Assert.Equal(
-            "取引先「取引をやめた先」は無効なので、新しい計上には使えません。別の取引先を選ぶか、取引先の画面で有効に戻してください。",
+            "取引先「取引をやめた先」は無効なので、新しい計上には使えません。別の取引先を選ぶか、取引先マスタで有効に戻してください。",
             violation.Message);
         Assert.Equal(ViolationSeverity.Error, violation.Severity);
         Assert.Single(violations, v => v.Code == JournalViolationCodes.PartnerInactive);
@@ -984,7 +984,8 @@ public class JournalEntryValidatorTests
 
     /// <summary>
     /// <b>重さは、利用者が直せるかで決まる。</b> 取消は明細も伝票も写しなので止めない（警告）。
-    /// 訂正は、伝票の取引先は選び直せるので止める（Error）が、明細の取引先は画面に列が無いので止めない（警告）。
+    /// <b>訂正は、伝票も明細も止める（Error）</b>——どちらも再計上の下書きで選び直せる。
+    /// <b>明細は 2026-09-16 まで警告だった</b>（画面に列が無かったため）。列を足したので理由が消えた。
     /// 「マスタに無い」も同じ重さ（DDL の取引先のトリガが、取消の写しではマスタに無い取引先を通すのと同じ広さ）。
     /// </summary>
     [Theory]
@@ -993,9 +994,9 @@ public class JournalEntryValidatorTests
     [InlineData(EntryType.Reversal, "entry", "unknown", ViolationSeverity.Warning)]
     [InlineData(EntryType.Reversal, "line", "unknown", ViolationSeverity.Warning)]
     [InlineData(EntryType.Correction, "entry", "inactive", ViolationSeverity.Error)]
-    [InlineData(EntryType.Correction, "line", "inactive", ViolationSeverity.Warning)]
+    [InlineData(EntryType.Correction, "line", "inactive", ViolationSeverity.Error)]
     [InlineData(EntryType.Correction, "entry", "unknown", ViolationSeverity.Error)]
-    [InlineData(EntryType.Correction, "line", "unknown", ViolationSeverity.Warning)]
+    [InlineData(EntryType.Correction, "line", "unknown", ViolationSeverity.Error)]
     public void 取消と訂正で取引先の断りの重さは直せるかで決まる(
         EntryType entryType, string where, string problem, ViolationSeverity expected)
     {

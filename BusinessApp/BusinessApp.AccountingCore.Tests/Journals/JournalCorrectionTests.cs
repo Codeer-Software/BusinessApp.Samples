@@ -4,6 +4,7 @@ using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Shared;
 using BusinessApp.AccountingCore.Tests.Fixtures;
+using BusinessApp.Partners;
 
 /// <summary>
 /// 訂正（取消 ＋ 正しい内容の再計上）。docs/10 §5・ADR-0015。
@@ -44,6 +45,30 @@ public class JournalCorrectionTests
             PostedAt = new DateTimeOffset(2026, 5, 20, 18, 0, 0, TimeSpan.FromHours(9)),
         };
 
+    /// <summary>
+    /// <b>取引先と計上時の写しの入った計上済み。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>伝票と明細で違う相手を置き、行ごとにも違う値を置く</b>（qa/03 L-02 の縮退）。
+    /// 全部 <c>null</c> や全部同じ字の検体では、<b>行を取り違える壊し方も、
+    /// 取引先を落とす壊し方も死なない</b>。
+    /// </remarks>
+    private static JournalEntry PostedWithPartners()
+    {
+        var posted = Posted() with { PartnerId = AccountingFixture.Partner };
+        PartnerId?[] perLine = [AccountingFixture.OtherPartner, null];
+
+        return posted with
+        {
+            Lines = [.. posted.Lines.Select((line, index) => line with
+            {
+                PartnerId = perLine[index],
+                PartnerNameSnapshot = $"計上したときの名前 {index + 1}",
+                RegistrationNoSnapshot = $"T000000000000{index + 1}",
+            })],
+        };
+    }
+
     // --- 訂正を始める ---
 
     [Fact]
@@ -65,7 +90,7 @@ public class JournalCorrectionTests
     [Fact]
     public void 再計上は原仕訳をそのまま写した下書きになる()
     {
-        var original = Posted();
+        var original = PostedWithPartners();
 
         var correction = JournalCorrection.Start(original, CorrectedOn, EnteredAt, StartContext()).Drafts!.Value.Correction;
 
@@ -75,11 +100,40 @@ public class JournalCorrectionTests
         Assert.Equal(original.Lines.Select(l => l.AccountId), correction.Lines.Select(l => l.AccountId));
         Assert.Equal(original.Lines.Select(l => l.DepartmentId), correction.Lines.Select(l => l.DepartmentId));
         Assert.Equal(original.Lines.Select(l => l.LineNo), correction.Lines.Select(l => l.LineNo));
+        // **行ごとの取引先も写す**（明細の取引先は再計上の下書きで選び直せる既定値になる。ADR-0062）。
+        Assert.Equal(original.Lines.Select(l => l.PartnerId), correction.Lines.Select(l => l.PartnerId));
 
         Assert.Equal(EntryStatus.Draft, correction.Status);
         Assert.Null(correction.EntryNo);
         Assert.Equal(original.PartnerId, correction.PartnerId);
         Assert.Equal(EnteredAt, correction.EnteredAt);
+    }
+
+    /// <summary>
+    /// <b>再計上の下書きは、原仕訳の「計上時の写し」を持ち込まない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>写しを書くのは計上のときだけで（ADR-0018。書くのは <c>LedgerSnapshotWriter</c>）、
+    /// <b>下書きが写しを持っていると「写しがあれば計上済み」が崩れる</b>——
+    /// 画面は写しを見て計上時の姿を出すので（ADR-0037・ADR-0062）、
+    /// <b>行の取引先を選び直した再計上の下書きが、原仕訳の古い名前を表示する。</b></para>
+    /// <para><b>取消は逆に引き継ぐ</b>（<see cref="JournalReversalTests"/> の
+    /// <c>取消は原仕訳の写しをそのまま引き継ぐ</c>）。取消の明細は原仕訳の写しがそのまま帳簿に載る。</para>
+    /// </remarks>
+    [Fact]
+    public void 再計上の下書きは計上時の写しを持ち込まない()
+    {
+        var original = PostedWithPartners();
+
+        var correction = JournalCorrection.Start(original, CorrectedOn, EnteredAt, StartContext()).Drafts!.Value.Correction;
+
+        Assert.All(correction.Lines, line => Assert.Null(line.PartnerNameSnapshot));
+        Assert.All(correction.Lines, line => Assert.Null(line.RegistrationNoSnapshot));
+
+        // **落とすのは写しだけである。** 取引先そのものは写す（利用者が選び直せる既定値になる）。
+        // **検体は行ごとに違う相手**なので、伝票の取引先を全行へ写す壊し方もここで死ぬ。
+        Assert.Equal(original.Lines.Select(l => l.PartnerId), correction.Lines.Select(l => l.PartnerId));
+        Assert.Equal(original.PartnerId, correction.PartnerId);
     }
 
     [Fact]
@@ -421,7 +475,7 @@ public class JournalCorrectionTests
     [Fact]
     public void 取消済みなら再計上の下書きだけができる()
     {
-        var original = Posted();
+        var original = PostedWithPartners();
 
         var result = JournalCorrection.Resume(original, CorrectedOn, EnteredAt, ResumeContext());
 
@@ -432,7 +486,11 @@ public class JournalCorrectionTests
         Assert.Equal(original.Id, draft.OriginalEntryId);
         Assert.Equal(original.TransactionDate, draft.TransactionDate);
         Assert.Equal(CorrectedOn, draft.PostingDate);
-        Assert.Equal(original.Lines, draft.Lines);
+        // **やり直しの経路でも写しは落ちる**（`Start` と同じ `Draft` を通る。ADR-0062 の帰結 9）。
+        // **組み立てが分かれた日に片方だけ空く**ので、両方の経路で表明する。
+        Assert.Equal(
+            original.Lines.Select(line => line with { PartnerNameSnapshot = null, RegistrationNoSnapshot = null }),
+            draft.Lines);
         // **Start が作る再計上と同じ姿である**（同じ関数で作る）。明細の並びは参照が違うので別に見た。
         Assert.Equal(Correction(original: original) with { Lines = draft.Lines }, draft);
     }

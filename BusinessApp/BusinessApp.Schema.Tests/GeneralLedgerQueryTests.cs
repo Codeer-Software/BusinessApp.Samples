@@ -328,13 +328,23 @@ public class GeneralLedgerQueryTests
         Assert.All(Run(db, ("@p_entry_no_min", 3L), ("@p_entry_no_max", 3L)), r => Assert.Equal(3, r.EntryNo));
     }
 
-    [Fact]
-    public void 取引先で絞れる()
+    /// <summary>取引先で絞れる。<b>本番が束縛する型（文字列）でも通す</b>（qa/01 H-09）。</summary>
+    /// <remarks>
+    /// <b>数だけで試すと緑のまま通る。</b> CLB は識別子を文字列で束縛し、
+    /// SQLite が文字列を数に直すのは<b>列と比べるときだけ</b>である——
+    /// <c>COALESCE(l.partner_id, e.partner_id) = @p</c> と書いていた間は、
+    /// <b>実機では 1 件も当たらなかった</b>（2026-09-16 に稼働 DB で実測して直した）。
+    /// <b>これは帳簿の要件に直に効く</b>（別表二十四（四）（五）の「相手方別に」を満たす手立て。docs/40 §4-1）。
+    /// </remarks>
+    [Theory]
+    [InlineData(1L)]
+    [InlineData("1")]
+    public void 取引先で絞れる(object partnerId)
     {
         using var db = Create();
 
         // 取引先は 1 番の伝票にだけ付いている（2 行）。
-        var rows = Run(db, ("@p_partner_id", 1L));
+        var rows = Run(db, ("@p_partner_id", partnerId));
         Assert.Equal(2, rows.Count);
         Assert.All(rows, r => Assert.Equal(1, r.EntryNo));
     }

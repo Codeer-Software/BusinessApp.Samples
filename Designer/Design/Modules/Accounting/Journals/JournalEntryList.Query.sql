@@ -28,13 +28,45 @@ SELECT
     e.entry_type                AS entry_type,
     e.transaction_date          AS transaction_date,
     e.posting_date              AS posting_date,
+    -- **入力年月日を列に出す**（旧 Q-22 の決定。2026-09-16）。
+    -- 並びは元からこの列の降順だが（下の並べ替え）、列に出していなかったので
+    -- **同じ日に複製した下書きが一覧のどの列でも見分けられなかった**（ADR-0048 の帰結）。
+    -- **時分まで出す**（書式は画面の側。21 §2-5・qa/01 D-40）。
+    -- **同じ分に 2 回複製したら、また見分けられない**——書式は 21 §2-5 が固定していて広げられない。
+    -- そこまで起きたら摘要で見分ける（ADR-0048 の観察と同じ）。
+    e.entered_at                AS entered_at,
     -- **計上済みは計上時の写し、下書きは今のマスタ名**（ADR-0037）。
     -- 一覧は「いま探す」ための道具だが、**同じ伝票の詳細と名前が食い違うと、
     -- どちらが正典か分からなくなる**（開発者の指摘。2026-09-02）。
     -- 写しが無いのは取引先の無い伝票と、この列より前に計上された伝票である。
     -- **空文字も「無い」として扱う**（`NULLIF`）。帳簿の空値検索が同じ見方をしており
     -- （`JournalBook.Query.sql`）、片方だけ素通しにすると、同じ行が一覧では空欄・帳簿では現在名になる。
-    COALESCE(NULLIF(e.partner_name_snapshot, ''), p.name) AS partner_name,
+    --
+    -- **見るのは実効値である**（`JournalEntry.PartnerOf`。明細が空なら伝票のもの。ADR-0062）。
+    -- **伝票の取引先を空にして明細だけで選んだ伝票**が正規の形になったので、
+    -- 伝票の列だけを見ると**その伝票の取引先が一覧から消える**（2026-09-16 の自己レビュー。
+    -- 実機で作った伝票番号 54 がまさにその形だった）。
+    -- **行ごとに相手方が違うときは「（複数）」と出す**——名前を 1 つ選ぶと、選ばなかったほうが嘘になる。
+    -- **括弧で括るのは、取引先の名前と見分けが付くようにするため**である（一覧の「(0件)」と同じ作法）。
+    -- **数えるのは識別子**（`COALESCE(l.partner_id, e.partner_id)`）で、**出すのは名前**である——
+    -- 改名した相手と改名前の写しが同じ伝票に並ぶと、名前で数えれば「複数」に化ける。
+    -- **取引先の無い行は数えない**（`COUNT(DISTINCT ...)` は NULL を数えない）。
+    -- 「1 相手 ＋ 取引先の無い行」の伝票は**その 1 相手の名前**を出す——
+    -- **その伝票に記された相手方は 1 つだけ**であり、「複数」と言うほうが嘘になるからである。
+    -- **この列でだけ日本語を作っている。** 上の「区分値は生のまま返す」に対する例外で、
+    -- 「複数」には**デザイン enum の居場所が無い**（区分値ではなく、行を畳んだ要約である）。
+    -- **規則の現在形は 21 §3 が持つ**（ここは実装の理由だけを持つ）。
+    -- **明細を 1 行も持たない下書き**は実効値を持てないので、そのときだけ伝票の取引先を出す。
+    COALESCE(
+        (SELECT CASE
+                    WHEN COUNT(DISTINCT COALESCE(l.partner_id, e.partner_id)) > 1 THEN '（複数）'
+                    ELSE MAX(COALESCE(NULLIF(l.partner_name_snapshot, ''), lp.name,
+                                      NULLIF(e.partner_name_snapshot, ''), p.name))
+                END
+           FROM journal_lines l
+           LEFT JOIN partners lp ON lp.id = l.partner_id
+          WHERE l.journal_entry_id = e.id),
+        NULLIF(e.partner_name_snapshot, ''), p.name) AS partner_name,
     e.description               AS description,
     -- 借方合計。**貸借は一致している**（I-01）ので、片側だけ出せば伝票の大きさが分かる。
     -- 下書きは一致していないことがあるが、そのときも「いま入っている借方の合計」で正しい。
@@ -91,7 +123,22 @@ WHERE (@p_fiscal_year_id IS NULL OR @p_fiscal_year_id = ''
        OR date(e.posting_date) <= date(@p_posting_date_to))
   AND (@p_entry_no_min IS NULL OR @p_entry_no_min = '' OR e.entry_no >= @p_entry_no_min)
   AND (@p_entry_no_max IS NULL OR @p_entry_no_max = '' OR e.entry_no <= @p_entry_no_max)
-  AND (@p_partner_id IS NULL OR @p_partner_id = '' OR e.partner_id = @p_partner_id)
+  -- **取引先も実効値で探す**（ADR-0062）。伝票の列だけを見ると、
+  -- **明細だけで取引先を選んだ伝票が検索から落ちる**。
+  -- **明細を 1 行も持たない下書き**は実効値を持てないので、伝票の取引先で拾う。
+  --
+  -- **`COALESCE(l.partner_id, e.partner_id) = @p_partner_id` と書かない。**
+  -- CLB は識別子を**文字列で束縛する**ので、
+  -- **列と比べれば列の親和性で数に直るが、式と比べると直らず、1 件も当たらなくなる**
+  -- （2026-09-16 に実際に踏んだ。`COALESCE(l.partner_id, e.partner_id) = @p_partner_id` で全滅した）。
+  -- **比べる相手を列のままにする**ために、実効値を条件の側でほどく。
+  AND (@p_partner_id IS NULL OR @p_partner_id = ''
+       OR EXISTS (SELECT 1 FROM journal_lines l
+                   WHERE l.journal_entry_id = e.id
+                     AND (l.partner_id = @p_partner_id
+                          OR (l.partner_id IS NULL AND e.partner_id = @p_partner_id)))
+       OR (e.partner_id = @p_partner_id
+           AND NOT EXISTS (SELECT 1 FROM journal_lines l WHERE l.journal_entry_id = e.id)))
   -- 摘要の部分一致。**利用者が打った文字をワイルドカードにしない**（仕訳帳と同じ理由）。
   -- 逃がす順序は「まず \ を、次に % と _ を」。逆にすると付けたばかりの \ をもう一度逃がす。
   AND (@p_keyword IS NULL OR @p_keyword = ''

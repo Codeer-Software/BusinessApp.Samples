@@ -57,6 +57,47 @@ public class JournalReversalTests
         Assert.True(reversal.IsBalanced);
     }
 
+    /// <summary>
+    /// <b>取消は原仕訳の写しをそのまま引き継ぐ。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>焼き直すと、原仕訳の計上後に改名された相手で
+    /// <b>同じ取引の表と裏が違う名前になる</b>（ADR-0018。実際に起きた——qa/03 L-13）。
+    /// <c>LedgerSnapshotWriter</c> が取消では明細に 1 行も書かないのは、ここで引き継いでいるからである。</para>
+    /// <para><b>再計上は逆に落とす</b>（<see cref="JournalCorrectionTests"/> の
+    /// <c>再計上の下書きは計上時の写しを持ち込まない</c>）。あちらは中身を利用者が決め直すので、
+    /// 計上のときに焼き直される。</para>
+    /// <para><b>より強い表明は本番の配線の側にある</b>——
+    /// <c>LedgerSnapshotWriterTests</c> が DB へ往復して同じことを見ている。
+    /// ここはドメインだけを切り出した対称の表明である。</para>
+    /// </remarks>
+    [Fact]
+    public void 取消は原仕訳の写しをそのまま引き継ぐ()
+    {
+        // **行ごとに違う字を置く**（qa/03 L-02 の縮退）。同じ字だと、
+        // 1 行目の写しを全行へ配るような**行を取り違える壊し方が死なない**。
+        var posted = Posted();
+        var original = posted with
+        {
+            Lines = [.. posted.Lines.Select((line, index) => line with
+            {
+                PartnerId = index == 0 ? AccountingFixture.Partner : AccountingFixture.OtherPartner,
+                PartnerNameSnapshot = $"計上したときの名前 {index + 1}",
+                RegistrationNoSnapshot = $"T000000000000{index + 1}",
+            })],
+        };
+
+        var reversal = JournalReversal.Reverse(original, ReversedOn, EnteredAt, Context()).Reversal!;
+
+        Assert.Equal(
+            original.Lines.Select(l => l.PartnerNameSnapshot),
+            reversal.Lines.Select(l => l.PartnerNameSnapshot));
+        Assert.Equal(
+            original.Lines.Select(l => l.RegistrationNoSnapshot),
+            reversal.Lines.Select(l => l.RegistrationNoSnapshot));
+        Assert.Equal(original.Lines.Select(l => l.PartnerId), reversal.Lines.Select(l => l.PartnerId));
+    }
+
     [Fact]
     public void 取引日は原仕訳と同じで_計上日だけが後ろにずれる()
     {

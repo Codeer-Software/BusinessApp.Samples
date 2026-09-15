@@ -790,9 +790,9 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
+      "SaveAsUtc": false,
       "DbColumn": "entered_at",
       "Format": "yyyy/MM/dd HH:mm",
-      "IsYearMonthOnly": false,
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,

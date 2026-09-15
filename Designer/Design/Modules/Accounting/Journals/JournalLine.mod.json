@@ -452,7 +452,7 @@
       "IsRequired": false,
       "OnDataChanged": "",
       "Name": "PartnerNameSnapshot",
-      "IgnoreModification": false,
+      "IgnoreModification": true,
       "OnValidateInput": "",
       "IsFocusSkip": false,
       "NextFocusField": "",
@@ -1492,11 +1492,13 @@
   "ListLayouts": {
     "": {
       "HeaderTitle": "仕訳明細",
-      "DataOnlyFields": [],
+      "DataOnlyFields": [
+        "PartnerNameSnapshot"
+      ],
       "FocusControlMode": "Inherit",
       "IsFocusWrap": false,
       "OnBeforeInitialization": "",
-      "OnAfterInitialization": "",
+      "OnAfterInitialization": "ShowSnapshotPartner",
       "OnFieldDataChanged": "",
       "Elements": [
         [
@@ -1573,6 +1575,23 @@
             "FieldName": "Department",
             "ContextMenu": "",
             "Label": "部門",
+            "IsMaxWidthFixed": false,
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": true,
+            "CanUserSort": false,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "Partner",
+            "ContextMenu": "",
+            "Label": "取引先",
             "IsMaxWidthFixed": false,
             "ColumnSpan": 1,
             "RowSpan": 1,
