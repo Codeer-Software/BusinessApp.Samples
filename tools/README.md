@@ -3,7 +3,7 @@ title: tools — 開発スクリプト
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-09-15
+updated: 2026-09-16
 supersedes: []
 related: [../docs/README.md]
 ---
@@ -72,6 +72,10 @@ pwsh -NoProfile -File tools/clb/deploy.ps1
 # サーバ起動（別ターミナル）
 dotnet run --project BusinessApp/BusinessApp.Server --launch-profile http
 
+# サーバ停止（*.mod.cs / DB スキーマを変えたあとの再起動と、-Restore の前に要る）
+Get-NetTCPConnection -LocalPort 5085 -State Listen -ErrorAction SilentlyContinue |
+  Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }
+
 # 起動待ち
 pwsh -NoProfile -File tools/server/wait-server.ps1 -TimeoutSec 60
 
@@ -96,6 +100,8 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 - **`db_snapshot.ps1` はパスを受け取る引数を持たない。** だから関門は、この道具への言及では
   保護対象の名前を探さない（[ADR-0046](../docs/decisions/0046-稼働DBの退避と復元を戻せる道具に閉じる.md) の決定 7）——
   `-Name` に保護対象と同じ字を書いても確認は出ない
+- **待ち受けは IPv4 と IPv6 で 2 行返る。** 同じプロセスなので `-Unique` で 1 つに畳む
+  （畳まないと 2 度目の `Stop-Process` が「そんなプロセスは無い」と鳴く）
 - **`-Restore` はサーバを止めてから**（道具が断る）。**どのみち戻したあとはサーバとデザイナの再起動が要る**——
   CLB は列定義を static にキャッシュするため
 - **戻したら `migrate.ps1 -Verify` を打つ。** 古い退避を戻すとスキーマが巻き戻り、適用済みの記録と食い違う
