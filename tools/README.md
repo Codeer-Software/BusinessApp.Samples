@@ -20,10 +20,10 @@ related: [../docs/README.md]
 | スクリプト | 用途 |
 |---|---|
 | [`clb/deploy.ps1`](clb/deploy.ps1) | `Designer/Design` を zip 化して `LocalData/designs/App.zip` に配置する（デザイナ GUI「送信」の代替。FileWatcher が hot-reload） |
-| [`claude/trash.ps1`](claude/trash.ps1) | **ファイル・フォルダをごみ箱へ送る。`rm` の代わりに使う唯一の削除コマンド**（[ADR-0044](../docs/decisions/0044-削除はごみ箱送りに一本化しrmを機械で止める.md)・[30 §10](../docs/30_作業のルール.md)）。複数指定・ワイルドカード・`-DryRun` に対応する。**絶対パスへ解決してから保護対象を拒む**。`-SelfTest` で保護判定を検査する（コミット前フックが毎回流す） |
+| [`claude/trash.ps1`](claude/trash.ps1) | **ファイル・フォルダをごみ箱へ送る。`rm` の代わりに使う唯一の削除コマンド**（[ADR-0044](../docs/decisions/0044-削除はごみ箱送りに一本化しrmを機械で止める.md)・[33 §1](../docs/33_失わないためのルール.md)）。複数指定・ワイルドカード・`-DryRun` に対応する。**絶対パスへ解決してから保護対象を拒む**。`-SelfTest` で保護判定を検査する（コミット前フックが毎回流す） |
 | [`claude/guard_delete.py`](claude/guard_delete.py) | **失うことを止める** PreToolUse フック。**削除にあたるコマンドは当たり先によらず拒み、代わりに `trash.ps1` を使えと理由文で示す**。**保護対象への `Write`（全上書き）も拒む**（`Edit` は照合があるので拒まない）。`--selftest` で仕様表を検査する（コミット前フックが毎回流す） |
 | [`claude/protected_paths.json`](claude/protected_paths.json) | **削除と上書きから守るものの正典。** 上の 2 つが同じこの 1 ファイルを読む（**載せる基準と読み方はファイル冒頭の `_README`** が持つ） |
-| [`clb/db_snapshot.ps1`](clb/db_snapshot.ps1) | **稼働 DB の退避と復元**（[ADR-0046](../docs/decisions/0046-稼働DBの退避と復元を戻せる道具に閉じる.md)・[30 §10](../docs/30_作業のルール.md)）。`-Save` / `-Restore` / `-List`。**写しは `VACUUM INTO` で取る**（ファイルの複製は、古い内容と新しい内容が混ざった**壊れた写し**になりうる）。**何も消さず、戻す前に必ず現状を退避する**ので、`trash.ps1` と同じく確認を待たずに実行してよい |
+| [`clb/db_snapshot.ps1`](clb/db_snapshot.ps1) | **稼働 DB の退避と復元**（[ADR-0046](../docs/decisions/0046-稼働DBの退避と復元を戻せる道具に閉じる.md)・[33 §1](../docs/33_失わないためのルール.md)）。`-Save` / `-Restore` / `-List`。**写しは `VACUUM INTO` で取る**（ファイルの複製は、古い内容と新しい内容が混ざった**壊れた写し**になりうる）。**何も消さず、戻す前に必ず現状を退避する**ので、`trash.ps1` と同じく確認を待たずに実行してよい |
 | [`server/wait-server.ps1`](server/wait-server.ps1) | 開発サーバ（`http://localhost:5085`）の起動を待つ |
 | [`clb/sql.ps1`](clb/sql.ps1) | `sql` CLI のラッパ。結果 JSON を標準出力に返し、**一時ファイルを作らない** |
 | [`clb/migrate.ps1`](clb/migrate.ps1) | **DB マイグレーションのランナー**（ADR-0020）。`-Adopt` / `-Apply` / `-Status` / `-Verify`。書き方は [`Designer/migrations/README`](../Designer/migrations/README.md) |
@@ -55,11 +55,11 @@ Python の依存が恒常的に増えてきたら、そのとき `pyproject.toml
 ## よく使うコマンド
 
 ```powershell
-# 消す（ごみ箱へ送る。rm は使わない。docs/30 §10）。複数指定・ワイルドカード可
+# 消す（ごみ箱へ送る。rm は使わない。docs/33 §1）。複数指定・ワイルドカード可
 pwsh -NoProfile -File tools/claude/trash.ps1 <パス> [<パス> ...]
 pwsh -NoProfile -File tools/claude/trash.ps1 -DryRun <パス>        # 何が消えるかだけ見る
 
-# 稼働 DB を退避する・戻す・一覧する（docs/30 §10）
+# 稼働 DB を退避する・戻す・一覧する（docs/33 §1）
 pwsh -NoProfile -File tools/clb/db_snapshot.ps1 -Save -Name <名前>     # 省略すると snapshot_<日時>
 pwsh -NoProfile -File tools/clb/db_snapshot.ps1 -Restore -Name <名前>  # サーバを止めてから
 pwsh -NoProfile -File tools/clb/db_snapshot.ps1 -List
@@ -86,7 +86,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -Query "SELECT COUNT(*) FROM accounts;"
 pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 ```
 
-**ごみ箱と退避の扱い**（いつ使ってよいか・何を守るかの規則は [docs/30 §10](../docs/30_作業のルール.md)）。
+**ごみ箱と退避の扱い**（いつ使ってよいか・何を守るかの規則は [docs/33 §1](../docs/33_失わないためのルール.md)）。
 
 - **ごみ箱から戻すのはエクスプローラで行う。** `trash.ps1` に復元機能は無い
 - **`-Name` は半角英数で始まる 64 文字以内**（`[0-9A-Za-z][0-9A-Za-z._-]*`）。日本語・空白・`/` は断る。
