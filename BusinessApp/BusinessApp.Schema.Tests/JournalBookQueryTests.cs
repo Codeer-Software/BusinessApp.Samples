@@ -284,13 +284,22 @@ public class JournalBookQueryTests
 
     // --- 取引先（法定記載事項①）---
 
-    [Fact]
-    public void 取引先は伝票の値でも明細の値でも引ける()
+    /// <summary>取引先で引ける。<b>本番が束縛する型（文字列）でも通す</b>（qa/01 H-09）。</summary>
+    /// <remarks>
+    /// <b>数だけで試すと緑のまま通る。</b> CLB は識別子を文字列で束縛し、
+    /// SQLite が文字列を数に直すのは<b>列と比べるときだけ</b>である——
+    /// <c>COALESCE(l.partner_id, e.partner_id) = @p</c> と書いていた間は、
+    /// <b>実機では 1 件も当たらなかった</b>（2026-09-16 に稼働 DB で実測して直した）。
+    /// </remarks>
+    [Theory]
+    [InlineData(1L)]
+    [InlineData("1")]
+    public void 取引先は伝票の値でも明細の値でも引ける(object partnerId)
     {
         using var db = Create();
 
         // 1 番は伝票に取引先がある。明細には無い。
-        Assert.Equal([1L, 1L], Run(db, ("@p_partner_id", 1L)).Select(r => r.EntryId));
+        Assert.Equal([1L, 1L], Run(db, ("@p_partner_id", partnerId)).Select(r => r.EntryId));
     }
 
     [Fact]
@@ -304,6 +313,10 @@ public class JournalBookQueryTests
         Assert.Equal("乙商事", Run(db).First(r => r.LineNo == 1).PartnerName);
         Assert.Equal([1L], Run(db, ("@p_partner_id", 2L)).Select(r => r.EntryId));
         Assert.Single(Run(db, ("@p_partner_id", 1L)));
+
+        // **文字列でも同じ答えになる**（qa/01 H-09。本番はこちらで束縛する）。
+        Assert.Equal([1L], Run(db, ("@p_partner_id", "2")).Select(r => r.EntryId));
+        Assert.Single(Run(db, ("@p_partner_id", "1")));
     }
 
     [Fact]

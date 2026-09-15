@@ -43,7 +43,8 @@ SELECT
         AND o.debit_credit <> l.debit_credit)  AS counter_account_name,
     d.name                      AS department_name,
     -- 取引先名は**明細の写しを優先**する（docs/10 §4-2）。仕訳帳と同じ規則で引く。
-    COALESCE(l.partner_name_snapshot, lp.name, ep.name) AS partner_name,
+    -- **空文字も「無い」として扱う**（`NULLIF`。2026-09-16 に揃えた。仕訳帳と同じ理由）。
+    COALESCE(NULLIF(l.partner_name_snapshot, ''), lp.name, ep.name) AS partner_name,
     -- 借方と貸方を別の列に出す。**片方は NULL** になり、画面では空欄になる。
     CASE WHEN l.debit_credit = 'debit'  THEN l.amount END AS debit_amount,
     CASE WHEN l.debit_credit = 'credit' THEN l.amount END AS credit_amount,
@@ -94,8 +95,15 @@ WHERE e.status = 'posted'
   AND (@p_sub_account_id IS NULL OR @p_sub_account_id = '' OR l.sub_account_id = @p_sub_account_id)
   AND (@p_department_id IS NULL OR @p_department_id = '' OR l.department_id = @p_department_id)
   -- 表示・検索・空値検索で同じモデルを使う（仕訳帳と同じ理由）。
+  -- **`COALESCE(...) = @p_partner_id` と書かない**（2026-09-16 に直した。qa/01 H-09）。
+  -- CLB は識別子を**文字列で束縛する**。SQLite が文字列を数に直すのは**列と比べるときだけ**で、
+  -- **式と比べると直らず、1 件も当たらない**（稼働 DB で実測——`l.partner_id = '4'` は 4 行、
+  -- `COALESCE(l.partner_id, e.partner_id) = '4'` は **0 行**）。
+  -- **比べる相手を列のままにする**ために、実効値を条件の側でほどく。
+  -- **検体は数と文字列の両方を置く**——数だけで試すと緑のまま通る。
   AND (@p_partner_id IS NULL OR @p_partner_id = ''
-       OR COALESCE(l.partner_id, e.partner_id) = @p_partner_id)
+       OR l.partner_id = @p_partner_id
+       OR (l.partner_id IS NULL AND e.partner_id = @p_partner_id))
   AND (@p_transaction_date_from IS NULL OR @p_transaction_date_from = ''
        OR date(e.transaction_date) >= date(@p_transaction_date_from))
   AND (@p_transaction_date_to IS NULL OR @p_transaction_date_to = ''

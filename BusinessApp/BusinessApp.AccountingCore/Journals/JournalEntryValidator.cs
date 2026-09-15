@@ -44,9 +44,12 @@ public static class JournalEntryValidator
     /// <para><b>伝票の取引先は伝票として 1 回、明細の取引先は行ごとに見る。</b> 明細が空なら伝票の値が実効値になる
     /// （<see cref="JournalEntry.PartnerOf"/>）ので、行ごとに実効値を見ると同じ断りが行数だけ並ぶ。</para>
     /// <para><b>重さは、利用者が直せるかで決める</b>（<see cref="ReversalOnlySeverity"/> の注記と同じ線）。
-    /// <b>伝票の取引先</b>は訂正の下書きで選び直せるので、外すのは取消だけ（<see cref="ReversalOnlySeverity"/>）——
+    /// <b>伝票の取引先も明細の取引先も、訂正の下書きで選び直せる</b>ので、外すのは取消だけ（<see cref="ReversalOnlySeverity"/>）——
     /// 訂正でも外すと、無効にした相手の新しい記帳を訂正経由で帳簿へ入れられる。
-    /// <b>明細の取引先</b>は画面に列が無く、訂正の下書きでも直す手立てが無いので、取消も訂正も外す（<see cref="InactiveSeverity"/>）。</para>
+    /// <b>明細の取引先も、訂正の下書きで選び直せる</b>——明細の一覧に取引先の列があるからである（ADR-0062）。
+    /// <b>行き止まりにはならない</b>——利用者は下書きで選び直すか、空にできる。
+    /// <b>ただし消費税行はシステムが作り、利用者は直接編集できない</b>（docs/11 §2。実装はフェーズ 3）ので、
+    /// <b>税行を作る回にこの重さを見直す</b>（ADR-0062 の帰結 2）。</para>
     /// <para><b>「マスタに無い」も同じ重さで扱う。</b> DDL の取引先のトリガは、取消の明細が計上済みの原仕訳の写しなら
     /// 取引先が <c>partners</c> に無くても通す（<c>trg_journal_entries_partner_presence_when_posted</c>）ので、関門も同じ広さにする。
     /// <b>アプリの経路では外部キーが先に止める</b>（取消は原仕訳の取引先を写して INSERT するので、マスタに無い取引先は
@@ -71,8 +74,8 @@ public static class JournalEntryValidator
     private static void ValidatePartner(
         PartnerId partnerId, JournalEntry entry, PartnerCatalog partners, int? lineNo, List<Violation> violations)
     {
-        // 伝票の取引先は直せる（訂正の下書きで選び直せる）。明細の取引先は直せない（画面に列が無い）。
-        var severity = lineNo is null ? ReversalOnlySeverity(entry) : InactiveSeverity(entry);
+        // 伝票の取引先も明細の取引先も、訂正の下書きで選び直せる（明細の列は 2026-09-16 に足した）。
+        var severity = ReversalOnlySeverity(entry);
 
         // **次の一手まで言う**（docs/21 §2-3）。読み手の経理担当は取引先を保守する役でもある（docs/02）。
         var partner = partners.Find(partnerId);
@@ -91,7 +94,7 @@ public static class JournalEntryValidator
             violations.Add(new Violation(
                 JournalViolationCodes.PartnerInactive,
                 $"取引先「{partner.Name}」は無効なので、新しい計上には使えません。"
-                + "別の取引先を選ぶか、取引先の画面で有効に戻してください。",
+                + "別の取引先を選ぶか、取引先マスタで有効に戻してください。",
                 lineNo,
                 severity));
         }
@@ -364,8 +367,8 @@ public static class JournalEntryValidator
     /// <para><b>見るのは実効値である</b>（<see cref="JournalEntry.PartnerOf"/>）——
     /// 明細が持っていなければ伝票のものが帳簿に載るので、伝票に 1 つ選んであれば足りる。
     /// <b>明細だけを見ると、帳簿には取引先が載る行を関門が拒む</b>ことになる。
-    /// <b>いまの画面で選べるのは伝票の取引先だけ</b>だが、明細の値も帳簿に載る以上、
-    /// 判定は実効値のままにする（取込・API からは明細にも入る）。</para>
+    /// <b>画面では伝票と明細のどちらの取引先も選べる</b>（明細の一覧の列。ADR-0062）ので、
+    /// 案内は両方の欄を名指しする。判定は実効値のままである。</para>
     /// <para><b>片側だけの規則である。</b> 補助科目の 2 値（ADR-0038 §3）と違い、
     /// 要しない科目に取引先が付いていても止めない——<b>取引先は科目に属さない</b>ので、
     /// どの科目の行にも意味のある相手方がありうる（現金の行の支払先など）。</para>
@@ -380,15 +383,16 @@ public static class JournalEntryValidator
         }
 
         // 補助科目と同じく、**踏めない案内をしない**（docs/21 §2-3。qa/02 R53-06）。
-        // **「明細の取引先」とは言わない**——明細の一覧に取引先の列が無く、行の詳細も開けないので
-        // （`Lines` は `CanNavigateToDetail: false`）、画面から選べるのは**伝票の取引先だけ**である
-        // （列を足すのは docs/15 §1-2 の宿題 2。自己レビューで見つけた。2026-09-08）。
+        // **どちらの欄かを括って言う**——同じ画面に「取引先」というラベルの欄が 2 つある。
+        // **どちらを選んでも実効値が埋まる**（明細の一覧の列は ADR-0062 で足した）。
+        // **`Lines` は `CanNavigateToDetail: false`** なので、行の詳細は開けない——
+        // 案内できるのは**一覧の列**と**伝票の欄**の 2 つだけである。
         // **選べる取引先が 1 件も無いときは、次の一手が「登録」か「有効に戻す」に変わる**——
         // 取引先は運用で無効にされるマスタなので（docs/13）、登録済みで全部無効なこともある。
         violations.Add(new Violation(
             JournalViolationCodes.PartnerRequired,
             hasSelectablePartner
-                ? $"勘定科目「{account.Name}」は「取引先を要する」がオンです。伝票の「取引先」を選んでください。"
+                ? $"勘定科目「{account.Name}」は「取引先を要する」がオンです。伝票の「取引先」か、この行の「取引先」を選んでください。"
                 : $"勘定科目「{account.Name}」は「取引先を要する」がオンですが、選べる取引先がありません。"
                   + "取引先マスタに登録するか、無効にした取引先を有効に戻してから選んでください。",
             line.LineNo,
@@ -489,7 +493,8 @@ public static class JournalEntryValidator
 
     /// <summary>
     /// <b>取消でだけ止めない</b>ことの重さ。
-    /// <b>補助科目の 2 値</b>（ADR-0038 §3）と<b>取引先を要する科目</b>（docs/15 §1-2）が使う。
+    /// <b>補助科目の 2 値</b>（ADR-0038 §3）・<b>取引先を要する科目</b>（docs/15 §1-2）・
+    /// <b>伝票と明細の取引先の実在・有効</b>（docs/15 §1-3。明細は 2026-09-16 からこちら）が使う。
     /// </summary>
     /// <remarks>
     /// <para><b>外すのは取消だけである。</b> 取消の明細はサーバが原仕訳を反転して作り

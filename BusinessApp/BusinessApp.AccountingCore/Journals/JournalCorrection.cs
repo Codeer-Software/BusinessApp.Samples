@@ -124,8 +124,20 @@ public static class JournalCorrection
             // 利用者は誤っている箇所だけを直せばよく、打ち直しにならない。
             // **「内容」だけは上限に収める**——長い行をそのまま写すと DDL が拒み、
             // **その伝票を永久に訂正できなくなる**（ADR-0004。取消と同じ手当て）。
-            Lines = [.. original.Lines.Select(
-                line => line with { ItemDescription = JournalLineRules.ShortenCopiedText(line.ItemDescription) })],
+            //
+            // **計上時の写しは持ち込まない**（2026-09-16）。写しを書くのは計上のときだけで
+            // （ADR-0018。書くのは <c>LedgerSnapshotWriter</c>）、**下書きが写しを持っていると
+            // 「写しがあれば計上済み」が崩れる**——画面は写しを見て計上時の姿を出すので
+            // （ADR-0037・ADR-0062。明細は <c>JournalLine.mod.cs</c> の <c>ShowSnapshotPartner</c>）、
+            // **行の取引先を選び直した再計上の下書きが、原仕訳の古い名前を表示する。**
+            // **落として困らない**——再計上を計上すると全行に焼き直される。
+            // **取消は逆に写しを引き継ぐ**（<see cref="JournalReversal"/>。原仕訳の写しがそのまま帳簿に載る）。
+            Lines = [.. original.Lines.Select(line => line with
+            {
+                ItemDescription = JournalLineRules.ShortenCopiedText(line.ItemDescription),
+                PartnerNameSnapshot = null,
+                RegistrationNoSnapshot = null,
+            })],
             // **投入元の情報は写す。** 一意なのは冪等キーだけで（I-14）、それだけを落とせばよい。
             // 落としてしまうと、投入元の部品は自分が投げた伝票の訂正を帳簿から辿れなくなる。
             SourceComponent = original.SourceComponent,

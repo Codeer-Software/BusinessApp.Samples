@@ -53,14 +53,21 @@ public class JournalEntryListQueryTests
     /// </remarks>
     private const string Entries = """
         INSERT INTO partners (code, name) VALUES ('P002', 'いまのマスタ名');
+        -- **2 人目**。明細だけが取引先を持つ形と、行ごとに相手方が違う形（ADR-0062）に使う。
+        INSERT INTO partners (id, code, name) VALUES (3, 'P003', 'もう一方のマスタ名');
         INSERT INTO fiscal_years (code, label, start_date, end_date, status, premium_ledger_from)
             VALUES ('FY17', '第 17 期（2025 年度）', '2025-04-01', '2026-03-31', 'closed', '2025-04-01');
 
         -- 1) 第 18 期 / 取引 05-10 / 計上 05-12 / 取引先あり（写しあり） / 1,100 円
         INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, description, partner_id, partner_name_snapshot, entered_at)
             VALUES (1, 1, '2026-05-10', '2026-05-12', 'draft', 'normal', '5 月の売上', 2, '計上したときの名前', '2026-05-12 10:00:00');
+        -- **2 行とも伝票の取引先（2 番）を引き継ぐ**——実効値は 1 つなので名前が出る。
+        -- `DISTINCT` を落とす変異は、ここでしか死なない（行数で数えると「複数」に化ける）。
+        -- **貸方にしてあるので借方合計は 1,100 のまま**。
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (1, 1, 'debit', 1, 1100, 1);
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            VALUES (1, 2, 'credit', 1, 1100, 1);
 
         -- 2) 取引 05-20 / 計上 05-25 / 写しが空文字 / 摘要に % / 5,000 円
         INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, description, partner_id, partner_name_snapshot, entered_at)
@@ -103,16 +110,26 @@ public class JournalEntryListQueryTests
         --    ——`c.status = 'posted'` を落としたときに初めて答えが変わる唯一の行である。
         INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, description, original_entry_id, entered_at)
             VALUES (7, 1, '2026-05-23', '2026-05-27', 'draft', 'reversal', '取消の下書き', 8, '2026-05-27 12:00:00');
+        -- **伝票の取引先は空で、明細だけが持つ**（ADR-0062 が正規にした形。一覧はこれを実効値で出す）。
+        -- **1 行目だけが相手方を持ち、2 行目は伝票にも明細にも取引先が無い**——
+        -- **実機で作った伝票番号 54 がこの形**である（2026-09-16）。
+        -- **取引先の無い行は数えない**ので「複数」にはならず、1 相手の名前が出る。
+        -- **貸方にしてあるので借方合計は 900 のまま**。
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id, partner_id)
+            VALUES (7, 1, 'debit', 1, 900, 1, 3);
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
-            VALUES (7, 1, 'debit', 1, 900, 1);
+            VALUES (7, 2, 'credit', 1, 900, 1);
 
         -- 9) 下書き / **摘要が NULL** / **借方が 2 行**（300 ＋ 700）/ 計上 05-27 / 入力年月日が最も古い
-        INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
-            VALUES (9, 1, '2026-05-18', '2026-05-27', 'draft', 'normal', '2026-05-27 08:00:00');
+        INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at, partner_id)
+            VALUES (9, 1, '2026-05-18', '2026-05-27', 'draft', 'normal', '2026-05-27 08:00:00', 2);
+        -- **伝票の取引先（2 番）を、2 行目だけが 3 番で上書きする**（ADR-0062）。
+        -- 実効値は 2 番と 3 番の 2 つなので、一覧の取引先は「複数」になる。
+        -- **上書きしない行を数えないと答えが変わる**——`LEFT JOIN` を内部結合にする変異は、ここでしか死なない。
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (9, 1, 'debit', 1, 300, 1);
-        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
-            VALUES (9, 2, 'debit', 2, 700, 1);
+        INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id, partner_id)
+            VALUES (9, 2, 'debit', 2, 700, 1, 3);
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (9, 3, 'credit', 2, 1000, 1);
 
@@ -122,7 +139,13 @@ public class JournalEntryListQueryTests
         INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
             VALUES (10, 1, 'debit', 1, 5000, 1);
 
-        -- 計上する。**下書きのまま残すのは 3・7・9 の 3 本**。
+        -- 11) **明細を 1 行も持たない下書き**（取引先だけ選んで保存した状態）。
+        --     **実効値を持てないので、伝票の取引先で拾う**という枝はここでしか死なない。
+        --     **第 17 期・いちばん古い並び**にして、他の検体の期待を動かさない位置に置いた。
+        INSERT INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, partner_id, entered_at)
+            VALUES (11, 2, '2026-03-05', '2026-03-11', 'draft', 'normal', 3, '2026-03-11 09:00:00');
+
+        -- 計上する。**下書きのまま残すのは 3・7・9・11 の 4 本**。
         UPDATE journal_entries SET status = 'posted', entry_no = 1, posted_at = '2026-05-12 11:00:00' WHERE id = 1;
         UPDATE journal_entries SET status = 'posted', entry_no = 2, posted_at = '2026-05-25 11:00:00' WHERE id = 2;
         UPDATE journal_entries SET status = 'posted', entry_no = 3, posted_at = '2026-05-26 11:00:00' WHERE id = 4;
@@ -133,7 +156,7 @@ public class JournalEntryListQueryTests
         """;
 
     /// <summary>絞り込みをかけない全 10 本の並び。</summary>
-    private const string AllInOrder = "10 8 7 3 9 5 4 2 1 6";
+    private const string AllInOrder = "10 8 7 3 9 5 4 2 1 6 11";
 
     // --- 並び ---
 
@@ -186,13 +209,13 @@ public class JournalEntryListQueryTests
     {
         using var db = Create();
 
-        Assert.Equal("6", Joined(Run(db, ("@p_fiscal_year_id", 2L))));
+        Assert.Equal("6 11", Joined(Run(db, ("@p_fiscal_year_id", 2L))));
         Assert.Equal("10 8 7 3 9 5 4 2 1", Joined(Run(db, ("@p_fiscal_year_id", 1L))));
     }
 
     [Theory]
     [InlineData("posted", "10 8 5 4 2 1 6")]
-    [InlineData("draft", "7 3 9")]
+    [InlineData("draft", "7 3 9 11")]
     public void 状態で絞れる(string status, string expected)
     {
         using var db = Create();
@@ -201,7 +224,7 @@ public class JournalEntryListQueryTests
     }
 
     [Theory]
-    [InlineData("normal", "3 9 2 1 6")]
+    [InlineData("normal", "3 9 2 1 6 11")]
     [InlineData("reversal", "10 7 4")]
     [InlineData("correction", "5")]
     [InlineData("opening", "8")]
@@ -216,8 +239,8 @@ public class JournalEntryListQueryTests
     [Theory]
     [InlineData("2026-05-20", null, "8 7 5 4 2")]
     [InlineData("2026-05-21", null, "8 7 5 4")]
-    [InlineData(null, "2026-05-15", "3 1 6")]
-    [InlineData(null, "2026-05-14", "1 6")]
+    [InlineData(null, "2026-05-15", "3 1 6 11")]
+    [InlineData(null, "2026-05-14", "1 6 11")]
     [InlineData("2026-05-18", "2026-05-20", "10 9 2")]
     public void 取引年月日の範囲は両端を含む(string? from, string? to, string expected)
     {
@@ -237,8 +260,8 @@ public class JournalEntryListQueryTests
     [Theory]
     [InlineData("2026-05-27", null, "10 8 7 3 9 5")]
     [InlineData("2026-05-28", null, "10 8")]
-    [InlineData(null, "2026-05-26", "4 2 1 6")]
-    [InlineData(null, "2026-05-25", "2 1 6")]
+    [InlineData(null, "2026-05-26", "4 2 1 6 11")]
+    [InlineData(null, "2026-05-25", "2 1 6 11")]
     public void 計上日の範囲は両端を含む(string? from, string? to, string expected)
     {
         using var db = Create();
@@ -338,7 +361,8 @@ public class JournalEntryListQueryTests
     {
         using var db = Create();
 
-        Assert.Equal("3 2 1 6", Joined(Run(db, ("@p_partner_id", partnerId))));
+        // **9 番は明細だけが 2 番の取引先を持つ**（伝票の取引先は空）。実効値で探すので当たる（ADR-0062）。
+        Assert.Equal("3 9 2 1 6", Joined(Run(db, ("@p_partner_id", partnerId))));
     }
 
     /// <summary>
@@ -395,7 +419,7 @@ public class JournalEntryListQueryTests
     // --- 列の中身 ---
 
     /// <summary>
-    /// <b>13 列すべてを、行まるごと突き合わせる。</b>
+    /// <b>14 列すべてを、行まるごと突き合わせる。</b>
     /// </summary>
     /// <remarks>
     /// <b>列の取り違えは、これでしか捕まらない。</b> <c>QueryModuleTests</c> が見るのは
@@ -404,7 +428,7 @@ public class JournalEntryListQueryTests
     /// 取り違えると<b>別の伝票が開く</b>。
     /// </remarks>
     [Fact]
-    public void 十三列がそれぞれの列の値を返す()
+    public void 十四列がそれぞれの列の値を返す()
     {
         using var db = Create();
 
@@ -412,18 +436,18 @@ public class JournalEntryListQueryTests
 
         Assert.Equal(
             new Row(1, 1, "第 18 期（2026 年度）", "posted", "normal",
-                    "2026-05-10", "2026-05-12", "計上したときの名前", "5 月の売上",
-                    1100, "reversed", 4, 3),
+                    "2026-05-10", "2026-05-12", "2026-05-12 10:00:00", "計上したときの名前",
+                    "5 月の売上", 1100, "reversed", 4, 3),
             rows[1]);
         Assert.Equal(
             new Row(9, null, "第 18 期（2026 年度）", "draft", "normal",
-                    "2026-05-18", "2026-05-27", null, null,
-                    1000, null, null, null),
+                    "2026-05-18", "2026-05-27", "2026-05-27 08:00:00", "（複数）",
+                    null, 1000, null, null, null),
             rows[9]);
         Assert.Equal(
             new Row(6, 1, "第 17 期（2025 年度）", "posted", "normal",
-                    "2026-03-10", "2026-03-12", "前期の名前", "3 月の売上",
-                    7000, null, null, null),
+                    "2026-03-10", "2026-03-12", "2026-03-12 10:00:00", "前期の名前",
+                    "3 月の売上", 7000, null, null, null),
             rows[6]);
     }
 
@@ -535,6 +559,59 @@ public class JournalEntryListQueryTests
         Assert.Null(Run(db).Single(row => row.EntryId == 8).PartnerName);
     }
 
+    /// <summary>
+    /// <b>伝票の取引先が空で、明細だけが持つ伝票も、名前が出る</b>（ADR-0062）。
+    /// </summary>
+    /// <remarks>
+    /// <b>ADR-0062 が正規にした形である。</b> 伝票の列だけを見ていると、
+    /// <b>この伝票の取引先が一覧から消える</b>（2026-09-16 の自己レビューで見つけた。
+    /// 実機で作った伝票がまさにこの形だった）。
+    /// </remarks>
+    [Fact]
+    public void 明細だけが取引先を持つ伝票も名前が出る()
+    {
+        using var db = Create();
+
+        // 7 番は 1 行目だけが相手方を持ち、2 行目は伝票にも明細にも取引先が無い。
+        // **取引先の無い行は数えない**ので「（複数）」にはならない（実機の伝票番号 54 と同じ形）。
+        Assert.Equal("もう一方のマスタ名", Run(db).Single(row => row.EntryId == 7).PartnerName);
+    }
+
+    /// <summary>
+    /// <b>行ごとに相手方が違うときは「（複数）」と出す</b>（ADR-0062）。
+    /// </summary>
+    /// <remarks>
+    /// 名前を 1 つ選ぶと、<b>選ばなかったほうが嘘になる</b>。
+    /// <b>括弧で括るのは、取引先の名前と見分けが付くようにするため</b>である。
+    /// <b>数えるのは識別子で、出すのは名前である</b>——名前で数えると、
+    /// 改名した相手と改名前の写しが同じ伝票に並んだだけで「複数」に化ける。
+    /// </remarks>
+    [Fact]
+    public void 行ごとに相手方が違えば括弧つきの複数と出す()
+    {
+        using var db = Create();
+
+        Assert.Equal("（複数）", Run(db).Single(row => row.EntryId == 9).PartnerName);
+    }
+
+    /// <summary>
+    /// <b>明細だけが持つ取引先でも絞れる</b>（ADR-0062）。
+    /// </summary>
+    /// <remarks>
+    /// <b>本番が束縛する型（文字列）でも通す</b>——<c>COALESCE(...) = @p</c> と書くと
+    /// <b>列の親和性が効かず 1 件も当たらない</b>（2026-09-16 に実際に踏んだ）。
+    /// </remarks>
+    [Theory]
+    [InlineData(3)]
+    [InlineData("3")]
+    public void 明細だけが持つ取引先でも絞れる(object partnerId)
+    {
+        using var db = Create();
+
+        // 7 番は明細だけが 3 番を持ち、9 番は 2 行目が 3 番を持つ（1 行目は 2 番）。
+        Assert.Equal("7 9 11", Joined(Run(db, ("@p_partner_id", partnerId))));
+    }
+
     private static SqliteConnection Create()
     {
         var db = TestDatabase.Create();
@@ -553,11 +630,12 @@ public class JournalEntryListQueryTests
     private static string Joined(IEnumerable<Row> rows)
         => string.Join(" ", rows.Select(row => row.EntryId.ToString(CultureInfo.InvariantCulture)));
 
-    /// <summary>SQL が返す 13 列。<b>1 つも省かない</b>（省いた列は誰も見ていないことになる）。</summary>
+    /// <summary>SQL が返す 14 列。<b>1 つも省かない</b>（省いた列は誰も見ていないことになる）。</summary>
     private sealed record Row(
         long EntryId, long? EntryNo, string FiscalYearLabel, string Status, string EntryType,
-        string TransactionDate, string PostingDate, string? PartnerName, string? Description,
-        long DebitTotal, string? AmendmentState, long? AmendmentEntryId, long? AmendmentEntryNo);
+        string TransactionDate, string PostingDate, string EnteredAt, string? PartnerName,
+        string? Description, long DebitTotal, string? AmendmentState,
+        long? AmendmentEntryId, long? AmendmentEntryNo);
 
     /// <summary>一覧の SQL を<b>本物のまま</b>流す。渡さなかったパラメータは NULL（＝条件なし）。</summary>
     /// <remarks>
@@ -593,6 +671,7 @@ public class JournalEntryListQueryTests
                 reader.GetString(reader.GetOrdinal("entry_type")),
                 reader.GetString(reader.GetOrdinal("transaction_date")),
                 reader.GetString(reader.GetOrdinal("posting_date")),
+                reader.GetString(reader.GetOrdinal("entered_at")),
                 Text(reader, "partner_name"),
                 Text(reader, "description"),
                 reader.GetInt64(reader.GetOrdinal("debit_total")),

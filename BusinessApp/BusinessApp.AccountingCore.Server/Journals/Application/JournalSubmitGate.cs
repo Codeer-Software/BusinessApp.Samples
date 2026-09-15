@@ -80,10 +80,15 @@ public sealed class JournalSubmitGate(
     /// 日常の分岐ではない（qa/01 F-16）。正規の採番は計上のときだけ行われる。</para>
     /// <para><b><c>OptimisticLocking</c> は入れてはいけない。</b> 落とすと CLB の同時更新の検出が
     /// 働かなくなる——利用者が決める値ではないが、<b>利用者の画面が持ってくるべき値</b>である。</para>
+    /// <para><b>伝票の行と明細の行の両方に当てる</b>（2026-09-16。qa/03 L-44）。
+    /// <b>ここは欄の名前の集合であって、どちらの器の欄かは区別しない</b>——
+    /// <c>PartnerNameSnapshot</c> は伝票にも明細にもある。
+    /// <b><c>RegistrationNoSnapshot</c> は、いまどの画面にも欄が無い</b>が入れてある——
+    /// 欄を足した日に黙って空くのを避けるためで、無い欄を落とすのは何もしないのと同じである。</para>
     /// </remarks>
     private static readonly string[] SystemAssignedFields =
     [
-        "PostedBy", "PostedAt", "EntryNo", "PartnerNameSnapshot",
+        "PostedBy", "PostedAt", "EntryNo", "PartnerNameSnapshot", "RegistrationNoSnapshot",
         "Creator", "Updater", "CreatedAt", "UpdatedAt",
     ];
 
@@ -612,7 +617,16 @@ public sealed class JournalSubmitGate(
         // **CLB が「送られてきた値を上書きする」とはどの資料も書いていない**ので、
         // 充填しかしない可能性に備えて Creator / Updater もここで落とす
         // （正規の経路では CLB がこの直後に入れ直すので、落として困ることはない）。
-        foreach (var data in added.Concat(updated))
+        //
+        // **伝票の行にも明細の行にも当てる**（2026-09-16。qa/03 L-44 を塞いだ）。
+        // **同じ規則を 2 つの対象に当てるとき、片方だけ書いた**のが L-44 の型で、
+        // **明細は入れた日からずっと空いていた**。
+        // **画面が明細の写しを読むようになった回に塞いだ**——`JournalLine` の一覧が
+        // `DataOnlyFields` で写しを読み、計上済みの行の表示に使う（ADR-0062）ので、
+        // 送りつけた文字列がそのまま画面の字になる（`partner_id` と食い違ったまま）。
+        // **`IgnoreModification` は画面が差分に載せるかを決めるだけ**で、画面を通らない経路には効かない。
+        foreach (var data in transactionData.SelectMany(d => d.Add.Concat(d.Update))
+                     .Where(d => d.Name is EntryModuleName or LineModuleName))
         {
             foreach (var field in SystemAssignedFields)
             {

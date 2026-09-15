@@ -125,6 +125,12 @@
           },
           {
             "IsParameter": false,
+            "Name": "entered_at",
+            "DbType": "DATETIME",
+            "DbParameterDirection": "Input"
+          },
+          {
+            "IsParameter": false,
             "Name": "partner_name",
             "DbType": "text",
             "DbParameterDirection": "Input"
@@ -604,6 +610,25 @@
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateFieldDesign"
+    },
+    {
+      "SaveAsUtc": false,
+      "DbColumn": "entered_at",
+      "Format": "yyyy/MM/dd HH:mm",
+      "IsUpdateProtected": false,
+      "IsSimpleSearchParameter": false,
+      "AllowEmptySearch": false,
+      "OnSearchDataChanged": "",
+      "DisplayName": "入力年月日",
+      "IsRequired": false,
+      "OnDataChanged": "",
+      "Name": "EnteredAt",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateTimeFieldDesign"
     },
     {
       "DbColumn": "partner_name",
@@ -1198,6 +1223,23 @@
             "FieldName": "AmendmentLink",
             "ContextMenu": "",
             "Label": "取消・訂正の伝票",
+            "IsMaxWidthFixed": false,
+            "ColumnSpan": 1,
+            "RowSpan": 1,
+            "TextWrap": "Unset",
+            "CanResize": true,
+            "CanUserSort": false,
+            "ClassName": "",
+            "FontFamily": "",
+            "Color": "",
+            "BackgroundColor": "",
+            "DetailLayoutName": "",
+            "ListElementComponent": ""
+          },
+          {
+            "FieldName": "EnteredAt",
+            "ContextMenu": "",
+            "Label": "入力年月日",
             "IsMaxWidthFixed": false,
             "ColumnSpan": 1,
             "RowSpan": 1,

@@ -32,7 +32,10 @@ SELECT
     -- 取引先名は**明細の写しを優先**する。取引先の改名で過去の帳簿の記載が変わらないため
     -- （docs/10 §4-2）。写しが無い行は現在のマスタ名で補う。
     -- 明細の取引先は伝票の既定値を**上書きする**（docs/10 §4-1）ので、明細 → 伝票の順に見る。
-    COALESCE(l.partner_name_snapshot, lp.name, ep.name) AS partner_name,
+    -- **空文字も「無い」として扱う**（`NULLIF`。2026-09-16 に揃えた）。下の空値検索が同じ見方をしており、
+    -- **片方だけ素通しにすると、同じ行が空値検索には出るのに列は空欄**という食い違いが残る
+    -- （`JournalEntryList.Query.sql` が先にこの処方を採っていた）。
+    COALESCE(NULLIF(l.partner_name_snapshot, ''), lp.name, ep.name) AS partner_name,
     e.entered_at                AS entered_at,
     l.amount                    AS amount,
     tc.name                     AS tax_category_name,
@@ -69,8 +72,15 @@ WHERE e.status = 'posted'
   -- **表示・検索・空値検索で同じモデルを使う。** ここだけ OR にすると、
   -- 「伝票は甲・明細は乙」の行が「甲」で引けるのに帳簿には「乙」と出る——
   -- 法定記載事項を条件にした検索が、記載と違う行を返すことになる。
+  -- **`COALESCE(...) = @p_partner_id` と書かない**（2026-09-16 に直した。qa/01 H-09）。
+  -- CLB は識別子を**文字列で束縛する**。SQLite が文字列を数に直すのは**列と比べるときだけ**で、
+  -- **式と比べると直らず、1 件も当たらない**（稼働 DB で実測——`l.partner_id = '4'` は 4 行、
+  -- `COALESCE(l.partner_id, e.partner_id) = '4'` は **0 行**）。
+  -- **比べる相手を列のままにする**ために、実効値を条件の側でほどく。
+  -- **検体は数と文字列の両方を置く**——数だけで試すと緑のまま通る。
   AND (@p_partner_id IS NULL OR @p_partner_id = ''
-       OR COALESCE(l.partner_id, e.partner_id) = @p_partner_id)
+       OR l.partner_id = @p_partner_id
+       OR (l.partner_id IS NULL AND e.partner_id = @p_partner_id))
   -- 摘要・内容の部分一致。**利用者が打った文字をワイルドカードにしない。**
   -- 素通しにすると「%」を含む摘要を探せないうえ、「%」だけを打つと全件に当たる。
   -- 逃がす順序は「まず \ を、次に % と _ を」。逆にすると付けたばかりの \ をもう一度逃がす。
