@@ -18,6 +18,9 @@ using Microsoft.Data.Sqlite;
 [Collection(QuerySqlCollection.Name)]
 public class PartnerRegistrationListQueryTests
 {
+    /// <summary>クエリモジュールの名前。<b>SQL の読み込みと、変異の当て先の両方が指す。</b></summary>
+    private const string Module = "PartnerRegistrationList";
+
     /// <summary>
     /// 取引先 2 件・登録 4 件。
     /// </summary>
@@ -349,7 +352,7 @@ public class PartnerRegistrationListQueryTests
             $"この SQL に無いパラメータを渡している: {string.Join(" / ", unknown)}");
 
         using var command = db.CreateCommand();
-        command.CommandText = TestDatabase.QuerySql("PartnerRegistrationList");
+        command.CommandText = TestDatabase.QuerySql(Module);
 
         foreach (var name in Parameters)
         {
@@ -360,7 +363,7 @@ public class PartnerRegistrationListQueryTests
                     : DBNull.Value);
         }
 
-        using var reader = command.ExecuteReader();
+        using var reader = SqlMutationProbe.ExecuteReader(command, Module);
         var rows = new List<Row>();
         while (reader.Read())
         {
