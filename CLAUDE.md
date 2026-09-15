@@ -3,7 +3,7 @@ title: 会計コア構築ミッション（CLAUDE.md）
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-09-15
+updated: 2026-09-16
 supersedes: []
 related: [docs/README.md, Designer/CLAUDE.md, docs/30_作業のルール.md, docs/31_検証のルール.md, docs/33_失わないためのルール.md, docs/20_実装の原則.md, docs/32_調査のルール.md]
 ---
@@ -37,6 +37,7 @@ related: [docs/README.md, Designer/CLAUDE.md, docs/30_作業のルール.md, doc
 ### 0-3. 詳細設計・実装の前に
 
 - [20_実装の原則](docs/20_実装の原則.md)
+- [22_層と実行場所](docs/22_層と実行場所.md)（置き場・実行場所・Web API・依存の向きに触れるなら）
 - [21_画面の原則](docs/21_画面の原則.md)（画面・利用者に見せる文言に触れるなら）
 - **CLB のデザイン（モジュール・フィールド・レイアウト・`*.mod.cs`）に触れるなら**:
   `Designer/Project.md`（このプロジェクトでの書き方）→ `Designer/ClaudeCodeForDesigner/CLAUDE.md`
