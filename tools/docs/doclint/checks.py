@@ -16,8 +16,9 @@ from typing import Dict, List, NamedTuple, Optional, Tuple
 from .model import (ADR_LEDGER, APPEND_ANTIPATTERN, CODE_EXTENSIONS, excluded_from_code_check,
                     DATE_RE, DOCS_INDEX, Doc, GENERIC_DOC_NAMES, INLINE_IGNORE, LINE_LIMIT, LINE_LIMIT_EXEMPT, MD_LINK,
                     REFERENCE_PREFIXES, REPO_ROOT, REQUIRED_KEYS, SEV_ERROR, SEV_WARN,
-                    STALE_MARKER, VALID_AUDIENCE, VALID_STATUS, body_of, git_text,
-                    resolve, run_git)
+                    SKILL_ENTRY, SKILL_NAME_KEY, SKILL_PREFIX, SKILL_REQUIRED_KEYS,
+                    STALE_MARKER, VALID_AUDIENCE, VALID_STATUS, body_of,
+                    front_matter_unclosed, git_text, resolve, run_git, scalar_value)
 
 Finding = Tuple[str, str, str]
 
@@ -30,9 +31,88 @@ ALL_CHECKS = (
 )
 
 
+def treated_as_current(doc: Doc) -> bool:
+    """本文の検査（行数・未処理マーカー・`superseded` へのリンク）を当てるか。
+
+    **スキルに `status` の欄は無いが、current と同じに扱う**——ハーネスがその状況で
+    読み込む生きた手順書であり、覆された版を置く場所ではないからである。
+    **`Doc.status` を書き換えずここで判じるのは、`--stats` の指標を黙って動かさないため。**
+    """
+    return doc.status == "current" or doc.is_skill
+
+
+def has_dated_updated(doc: Doc) -> bool:
+    """`updated:` を日付として持っているか。**鮮度の 2 本はこの述語 1 つで揃える。**
+
+    スキルはこの欄を持たないので当たらない。**欄を持たせた日には 2 本とも当たり始める**——
+    片方だけをパスで外すと、そこで「片方だけ効く」非対称が静かにできる。
+    """
+    return DATE_RE.match(doc.meta.get("updated", "")) is not None
+
+
+def misplaced_skill_entry(rel: str) -> Optional[str]:
+    """`SKILL.md` が読み込まれない位置にあれば、その理由を返す（純粋関数）。
+
+    補助ファイル（`references/観点.md` など）には当たらない——名前が `SKILL.md` のものだけを見る。
+    """
+    if not rel.startswith(SKILL_PREFIX):
+        return None
+    rest = rel[len(SKILL_PREFIX):].split("/")
+    if rest[-1] != SKILL_ENTRY or len(rest) == 2:
+        return None
+    return ("{} が読み込まれる位置にありません（{}<名前>/{} に置く）"
+            .format(rel, SKILL_PREFIX, SKILL_ENTRY))
+
+
+def skill_front_matter_violations(skill_name: str, meta: Dict[str, str],
+                                  unclosed: bool) -> List[str]:
+    """スキル本体のフロントマターの違反を返す（純粋関数）。
+
+    文書規約の 5 欄は要求しない——欄はハーネスの仕様が `name` / `description` と決めている。
+    **代わりに、読み手がフロントマターとして読めない形を断る**: 閉じ `---` が無い・欄が空・
+    折りたたみ記法。**ハーネスがこれらをどう扱うかは確かめていない**（外部仕様。確かめていない
+    からこそ関門で止める——読めない形を置いて「動いているつもり」になるのを防ぐ）。
+
+    `name` はディレクトリ名と突き合わせる。**食い違うとハーネスの起動名が変わる**ので、
+    文書が名前で指しているスキル（`CLAUDE.md` の「`self-review` スキル」・`/self-review`）を
+    起動できなくなる。**リンクはパスで解決されるので、壊れるのは起動名の側だけである。**
+    """
+    if unclosed:
+        return ["フロントマターが `---` で閉じていません（読み手はこれをフロントマターとして読みません）"]
+    out: List[str] = []
+    if not meta:
+        return ["フロントマターがありません（{} が要る）".format(" と ".join(SKILL_REQUIRED_KEYS))]
+    for key in SKILL_REQUIRED_KEYS:
+        value = scalar_value(meta[key]) if key in meta else ""
+        if value is None:
+            out.append("{} が折りたたみ記法です。1 行で書いてください".format(key))
+        elif not value:
+            out.append("スキルのフロントマターに {} がありません".format(key))
+    name = scalar_value(meta.get(SKILL_NAME_KEY, "") or "")
+    if name and name != skill_name:
+        out.append("{} がディレクトリ名と違うので、その名前では起動できません: {}={} / ディレクトリ={}"
+                   .format(SKILL_NAME_KEY, SKILL_NAME_KEY, name, skill_name))
+    return out
+
+
 def check_front_matter(doc: Doc, findings: List[Finding]) -> None:
     add = lambda sev, msg: findings.append((sev, doc.rel, msg))
 
+    if doc.under_skill and not doc.is_skill:
+        # スキルに同梱する補助ファイル。**欄の規約は当てない**（本文の検査は当たる）。
+        # ただし `SKILL.md` を名乗って読み込まれない位置にあるものは断る
+        misplaced = misplaced_skill_entry(doc.rel)
+        if misplaced:
+            add(SEV_ERROR, misplaced)
+        return
+    if doc.is_skill:
+        for msg in skill_front_matter_violations(
+                doc.skill_name, doc.meta, front_matter_unclosed(doc.lines)):
+            add(SEV_ERROR, msg)
+        return
+    if front_matter_unclosed(doc.lines):
+        add(SEV_ERROR, "フロントマターが `---` で閉じていません（規約 §3）")
+        return
     if not doc.meta:
         add(SEV_ERROR, "フロントマターがありません（規約 §3）")
         return
@@ -124,7 +204,7 @@ def check_superseded_links(doc: Doc, docs_by_rel: Dict[str, Doc],
     戻り値は**見た superseded 宛リンクの数**（免除した分を含む）。
     `main` がこれを印字する——0 に落ちたら、配線が死んだか免除が広がりすぎたかである。
     """
-    if doc.status != "current" or doc.rel == ADR_LEDGER:
+    if not treated_as_current(doc) or doc.rel == ADR_LEDGER:
         return 0
     predecessors = {resolve(doc, t) for t in doc.list_field("supersedes")}
     seen = 0
@@ -160,7 +240,7 @@ def check_superseded_links(doc: Doc, docs_by_rel: Dict[str, Doc],
 
 def check_body(doc: Doc, findings: List[Finding]) -> None:
     add = lambda sev, msg: findings.append((sev, doc.rel, msg))
-    if doc.status != "current":
+    if not treated_as_current(doc):
         return
 
     is_reference = doc.rel.startswith(REFERENCE_PREFIXES)
@@ -567,6 +647,11 @@ def check_updated_freshness(docs: List[Doc], findings: List[Finding]) -> None:
     マージ・cherry-pick・rebase の途中も見ない——取り込んだ他人の変更に対して
     「今日の日付にしろ」と言っても意味がなく、衝突の解決を妨げるだけである。
     **飛ばしたことは黙らず印字する**（黙って素通りする関門を作らないため）。
+
+    **限界: `updated:` を日付として持たない文書には当たらない**（`has_dated_updated`）。
+    いま該当するのはスキルだけで、**スキルの鮮度は機械が見ていない**——腐りの検査は
+    リンク・節への参照・`superseded` へのリンクが受け持つ。
+    **欄を持たせれば `check_updated_history` と 2 本とも当たり始める**（同じ述語で外しているため）。
     """
     if git_text(["rev-parse", "--verify", "HEAD"], allow_failure=True) is None:
         return
@@ -587,7 +672,7 @@ def check_updated_freshness(docs: List[Doc], findings: List[Finding]) -> None:
 
     today = datetime.date.today().isoformat()
     for doc in docs:
-        if doc.rel not in changed_set:
+        if doc.rel not in changed_set or not has_dated_updated(doc):
             continue
         old = git_text(["show", "HEAD:{}".format(doc.rel)], allow_failure=True)
         old_body = body_of(old) if old is not None else None
@@ -609,9 +694,12 @@ def check_updated_history(docs: List[Doc], findings: List[Finding]) -> None:
     if git_text(["rev-parse", "--verify", "HEAD"], allow_failure=True) is None:
         return
     for doc in docs:
-        updated = doc.meta.get("updated", "")
-        if not DATE_RE.match(updated):
-            continue  # 書式そのものの error は check_front_matter が出す
+        # 書式そのものの error は `check_front_matter` が出す。
+        # **欄を持たない文書（スキル）はここでも当たらない**——`check_updated_freshness` と
+        # 同じ述語で外している（片方だけ外すと、欄を持たせた日に非対称が静かにできる）
+        if not has_dated_updated(doc):
+            continue
+        updated = doc.meta["updated"]
         log = git_text(["log", "--follow", "--format=%H %as", "--", doc.rel])
         body_date = None
         prev_body: Optional[List[str]] = None

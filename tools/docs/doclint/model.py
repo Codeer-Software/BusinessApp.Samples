@@ -31,15 +31,30 @@ DOCS_INDEX = "docs/README.md"
 # `growth: append` だからではない——役割による免除なので、フロントマターが変わっても効く
 ADR_LEDGER = "docs/decisions/README.md"
 
-# 検査対象外（生成物・ベンダー同梱・Git 追跡外・別の規約に従うもの）
+# 検査対象外（生成物・ベンダー同梱・Git 追跡外）
 EXCLUDE_PREFIXES = (
     "Designer/ClaudeCodeForDesigner/",
     "BusinessApp/",
     "LocalData/temp/",
-    # スキルのフロントマターは name / description が仕様で決まっており、
-    # 本プロジェクトの文書規約（title / status / scope / audience / updated）とは別物である。
-    ".claude/skills/",
 )
+
+# スキル（`.claude/skills/<名前>/SKILL.md`）。**検査対象だが、フロントマターだけ別仕様**。
+# 欄は `name` / `description` がハーネスの仕様で決まっており、本プロジェクトの文書規約
+# （title / status / scope / audience / updated）とは別物である。
+#
+# **免除するのは「欄の規約に依存する検査」だけで、文書としての検査は当てる。**
+# 前置で丸ごと外すと、次の 8 つが落ちる——フロントマター・リンク切れ・`superseded` への
+# リンク・行数・未処理マーカー・条項の記法・改正法の略称・条番号の切替。
+# **節への参照と札の突合は、もともとこの経路の外で当たっている**
+# （`check_section_references` などは `ls-files` を直に歩き、この前置を見ない）。
+SKILL_PREFIX = ".claude/skills/"
+SKILL_ENTRY = "SKILL.md"
+SKILL_NAME_KEY = "name"
+SKILL_REQUIRED_KEYS = [SKILL_NAME_KEY, "description"]
+
+# YAML の折りたたみ・リテラル記法の印。**この読み手は 1 行の `key: value` しか読まない**ので、
+# 値がこの印だけの行は「本体を読めていない」。空欄と同じに扱う（読めた値だと誤解しない）
+FOLDED_SCALARS = frozenset((">", "|", ">-", "|-", ">+", "|+"))
 
 # 追跡下にあるがデザイナが再生成する文書（手で直しても失われるので検査しない）
 EXCLUDE_FILES = ("Designer/CLAUDE.md",)
@@ -96,7 +111,35 @@ class Doc:
         self.body_start = body_start
 
     @property
+    def skill_name(self) -> Optional[str]:
+        """`.claude/skills/<名前>/SKILL.md` のときだけ `<名前>` を返す。
+
+        **前置一致で判定しない。** `references/` `scripts/` はハーネスのスキルの標準構成なので、
+        配下を丸ごと「スキル本体」と見なすと、**補助ファイルを 1 枚置いた日に必ず赤くなる**——
+        しかも直し方が「`.claude/skills/` を除外へ戻す」しか無くなり、塞いだ穴へ戻る力が働く。
+        """
+        if not self.rel.startswith(SKILL_PREFIX):
+            return None
+        rest = self.rel[len(SKILL_PREFIX):].split("/")
+        return rest[0] if len(rest) == 2 and rest[1] == SKILL_ENTRY else None
+
+    @property
+    def is_skill(self) -> bool:
+        """スキル本体（`.claude/skills/<名前>/SKILL.md`）か。"""
+        return self.skill_name is not None
+
+    @property
+    def under_skill(self) -> bool:
+        """スキルのディレクトリ配下か（本体と、`references/` などの補助ファイル）。"""
+        return self.rel.startswith(SKILL_PREFIX)
+
+    @property
     def status(self) -> str:
+        """フロントマターの `status` を**素で**返す。
+
+        スキルを `current` に読み替えるのはここではない（[checks.treated_as_current]）——
+        **`--stats` の指標まで黙って動く**からである。ここは「書いてあること」だけを返す。
+        """
         return self.meta.get("status", "")
 
     @property
@@ -153,10 +196,39 @@ def parse_front_matter(lines: List[str]) -> Tuple[Dict[str, str], int]:
         line = lines[i]
         if line.strip() == "---":
             return meta, i + 1
-        m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$", line)
+        # ハイフンを許す。許さないと `allowed-tools:` のような欄が**黙って meta に入らず**、
+        # 「書いたのに読まれていない」が誰にも見えない
+        m = re.match(r"^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$", line)
         if m:
             meta[m.group(1)] = m.group(2).strip()
     return meta, 0
+
+
+def front_matter_unclosed(lines: List[str]) -> bool:
+    """`---` で開いたまま閉じていないフロントマターか。
+
+    **`parse_front_matter` は閉じフェンスが無くても `meta` を埋めて返す**ので、
+    欄の実在だけを見る検査は通ってしまう。ところが**読み手（ハーネスや静的サイト）は
+    フロントマターとして認識しない**ので、「関門は正しいと言うが、実際には効いていない」
+    という**緑で失敗する**形になる。だから閉じているかを別に見る。
+    """
+    if not lines or lines[0].strip() != "---":
+        return False
+    return not any(lines[i].strip() == "---" for i in range(1, len(lines)))
+
+
+def scalar_value(raw: str) -> Optional[str]:
+    """1 行の `key: value` から値を取り出す。**読めない形は None** を返す。
+
+    引用符は落とす（`Doc.list_field` と同じ流儀。`name: "foo"` を `"foo"` のまま比べると、
+    **YAML として正しい書き方が偽の違反になる**）。
+    折りたたみ（`>` `|`）は本体が次の行以降にあるが、この読み手は 1 行しか見ない——
+    **印だけの値は「読めていない」**として None を返す（空でないと誤解しない）。
+    """
+    v = raw.strip()
+    if v in FOLDED_SCALARS:
+        return None
+    return v.strip("'\"").strip()
 
 
 def body_of(text: str) -> List[str]:

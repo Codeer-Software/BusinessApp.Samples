@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """doclint.selftest — 関門そのものを検査する（`lint_docs.py --selftest`）.
 
-**中身を空にしても緑**という状態を作らないための検査である。見るのは 4 つ。
+**中身を空にしても緑**という状態を作らないための検査である。見るもの:
 
   1. 判定の純粋部分（`updated_violation` / `body_of`）が期待どおり鳴るか
   2. **わざと壊した入力**で `check_superseded_links` が鳴り、免除の形では鳴らないか。
@@ -12,6 +12,9 @@
   5. `article_notation_violations` が `5 条 1 項` を拾い、**公布番号と「12 項目」を拾わない**か  # lint-docs:article-ok
   6. `check_dated_switches` が発効日前は数えるだけで、発効日以後は error にし、印で外れるか
   7. `banned_law_abbreviations` が `28年改正法`・`改正令附則` を拾い、**法令番号つきの略称と普通名詞を拾わない**か  # lint-docs:abbrev-ok 検体
+  8. スキルが**文書として検査に掛かり**、フロントマターだけが別仕様として扱われるか
+
+**本数は数えない**（足すたびに直し忘れる。正典は `selftest()` が回す関数の並び）。
 """
 
 from __future__ import annotations
@@ -23,10 +26,13 @@ from typing import Dict, List
 
 from . import checks
 from .checks import (ABBREV_IGNORE, ALL_CHECKS, ARTICLE_IGNORE, DATED_SWITCHES, SWITCH_IGNORE, Finding,
-                     article_notation_violations, banned_law_abbreviations, check_superseded_links,
-                     dated_switch_hits, successor_of, updated_violation)
-from .model import (ADR_LEDGER, DOCS_INDEX, Doc, INLINE_IGNORE, LINE_LIMIT, SEV_ERROR,
-                    SEV_WARN, body_of, load_docs, parse_front_matter)
+                     article_notation_violations, banned_law_abbreviations, check_body,
+                     check_front_matter, check_links, check_superseded_links, dated_switch_hits,
+                     has_dated_updated, misplaced_skill_entry, skill_front_matter_violations,
+                     successor_of, treated_as_current, updated_violation)
+from .model import (ADR_LEDGER, DOCS_INDEX, Doc, INLINE_IGNORE, LINE_LIMIT, REPO_ROOT, SEV_ERROR,
+                    SEV_WARN, SKILL_ENTRY, SKILL_PREFIX, body_of, front_matter_unclosed,
+                    load_docs, parse_front_matter, scalar_value)
 
 CLI_SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lint_docs.py")
 
@@ -200,6 +206,186 @@ def _check_section_ref_forms() -> List[str]:
         ng.append("docs_num_target: 無い番号に指し先を返した")
     if checks.docs_num_target("78", entries) != "docs/78_架空の設計.md":
         ng.append("docs_num_target: 78 を引けない")
+    return ng
+
+
+SKILL_MD = SKILL_PREFIX + "self-review/" + SKILL_ENTRY
+OK_META = {"name": "self-review", "description": "観点を分けて読ませる"}
+
+
+def _check_skill_front_matter_forms() -> List[str]:
+    """`skill_front_matter_violations` と `misplaced_skill_entry` を**完全一致**で表明する。
+
+    **真偽や部分一致で見ない**（隣の条項・略称の検査と同じ流儀）——語が含まれるかだけを見ると、
+    指摘が増えても・順序が変わっても・`name=` と `ディレクトリ=` が入れ替わっても緑になる。
+    """
+    ng = []
+    cases = [
+        # (ディレクトリ名, meta, 閉じていないか, 期待する違反の全部)
+        ("self-review", OK_META, False, []),
+        # 引用符つきは YAML として正しい。**落とさないと偽の違反になる**
+        ("self-review", {"name": '"self-review"', "description": "'説明'"}, False, []),
+        ("self-review", {}, False,
+         ["フロントマターがありません（name と description が要る）"]),
+        ("self-review", OK_META, True,
+         ["フロントマターが `---` で閉じていません（読み手はこれをフロントマターとして読みません）"]),
+        ("self-review", {"name": "self-review", "description": "   "}, False,
+         ["スキルのフロントマターに description がありません"]),
+        ("self-review", {"description": "説明だけある"}, False,
+         ["スキルのフロントマターに name がありません"]),
+        # 折りたたみは「空でない」ように見えて中身を読めていない
+        ("self-review", {"name": "self-review", "description": ">-"}, False,
+         ["description が折りたたみ記法です。1 行で書いてください"]),
+        ("live-test", OK_META, False,
+         ["name がディレクトリ名と違うので、その名前では起動できません: "
+          "name=self-review / ディレクトリ=live-test"]),
+    ]
+    for dir_name, meta, unclosed, want in cases:
+        got = skill_front_matter_violations(dir_name, meta, unclosed)
+        if got != want:
+            ng.append("skill_front_matter_violations({}, {}, unclosed={}): {} のはずが {}"
+                      .format(dir_name, meta, unclosed, want, got))
+
+    place_cases = [
+        (SKILL_MD, None),
+        (SKILL_PREFIX + "self-review/references/観点.md", None),  # 補助ファイルは位置を問わない
+        ("docs/README.md", None),
+        # 名前のディレクトリが無い直下も読み込まれないので断る
+        (SKILL_PREFIX + SKILL_ENTRY,
+         ".claude/skills/SKILL.md が読み込まれる位置にありません"
+         "（.claude/skills/<名前>/SKILL.md に置く）"),
+        (SKILL_PREFIX + "a/b/" + SKILL_ENTRY,
+         ".claude/skills/a/b/SKILL.md が読み込まれる位置にありません"
+         "（.claude/skills/<名前>/SKILL.md に置く）"),
+    ]
+    for rel, want in place_cases:
+        got = misplaced_skill_entry(rel)
+        if got != want:
+            ng.append("misplaced_skill_entry({}): {} のはずが {}".format(rel, want, got))
+
+    # 読み手の前提（`model` 側の純粋関数）
+    for raw, want in [("foo", "foo"), ('"foo"', "foo"), ("'foo'", "foo"),
+                      (">-", None), ("|", None), ("", ""), ("  foo  ", "foo")]:
+        if scalar_value(raw) != want:
+            ng.append("scalar_value({!r}): {!r} のはずが {!r}".format(raw, want, scalar_value(raw)))
+    for lines, want in [(["---", "a: 1", "---", "本文"], False),
+                        (["---", "a: 1", "本文"], True),
+                        (["本文"], False), ([], False)]:
+        if front_matter_unclosed(lines) != want:
+            ng.append("front_matter_unclosed({!r}): {} のはず".format(lines, want))
+    # ハイフンを含む欄（`allowed-tools:` など）。読めないと**書いたのに読まれていない**が見えない
+    meta, _ = parse_front_matter(["---", "name: foo", "allowed-tools: Read", "---"])
+    if meta.get("allowed-tools") != "Read":
+        ng.append("parse_front_matter: ハイフンを含む欄を読み落としている: {}".format(meta))
+    return ng
+
+
+def _check_skill_is_checked() -> List[str]:
+    """スキルが**文書として検査に掛かっている**ことを、検査ごとに鳴らして表明する。
+
+    属性の読み返し（`doc.status` を読んで同じ値と比べる）では**何も守れない**——
+    `check_body` や `check_superseded_links` の status ガードを通ってスキルで**実際に鳴る**
+    ことを見る。qa/02 の R19-12・R20-16 が宿題にしていたのは、まさにこの経路である。
+    """
+    ng = []
+
+    # ① 欄の規約は当てない（当てると、正しいスキルが毎回 error になる）
+    sink: List[Finding] = []
+    check_front_matter(_fake(SKILL_MD, OK_META, ["本文"]), sink)
+    if sink:
+        ng.append("check_front_matter: 正しいスキルが鳴っている: {}".format(sink))
+
+    # ② **壊したスキルでは鳴る。** 分岐を「黙って免除」に書き換えたら赤くなるのはここだけ。
+    #    severity・指摘先・文面を組で当てる（件数だけ見ると格下げに気づけない。qa/03 L-17）
+    sink = []
+    check_front_matter(_fake(SKILL_PREFIX + "live-test/" + SKILL_ENTRY, OK_META, ["本文"]), sink)
+    want = [(SEV_ERROR, SKILL_PREFIX + "live-test/" + SKILL_ENTRY,
+             "name がディレクトリ名と違うので、その名前では起動できません: "
+             "name=self-review / ディレクトリ=live-test")]
+    if sink != want:
+        ng.append("check_front_matter: 壊したスキルの所見が {} のはずが {}".format(want, sink))
+
+    # ③ 補助ファイル（`references/`）に欄を要求しない。**要求すると置いた日に必ず赤くなる**
+    sink = []
+    check_front_matter(_fake(SKILL_PREFIX + "self-review/references/観点.md", {}, ["本文"]), sink)
+    if sink:
+        ng.append("check_front_matter: スキルの補助ファイルに欄を要求している: {}".format(sink))
+
+    # ④ 読み込まれない位置の SKILL.md は断る
+    sink = []
+    check_front_matter(_fake(SKILL_PREFIX + "a/b/" + SKILL_ENTRY, OK_META, ["本文"]), sink)
+    if len(sink) != 1 or sink[0][0] != SEV_ERROR or "読み込まれる位置" not in sink[0][2]:
+        ng.append("check_front_matter: 位置の違う SKILL.md を断れていない: {}".format(sink))
+
+    # ⑤ 行数と未処理マーカー（`check_body`）が当たる＝`treated_as_current` が効いている
+    sink = []
+    check_body(_fake(SKILL_MD, OK_META, ["x"] * (LINE_LIMIT + 1)), sink)
+    if not [f for f in sink if f[0] == SEV_WARN and "目安" in f[2]]:
+        ng.append("check_body: スキルに行数の目安が当たっていない: {}".format(sink))
+    sink = []
+    check_body(_fake(SKILL_MD, OK_META, ["ここは TODO のまま"]), sink)
+    if not [f for f in sink if "未処理マーカー" in f[2]]:
+        ng.append("check_body: スキルに未処理マーカーの検査が当たっていない: {}".format(sink))
+    if treated_as_current(_fake("docs/x.md", {"status": "superseded"}, [])):
+        ng.append("treated_as_current: superseded を current 扱いしている")
+
+    # ⑥ **superseded へのリンクが鳴る**（R19-12 の本丸）。`../../../` の解決も同時に守る
+    old = _fake("docs/98_旧.md", {"status": "superseded", "related": "[99_新.md]"}, ["旧"])
+    new = _fake("docs/99_新.md", {"status": "current"}, ["新"])
+    by_rel = {old.rel: old, new.rel: new}
+    sink = []
+    seen = check_superseded_links(
+        _fake(SKILL_MD, OK_META, ["[旧](../../../docs/98_旧.md)"]), by_rel, sink)
+    if seen != 1 or len(sink) != 1 or "docs/99_新.md" not in sink[0][2]:
+        ng.append("check_superseded_links: スキルで鳴らない／後継を案内していない"
+                  "（seen={} sink={}）".format(seen, sink))
+
+    # ⑦ リンク切れ。**実在するほうで鳴らない対照を置く**（空集合だと何でも鳴るので表明にならない）
+    sink = []
+    check_links(_fake(SKILL_MD, OK_META, ["[新](../../../docs/99_新.md)"]), {new.rel}, sink)
+    if sink:
+        ng.append("check_links: 実在するリンクで鳴っている（相対パスの解決が違う）: {}".format(sink))
+    sink = []
+    check_links(_fake(SKILL_MD, OK_META, ["[無い](../../../docs/97_ない.md)"]), {new.rel}, sink)
+    if len(sink) != 1:
+        ng.append("check_links: スキルの中のリンク切れを見ていない: {}".format(sink))
+
+    # ⑧ 鮮度の 2 本は同じ述語で外れる（片方だけ外すと、欄を足した日に非対称ができる）
+    if has_dated_updated(_fake(SKILL_MD, OK_META, [])):
+        ng.append("has_dated_updated: 欄の無いスキルを当たりにしている")
+    if not has_dated_updated(_fake(SKILL_MD, dict(OK_META, updated="2026-09-15"), [])):
+        ng.append("has_dated_updated: 欄を足しても当たらない（保留を実行した日に効かない）")
+    return ng
+
+
+def _check_skill_real_data() -> List[str]:
+    """実データで往復させる。**本数のラチェットと、実ファイルが通ることの両方**を見る。
+
+    「1 本以上あるか」だけだと、いまのリポジトリでは「そのファイルが消えていない」としか
+    言っていない。**ディスク上の実数と突き合わせる**ことで、
+    **追跡されていないスキル**（`git ls-files` に載らず、黙って検査 0 本になる）を拾う。
+    """
+    ng = []
+    root = os.path.join(REPO_ROOT, *SKILL_PREFIX.rstrip("/").split("/"))
+    on_disk = sorted(
+        (SKILL_PREFIX + name + "/" + SKILL_ENTRY)
+        for name in (os.listdir(root) if os.path.isdir(root) else [])
+        if os.path.isfile(os.path.join(root, name, SKILL_ENTRY)))
+    docs, _ = load_docs()
+    loaded = sorted(d.rel for d in docs if d.is_skill)
+    if not on_disk:
+        return ["ディスクにスキルが 1 本も無い（**0 本は緑ではない**）"]
+    if loaded != on_disk:
+        ng.append("load_docs が拾ったスキルがディスクと違う: 検査 {} / ディスク {}"
+                  "（追跡されていないスキルは黙って検査 0 本になる。EXCLUDE_PREFIXES へ戻っていないか）"
+                  .format(loaded, on_disk))
+    # **実ファイル → parse_front_matter → 検査の往復。** 偽 `Doc` だけだと、本物の
+    # description（長い 1 行・読点・`§` を含む）が通ることを機械が一度も言っていない
+    for doc in (d for d in docs if d.is_skill):
+        sink: List[Finding] = []
+        check_front_matter(doc, sink)
+        if sink:
+            ng.append("実在のスキル {} が新しい関門で鳴っている: {}".format(doc.rel, sink))
     return ng
 
 
@@ -759,6 +945,7 @@ def selftest() -> int:
     for part in (_check_updated_violation, _check_superseded_links, _check_other_checks,
                  _check_section_ref_forms, _check_article_notation_forms, _check_dated_switch_forms,
                  _check_law_abbreviation_forms, _check_link_label_forms, _check_question_forms,
+                 _check_skill_front_matter_forms, _check_skill_is_checked, _check_skill_real_data,
                  _check_real_data, _check_wiring):
         ng.extend(part())
     for msg in ng:
