@@ -22,7 +22,8 @@ related: [../docs/README.md]
 | [`clb/deploy.ps1`](clb/deploy.ps1) | `Designer/Design` を zip 化して `LocalData/designs/App.zip` に配置する（デザイナ GUI「送信」の代替。FileWatcher が hot-reload） |
 | [`claude/trash.ps1`](claude/trash.ps1) | **ファイル・フォルダをごみ箱へ送る。`rm` の代わりに使う唯一の削除コマンド**（[ADR-0044](../docs/decisions/0044-削除はごみ箱送りに一本化しrmを機械で止める.md)・[33 §1](../docs/33_失わないためのルール.md)）。複数指定・ワイルドカード・`-DryRun` に対応する。**絶対パスへ解決してから保護対象を拒む**。`-SelfTest` で保護判定を検査する（コミット前フックが毎回流す） |
 | [`claude/guard_delete.py`](claude/guard_delete.py) | **失うことを止める** PreToolUse フック。**削除にあたるコマンドは当たり先によらず拒み、代わりに `trash.ps1` を使えと理由文で示す**。**保護対象への `Write`（全上書き）も拒む**（`Edit` は照合があるので拒まない）。`--selftest` で仕様表を検査する（コミット前フックが毎回流す） |
-| [`claude/protected_paths.json`](claude/protected_paths.json) | **削除と上書きから守るものの正典。** 上の 2 つが同じこの 1 ファイルを読む（**載せる基準と読み方はファイル冒頭の `_README`** が持つ） |
+| [`claude/normalize_eol.py`](claude/normalize_eol.py) | **作業コピーの改行を LF に保つ。** 既定は PostToolUse フック（`Write` などが書いた直後に直す）、`--check` はコミット前フックの段、`--fix` は残っているものを直す、`--selftest` は判定の検査。**リポジトリに入る中身は `.gitattributes` が正規化する**ので常に LF で、**ずれるのは作業コピーだけ**である。**`.cs` の中の CR は `CSharpStyleTests` が別に見る**（[ADR-0021 §4-3](../docs/decisions/0021-CSharpは読みやすさを損なわない範囲で最新の記法に揃える.md)。**あちらは単独の CR も拾うが `.cs` だけ**、こちらは**全追跡ファイルだが CRLF と混在だけ**——**どちらも他方の上位集合ではない**） |
+| [`claude/protected_paths.json`](claude/protected_paths.json) | **削除と上書きから守るものの正典。** `trash.ps1` と `guard_delete.py` が同じこの 1 ファイルを読む（**載せる基準と読み方はファイル冒頭の `_README`** が持つ） |
 | [`clb/db_snapshot.ps1`](clb/db_snapshot.ps1) | **稼働 DB の退避と復元**（[ADR-0046](../docs/decisions/0046-稼働DBの退避と復元を戻せる道具に閉じる.md)・[33 §1](../docs/33_失わないためのルール.md)）。`-Save` / `-Restore` / `-List`。**写しは `VACUUM INTO` で取る**（ファイルの複製は、古い内容と新しい内容が混ざった**壊れた写し**になりうる）。**何も消さず、戻す前に必ず現状を退避する**ので、`trash.ps1` と同じく確認を待たずに実行してよい |
 | [`server/wait-server.ps1`](server/wait-server.ps1) | 開発サーバ（`http://localhost:5085`）の起動を待つ |
 | [`clb/sql.ps1`](clb/sql.ps1) | `sql` CLI のラッパ。結果 JSON を標準出力に返し、**一時ファイルを作らない** |
@@ -98,20 +99,22 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
   CLB は列定義を static にキャッシュするため
 - **戻したら `migrate.ps1 -Verify` を打つ。** 古い退避を戻すとスキーマが巻き戻り、適用済みの記録と食い違う
 
-**コミット前フックが 8 段を自動で流す**（`tools/git-hooks/pre-commit`。段の正典はこの表）。
+**コミット前フックが次の段を上から順に流す**（`tools/git-hooks/pre-commit`。段の正典はこの表）。
+**段数は数えない**（[ADR-0012 §7](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)。数えると足すたびに全部書き直すことになる。スクリプトも実行時に数える）。
 
 | 段 | 中身 |
 |---|---|
-| 1 | `check_frozen.py`（**凍結されたファイルの変更・削除・改名**。適用済みマイグレーションと `baseline/`。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
-| 2 | 失うことを止める道具 3 つの自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる） |
-| 3 | `lint_secrets.py`（秘密・絶対パスの混入） |
-| 4 | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
-| 5 | `lint_design.py --selftest` → `lint_design.py`（CLB デザインの静的検査）＋ `sql_mutate.py --selftest`（**変異点の数え方。掃引そのものは載せない**——理由の現在形は [ADR-0058 決定 9](../docs/decisions/0058-行セットの差分で殺す掃引は入力コーパスを持たず行動テストが流した入力をその場で当てる.md)） |
-| 6 | `dotnet test`（テスト・カバレッジ・スキーマ） |
-| 7 | `migrate.ps1 -Verify`（稼働 DB とスキーマ正典の同値。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
-| 8 | `dotnet stryker`（ミューテーション。**5 プロジェクト**——会計コアの純粋層とサーバ層、取引先部品の純粋層とサーバ層、共有インフラ。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)・[ADR-0025 §6](../docs/decisions/0025-取引先を部品として分ける.md)） |
+| **凍結ファイルの検査** | `check_frozen.py --selftest` → `check_frozen.py`（**凍結されたファイルの変更・削除・改名**。適用済みマイグレーションと `baseline/`。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
+| **失うことを止める道具の自己検査** | 失うことを止める道具 3 つの自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる） |
+| **改行の検査** | `normalize_eol.py --selftest` → `normalize_eol.py --check`（**作業コピーの改行が LF か**。`git ls-files --eol` が判定の正典で、**何を LF にすべきかは `.gitattributes` が決める**——この道具は拡張子の一覧を持たない。1 秒で終わるので前に置く） |
+| **秘密の検査** | `lint_secrets.py`（秘密・絶対パスの混入） |
+| **ドキュメント規約の検査** | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
+| **CLB デザインの検査** | `lint_design.py --selftest` → `lint_design.py`（CLB デザインの静的検査）＋ `sql_mutate.py --selftest`（**変異点の数え方。掃引そのものは載せない**——理由の現在形は [ADR-0058 決定 9](../docs/decisions/0058-行セットの差分で殺す掃引は入力コーパスを持たず行動テストが流した入力をその場で当てる.md)） |
+| **テスト・カバレッジ・スキーマ** | `dotnet test`（テスト・カバレッジ・スキーマ） |
+| **稼働 DB とスキーマ正典の同値検査** | `migrate.ps1 -Verify`（稼働 DB とスキーマ正典の同値。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
+| **ミューテーションテスト** | `dotnet stryker`（ミューテーション。**5 プロジェクト**——会計コアの純粋層とサーバ層、取引先部品の純粋層とサーバ層、共有インフラ。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)・[ADR-0025 §6](../docs/decisions/0025-取引先を部品として分ける.md)） |
 
-**マージが自動でコミットするときは `pre-merge-commit` から同じ 8 段へ委譲する**——
+**マージが自動でコミットするときは `pre-merge-commit` から同じ段へ委譲する**——
 git はマージで `pre-commit` を呼ばないので、置かないと **`main` に入る瞬間だけ誰も見ていない**。
 
 有効にするのは clone 後の 1 回だけ。
