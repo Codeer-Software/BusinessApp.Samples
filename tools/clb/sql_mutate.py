@@ -259,7 +259,7 @@ def selftest():
     # **実物の SQL の書き方が変わって演算子が当たらなくなった日に、何も鳴らない**
     # ——生き残りは母数と一緒に減るので、**上限だけの関門は緑になる**。
     # **掃引（`sql_sweep.ps1`）はモジュールごとに同じ下限を持つが、あれは毎回は流れない。**
-    # **ここはコミット前フックで毎回流れる**（`tools/git-hooks/pre-commit` の 5 段目）。
+    # **ここはコミット前フックで毎回流れる**（`tools/git-hooks/pre-commit` の「CLB デザインの検査」の段）。
     real = 0
     for path in sorted(query_sql()):
         real += len(points(read(path)))
