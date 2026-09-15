@@ -15,6 +15,10 @@
     **なぜこの形なのか（VACUUM INTO で取る・止めてから戻す・何も消さない）は ADR-0046 が持つ。**
     ここに書くのは、**実装しないと分からないこと**だけである。
 
+    **DB とパスの小道具は _sqlite.ps1 が持つ**（worktree_db.ps1 と共有。2026-09-16 に出した。
+    docs/20_実装の原則.md §4）。**この道具に固有の判断——稼働 DB をプロセス名で見分けること・
+    退避の名前の検査・退避の置き場——だけがここに残る。**
+
     **稼働 DB のパスは DB 自身に聞く**（PRAGMA database_list）。追跡外の設定ファイルを
     このスクリプトが解釈すると、書式が変わったときに黙ってずれる（_designer.ps1 と同じ考え）。
 
@@ -75,6 +79,7 @@ $selected = @($Save, $Restore, $List, $SelfTest) | Where-Object { $_ }
 if ($selected.Count -ne 1) { throw '-Save / -Restore / -List / -SelfTest のどれか 1 つを指定する。' }
 
 . (Join-Path $PSScriptRoot '_designer.ps1')
+. (Join-Path $PSScriptRoot '_sqlite.ps1')
 
 $script:RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $script:BackupDir = Join-Path $script:RepoRoot 'LocalData/backup'
@@ -83,51 +88,20 @@ $script:SupersededDir = Join-Path $script:BackupDir '_superseded'
 # 稼働中のサーバの実行ファイル名。**dotnet run は apphost を起こす**ので dotnet.exe ではない。
 $ServerProcessName = 'BusinessApp.Server'
 
-# 本体のほかに SQLite が作るファイル。**戻すときはこれらも一緒に片付ける**——
-# 古いジャーナルが残っていると、戻した本体にそれが再生されて壊れる。
-$SidecarSuffixes = @('-wal', '-shm', '-journal')
-
 # ------------------------------------------------------------------ 小道具
 
-function Format-ForDisplay {
-    <#  表示用に repo からの相対へ畳む。**畳めないものはそのまま返す。**
-        絶対パスにはユーザー名が入り、貼ると公開リポジトリへ混ざる（CLAUDE.md §5）。 #>
-    param([Parameter(Mandatory)][string]$FullPath)
+# **DB とパスの小道具は _sqlite.ps1 が持つ。** ここに置くのは、
+# この道具の中でしか意味を持たない糊だけである。
 
-    $root = [System.IO.Path]::GetFullPath($script:RepoRoot).TrimEnd('\', '/')
-    $full = [System.IO.Path]::GetFullPath($FullPath)
-    if ($full.StartsWith($root + [System.IO.Path]::DirectorySeparatorChar,
-                         [System.StringComparison]::OrdinalIgnoreCase)) {
-        return $full.Substring($root.Length + 1).Replace('\', '/')
-    }
-    # repo の外（稼働 DB の置き場を移した環境）では、親を伏せて名前だけ出す。
-    return '…/' + (Split-Path -Leaf $full)
-}
-
-function Test-FileExists {
-    param([Parameter(Mandatory)][string]$Path)
-    return Test-Path -LiteralPath $Path -PathType Leaf
-}
-
-function ConvertTo-SqlLiteral {
-    param([Parameter(Mandatory)][string]$Value)
-    # SQLite の文字列リテラルで特別なのは ' だけ（バックスラッシュはただの文字）。
-    return "'" + $Value.Replace("'", "''") + "'"
-}
-
-function Invoke-Sql {
-    param([Parameter(Mandatory)][string]$Sql)
+$SqlRunner = {
+    param([string]$Sql)
     # 中身は _designer.ps1 が持つ（migrate.ps1 と同じ 1 つを使う。docs/20 §4）。
-    return Invoke-DesignerSql -RepoRoot $script:RepoRoot -DataSource $DataSource -Sql $Sql
+    Invoke-DesignerSql -RepoRoot $script:RepoRoot -DataSource $DataSource -Sql $Sql
 }
 
-function Get-LiveDbPath {
-    $result = Invoke-Sql 'PRAGMA database_list;'
-    $main = @($result.results[0].rows | Where-Object { $_.name -eq 'main' })
-    if ($main.Count -ne 1) { throw 'PRAGMA database_list が main を 1 つ返さなかった。' }
-    $path = [string]$main[0].file
-    if (-not $path) { throw '稼働 DB のパスを取れなかった（インメモリの接続先かもしれない）。' }
-    return $path
+function Show-Path {
+    param([Parameter(Mandatory)][string]$Path)
+    return Format-ForDisplay -FullPath $Path -RepoRoot $script:RepoRoot
 }
 
 function Assert-SnapshotName {
@@ -144,23 +118,8 @@ function Get-SnapshotPath {
 }
 
 function Assert-SnapshotSound {
-    <#  写しが SQLite として読めるか。**ATTACH して integrity_check を通す。**
-        Test-Path だけでは、0 バイトや途中で切れた出力が素通りする。 #>
     param([Parameter(Mandatory)][string]$Path)
-
-    if (-not (Test-FileExists $Path)) { throw "写しが無い: $(Format-ForDisplay $Path)" }
-    if ((Get-Item -LiteralPath $Path).Length -eq 0) {
-        throw "写しが空である: $(Format-ForDisplay $Path)"
-    }
-
-    $literal = ConvertTo-SqlLiteral $Path
-    $result = Invoke-Sql "ATTACH DATABASE $literal AS probe; PRAGMA probe.integrity_check; DETACH DATABASE probe;"
-    $rows = @($result.results | Where-Object { $_.columns -contains 'integrity_check' })
-    if ($rows.Count -ne 1) { throw "写しの検査結果を読めなかった: $(Format-ForDisplay $Path)" }
-    $verdict = [string]$rows[0].rows[0].integrity_check
-    if ($verdict -ne 'ok') {
-        throw "写しが壊れている（$verdict）: $(Format-ForDisplay $Path)"
-    }
+    Assert-DbSound -Path $Path -SqlRunner $SqlRunner -RepoRoot $script:RepoRoot
 }
 
 function Save-Snapshot {
@@ -174,15 +133,15 @@ function Save-Snapshot {
     # **既にある退避は上書きしない。** VACUUM INTO 自身も既存ファイルを拒むが、
     # ここで先に断ると「どの名前が塞がっているか」を言葉で返せる。
     if (Test-Path -LiteralPath $destination) {
-        throw "同じ名前の退避が既にある: $(Format-ForDisplay $destination)（別の名前にする。退避は上書きしない）"
+        throw "同じ名前の退避が既にある: $(Show-Path $destination)（別の名前にする。退避は上書きしない）"
     }
 
-    Invoke-Sql "VACUUM INTO $(ConvertTo-SqlLiteral $destination);" | Out-Null
+    & $SqlRunner "VACUUM INTO $(ConvertTo-SqlLiteral $destination);" | Out-Null
     Assert-SnapshotSound -Path $destination
     return Get-Item -LiteralPath $destination
 }
 
-function Assert-NotInUse {
+function Assert-LiveDbUsable {
     param([Parameter(Mandatory)][string]$LiveDbPath)
 
     $running = @(Get-Process -Name $ServerProcessName -ErrorAction SilentlyContinue)
@@ -192,59 +151,13 @@ function Assert-NotInUse {
     }
 
     # 本体と連れを排他で開けるか。開けない相手（デザイナ exe など）が居るなら、書き換えてはいけない。
-    foreach ($suffix in @('') + $SidecarSuffixes) {
-        $path = $LiveDbPath + $suffix
-        if (-not (Test-FileExists $path)) { continue }
-        try {
-            $stream = [System.IO.File]::Open($path, 'Open', 'ReadWrite', 'None')
-            $stream.Close()
-        } catch {
-            throw "稼働 DB を誰かが開いている: $(Format-ForDisplay $path)（$($_.Exception.Message)）"
-        }
-    }
+    Assert-NotInUse -DbPath $LiveDbPath -RepoRoot $script:RepoRoot
 }
 
 function Move-LiveAside {
-    <#  本体と連れを `_superseded/<日時>/` へ改名して退ける。**1 つも無ければフォルダも作らない。**
-        途中で落ちたら、動かした分を戻してから投げ直す——本体だけ消えて古いジャーナルが残る、
-        という一番危ない形を作らないため。 #>
+    <#  本体と連れを `_superseded/<日時>/` へ改名して退ける（中身は _sqlite.ps1）。 #>
     param([Parameter(Mandatory)][string]$LiveDbPath, [Parameter(Mandatory)][string]$Stamp)
-
-    $sources = @()
-    foreach ($suffix in @('') + $SidecarSuffixes) {
-        $path = $LiveDbPath + $suffix
-        if (Test-FileExists $path) { $sources += $path }
-    }
-    if ($sources.Count -eq 0) { return $null }
-
-    $destination = Join-Path $script:SupersededDir $Stamp
-    New-Item -ItemType Directory -Path $destination -Force | Out-Null
-
-    $moved = @()
-    try {
-        foreach ($source in $sources) {
-            $target = Join-Path $destination (Split-Path -Leaf $source)
-            Move-Item -LiteralPath $source -Destination $target
-            $moved += , @($target, $source)
-        }
-    } catch {
-        foreach ($pair in $moved) { Move-Item -LiteralPath $pair[0] -Destination $pair[1] }
-        throw
-    }
-    return [pscustomobject]@{
-        Directory = $destination
-        Moved     = $moved
-        Files     = @($sources | ForEach-Object { Split-Path -Leaf $_ })
-    }
-}
-
-function Restore-Aside {
-    <#  退けたものを元の場所へ戻す（復元が途中で落ちたときの巻き戻し）。 #>
-    param($Aside)
-    if (-not $Aside) { return }
-    foreach ($pair in $Aside.Moved) {
-        if (Test-FileExists $pair[0]) { Move-Item -LiteralPath $pair[0] -Destination $pair[1] -Force }
-    }
+    return Move-FilesAside -DbPath $LiveDbPath -Destination (Join-Path $script:SupersededDir $Stamp)
 }
 
 # ------------------------------------------------------------------ 自己検査
@@ -291,10 +204,10 @@ function Invoke-SelfTest {
         }
 
         # 本体と連れを、すべて退ける。
-        # **期待する連れの名前は、ここに書き下す。** 実装の $SidecarSuffixes を読んで作ると、
+        # **期待する連れの名前は、ここに書き下す。** 実装の $script:SqliteSidecarSuffixes を読んで作ると、
         # リストを縮めたときに検体も一緒に縮んで同語反復になる（自己レビューで実測。2026-09-08）。
         $expectedSidecars = @('-wal', '-shm', '-journal')
-        $extra = @($SidecarSuffixes | Where-Object { $_ -notin $expectedSidecars })
+        $extra = @($script:SqliteSidecarSuffixes | Where-Object { $_ -notin $expectedSidecars })
         if ($extra.Count -gt 0) { Fail "連れが増えている（検体にも足すこと）: $($extra -join ', ')" }
 
         Set-Content -LiteralPath $live -Value 'body' -NoNewline
@@ -365,19 +278,19 @@ if ($Save) {
     if (-not $Name) { $Name = 'snapshot_' + (Get-Date -Format 'yyyyMMdd-HHmmss') }
     Assert-SnapshotName -Value $Name
     $item = Save-Snapshot -SnapshotName $Name
-    Write-Host "退避した: $(Format-ForDisplay $item.FullName)（$([int][math]::Round($item.Length / 1KB)) KB）"
+    Write-Host "退避した: $(Show-Path $item.FullName)（$([int][math]::Round($item.Length / 1KB)) KB）"
     exit 0
 }
 
 if ($List) {
     if (-not (Test-Path -LiteralPath $script:BackupDir)) {
-        Write-Host "退避はまだ 1 つも無い: $(Format-ForDisplay $script:BackupDir)"
+        Write-Host "退避はまだ 1 つも無い: $(Show-Path $script:BackupDir)"
         exit 0
     }
 
     $snapshots = @(Get-ChildItem -LiteralPath $script:BackupDir -Filter '*.db' -File | Sort-Object LastWriteTime)
     if ($snapshots.Count -eq 0) {
-        Write-Host "退避はまだ 1 つも無い: $(Format-ForDisplay $script:BackupDir)"
+        Write-Host "退避はまだ 1 つも無い: $(Show-Path $script:BackupDir)"
     } else {
         $snapshots |
             Select-Object @{ n = '名前'; e = { $_.BaseName } },
@@ -389,7 +302,7 @@ if ($List) {
     if (Test-Path -LiteralPath $script:SupersededDir) {
         $aside = @(Get-ChildItem -LiteralPath $script:SupersededDir -Directory)
         if ($aside.Count -gt 0) {
-            Write-Host "置き換える前の現物が $($aside.Count) 組残っている: $(Format-ForDisplay $script:SupersededDir)"
+            Write-Host "置き換える前の現物が $($aside.Count) 組残っている: $(Show-Path $script:SupersededDir)"
         }
     }
     exit 0
@@ -401,17 +314,17 @@ Assert-SnapshotName -Value $Name
 
 $snapshot = Get-SnapshotPath -SnapshotName $Name
 if (-not (Test-FileExists $snapshot)) {
-    throw "その名前の退避が無い: $(Format-ForDisplay $snapshot)（-List で名前を見る）"
+    throw "その名前の退避が無い: $(Show-Path $snapshot)（-List で名前を見る）"
 }
 
-$livePath = Get-LiveDbPath
-Assert-NotInUse -LiveDbPath $livePath
+$livePath = Get-LiveDbPath -SqlRunner $SqlRunner
+Assert-LiveDbUsable -LiveDbPath $livePath
 
 # **戻す前に、いまの状態を必ず退避する。** 戻しすぎたことに気づいたときの戻り先である。
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 if (Test-FileExists $livePath) {
     $auto = Save-Snapshot -SnapshotName "before-restore_$stamp"
-    Write-Host "戻す前の状態を退避した: $(Format-ForDisplay $auto.FullName)"
+    Write-Host "戻す前の状態を退避した: $(Show-Path $auto.FullName)"
 }
 
 # **戻す写しが健全かを、現物に触れる前に確かめる。** SQL を使うので、稼働 DB がまだ在る間に行う。
@@ -419,12 +332,12 @@ Assert-SnapshotSound -Path $snapshot
 
 # **先に複製を作ってから現物を退ける。** 逆にすると、複製で落ちたときに稼働 DB が無い状態で残る。
 $staged = $livePath + '.restoring'
-if (Test-Path -LiteralPath $staged) { throw "前回の復元の残骸がある: $(Format-ForDisplay $staged)" }
+if (Test-Path -LiteralPath $staged) { throw "前回の復元の残骸がある: $(Show-Path $staged)" }
 Copy-Item -LiteralPath $snapshot -Destination $staged
 
 $aside = $null
 try {
-    Assert-NotInUse -LiveDbPath $livePath   # 退ける直前にもう一度（最初の検査から時間が経っている）
+    Assert-LiveDbUsable -LiveDbPath $livePath   # 退ける直前にもう一度（最初の検査から時間が経っている）
     $aside = Move-LiveAside -LiveDbPath $livePath -Stamp $stamp
     Move-Item -LiteralPath $staged -Destination $livePath
 } catch {
@@ -434,8 +347,8 @@ try {
 }
 
 if ($aside) {
-    Write-Host "現物を退けた: $(Format-ForDisplay $aside.Directory)（$($aside.Files -join ', ')）"
+    Write-Host "現物を退けた: $(Show-Path $aside.Directory)（$($aside.Files -join ', ')）"
 }
-Write-Host "戻した: $Name → $(Format-ForDisplay $livePath)"
+Write-Host "戻した: $Name → $(Show-Path $livePath)"
 Write-Host 'サーバとデザイナを再起動すること（CLB は列定義を static にキャッシュする）。'
 Write-Host 'そのあと migrate.ps1 -Verify を打つこと（古い退避を戻すとスキーマが巻き戻る）。'

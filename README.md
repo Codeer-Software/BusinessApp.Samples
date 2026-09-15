@@ -3,7 +3,7 @@ title: BusinessApp — CLB 製 会計コア
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-09-15
+updated: 2026-09-16
 supersedes: []
 related: [docs/README.md]
 ---
@@ -85,11 +85,15 @@ Claude が自分で用意できないのは、要るファイルの多くが[保
 
 **以下は Claude の敷衍**（[00 §4-11](docs/00_ドキュメント規約/本文.md)。**開発者が述べたのは「作ってよい」まで**）。
 
-- **その道具はまだ無い。** 作るまでは、写しがずれたら開発者に再コピーを頼む
+- **その道具は [`tools/clb/worktree_db.ps1`](tools/clb/worktree_db.ps1)**（2026-09-16）。
+  `-Update` で本体の写しに揃え、`-List` で更新できるワークツリーを見る。
+  **打ち方は [tools/README](tools/README.md)**
 - **`db_snapshot.ps1` には足さない。** [ADR-0046](docs/decisions/0046-稼働DBの退避と復元を戻せる道具に閉じる.md) の決定 7 が
   「この道具はパスを受け取らない」ことを根拠に**守りの免除**を置いているので、
   そこへ行き先の引数を足すと**無検査の書き込み経路が 1 本開く**
 - **別の道具として作り、`cp` ではなく `VACUUM INTO` で写し、行き先をワークツリー配下に限る**
+  （**そのとおりに作った。行き先を許す条件の正典は
+  [`worktree_db.ps1`](tools/clb/worktree_db.ps1) の `.DESCRIPTION`** である）
 - **再コピーや作り直しが要るときは開発者に頼み、できるだけ自律作業を始める前に頼む**
   ——声をかけた時点で自律作業が止まるためである
 

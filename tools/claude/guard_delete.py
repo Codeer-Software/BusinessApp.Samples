@@ -194,6 +194,12 @@ OVERWRITE_FORMS = (
     ("リダイレクト", REDIRECT),
     ("open の書き込み", r"\bopen\([^)]*['\"][wa]"),
     (".NET の書き込み", r"\[[\w.]*IO\.\w+\]::(Write|Append|Create)\w*"),
+    # **移動は書き込みの形に入っていなかった。** `_sqlite.ps1` が `[System.IO.File]::Move` を
+    # 使い始めた 2026-09-16 に足した（上書きの `Move` は overwrite 引数で前の中身を捨てる）。
+    (".NET の移動", r"\[[\w.]*IO\.\w+\]::Move\b"),
+    # **dot-source できる道具箱の、パスを取る関数。** `. tools/clb/_sqlite.ps1` を挟めば
+    # `Move-Item` の語を一度も書かずに保護対象を動かせる（2026-09-16 の自己レビューで判明）。
+    ("_sqlite.ps1 の退避", r"\b(Move-FilesAside|Restore-Aside)\b"),
 )
 
 OVERWRITE = re.compile(
@@ -590,6 +596,10 @@ SELFTEST = [
     ("echo x > .claude/settings.local.json", "deny"),
     ("python -c \"open('LocalData/db/x.db','w')\"", "deny"),
     ("pwsh -c \"[IO.File]::WriteAllText('LocalData/db/x.db','')\"", "deny"),
+    # **.NET の移動と、dot-source した道具箱。** どちらも上書きの語を 1 つも書かずに
+    # 保護対象を動かせる形で、2026-09-16 に語彙へ足した。
+    ("pwsh -c \"[IO.File]::Move('LocalData/db/x.db','y.db')\"", "deny"),
+    ("pwsh -c \". tools/clb/_sqlite.ps1; Move-FilesAside -DbPath LocalData/db/x.db -Destination t\"", "deny"),
     # 保護対象に触れない上書きは、このフックの仕事ではない
     ("sed -i 's/a/b/' docs/README.md", None),
     ("Copy-Item -Force a b", None),
