@@ -70,6 +70,10 @@ python tools/clb/lint_design.py
 # **変異点の数え方を守る検査だけは載せる**——0.1 秒で済み、
 # **ここが壊れると掃引が「生き残り 0」という最良の報告を返す**。
 python tools/clb/sql_mutate.py --selftest
+# 計器の選択そのものの自己検査。**印字のほうは載せない**——フックは印字を読まないし、
+# ここで印字しても「掃引を流すかどうか」はもう変えられない（コミットの直前だから）。
+# **印字は検証の段で人が打つ**（31 §6・`cycle` スキル）。
+python tools/clb/which_gates.py --selftest
 
 stage "テスト・カバレッジ・スキーマ"
 dotnet test BusinessApp.slnx --nologo -v q
