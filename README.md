@@ -3,7 +3,7 @@ title: BusinessApp — CLB 製 会計コア
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-08-26
+updated: 2026-09-15
 supersedes: []
 related: [docs/README.md]
 ---
@@ -71,6 +71,11 @@ CLAUDE.md                   Claude Code 向けミッションブリーフ
    → http://localhost:5085 を開き `admin` / `admin` でログインする。
 
 API キー等の秘密は .NET User Secrets に置く。設定ファイルにもドキュメントにも書かない。
+
+**git のワークツリーを切ったときも同じものが要る**（追跡外なので複製されない）。
+**用意の仕方は [05 の Q-28](docs/05_開発者への問い.md) で開発者に諮っている**——
+要るファイルの多くが[保護対象](tools/claude/protected_paths.json)で、
+[30 §10](docs/30_作業のルール.md) が「新しく作る素直な経路はどれも塞がっている」と定めているためである。
 
 ## 開発の流れ
 
