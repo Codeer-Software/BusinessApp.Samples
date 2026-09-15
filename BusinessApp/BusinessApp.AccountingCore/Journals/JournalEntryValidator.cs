@@ -51,8 +51,9 @@ public static class JournalEntryValidator
     /// 取引先が <c>partners</c> に無くても通す（<c>trg_journal_entries_partner_presence_when_posted</c>）ので、関門も同じ広さにする。
     /// <b>アプリの経路では外部キーが先に止める</b>（取消は原仕訳の取引先を写して INSERT するので、マスタに無い取引先は
     /// 検証に届く前に落ちる）——この重さが効くのは外部キーを切った経路だけで、関門の重さで取り消せなくなる伝票を作らないための整合である。</para>
-    /// <para><b>警告は、いまはどこにも届かない</b>（計上の側は Error だけを読む）。「警告に落とす」は「止めない」の意味であり、
-    /// 届け先は未決である（docs/04 §5）。</para>
+    /// <para><b>警告は、いまはまだどこにも届かない</b>（計上の側は Error だけを読む）。「警告に落とす」は「止めない」の意味である。
+    /// <b>取消の分は届け先が決まった</b>——取消の応答に載せて黄色のトーストにする（ADR-0061。実装はフェーズ 4）。
+    /// <b>訂正の再計上の分はまだ決まっていない</b>（docs/04 §5）。</para>
     /// </remarks>
     private static void ValidatePartners(JournalEntry entry, PartnerCatalog partners, List<Violation> violations)
     {
