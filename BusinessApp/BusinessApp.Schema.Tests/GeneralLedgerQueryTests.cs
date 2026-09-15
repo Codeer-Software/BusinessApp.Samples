@@ -19,6 +19,9 @@ using Microsoft.Data.Sqlite;
 [Collection(QuerySqlCollection.Name)]
 public class GeneralLedgerQueryTests
 {
+    /// <summary>クエリモジュールの名前。<b>SQL の読み込みと、変異の当て先の両方が指す。</b></summary>
+    private const string Module = "GeneralLedger";
+
     /// <summary>
     /// 元帳に載る素材。<b>通常残高の 4 通りを揃える</b>——
     /// 資産（現金）・資産の評価勘定（減価償却累計額）・収益（売上高）・収益の評価勘定（売上値引高）。
@@ -856,7 +859,7 @@ public class GeneralLedgerQueryTests
             $"この SQL に無いパラメータを渡している: {string.Join(" / ", unknown)}");
 
         using var command = db.CreateCommand();
-        command.CommandText = TestDatabase.QuerySql("GeneralLedger");
+        command.CommandText = TestDatabase.QuerySql(Module);
 
         foreach (var name in Parameters)
         {
@@ -865,7 +868,7 @@ public class GeneralLedgerQueryTests
             command.Parameters.AddWithValue(name, givenValue ?? DBNull.Value);
         }
 
-        using var reader = command.ExecuteReader();
+        using var reader = SqlMutationProbe.ExecuteReader(command, Module);
         var rows = new List<Row>();
         while (reader.Read())
         {

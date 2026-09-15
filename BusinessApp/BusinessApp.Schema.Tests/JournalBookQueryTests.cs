@@ -21,6 +21,9 @@ using Microsoft.Data.Sqlite;
 [Collection(QuerySqlCollection.Name)]
 public class JournalBookQueryTests
 {
+    /// <summary>クエリモジュールの名前。<b>SQL の読み込みと、変異の当て先の両方が指す。</b></summary>
+    private const string Module = "JournalBook";
+
     /// <summary>
     /// 帳簿に載る素材。取引日・金額・取引先・部門・摘要をすべてずらしてある。
     /// </summary>
@@ -398,6 +401,55 @@ public class JournalBookQueryTests
     }
 
     /// <summary>
+    /// <b>取引年月日に時刻が付いていても、日付として並ぶ。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>格納形は一様ではない。</b> DDL が受理するのは 5 書式で（<c>Designer/ddl/011</c>）、
+    /// CLB は同じ日を <c>'2026-05-22'</c> とも <c>'2026-05-22 00:00:00'</c> とも書く（qa/01 の A-04）。
+    /// <c>ORDER BY</c> の <c>date()</c> を剥がすと<b>時刻の付いた行だけが同じ日の最後へ回る</b>
+    /// ——例外は出ず、帳簿の並びだけが静かに狂う（qa/03 の L-12 と同じ型）。</para>
+    /// <para><b>この穴は、行セットの差分で殺す掃引が見つけた</b>（ADR-0058）——
+    /// 取引年月日の <c>date()</c> を剥がしても、<b>どの入力でも 1 行も変わらなかった</b>。
+    /// 検体の取引年月日が裸の日付しか持たず、<b>同じ日に 2 通りの書き方が並ぶ形が無かった</b>からである。</para>
+    /// </remarks>
+    [Fact]
+    public void 取引年月日に時刻が付いていても日付として並ぶ()
+    {
+        using var db = Create();
+        TestDatabase.Execute(db, """
+            -- 4) 05-22 の取引。**時刻つきで格納する。** 伝票番号は 3。
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('時刻つきで記録した取引', 1, '2026-05-22 00:00:00', '2026-05-22', 'draft', 'normal', '2026-05-22 10:00:00');
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (4, 1, 'debit', 1, 600, 1);
+
+            -- 5) 同じ 05-22 の取引を、**日付だけ**で格納する。伝票番号は 4。
+            INSERT INTO journal_entries (description, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)
+                VALUES ('日付だけで記録した取引', 1, '2026-05-22', '2026-05-22', 'draft', 'normal', '2026-05-22 11:00:00');
+            INSERT INTO journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+                VALUES (5, 1, 'debit', 1, 700, 1);
+
+            UPDATE journal_entries SET status = 'posted', entry_no = 3, posted_at = '2026-05-22 10:00:00' WHERE id = 4;
+            UPDATE journal_entries SET status = 'posted', entry_no = 4, posted_at = '2026-05-22 11:00:00' WHERE id = 5;
+            """);
+
+        // **この検体が計器として効く前提を、先に表明する。**
+        // **時刻つきの伝票（id 4）のほうが伝票番号が小さい**——逆に振ると、
+        // `date()` を剥がしても並びが変わらず、**テストは緑のまま計器としての意味を失う**。
+        Assert.Equal(3L, EntryNoOf(db, "2026-05-22 00:00:00"));
+        Assert.Equal(4L, EntryNoOf(db, "2026-05-22"));
+
+        // 05-22 の 2 行は**伝票番号の順**（3 → 4 ＝ id 4 → id 5）に並ぶ。
+        // 文字列として比べると、時刻の付いた 3 番が同じ日の最後へ回って id 5 → id 4 になる。
+        Assert.Equal("1-1 1-2 2-1 2-2 4-1 5-1", Joined(Run(db)));
+    }
+
+    /// <summary>格納された取引年月日の字面で伝票を引き、その伝票番号を返す。</summary>
+    private static long EntryNoOf(SqliteConnection db, string transactionDate)
+        => TestDatabase.ScalarOf<long>(
+            db, $"SELECT entry_no FROM journal_entries WHERE transaction_date = '{transactionDate}'");
+
+    /// <summary>
     /// <b>会計年度を列に出す。</b> 伝票番号は年度ごとの連番なので、年度で絞らなければ
     /// 同じ番号が何行も並ぶ。帳簿は既定で絞らない（docs/21 §3）ので、既定の表示がその状態である。
     /// </summary>
@@ -462,7 +514,7 @@ public class JournalBookQueryTests
     private static IReadOnlyList<Row> Run(SqliteConnection db, params (string Name, object Value)[] parameters)
     {
         using var command = db.CreateCommand();
-        command.CommandText = TestDatabase.QuerySql("JournalBook");
+        command.CommandText = TestDatabase.QuerySql(Module);
 
         foreach (var name in Parameters)
         {
@@ -470,7 +522,7 @@ public class JournalBookQueryTests
             command.Parameters.AddWithValue(name, givenName is null ? DBNull.Value : givenValue);
         }
 
-        using var reader = command.ExecuteReader();
+        using var reader = SqlMutationProbe.ExecuteReader(command, Module);
         var rows = new List<Row>();
         while (reader.Read())
         {
