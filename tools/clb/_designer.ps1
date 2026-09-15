@@ -30,7 +30,7 @@ function Invoke-DesignerSql {
         `sql` サブコマンドで SQL を 1 本流し、結果 JSON を解析して返す。失敗したら例外。
 
     .DESCRIPTION
-        **migrate.ps1 と db_snapshot.ps1 が同じ処理を持たないための置き場**
+        **migrate.ps1・db_snapshot.ps1・worktree_db.ps1 が同じ処理を持たないための置き場**
         （docs/20_実装の原則.md §4「重複定義を避ける」）。
         素の出力をそのまま返す薄い口が要るときは sql.ps1 を使う——あちらは終了コードごと素通しする。
 

@@ -24,6 +24,8 @@ related: [../docs/README.md]
 | [`claude/guard_delete.py`](claude/guard_delete.py) | **失うことを止める** PreToolUse フック。**削除にあたるコマンドは当たり先によらず拒み、代わりに `trash.ps1` を使えと理由文で示す**。**保護対象への `Write`（全上書き）も拒む**（`Edit` は照合があるので拒まない）。`--selftest` で仕様表を検査する（コミット前フックが毎回流す） |
 | [`claude/normalize_eol.py`](claude/normalize_eol.py) | **作業コピーの改行を LF に保つ。** 既定は PostToolUse フック（`Write` などが書いた直後に直す）、`--check` はコミット前フックの段、`--fix` は残っているものを直す、`--selftest` は判定の検査。**リポジトリに入る中身は `.gitattributes` が正規化する**ので常に LF で、**ずれるのは作業コピーだけ**である。**`.cs` の中の CR は `CSharpStyleTests` が別に見る**（[ADR-0021 §4-3](../docs/decisions/0021-CSharpは読みやすさを損なわない範囲で最新の記法に揃える.md)。**あちらは単独の CR も拾うが `.cs` だけ**、こちらは**全追跡ファイルだが CRLF と混在だけ**——**どちらも他方の上位集合ではない**） |
 | [`claude/protected_paths.json`](claude/protected_paths.json) | **削除と上書きから守るものの正典。** `trash.ps1` と `guard_delete.py` が同じこの 1 ファイルを読む（**載せる基準と読み方はファイル冒頭の `_README`** が持つ） |
+| [`clb/worktree_db.ps1`](clb/worktree_db.ps1) | **ワークツリーの稼働 DB を、本体の写しで置き換える**（[README](../README.md) の「ワークツリーにも同じものが要る」）。`-Update` / `-List` / `-SelfTest`（コミット前フックが毎回流す）。**行き先を許す条件の正典は、この道具の `.DESCRIPTION`** |
+| [`clb/_sqlite.ps1`](clb/_sqlite.ps1) | **`worktree_db.ps1` と `db_snapshot.ps1` が共有する小道具**（稼働 DB のパス・写しの健全性・退避と巻き戻し・使用中かの判定・空き名探し・表示用のパス畳み）。**単体では動かない** |
 | [`clb/db_snapshot.ps1`](clb/db_snapshot.ps1) | **稼働 DB の退避と復元**（[ADR-0046](../docs/decisions/0046-稼働DBの退避と復元を戻せる道具に閉じる.md)・[33 §1](../docs/33_失わないためのルール.md)）。`-Save` / `-Restore` / `-List`。**写しは `VACUUM INTO` で取る**（ファイルの複製は、古い内容と新しい内容が混ざった**壊れた写し**になりうる）。**何も消さず、戻す前に必ず現状を退避する**ので、`trash.ps1` と同じく確認を待たずに実行してよい |
 | [`server/wait-server.ps1`](server/wait-server.ps1) | 開発サーバ（`http://localhost:5085`）の起動を待つ |
 | [`clb/sql.ps1`](clb/sql.ps1) | `sql` CLI のラッパ。結果 JSON を標準出力に返し、**一時ファイルを作らない** |
@@ -66,6 +68,10 @@ pwsh -NoProfile -File tools/clb/db_snapshot.ps1 -Save -Name <名前>     # 省�
 pwsh -NoProfile -File tools/clb/db_snapshot.ps1 -Restore -Name <名前>  # サーバを止めてから
 pwsh -NoProfile -File tools/clb/db_snapshot.ps1 -List
 
+# ワークツリーの稼働 DB を、本体の写しで更新する（DDL を変えたあと）
+pwsh -NoProfile -File tools/clb/worktree_db.ps1 -List
+pwsh -NoProfile -File tools/clb/worktree_db.ps1 -Update [-Worktree <名前>]  # 1 つだけなら省略可
+
 # デザインを稼働サーバへ反映（designcheck を通してから実行する）
 pwsh -NoProfile -File tools/clb/deploy.ps1
 
@@ -102,6 +108,8 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
   `-Name` に保護対象と同じ字を書いても確認は出ない
 - **待ち受けは IPv4 と IPv6 で 2 行返る。** 同じプロセスなので `-Unique` で 1 つに畳む
   （畳まないと 2 度目の `Stop-Process` が「そんなプロセスは無い」と鳴く）
+- **`worktree_db.ps1` はパスを受け取らない**（受け取るのはワークツリーの**名前**だけ）。行き先は稼働 DB の在処から導く——**引数で行き先を指せる形にすると、無検査の書き込み経路が 1 本開く**
+- **ワークツリーの DB は [protected_paths.json](claude/protected_paths.json) に行が無い**（載せる基準は同ファイルの `_README_criteria`。ここに写さない）。**理由と、機械の側の非対称は [docs/33 §1](../docs/33_失わないためのルール.md) が持つ**
 - **`-Restore` はサーバを止めてから**（道具が断る）。**どのみち戻したあとはサーバとデザイナの再起動が要る**——
   CLB は列定義を static にキャッシュするため
 - **戻したら `migrate.ps1 -Verify` を打つ。** 古い退避を戻すとスキーマが巻き戻り、適用済みの記録と食い違う
@@ -112,7 +120,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 | 段 | 中身 |
 |---|---|
 | **凍結ファイルの検査** | `check_frozen.py --selftest` → `check_frozen.py`（**凍結されたファイルの変更・削除・改名**。適用済みマイグレーションと `baseline/`。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
-| **失うことを止める道具の自己検査** | 失うことを止める道具 3 つの自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる） |
+| **失うことを止める道具の自己検査** | 失うことを止める道具の自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`・`worktree_db.ps1 -SelfTest`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる） |
 | **改行の検査** | `normalize_eol.py --selftest` → `normalize_eol.py --check`（**作業コピーの改行が LF か**。`git ls-files --eol` が判定の正典で、**何を LF にすべきかは `.gitattributes` が決める**——この道具は拡張子の一覧を持たない。1 秒で終わるので前に置く） |
 | **秘密の検査** | `lint_secrets.py`（秘密・絶対パスの混入） |
 | **ドキュメント規約の検査** | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
