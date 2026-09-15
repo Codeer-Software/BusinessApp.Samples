@@ -378,7 +378,7 @@ def within(target: str, root) -> bool:
 def main_repo_root(script_repo_root):
     """**worktree から実行されたときの、本体のリポジトリの根。** それ以外は `None`。
 
-    `.claude/worktrees/` はこの repo が実際に使う作業形態である（[30 §6](../../docs/30_作業のルール.md)）。
+    `.claude/worktrees/` はこの repo が実際に使う作業形態である（運用は README のセットアップ）。
     そこからは `../../../LocalData` のように**本体を相対で指せてしまい**、
     しかも**コマンド文字列に保護対象の名前が出ない**ので、文字列側の判定では止まらない。
     `trash.ps1` の `Get-ProtectedRoots` が先に塞いだ穴で、**同じ穴が Write 側に残っていた**
