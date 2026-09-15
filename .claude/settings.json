@@ -43,6 +43,8 @@
             "Bash(zip:*)",
             "Bash(unzip:*)",
             "Bash(curl:*)",
+            "Bash(iconv:*)",
+            "Bash(uv run:*)",
             "Bash(pwsh -NoProfile -File tools/claude/trash.ps1:*)",
             "PowerShell(pwsh -NoProfile -File tools/claude/trash.ps1:*)",
             "PowerShell(Get-ChildItem:*)",
@@ -60,6 +62,7 @@
             "PowerShell(Expand-Archive:*)",
             "mcp__claude-in-chrome"
         ],
+        "_README_allow": "**`iconv` と uv を足したのは開発者の決定**（2026-09-16。**自走中に許可の確認で止まらないため**。調査の回は 1 回で何本も原文を取るので、止まる回数が少なくない）。使い道の正典は docs/32_調査のルール.md（国税庁の HTML が Shift_JIS である件）と tools/README.md（uv の一時環境）。**uv は `Bash(uv:*)` ではなく `Bash(uv run:*)` に絞ってある**——前方一致なので `Bash(uv:*)` は `uvx`（PyPI から取ったパッケージを即実行する別の実体）まで覆い、処方に要るのは `uv run` の 1 形だけだからである（2026-09-16 に実測。`Bash(uv:*)` を置いた状態で `uvx --version` が確認なしに通った）。**守りがどこまで効くかを、ここで数え直さない**——正典は docs/33_失わないためのルール.md と tools/claude/guard_delete.py の正規表現である。この 2 つを足した回に、語彙へ `iconv -o` と `uv venv --clear` を入れて検体で縛った。",
         "ask": [
             "Read(**/designer.settings.Development.json)",
             "Read(**/appsettings.Development.json)",

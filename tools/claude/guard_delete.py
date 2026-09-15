@@ -151,6 +151,12 @@ DELETION_FORMS = (
     ("os の削除", r"os\.(remove|unlink|rmdir|removedirs)"),
     ("Path.unlink", r"\.unlink\("),
     ("send2trash", r"send2trash"),
+    # **`uv venv --clear` はディレクトリを丸ごと消す。** `uv venv --help` の逐語は
+    # `-c, --clear  Remove any existing files or directories at the target path` と
+    # `--force  Allow --clear to remove a non-virtual environment directory`（2026-09-16 に実測）。
+    # **削除の語を 1 つも書かずに消せる形**なので、`uv` を allow に足した回にここへ入れた。
+    # `uvx` も同じ実体なので `uvx?` で受ける。
+    ("uv venv --clear", r"\buvx?\b[^;&|]*\bvenv\b[^;&|]*(\s-c\b|--clear\b)"),
 )
 
 
@@ -191,6 +197,11 @@ OVERWRITE_FORMS = (
     ("sed -i", r"\bsed\s+-i"),
     ("-OutFile", r"-OutFile\b"),
     ("curl -o", r"\bcurl\b[^;&|]*\s-[oO]\b"),
+    # **`iconv -o`。** この環境の GNU libiconv 1.19 には `-o` が無い（2026-09-16 に実測。
+    # `iconv -f UTF-8 -t UTF-8 -o /dev/null` は Usage を出して終わる）ので、
+    # **ここで塞いでいるのは glibc 版の iconv が入った環境である**——公開リポジトリなので、
+    # 手元に `-o` が無いことを理由に外さない。**リダイレクト経由の書き込みは下の「リダイレクト」が拾う。**
+    ("iconv -o", r"\biconv\b[^;&|]*\s-o\b"),
     ("リダイレクト", REDIRECT),
     ("open の書き込み", r"\bopen\([^)]*['\"][wa]"),
     (".NET の書き込み", r"\[[\w.]*IO\.\w+\]::(Write|Append|Create)\w*"),
@@ -593,6 +604,10 @@ SELFTEST = [
     ("sed -i 's/a/b/' LocalData/db/x.db", "deny"),
     ("Invoke-WebRequest http://example.com -OutFile Designer/LocalEnvironment.md", "deny"),
     ("curl -o LocalData/db/x.db http://example.com", "deny"),
+    # **`iconv` と `uv` を allow に足した回（2026-09-16）に足した 2 形。**
+    # どちらも削除・上書きの語を 1 つも書かずに保護対象へ当てられる。
+    ("iconv -f CP932 -t UTF-8 -o LocalData/db/x.db in.htm", "deny"),
+    ("uv venv --clear --force LocalData/db", "deny"),
     ("echo x > .claude/settings.local.json", "deny"),
     ("python -c \"open('LocalData/db/x.db','w')\"", "deny"),
     ("pwsh -c \"[IO.File]::WriteAllText('LocalData/db/x.db','')\"", "deny"),
