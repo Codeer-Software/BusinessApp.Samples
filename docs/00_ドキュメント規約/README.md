@@ -148,7 +148,10 @@ python tools/docs/lint_docs.py --today 2027-01-01  # 日付で発効する切替
    代わりに**そのスキルを起動させたい文書からリンクする**。リンク切れは lint が見る
 2. 判断をしたら **ADR** を起こし、[`decisions/README.md`](../decisions/README.md) に 1 行足す（lint が突合する）
 3. 後回しにするものは**保留リスト**へ（[§4-4](本文.md)）
-4. コミット前に `python tools/docs/lint_docs.py` と `python tools/docs/lint_secrets.py` を流す
+4. コミット前に `python tools/docs/lint_docs.py` と `python tools/docs/lint_secrets.py` を流す。
+   **新しく作った文書は、先に `git add` してから流す**——検査対象を `git ls-files` で集めるので、
+   **追跡外の文書は見えない**。ADR を足した回に「台帳の行に対応する ADR がありません」が出るのはこれである
+   （コミットの時点では staged なので見えている。**手で先に流したときだけ起きる**）
 5. **マージ前に別の目を通す**（[CLAUDE.md](../../CLAUDE.md) §4）。
    **lint が見るのは、フロントマター・リンク・日付・条項の表記という「形」だけである。**
    [§4-6](本文.md) の重複も、**書いてある内容の矛盾も、機械では捕まらない**
