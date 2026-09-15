@@ -108,7 +108,7 @@ function Get-GitCommonDir {
 function Get-ProtectedRoots {
     <#  保護判定の起点。**worktree から実行されたときは、本体のリポジトリも守る。**
 
-        `.claude/worktrees/` はこの repo が実際に使う作業形態である（[30 §6](../../docs/30_作業のルール.md)）。
+        `.claude/worktrees/` はこの repo が実際に使う作業形態である（運用は README のセットアップ）。
         そこから `../../../Designer` のように**本体を相対で指せてしまい**、
         しかも**コマンド文字列に保護対象の名前が出ない**のでフック側も止められない
         （自己レビューで実証。2026-09-07）。
