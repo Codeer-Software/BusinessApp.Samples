@@ -3,9 +3,9 @@ title: 会計コア構築ミッション（CLAUDE.md）
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-09-08
+updated: 2026-09-15
 supersedes: []
-related: [docs/README.md, Designer/CLAUDE.md, docs/30_作業のルール.md, docs/31_検証のルール.md, docs/20_実装の原則.md, docs/32_調査のルール.md]
+related: [docs/README.md, Designer/CLAUDE.md, docs/30_作業のルール.md, docs/31_検証のルール.md, docs/33_失わないためのルール.md, docs/20_実装の原則.md, docs/32_調査のルール.md]
 ---
 # 会計コア構築ミッション（CLAUDE.md）
 
@@ -100,7 +100,7 @@ related: [docs/README.md, Designer/CLAUDE.md, docs/30_作業のルール.md, doc
 - **実機で操作していない機能は、できていないものとして扱う。** `designcheck` と `dotnet test` の緑は「読み込める」「C# が正しい」までしか言っていない（[31 §2](docs/31_検証のルール.md)）
 - **ファイル・フォルダ削除は `trash` のみ用いる**——`pwsh -NoProfile -File tools/claude/trash.ps1 <パス>`。**`rm` 等は使用禁止。**
     - **`trash` は開発者への確認なしに使用可能（復元可能だから）。**
-    - その他、消せるもの・消せないもの等の詳細は [30 §10](docs/30_作業のルール.md)
+    - その他、消せるもの・消せないもの等の詳細は [33](docs/33_失わないためのルール.md)
 
 ## 5. 情報セキュリティ
 
