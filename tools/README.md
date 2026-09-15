@@ -50,8 +50,15 @@ related: [../docs/README.md]
 
 ```powershell
 # 例: 抽出スクリプトを書いて uv で走らせる（pypdf は実行のたびに一時環境へ解決される）
-uv run --with pypdf python <スクリプト.py> <対象.pdf> <出力.txt> <開始ページ> <終了ページ>
+uv run --with pypdf --with cryptography python <スクリプト.py> <対象.pdf> <出力.txt> <開始ページ> <終了ページ>
 ```
+
+**`--with cryptography` を落とさない。** 国税庁の一問一答は **AES で暗号化された PDF** で、
+pypdf だけだと**全ページが `cryptography>=3.1 is required for AES algorithm` で抽出できない**
+（2026-09-16 に電帳一問一答の 55 ページ全部で実測）。
+**このとき出るのはページごとの例外なので、「スキャン画像だから本文が取れない」と誤認しやすい**
+——[32 §3](../docs/32_調査のルール.md) が「取れなければ未確認として残す」と言っている相手は
+**本当に画像のページ**であって、これではない。
 
 抽出スクリプト自体は使い捨てなのでスクラッチパッドに置く（[30 §8](../docs/30_作業のルール.md)）。
 Python の依存が恒常的に増えてきたら、そのとき `pyproject.toml` ＋ uv 管理の venv へ移行を検討する。
