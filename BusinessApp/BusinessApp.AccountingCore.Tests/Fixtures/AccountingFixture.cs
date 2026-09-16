@@ -33,7 +33,16 @@ public static class AccountingFixture
 
     /// <summary><b>取引先を要する</b>科目（docs/15 §1-2）。</summary>
     public static readonly AccountId AccountsReceivable = new(8);
+    /// <summary>
+    /// <b>2 つ目の無効な科目。</b> 1 つだと「まとめる単位が科目か、違反コードか」が縮退する——
+    /// 無効とマスタに無いの 2 件で撃つと、<b>コードでまとめる実装でも 2 件返って緑になる</b>
+    /// （2026-09-16 の自己レビュー。<see cref="OtherRetiredPartner"/> と同じ型）。
+    /// </summary>
+    public static readonly AccountId OtherRetiredExpense = new(9);
     public static readonly AccountId UnknownAccount = new(999);
+
+    /// <summary><b>2 つ目のマスタに無い科目。</b> 同上。</summary>
+    public static readonly AccountId OtherUnknownAccount = new(998);
 
     public static readonly SubAccountId MainBank = new(1);
     public static readonly SubAccountId RetiredBank = new(2);
@@ -41,9 +50,18 @@ public static class AccountingFixture
     public static readonly SubAccountId RetiredCurrent = new(4);
     public static readonly SubAccountId UnknownSubAccount = new(999);
 
+    /// <summary><b>2 つ目のマスタに無い補助科目。</b> 同上。</summary>
+    public static readonly SubAccountId OtherUnknownSubAccount = new(998);
+
     public static readonly DepartmentId SalesDepartment = new(1);
     public static readonly DepartmentId RetiredDepartment = new(2);
+
+    /// <summary><b>2 つ目の無効な部門。</b> 同上。</summary>
+    public static readonly DepartmentId OtherRetiredDepartment = new(3);
     public static readonly DepartmentId UnknownDepartment = new(999);
+
+    /// <summary><b>2 つ目のマスタに無い部門。</b> 同上。</summary>
+    public static readonly DepartmentId OtherUnknownDepartment = new(998);
 
     public static readonly PartnerId Partner = new(1);
 
@@ -78,6 +96,7 @@ public static class AccountingFixture
         new(BankAccount, "1200", "普通預金", AccountCategory.Asset, UsesSubAccount: true),
         new(CurrentAccount, "1210", "当座預金", AccountCategory.Asset, UsesSubAccount: true),
         new(AccountsReceivable, "1300", "売掛金", AccountCategory.Asset, RequiresPartner: true),
+        new(OtherRetiredExpense, "5910", "もう 1 つ廃止した費用科目", AccountCategory.Expense, IsActive: false),
     ];
 
     public static IReadOnlyList<SubAccountDefinition> SubAccounts { get; } =
@@ -92,6 +111,7 @@ public static class AccountingFixture
     [
         new(SalesDepartment, "20", "営業部"),
         new(RetiredDepartment, "99", "廃止した部門", IsActive: false),
+        new(OtherRetiredDepartment, "98", "もう 1 つ廃止した部門", IsActive: false),
     ];
 
     /// <param name="hasSelectablePartner">

@@ -68,77 +68,57 @@ public static class JournalEntryValidator
         // ここが持つのは実装の事情だけである——
         // **まとめる鍵は取引先の識別子**（違反の種類ではない。2 社が無効なら 2 件出る）。
         // **場所は伝票が先、次に行番号の順**（ドメインの型は並びを持たないので、ここで決める）。
-        // **場所が 1 つなら行番号だけを付け、複数なら文に並べる**（docs/21 §2-6）。
-        var places = new Dictionary<PartnerId, List<int?>>();
-        var order = new List<PartnerId>();
-
-        void Note(PartnerId partnerId, int? lineNo)
-        {
-            if (!places.TryGetValue(partnerId, out var found))
-            {
-                places[partnerId] = found = [];
-                order.Add(partnerId);
-            }
-
-            found.Add(lineNo);
-        }
-
+        //
+        // **場所を集めるのと、断るのを、同じ並びで 2 度回す**——
+        // **重ねて断らないのは控えの側の仕事**（`SayOnce`）なので、ここでは素直に全部を回す。
+        var used = new List<(PartnerId PartnerId, int? LineNo)>();
         if (entry.PartnerId is PartnerId entryPartner)
         {
-            Note(entryPartner, null);
+            used.Add((entryPartner, null));
         }
 
-        // **行番号の順に並べる。** ドメインの型は並びを持たないので、ここで決める
-        // （並べないと、場所の並べ書きが読み込みの順に左右される）。
-        foreach (var line in entry.Lines.Where(l => l.PartnerId is not null).OrderBy(l => l.LineNo))
+        used.AddRange(entry.Lines
+            .Where(l => l.PartnerId is not null)
+            .OrderBy(l => l.LineNo)
+            .Select(l => (l.PartnerId!.Value, PlaceOf(l))));
+
+        var places = new RejectionPlaces<PartnerId>();
+        foreach (var (partnerId, lineNo) in used)
         {
-            Note(line.PartnerId!.Value, line.LineNo);
+            places.Note(partnerId, lineNo);
         }
 
-        foreach (var partnerId in order)
+        foreach (var (partnerId, _) in used)
         {
-            ValidatePartner(partnerId, places[partnerId], entry, partners, violations);
+            ValidatePartner(partnerId, places, entry, partners, violations);
         }
-    }
-
-    /// <summary>その取引先を使っている場所の並べ書き。1 か所なら空（行番号だけで足りる）。</summary>
-    private static string UsedIn(List<int?> places)
-    {
-        if (places.Count < 2)
-        {
-            return string.Empty;
-        }
-
-        var written = places.Select(p => p is int lineNo ? $"行 {lineNo}" : "伝票");
-        return $"{string.Join("・", written)} で使っています。";
     }
 
     private static void ValidatePartner(
-        PartnerId partnerId, List<int?> places, JournalEntry entry, PartnerCatalog partners,
+        PartnerId partnerId, RejectionPlaces<PartnerId> places, JournalEntry entry, PartnerCatalog partners,
         List<Violation> violations)
     {
         // 伝票の取引先も明細の取引先も、訂正の下書きで選び直せる（明細の列は 2026-09-16 に足した）。
         var severity = ReversalOnlySeverity(entry);
 
-        // **場所が 1 つのときだけ行番号を付ける。** 複数あるのに 1 つだけ付けると、
-        // **他の場所を直さなくてよいように読める**。
-        var lineNo = places.Count == 1 ? places[0] : null;
-        var usedIn = UsedIn(places);
-
         // **次の一手まで言う**（docs/21 §2-3）。読み手の経理担当は取引先を保守する役でもある（docs/02）。
         var partner = partners.Find(partnerId);
         if (partner is null)
         {
-            violations.Add(new Violation(
-                JournalViolationCodes.PartnerUnknown,
-                $"取引先が取引先マスタにありません。{usedIn}"
-                + "別の取引先を選ぶか、取引先マスタに登録してください。",
-                lineNo,
-                severity));
+            if (places.TrySayOnce(partnerId, out var unknownLine, out var unknownUsedIn))
+            {
+                violations.Add(new Violation(
+                    JournalViolationCodes.PartnerUnknown,
+                    $"取引先が取引先マスタにありません。{unknownUsedIn}"
+                    + "別の取引先を選ぶか、取引先マスタに登録してください。",
+                    unknownLine,
+                    severity));
+            }
+
             return;
         }
 
-        if (!partner.IsActive)
+        if (!partner.IsActive && places.TrySayOnce(partnerId, out var lineNo, out var usedIn))
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PartnerInactive,
@@ -331,7 +311,37 @@ public static class JournalEntryValidator
 
     private static void ValidateLines(JournalEntry entry, PostingContext context, List<Violation> violations)
     {
-        foreach (var line in entry.Lines)
+        // **同じ直し先の断りを、行数だけ並べない**（docs/21 §2-6）。
+        // **無効にした 1 科目を 3 行で使えば、直すのは勘定科目マスタの 1 行なのに同じ文が 3 つ並ぶ**
+        // ——取引先より起きやすい（2026-09-16 の自己レビュー。qa/02 のラウンド 118）。
+        // **断る前に場所を集める**ので、行を回す前に 1 度数える。
+        // **行番号の順に集める**（ドメインの型は並びを持たないので、ここで決める）。
+        var accountPlaces = new RejectionPlaces<AccountId>();
+        var departmentPlaces = new RejectionPlaces<DepartmentId>();
+        var subAccountPlaces = new RejectionPlaces<SubAccountId>();
+        foreach (var line in entry.Lines.OrderBy(l => l.LineNo))
+        {
+            accountPlaces.Note(line.AccountId, PlaceOf(line));
+
+            if (line.DepartmentId is DepartmentId departmentId)
+            {
+                departmentPlaces.Note(departmentId, PlaceOf(line));
+            }
+
+            // **補助科目は、無効の断りに届く行だけ控える**（<see cref="ReachesSubAccountRejection"/>）。
+            // 「補助科目を使う」がオフの行や親が違う行を控えると、
+            // **「有効に戻せば直る場所」に、有効に戻しても直らない行が混ざる**。
+            if (line.SubAccountId is SubAccountId subAccountId
+                && context.Accounts.Find(line.AccountId) is AccountDefinition owner
+                && ReachesSubAccountRejection(owner, subAccountId, context.SubAccounts))
+            {
+                subAccountPlaces.Note(subAccountId, PlaceOf(line));
+            }
+        }
+
+        // **断るのも行番号の順**——ドメインの型は並びを持たないので、
+        // 渡された順のままだと「①行 2: …②行 1: …」になる。
+        foreach (var line in entry.Lines.OrderBy(l => l.LineNo))
         {
             if (!line.Amount.IsPositive)
             {
@@ -347,24 +357,31 @@ public static class JournalEntryValidator
             }
 
             ValidateTaxLine(line, entry, violations);
-            ValidateDepartment(line, entry, context.Departments, violations);
+            ValidateDepartment(line, entry, context.Departments, departmentPlaces, violations);
 
             var account = context.Accounts.Find(line.AccountId);
             if (account is null)
             {
-                violations.Add(new Violation(
-                    JournalViolationCodes.AccountUnknown,
-                    "勘定科目が勘定科目マスタにありません。",
-                    line.LineNo));
+                if (accountPlaces.TrySayOnce(line.AccountId, out var unknownLine, out var unknownUsedIn))
+                {
+                    violations.Add(new Violation(
+                        JournalViolationCodes.AccountUnknown,
+                        $"勘定科目が勘定科目マスタにありません。{unknownUsedIn}"
+                        + "別の勘定科目を選ぶか、勘定科目マスタに登録してください。",
+                        unknownLine));
+                }
+
                 continue;
             }
 
-            if (!account.IsActive)
+            if (!account.IsActive
+                && accountPlaces.TrySayOnce(line.AccountId, out var inactiveLine, out var inactiveUsedIn))
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.AccountInactive,
-                    $"勘定科目「{account.Name}」は無効なので、新しい計上には使えません。",
-                    line.LineNo,
+                    $"勘定科目「{account.Name}」は無効なので、新しい計上には使えません。{inactiveUsedIn}"
+                    + "別の勘定科目を選ぶか、勘定科目マスタで有効に戻してください。",
+                    inactiveLine,
                     InactiveSeverity(entry)));
             }
 
@@ -377,12 +394,13 @@ public static class JournalEntryValidator
             }
 
             ValidatePartner(line, entry, account, context.HasSelectablePartner, violations);
-            ValidateSubAccount(line, entry, account, context.SubAccounts, violations);
+            ValidateSubAccount(line, entry, account, context.SubAccounts, subAccountPlaces, violations);
         }
     }
 
     private static void ValidateDepartment(
-        JournalLine line, JournalEntry entry, DepartmentCatalog departments, List<Violation> violations)
+        JournalLine line, JournalEntry entry, DepartmentCatalog departments,
+        RejectionPlaces<DepartmentId> places, List<Violation> violations)
     {
         if (line.DepartmentId is not DepartmentId departmentId)
         {
@@ -392,20 +410,26 @@ public static class JournalEntryValidator
         var department = departments.Find(departmentId);
         if (department is null)
         {
-            violations.Add(new Violation(
-                JournalViolationCodes.DepartmentUnknown,
-                "部門が部門マスタにありません。",
-                line.LineNo));
+            if (places.TrySayOnce(departmentId, out var unknownLine, out var unknownUsedIn))
+            {
+                violations.Add(new Violation(
+                    JournalViolationCodes.DepartmentUnknown,
+                    $"部門が部門マスタにありません。{unknownUsedIn}"
+                    + "別の部門を選ぶか、部門マスタに登録してください。",
+                    unknownLine));
+            }
+
             return;
         }
 
-        if (!department.IsActive)
+        if (!department.IsActive && places.TrySayOnce(departmentId, out var lineNo, out var usedIn))
         {
             violations.Add(new Violation(
                 JournalViolationCodes.DepartmentInactive,
-                $"部門「{department.Name}」は無効なので、新しい計上には使えません。",
-                line.LineNo,
-                    InactiveSeverity(entry)));
+                $"部門「{department.Name}」は無効なので、新しい計上には使えません。{usedIn}"
+                + "別の部門を選ぶか、部門マスタで有効に戻してください。",
+                lineNo,
+                InactiveSeverity(entry)));
         }
     }
 
@@ -450,7 +474,7 @@ public static class JournalEntryValidator
 
     private static void ValidateSubAccount(
         JournalLine line, JournalEntry entry, AccountDefinition account, SubAccountCatalog subAccounts,
-        List<Violation> violations)
+        RejectionPlaces<SubAccountId> places, List<Violation> violations)
     {
         if (line.SubAccountId is not SubAccountId subAccountId)
         {
@@ -476,10 +500,15 @@ public static class JournalEntryValidator
         var subAccount = subAccounts.Find(subAccountId);
         if (subAccount is null)
         {
-            violations.Add(new Violation(
-                JournalViolationCodes.SubAccountUnknown,
-                "補助科目が補助科目マスタにありません。",
-                line.LineNo));
+            if (places.TrySayOnce(subAccountId, out var unknownLine, out var unknownUsedIn))
+            {
+                violations.Add(new Violation(
+                    JournalViolationCodes.SubAccountUnknown,
+                    $"補助科目が補助科目マスタにありません。{unknownUsedIn}"
+                    + "別の補助科目を選ぶか、補助科目マスタに登録してください。",
+                    unknownLine));
+            }
+
             return;
         }
 
@@ -509,15 +538,45 @@ public static class JournalEntryValidator
             return;
         }
 
-        if (!subAccount.IsActive)
+        if (!subAccount.IsActive && places.TrySayOnce(subAccountId, out var lineNo, out var usedIn))
         {
             violations.Add(new Violation(
                 JournalViolationCodes.SubAccountInactive,
-                $"補助科目「{subAccount.Name}」は無効なので、新しい計上には使えません。",
-                line.LineNo,
-                    InactiveSeverity(entry)));
+                $"補助科目「{subAccount.Name}」は無効なので、新しい計上には使えません。{usedIn}"
+                + "別の補助科目を選ぶか、補助科目マスタで有効に戻してください。",
+                lineNo,
+                InactiveSeverity(entry)));
         }
     }
+
+    /// <summary>
+    /// <b>断りが指す場所</b>。<b>消費税行は本体行で代表させる</b>。
+    /// </summary>
+    /// <remarks>
+    /// <b>消費税行はシステムが作り、利用者は直接編集できない</b>（docs/11 §2）ので、
+    /// <b>税行の行番号を並べても踏めない</b>——しかも税行の部門は本体行と同じであることを
+    /// <see cref="ValidateTaxLine"/> が強制するので、<b>同じ部門が必ず 2 行に現れる</b>。
+    /// 本体行で代表させると控えが重なり、<see cref="RejectionPlaces{TKey}.Note"/> が 1 つに畳む。
+    /// <b>本体行を指していない税行は自分の行番号で数える</b>——そちらは
+    /// <see cref="ValidateTaxLine"/> が別に断るので、ここで隠さない。
+    /// </remarks>
+    private static int? PlaceOf(JournalLine line)
+        => line.IsTaxLine ? line.ParentLineNo ?? line.LineNo : line.LineNo;
+
+    /// <summary>
+    /// その行が<b>補助科目の「マスタに無い」「無効」の断りに届く</b>か。
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="ValidateSubAccount"/> の打ち切りと同じ判断</b>である——
+    /// 実在しない補助科目は「補助科目を使う」を見ずに断り、
+    /// 使わない科目の行と親が違う行は<b>無効を見る前に別の断りで終わる</b>。
+    /// <b>2 か所に同じ判断があるので、片方だけ動かすと場所がずれる</b>——
+    /// 打ち切りの 1 つ 1 つを検体が固定している（<c>JournalEntryValidatorTests</c>）。
+    /// </remarks>
+    private static bool ReachesSubAccountRejection(
+        AccountDefinition account, SubAccountId subAccountId, SubAccountCatalog subAccounts)
+        => subAccounts.Find(subAccountId) is not SubAccountDefinition subAccount
+            || (account.UsesSubAccount && subAccount.AccountId == account.Id);
 
     /// <summary>
     /// 無効にしたマスタを使っていることの重さ。
@@ -635,6 +694,82 @@ public static class JournalEntryValidator
                 JournalViolationCodes.TaxLineNotInherited,
                 "消費税行の用途区分は、本体行と同じにしてください。",
                 line.LineNo));
+        }
+    }
+
+    /// <summary>
+    /// 同じ直し先の断りを 1 件にまとめるための、<b>使った場所の控え</b>（docs/21 §2-6）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>断る前に、その直し先を使っている場所を全部知っている必要がある</b>——
+    /// 1 件にまとめるとき、文に並べるのは<b>場所の全部</b>だからである。
+    /// だから<b>使った場所を先に 1 度集め</b>（<see cref="Note"/>）、
+    /// 断るときに<b>最初の 1 回だけ</b>文を作る（<see cref="TrySayOnce"/>）。</para>
+    /// <para><b>場所が 1 つなら行番号で指し、複数なら文に並べる</b>（docs/21 §2-6・§3）。
+    /// 1 つのときに並べ書きを出さないのは、<b>「行 N:」で足りるところに同じことを 2 回書かない</b>ため。</para>
+    /// <para><b>まとめる鍵は直し先の識別子</b>である——違反の種類ではない。
+    /// 無効なマスタが 2 つあれば 2 件出る（片方の直し忘れに気づけなくなるから）。</para>
+    /// <para><b>同じ鍵で、種類の違う断りが 2 つ立つことは無い。</b>
+    /// 「マスタに無い」と「無効」はカタログの引き当てが決めるので<b>排他</b>で、前者は必ずその場で打ち切る。
+    /// <b>3 つ目の検査をこの控えに足すときは、先に来たほうが後を黙らせないかを確かめる</b>——
+    /// 重さが違うと、警告が差し戻しを食う。</para>
+    /// <para><b><see cref="TrySayOnce"/> を呼ぶ鍵は、必ず先に <see cref="Note"/> してあること。</b>
+    /// 控えの無い鍵では落ちる——<b>落とすのは意図である</b>。場所を知らないまま断ると、
+    /// 「場所は捨てない」という規則に反した文が静かに出る。</para>
+    /// </remarks>
+    private sealed class RejectionPlaces<TKey>
+        where TKey : notnull
+    {
+        private readonly Dictionary<TKey, List<int?>> _used = [];
+        private readonly HashSet<TKey> _said = [];
+
+        /// <summary>その直し先を使っている場所を控える（<c>null</c> は伝票の欄）。</summary>
+        /// <remarks>
+        /// <b>同じ場所は 1 度しか控えない</b>——行番号が重なった伝票（<c>E-LINE-NO</c>）でも
+        /// 「行 1・行 1 で使っています。」とは言わない。
+        /// </remarks>
+        internal void Note(TKey key, int? lineNo)
+        {
+            if (!_used.TryGetValue(key, out var places))
+            {
+                _used[key] = places = [];
+            }
+
+            if (!places.Contains(lineNo))
+            {
+                places.Add(lineNo);
+            }
+        }
+
+        /// <summary>
+        /// いま断るなら <c>true</c>。<b>同じ直し先の 2 回目からは <c>false</c></b>。
+        /// </summary>
+        /// <param name="lineNo">場所が 1 つならその行番号（伝票の欄なら <c>null</c>）。0 か複数なら <c>null</c>。</param>
+        /// <param name="usedIn">場所が複数なら並べ書き。1 つ以下なら空。</param>
+        internal bool TrySayOnce(TKey key, out int? lineNo, out string usedIn)
+        {
+            lineNo = null;
+            usedIn = string.Empty;
+            if (!_said.Add(key))
+            {
+                return false;
+            }
+
+            // **指せない行番号は場所に出さない。** 0 や負の行番号を並べると
+            // 「行 0 で使っています」と、存在しない行を名指しすることになる
+            // （同じ線は ValidateStructure が引いている）。**全部落ちたら場所は言わない。**
+            var places = _used[key].Where(place => place is not int no || no > 0).ToList();
+            if (places.Count == 1)
+            {
+                lineNo = places[0];
+            }
+            else if (places.Count > 1)
+            {
+                var written = places.Select(place => place is int no ? $"行 {no}" : "伝票");
+                usedIn = $"{string.Join("・", written)} で使っています。";
+            }
+
+            return true;
         }
     }
 }
