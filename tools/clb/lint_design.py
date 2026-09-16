@@ -107,6 +107,85 @@ ROLE_HIERARCHY = {
 # アプリ全体のアクセス条件が見ている変数（D-23）。
 ACCESS_FLAG_VARIABLE = "CanAccessApp.Value"
 
+# 取ってこない欄を読むと、`designcheck` も lint も何も言わないまま**必ず空**になる（D-33。qa/01 F-34）。
+#
+# **CLB が取ってくるのは「そのレイアウトに出ている欄 ＋ `DataOnlyFields` ＋ `Id` / `OptimisticLocking`」**
+# だけである。**出典は qa/01 F-34**（CLB マニュアル `JP/module/module.md`。**このリポジトリには無い**
+# ——参照は外に置く決まりなので、ここからは開けない）＋ **2026-09-03 の実機確認**。
+# **`_specs/Layouts.md` は `DataOnlyFields` を「データとしてロードするが画面に表示しない」としか
+# 書いておらず、「だけ」とも「`Id` は常に来る」とも書いていない**（2026-09-16 に開いて確かめた）。
+ALWAYS_LOADED_FIELDS = {"Id", "OptimisticLocking"}
+
+# レイアウトそのものに書く手。**種類ごとに持てる手が違う**ので、種類ごとに持つ。
+# **正典は `Designer/ClaudeCodeForDesigner/_defaults/ModuleDesign.json`**（デザイナが書き出す既定）で、
+# `check_hook_wiring` がその字と突き合わせる——**片側（書いた名前が実在するか）だけでは、
+# CLB が手を増やした日に書き忘れる。**
+LAYOUT_HOOKS = {
+    "DetailLayouts": ("OnBeforeInitialization", "OnAfterInitialization",
+                      "OnLocationChanging", "OnFieldDataChanged"),
+    "ListLayouts": ("OnBeforeInitialization", "OnAfterInitialization", "OnFieldDataChanged"),
+    "SearchLayouts": ("OnSearchInitialization",),
+}
+
+# 欄そのものに書く手 → **その手が走るレイアウトの種類**。
+# **種類を分けないと、走りようのないレイアウトに入口を数える**——`OnSearchDataChanged` は
+# 詳細では発火せず、`OnDataChanged` は検索フォームでは発火しない（2026-09-16 の自己レビュー）。
+#
+# **CLB の欄の手はもっと多い**（`OnValidateInput`・`OnFocusMoving`・`OnKeyDown`・
+# `OnSelectedIndexChanged` ほか）。ここに載せるのは**いまデザインが実際に使っている手だけ**で、
+# **載せ忘れは `check_hook_wiring` が鳴らす**（使った日に赤くなる）。
+FIELD_HOOKS = {
+    "OnDataChanged": ("DetailLayouts", "ListLayouts"),
+    "OnClick": ("DetailLayouts", "ListLayouts"),
+    "OnSearchDataChanged": ("SearchLayouts",),
+}
+
+# **読みを突き合わせるレイアウトの種類。**
+#
+# **検索レイアウトは入れない。** 検索ページの欄は `SearchValue` / `SearchMin` / `SearchMax` の系統で動き、
+# **`.Value` には値が来ない**（`Designer/ClaudeCodeForDesigner/CLAUDE.md` の 48 番。
+# 「`OnSearchInitialization` 等の検索コンテキストで `Status.Value = "進行中"` のように
+# **`.Value` をセットしても無視される**」）。だから検索の `.Value` は
+# **「レイアウトが取ってこない」ではなく「そもそも別系統」**であり、直し方が違う。
+# **検索の手も入口としては数える**（数えないと、その手が孤児として鳴ってしまう）。
+CHECKED_LAYOUTS = ("DetailLayouts", "ListLayouts")
+
+# **読むとレコードの値が来る呼び名。** 取ってこない欄で静かに空（0）になるのはこれだけである。
+# `Rows` 以下 4 つは `ListField` のもの（`_field_catalog.md` の「リスト」の表。すべて読み取り専用）。
+#
+# **UI の状態は入れない**（`IsVisible`・`IsViewOnly`・`Text`）——レイアウトに無い欄の
+# 見た目を触っても、描くものが無いだけで、**空の値が計算に混ざる**という D-33 の害は起きない。
+# **`SearchValue` も入れない**——検索は別系統で、レコードの読み込みの話ではない（`CHECKED_LAYOUTS`）。
+DATA_ACCESSORS = ("Value", "DisplayText", "Rows", "RowCount", "TotalCount", "PageCount")
+
+
+# 手の中の呼び出し（`Foo(` / `this.Foo(`）。**`this.` を許す**——許さないと、
+# `this.` を付けて呼んだ自前の手が孤児に見え、**「読みが落ちた」ではなく「消せ」と言う**
+# （`_SUBMIT` / `_VALIDATE_INPUT` も同じ作法である）。
+# **他のインスタンスの手は落とす**——`row.Submit()` はこのスクリプトの手ではない。
+# `if (` や `foreach (` にも当たるが、手の名前と一致しないので素通りする。
+_CALLS = re.compile(r"(?<![\w.])(?:this\.)?(\w+)\s*\(")
+
+
+def _field_read_re(accessors):
+    """欄のデータの読みを拾う正規表現（`Partner.Value` / `this.Partner.Value`）。
+
+    **`DATA_ACCESSORS` から組み立てる形を関数にしておく**——selftest が
+    **呼び名を 1 つずつ落として、母数か検体が減ることを確かめる**ために差し替える。
+    **識別子の境目を見る**（`(?<![\\w.])`）——見ないと `account.DefaultTaxCategory.Value` の
+    ような**他のインスタンスの欄**に当たる。
+    """
+    return re.compile(r"(?<![\w.])(?:this\.)?(\w+)\.(" + "|".join(accessors) + r")(?![\w])")
+
+
+_FIELD_READ = _field_read_re(DATA_ACCESSORS)
+
+# `ListField` の行を回す形（`foreach (var row in Lines.Rows)`）と、行を子モジュールへ受け直す形
+# （`var line = (JournalLine)row;`）。**この 2 つが揃って初めて、親が読む子の欄が判る。**
+_ROW_LOOP = re.compile(r"\bforeach\s*\(\s*var\s+(\w+)\s+in\s+(?:this\.)?(\w+)\.Rows\s*\)")
+_ROW_CAST = re.compile(r"\bvar\s+(\w+)\s*=\s*\(\s*(\w+)\s*\)\s*(\w+)\s*;")
+
+
 # 参照してはならない向き（ADR-0025 §4）。`Modules/` のトップレベルのフォルダ＝アプリ（部品）で
 # 判定する（Designer/Project.md のフォルダ規約）——モジュール名を並べると、増えるたびに腐る。
 # **認証部品（Platform）は誰が参照してもよい**——権限の条件は AppUser の列でしか書けない（qa/01 F-21）。
@@ -797,6 +876,408 @@ def check_search_text_trim(modules, scripts, findings):
                          "検索に使う文字の欄が 1 つも見つからない"
                          "（search_text_fields の母数の取り方を疑う）"))
     return seen
+
+
+def _blank_keeping_interpolations(text):
+    """コメントと文字列を潰すが、**補間の穴（`$"{…}"` の `{}` の中）だけは残す**。
+
+    **潰すこと自体は要る**——`$"{x}"` の波括弧を残すと `_script_methods` の
+    括弧の対応が狂い、手の切り分けが丸ごとずれる。
+    **それでも穴の中は読みである**——`$"{Account.Value}"` は `Account` を読んでいる。
+    穴ごと潰していたら、**補間の中だけで読んでいる欄が検査から落ちる**。
+
+    `_blank` と同じく**長さを変えない**（`{` と `}` は空白に置き換える）。
+    """
+
+    def blank(match):
+        body = match.group(0)
+        if not body.startswith('$"'):
+            return "".join(c if c == "\n" else " " for c in body)
+
+        out = []
+        depth = 0
+        for char in body:
+            if char == "{":
+                depth += 1
+                out.append(" ")
+            elif char == "}":
+                depth -= 1
+                out.append(" ")
+            elif depth > 0:
+                out.append(char)
+            else:
+                out.append("\n" if char == "\n" else " ")
+        return "".join(out)
+
+    return re.sub(r'\$?' + _STRINGS + "|" + _COMMENTS, blank, text, flags=re.DOTALL)
+
+
+def _placed_fields(layout):
+    """そのレイアウトが**画面に置いている**欄の名前。
+
+    `FieldName` はグリッドの桝・タブ・一覧の列と、置き場所ごとに違う深さに現れるので
+    **木を全部たどる**（`_walk`）。空文字は結合の穴埋め（`ListElement` のプレースホルダ）なので落とす。
+    """
+    names = set()
+
+    def visit(node):
+        name = node.get("FieldName")
+        if isinstance(name, str) and name:
+            names.add(name)
+
+    _walk(layout, visit)
+    return names
+
+
+def layouts_of(doc):
+    """`(種類, レイアウト名, そのレイアウトの定義)` を順に返す。"""
+    for group in LAYOUT_HOOKS:
+        for name, layout in (doc.get(group) or {}).items():
+            if isinstance(layout, dict):
+                yield group, name, layout
+
+
+def loaded_fields(layout):
+    """そのレイアウトが**取ってくる**欄（画面に置いた欄 ＋ `DataOnlyFields` ＋ 常に来る欄）。"""
+    return (_placed_fields(layout)
+            | set(layout.get("DataOnlyFields") or [])
+            | ALWAYS_LOADED_FIELDS)
+
+
+def _script_methods(code):
+    """スクリプトを **名前 → 本文** に切り分け、**見出しを読めなかった塊の位置**も返す。
+
+    返すのは `(本文の辞書, 読めなかった塊の先頭位置の一覧)`。
+
+    **「見出しを探して本文を取る」ではなく「最上位の `{…}` を数えて見出しを当てる」。**
+    見出しは**塊の手前の字**から読む（`_METHOD_HEAD`）ので、`{` が同じ行にあっても次の行にあっても同じ。
+    こうしないと、**見出しに見えない手は、網の外にいることすら言われない**——
+    `void UpdateTotals()` を 4 桁下げるだけで、その手が読む欄が 1 件も鳴らずに消えた
+    （2026-09-16 の自己レビューで実測。母数は 39 → 38 に減るだけだった）。
+
+    **`_methods` も `_method_body` も使わない。** 前者は「次の見出しまで」で切るので
+    見出しに見えない書き方があると隣の本文まで飲み、後者は `<名前>()` の形しか探せないので
+    **引数のある手が丸ごと落ちる**（`OnFieldDataChanged` は `(string fieldName)` を取る）。
+
+    **コメントと文字列を潰した字を渡すこと**（`_blank_keeping_interpolations`）。潰さないと、
+    利用者に見せる文言の中の `}` と `$"{…}"` の波括弧で対応が狂う。
+    """
+    bodies, unreadable = {}, []
+    depth = 0
+    start = -1
+    last_end = 0
+    for i, char in enumerate(code):
+        if char == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth < 0:
+                unreadable.append(i)
+                depth = 0
+                start = -1
+            elif depth == 0 and start >= 0:
+                heads = list(_METHOD_HEAD.finditer(code[last_end:start]))
+                if heads and not code[last_end + heads[-1].end():start].strip():
+                    bodies[heads[-1].group(1)] = code[start + 1:i]
+                else:
+                    unreadable.append(start)
+                last_end = i + 1
+                start = -1
+    if depth:
+        unreadable.append(max(start, 0))
+    return bodies, unreadable
+
+
+def _reached_methods(bodies, entries):
+    """`entries` の手から**呼んで辿り着ける**手の名前（入口そのものを含む）。
+
+    **手から手への呼び出しを追う。** 追わないと、`Account_OnDataChanged` のように
+    **中身を別の手へ全部預けた入口**で、読んでいる欄が 1 つも見えなくなる。
+    """
+    reached = set()
+    stack = [entry for entry in entries if entry]
+    while stack:
+        name = stack.pop()
+        if name in reached or name not in bodies:
+            continue
+        reached.add(name)
+        for call in _CALLS.findall(bodies[name]):
+            if call in bodies and call not in reached:
+                stack.append(call)
+    return reached
+
+
+def _is_write(body, end):
+    """その読みの直後が代入（`= …`）か。`==` は比較なので読みのままにする。"""
+    return re.match(r"\s*=(?!=)", body[end:]) is not None
+
+
+def _data_reads(body, accessors=DATA_ACCESSORS):
+    """その本文が**読んでいる** `<欄>.<呼び名>` を `(欄, 呼び名)` で順に返す。
+
+    **代入の左辺は読みではない**（`X.Value = …`）ので落とす。
+    **`this.` を付けた形も同じ**（`this.Partner.Value`）。
+    **他のインスタンスの欄は見ない**——`account.DefaultTaxCategory.Value` の
+    `DefaultTaxCategory` は直前がドットなので当たらない（`ModuleSearcher` で引いた行がこれ）。
+    **`ListField` の行だけは別に見る**（`_row_reads`）。
+    """
+    for match in _field_read_re(accessors).finditer(body):
+        if not _is_write(body, match.end()):
+            yield match.group(1), match.group(2)
+
+
+def _row_reads(body, accessors=DATA_ACCESSORS):
+    """**親が `ListField` の行から読む欄**を `(ListField, 欄, 呼び名)` で順に返す。
+
+    **これが F-34 の見出しそのものの形である**——「`ListField` の行から、レイアウトに
+    出していないフィールドを読むと必ず空」。**親の `*.mod.cs` が書く**ので、
+    子のスクリプトだけを見ていると 1 件も見えない（2026-09-16 の自己レビューで実測——
+    `JournalEntry.mod.cs` の `line.Amount.Value` ほか 8 か所が母数の外にいて、
+    子の一覧から `Amount` を外しても D-33 は 0 件のままだった）。
+
+    読むのは 2 つの形だけ——`foreach (var row in <ListField>.Rows)` と、
+    その中の `var line = (<子モジュール>)row;`。**子モジュールは `ListField` の設計から引く**ので、
+    キャストの型名が設計とずれていても、**そのずれ自体はここでは見ない**。
+    """
+    rows = {}
+    for match in _ROW_LOOP.finditer(body):
+        rows[match.group(1)] = match.group(2)
+    for match in _ROW_CAST.finditer(body):
+        if match.group(3) in rows:
+            rows[match.group(1)] = rows[match.group(3)]
+
+    for name, list_field in sorted(rows.items()):
+        reader = re.compile(rf"(?<![\w.]){re.escape(name)}\.(\w+)\."
+                            rf"({'|'.join(accessors)})(?![\w])")
+        for match in reader.finditer(body):
+            if not _is_write(body, match.end()):
+                yield list_field, match.group(1), match.group(2)
+
+
+def _list_field_targets(doc):
+    """そのモジュールの `ListField` → `(子モジュール名, 行を描く一覧レイアウトの名前)`。
+
+    **`ListField` が使うのは子モジュールの一覧レイアウト**（詳細ではない。qa/01 F-34）で、
+    どれを使うかは `LayoutName` が決める（`Partner.Registrations` は `"Embedded"`）。
+    """
+    targets = {}
+    for field in doc.get("Fields", []):
+        if not field.get("TypeFullName", "").endswith("ListFieldDesign"):
+            continue
+        module = (field.get("SearchCondition") or {}).get("ModuleName", "")
+        if module:
+            targets[field.get("Name")] = (module, field.get("LayoutName") or "")
+    return targets
+
+
+def hook_wirings(doc):
+    """デザインの中で**メソッド名を書いてある場所**を `(道, キー, メソッド名)` で順に返す。
+
+    **空のキーは数えない**（デザイナは全部のキーを書き出すので、空が大半である）。
+    """
+    found = []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key.startswith("On") and isinstance(value, str) and value:
+                    found.append((tuple(path), key, value))
+                walk(value, path + [key])
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, path + ["[]"])
+
+    walk(doc, [])
+    return found
+
+
+def _is_modeled(path, key):
+    """その配線を D-33 が「どのレイアウトで走るか」まで数えられるか。"""
+    if len(path) == 2 and path[0] in LAYOUT_HOOKS:
+        return key in LAYOUT_HOOKS[path[0]]
+    if path == ("Fields", "[]"):
+        return key in FIELD_HOOKS
+    return False
+
+
+def check_hook_wiring(modules, frames, findings):
+    """**手を書ける場所が、D-33 の数えている場所の中に収まっているか**（qa/01 F-34）。
+
+    D-33 は「どのレイアウトで走る手か」を `LAYOUT_HOOKS` と `FIELD_HOOKS` で決めている。
+    **CLB にはこの 2 つの外にも手を書ける場所がある**——`ListPageFieldDesign` の 7 つ、
+    ページフレームの `ListPageDesign.ListFieldDesign` の 7 つ、`Layout` の `OnKeyDown`、
+    タブの `OnSelectedIndexChanged`、欄の `OnValidateInput` / `OnFocusMoving` ほか。
+    **いまはどれも空だが、書いた日に D-33 の網から静かに外れる**ので、ここで鳴らす。
+
+    **表を片側からしか守らないと、書き忘れは 1 件も見つからない**（self-review スキル §9 の
+    「除外表・許可表は両側から守っているか」）。**逆向き**——表に無い場所に手が書かれた——を見る。
+    """
+    seen = 0
+    for path, doc in list(modules) + list(frames):
+        for where, key, method in hook_wirings(doc):
+            seen += 1
+            if _is_modeled(where, key):
+                continue
+            findings.append((SEV_ERROR, "D-33", relative(path),
+                             f"{doc.get('Name', '')}: {'/'.join(where) or '(根)'} の {key} に "
+                             f"{method}() を配線しているが、"
+                             "D-33 はこの置き場を数えていない"
+                             "（どのレイアウトで走る手かが決まらず、読む欄が検査から落ちる。"
+                             "LAYOUT_HOOKS / FIELD_HOOKS に足す）"))
+    return seen
+
+
+def check_layout_reads(modules, scripts, findings, accessors=DATA_ACCESSORS):
+    """**レイアウトのスクリプトが読む欄を、そのレイアウトが取ってくるか**（qa/01 F-34）。
+
+    **CLB が取ってくるのは「そのレイアウトに出ている欄 ＋ `DataOnlyFields` ＋
+    `Id` / `OptimisticLocking`」だけ**である。出していない欄を読むと**必ず空**で、
+    `designcheck` も `dotnet test` も何も言わない——**一覧なら全行で空**になる。
+    2026-09-03 に、明細の写しを読むスクリプトが全行で空振りしていたのを自己レビューで見つけた。
+
+    **見るのは 2 つの経路である。**
+    ①**そのモジュール自身の手**が読む `<欄>.Value`——手がどのレイアウトで走るかは、
+    CLB が手をレイアウトと欄に書かせるので決まる（`LAYOUT_HOOKS` / `FIELD_HOOKS`）。
+    ②**親の手が `ListField` の行から読む `<行>.<欄>.Value`**——これが F-34 の見出しの形で、
+    突き合わせ先は**子モジュールの一覧レイアウト**である（`_row_reads`）。
+
+    **呼び先まで辿る**（`_reached_methods`）。辿らないと、入口が中身を別の手へ預けた形で素通りする。
+
+    **検索レイアウトは読みの対象にしない**（`CHECKED_LAYOUTS`）——検索ページの欄は
+    `SearchValue` の系統で動き、`.Value` には値が来ない。**入口としては数える**
+    （数えないと、検索の手が孤児として鳴る）。
+
+    **見ていないもの**——書き込み（`X.Value = …`。取ってこない欄へ入れた値がどうなるかは未実測）・
+    見た目の呼び名（`IsVisible`・`IsViewOnly`・`Text`）・`ModuleSearcher` で引いた行の欄。
+    **到達しない枝の中の読みも読みとして数える**（`if (false)` の中に書いても鳴る。
+    D-28・D-32 が「到達しない枝に書いた守りを緑と見る」のとは**向きが逆の限界**である）。
+    """
+    scripts_by_module = {os.path.basename(p)[:-len(".mod.cs")]: t for p, t in scripts}
+    layouts_by_module = {doc.get("Name", ""): doc for _, doc in modules}
+
+    counts = {"欄": 0, "行": 0}
+    for path, doc in modules:
+        module = doc.get("Name", "")
+        code = _blank_keeping_interpolations(scripts_by_module.get(module, ""))
+        bodies, unreadable = _script_methods(code)
+        for offset in unreadable:
+            findings.append((SEV_ERROR, "D-33", relative(path),
+                             f"{module}: {code[:offset].count(chr(10)) + 1} 行目のメソッドの見出しを読めない"
+                             "（見出しは行頭から書く。読めない手が読む欄は検査から落ちる）"))
+
+        fields = {f.get("Name") for f in doc.get("Fields", []) if f.get("Name")}
+        hooks_of_field = {}
+        for field in doc.get("Fields", []):
+            for hook, groups in FIELD_HOOKS.items():
+                if field.get(hook):
+                    hooks_of_field.setdefault(field.get("Name"), []).append(
+                        (hook, field[hook], groups))
+        targets = _list_field_targets(doc)
+
+        reached_anywhere = set()
+        for group, name, layout in layouts_of(doc):
+            where = f"{module}/{group}" + (f"/{name}" if name else "")
+            loaded = loaded_fields(layout)
+
+            # **検索レイアウトには `DataOnlyFields` が無い**（`SearchLayoutDesign`）ので、
+            # 書いてあること自体が誤りである。
+            for field_name in (layout.get("DataOnlyFields") or []):
+                if field_name not in fields:
+                    findings.append((SEV_ERROR, "D-33", relative(path),
+                                     f"{where}: DataOnlyFields の {field_name} がモジュールに無い"
+                                     "（綴り違いなら、読む側は黙って空になる）"))
+
+            entries = []
+            for hook in LAYOUT_HOOKS[group]:
+                method = layout.get(hook)
+                if not method:
+                    continue
+                entries.append(method)
+                if method not in bodies:
+                    findings.append((SEV_ERROR, "D-33", relative(path),
+                                     f"{where}: {hook} が指す {method}() がスクリプトに無い"
+                                     "（CLB は黙って何もしない。この手が読む欄も検査から落ちる）"))
+            for field_name in sorted(loaded):
+                for hook, method, groups in hooks_of_field.get(field_name, []):
+                    if group not in groups:
+                        continue
+                    entries.append(method)
+                    if method not in bodies:
+                        findings.append((SEV_ERROR, "D-33", relative(path),
+                                         f"{where}: {field_name} の {hook} が指す {method}() が"
+                                         "スクリプトに無い"
+                                         "（CLB は黙って何もしない。"
+                                         "この手が読む欄も検査から落ちる）"))
+
+            reached = _reached_methods(bodies, entries)
+            reached_anywhere |= reached
+            if group not in CHECKED_LAYOUTS:
+                continue
+
+            # **同じ読みを 2 度言わない**（`ShowSnapshotPartner` は写しを 2 回読む）。
+            # 直し方は 1 つなので、同じ組は 1 件にまとめる。
+            said = set()
+            for method in sorted(reached):
+                for field_name, accessor in _data_reads(bodies[method], accessors):
+                    if field_name not in fields:
+                        continue
+                    counts["欄"] += 1
+                    if field_name in loaded or (method, field_name, accessor) in said:
+                        continue
+                    said.add((method, field_name, accessor))
+                    findings.append((SEV_ERROR, "D-33", relative(path),
+                                     f"{where}: {method}() が {field_name}.{accessor} を読むが、"
+                                     f"このレイアウトは {field_name} を取ってこない"
+                                     f"（読むと必ず空。レイアウトに出すか "
+                                     f"DataOnlyFields に {field_name} を書く。qa/01 F-34）"))
+
+                # ②親が `ListField` の行から読む欄——突き合わせ先は**子の一覧レイアウト**。
+                for list_field, field_name, accessor in _row_reads(bodies[method], accessors):
+                    child, child_layout = targets.get(list_field, ("", ""))
+                    child_doc = layouts_by_module.get(child)
+                    if child_doc is None:
+                        continue
+                    child_layouts = child_doc.get("ListLayouts") or {}
+                    if child_layout not in child_layouts:
+                        findings.append((SEV_ERROR, "D-33", relative(path),
+                                         f"{module}.{list_field}: 行を描く一覧レイアウト "
+                                         f"{child}/ListLayouts/{child_layout or '(既定)'} が無い"
+                                         "（LayoutName の指し先を直す）"))
+                        continue
+                    counts["行"] += 1
+                    child_loaded = loaded_fields(child_layouts[child_layout])
+                    key = (method, list_field, field_name, accessor)
+                    if field_name in child_loaded or key in said:
+                        continue
+                    said.add(key)
+                    findings.append((SEV_ERROR, "D-33", relative(path),
+                                     f"{module}.{method}() が {list_field} の行から "
+                                     f"{field_name}.{accessor} を読むが、"
+                                     f"{child}/ListLayouts/{child_layout or '(既定)'} は "
+                                     f"{field_name} を取ってこない"
+                                     f"（**全行で空になる**。子の一覧に出すか "
+                                     f"DataOnlyFields に {field_name} を書く。qa/01 F-34）"))
+
+        # **どのレイアウトからも辿れない手は、この検査の網の外にある。**
+        # 本当に誰も呼んでいないか、**手の割り当て方が足りない**かのどちらかで、
+        # **後者だと読みが黙って検査から落ちる**ので、両方の読み方を書いて鳴らす。
+        for method in sorted(set(bodies) - reached_anywhere):
+            findings.append((SEV_ERROR, "D-33", relative(path),
+                             f"{module}: {method}() をどのレイアウトからも辿れない"
+                             "（誰も呼んでいない手なら消す。呼ばれているなら "
+                             "LAYOUT_HOOKS / FIELD_HOOKS の取り方が足りない）"))
+
+    # **母数が 0 なら鳴らす**（qa/03 L-15）。画面のスクリプトは必ず欄を読み、
+    # 伝票は必ず明細の行を読むので、0 は「違反が無い」ではなく**手の割り当てが壊れた**ことを言っている。
+    # **枝ごとに数える**——合計だけだと、片方の枝が丸ごと死んでも沈黙する。
+    for label, seen in counts.items():
+        if not seen:
+            findings.append((SEV_ERROR, "D-33", relative(DESIGN_DIR),
+                             f"スクリプトが読む{label}が 1 つも見つからない"
+                             "（check_layout_reads の母数の取り方を疑う）"))
+    return counts
 
 
 def app_of(path):
@@ -1592,6 +2073,26 @@ def load_json(path, findings):
         return None
 
 
+def report(findings, file_count, counts):
+    """**印字する行と終了コード**を作る。**判定と印字を分ける**（qa/02 のラウンド 103）。
+
+    **`main()` の中に置かない。** 置くと、集計を捨てても印字を消しても終了コードを 0 に
+    固定しても、`WIRED_CHECKS` の字面検査は緑のまま通る——**lint 全体が黙る経路が
+    検体の外に残る**（2026-09-16 の自己レビューで実測。`return 1 if errors else 0` を
+    `return 0` にしても `--selftest` は緑だった）。
+
+    **母数も印字に載せる。** 「違反 0 件」は、**いくつ見たか**と並べて初めて読める。
+    """
+    errors = [f for f in findings if f[0] == SEV_ERROR]
+    warns = [f for f in findings if f[0] == SEV_WARN]
+    lines = [f"{severity}\t{rule}\t{path}\t{message}"
+             for severity, rule, path, message in sorted(findings)]
+    lines.append("")
+    lines.append(f"検査ファイル数: {file_count} / error: {len(errors)} / warn: {len(warns)}"
+                 + "".join(f" / {label}: {value}" for label, value in counts.items()))
+    return lines, 1 if errors else 0
+
+
 def main() -> int:
     findings: list[tuple[str, str, str, str]] = []
 
@@ -1632,6 +2133,8 @@ def main() -> int:
     check_child_detail_screens(loaded_modules, loaded_frames, loaded_scripts, findings)
     check_module_references(loaded_modules, loaded_scripts, findings)
     searched_texts = check_search_text_trim(loaded_modules, loaded_scripts, findings)
+    layout_reads = check_layout_reads(loaded_modules, loaded_scripts, findings)
+    check_hook_wiring(loaded_modules, loaded_frames, findings)
     check_role_conditions(loaded_modules, loaded_frames, findings)
     app_settings = os.path.join(DESIGN_DIR, "app.clprj")
     if os.path.exists(app_settings):
@@ -1645,16 +2148,14 @@ def main() -> int:
     check_vocabulary(loaded_modules, enums, css, findings)
     check_exemptions(loaded_modules, findings)
 
-    errors = [f for f in findings if f[0] == SEV_ERROR]
-    warns = [f for f in findings if f[0] == SEV_WARN]
-    for severity, rule, path, message in sorted(findings):
-        print(f"{severity}\t{rule}\t{path}\t{message}")
-
-    print("")
-    print(f"検査ファイル数: {len(design_files('*.mod.json')) + len(design_files('*.frm.json')) + len(design_files('*.mod.cs'))}"
-          f" / error: {len(errors)} / warn: {len(warns)}"
-          f" / 検索の文字欄: {searched_texts} 欄を検査")
-    return 1 if errors else 0
+    lines, exit_code = report(findings, len(modules) + len(frames) + len(scripts), {
+        "検索の文字欄": searched_texts,
+        "レイアウトが読む欄": layout_reads["欄"],
+        "明細の行から読む欄": layout_reads["行"],
+    })
+    for line in lines:
+        print(line)
+    return exit_code
 
 
 SELFTEST_CASES = [
@@ -1754,8 +2255,9 @@ WIRED_CHECKS = [
     "check_module", "check_page_frame", "check_application_root",
     "check_script", "check_cross_frame_links", "check_child_parent_keys",
     "check_child_detail_screens", "check_module_references", "check_role_conditions",
-    "check_search_text_trim",
+    "check_search_text_trim", "check_layout_reads", "check_hook_wiring",
     "check_app_access_condition", "check_vocabulary", "check_exemptions",
+    "report",
 ]
 
 
@@ -1830,6 +2332,217 @@ SELFTEST_TRIM_CASES = [
      _trim_body(name="Name",
                 inner="    PartnerName.SearchValue = PartnerName.SearchValue.Trim();\n"),
      "書き戻していない"),
+]
+
+
+# D-33 の検体のスクリプト。**本番と同じ字面で書く**（qa/03 L-17）——
+# 写しを一覧の `OnAfterInitialization` で読む形（`JournalLine.ShowSnapshotPartner`）、
+# 欄の手が中身を別の手へ預ける形（`JournalLine.Account_OnDataChanged`）、
+# 親が明細の行を回して読む形（`JournalEntry.UpdateTotals`）が、どれも本番にある。
+_READ_SCRIPT = """void ShowSnapshotPartner()
+{
+    if (string.IsNullOrEmpty(PartnerNameSnapshot.Value)) return;
+
+    Partner.DisplayText = PartnerNameSnapshot.Value;
+}
+
+void Account_OnDataChanged()
+{
+    DropForeignSubAccount();
+}
+
+void DropForeignSubAccount()
+{
+    if (string.IsNullOrEmpty(SubAccount.Value)) return;
+    if (string.IsNullOrEmpty(Account.Value)) return;
+
+    SubAccount.Value = "";
+}
+
+void Lines_OnDataChanged()
+{
+    decimal total = 0;
+    foreach (var row in Lines.Rows)
+    {
+        var line = (SelfTestRow)row;
+        if (line.Amount.Value == null) continue;
+
+        total += line.Amount.Value;
+    }
+}
+"""
+
+# 子（明細）のモジュール。**行を描くのは子の一覧レイアウトである**（qa/01 F-34）。
+SELFTEST_ROW_MODULE = "SelfTestRow"
+
+
+def _row_module(placed=("Amount",), data_only=(), layout=""):
+    return _module(Name=SELFTEST_ROW_MODULE,
+                   Fields=[{"Name": "Amount", "TypeFullName": "X.NumberFieldDesign"},
+                           {"Name": "Memo", "TypeFullName": "X.TextFieldDesign"}],
+                   ListLayouts={layout: {"DataOnlyFields": list(data_only),
+                                         "Elements": [[{"FieldName": n} for n in placed]]}})
+
+
+def _read_module(list_placed=("Partner", "Account", "SubAccount"),
+                 list_data_only=("PartnerNameSnapshot",),
+                 list_hook="ShowSnapshotPartner",
+                 detail_placed=("Partner", "Account", "SubAccount", "Lines"),
+                 detail_data_only=(),
+                 detail_hook="",
+                 search_placed=("Keyword",),
+                 search_hook="",
+                 account_hook="Account_OnDataChanged",
+                 lines_hook="Lines_OnDataChanged",
+                 lines_layout="",
+                 extra_fields=()):
+    """D-33 の検体。**本番（`JournalEntry` ＋ `JournalLine`）と同じ形**で組む。
+
+    一覧は `Elements`、詳細と検索は `Layout` に欄を置く——**置き方が種類ごとに違う**ので、
+    片方の形だけで撃つと、もう片方を読む配線が死んでも緑になる。
+    """
+    fields = [
+        {"Name": "Partner", "TypeFullName": "X.LinkFieldDesign"},
+        {"Name": "PartnerNameSnapshot", "TypeFullName": "X.TextFieldDesign"},
+        {"Name": "Account", "TypeFullName": "X.LinkFieldDesign",
+         "OnDataChanged": account_hook},
+        {"Name": "SubAccount", "TypeFullName": "X.LinkFieldDesign"},
+        {"Name": "Keyword", "TypeFullName": "X.TextFieldDesign"},
+        {"Name": "Lines", "TypeFullName": "X.ListFieldDesign",
+         "OnDataChanged": lines_hook, "LayoutName": lines_layout,
+         "SearchCondition": {"ModuleName": SELFTEST_ROW_MODULE}},
+    ]
+
+    def grid(names):
+        return {"Rows": [{"Columns": [{"Layout": {"FieldName": n}} for n in names]}]}
+
+    return _module(
+        Fields=fields + list(extra_fields),
+        ListLayouts={"": {"DataOnlyFields": list(list_data_only),
+                          "OnAfterInitialization": list_hook,
+                          "Elements": [[{"FieldName": n} for n in list_placed]]}},
+        DetailLayouts={"": {"DataOnlyFields": list(detail_data_only),
+                            "OnAfterInitialization": detail_hook,
+                            "Layout": grid(detail_placed)}},
+        SearchLayouts={"": {"OnSearchInitialization": search_hook,
+                            "Layout": grid(search_placed)}})
+
+
+def _snapshot_read(inner):
+    """写しを読む手の中身を `inner` に差し替えた検体スクリプト。"""
+    head, _, rest = _READ_SCRIPT.partition("{")
+    return head + "{\n" + inner + "}\n" + rest.split("}\n", 1)[1]
+
+
+# D-33 の壊れ方。**(何を壊すか, モジュール, スクリプト, 指摘文に必ず入る語)**。
+# **鳴ったことだけを見ない**——同じ D-33 でも直し方が違うので、**言ってほしい字面そのもの**を書く
+# （qa/03 L-17。定数から組み立てると、字面が薄まっても釣り合ってしまう）。
+SELFTEST_READ_CASES = [
+    # **これが 2026-09-03 に実際に起きた形である**（明細の写しが全行で空）。
+    ("一覧が写しを取ってこない", _read_module(list_data_only=()), _READ_SCRIPT,
+     "DataOnlyFields に PartnerNameSnapshot を書く"),
+    # **詳細でも同じことが起きる**（`JournalEntry` の写しの欄）。置き方が `Layout` なので別に撃つ。
+    ("詳細が写しを取ってこない", _read_module(detail_hook="ShowSnapshotPartner"), _READ_SCRIPT,
+     "DataOnlyFields に PartnerNameSnapshot を書く"),
+    # **呼び先まで辿らないと見えない**（入口は欄を 1 つも読んでいない）。
+    # **孤児の指摘文にも同じ手の名前が出る**ので、**読みの指摘文にしか無い字**で表明する。
+    ("呼び先の手が読んでいる", _read_module(detail_placed=("Partner", "Account", "Lines")),
+     _READ_SCRIPT, "DropForeignSubAccount() が SubAccount.Value を読む"),
+    # **F-34 の見出しそのものの形**——親が明細の行から読む。子の一覧に無ければ全行で空。
+    ("明細の行から、子の一覧に無い欄を読む", _read_module(), _READ_SCRIPT,
+     "Lines の行から Amount.Value を読む", _row_module(placed=("Memo",))),
+    ("明細の行を描くレイアウトが無い", _read_module(lines_layout="Embedded"), _READ_SCRIPT,
+     "行を描く一覧レイアウト", _row_module()),
+    ("DataOnlyFields の綴り違い", _read_module(list_data_only=("PartnerNameSnapshots",)),
+     _READ_SCRIPT, "モジュールに無い"),
+    ("レイアウトの手がスクリプトに無い", _read_module(list_hook="ShowSnapshot"), _READ_SCRIPT,
+     "スクリプトに無い"),
+    ("欄の手がスクリプトに無い", _read_module(account_hook="Account_OnChanged"), _READ_SCRIPT,
+     "スクリプトに無い"),
+    ("どのレイアウトからも辿れない手", _read_module(),
+     _READ_SCRIPT + "void Orphan()\n{\n    var x = 1;\n}\n", "辿れない"),
+    # **`this.` を付けて呼んだ自前の手も呼び出しである。** 落とすと、呼び先が孤児に見えて、
+    # 「**読みが落ちた**」ではなく「**消せ**」と言う（2026-09-16 の自己レビューで実測）。
+    ("this を付けて呼んでいる", _read_module(detail_placed=("Partner", "Account", "Lines")),
+     _READ_SCRIPT.replace("    DropForeignSubAccount();",
+                          "    this.DropForeignSubAccount();"),
+     "DropForeignSubAccount() が SubAccount.Value を読む"),
+    # **見出しが行頭から始まらない手**。読めないと、その手の読みが 1 件も鳴らずに消える。
+    ("見出しを読めない", _read_module(),
+     _READ_SCRIPT + "    void Indented()\n    {\n        var x = 1;\n    }\n",
+     "メソッドの見出しを読めない"),
+    # **`this.` を付けた形も読みである。**
+    ("this を付けて読んでいる", _read_module(list_data_only=()),
+     _snapshot_read("    Partner.DisplayText = this.PartnerNameSnapshot.Value;\n"),
+     "取ってこない"),
+    # **補間の中だけで読んでいる形**（本番の `RegisterButton_OnClick` がこれ）。
+    ("補間の中だけで読んでいる", _read_module(list_data_only=()),
+     _snapshot_read('    Partner.DisplayText = $"{PartnerNameSnapshot.Value}";\n'),
+     "取ってこない"),
+    ("見出しが同じ行に { を書いている", _read_module(list_data_only=()),
+     "void ShowSnapshotPartner() {\n"
+     "    Partner.DisplayText = PartnerNameSnapshot.Value;\n}\n"
+     "void Account_OnDataChanged() {\n    DropForeignSubAccount();\n}\n"
+     "void DropForeignSubAccount() {\n"
+     "    if (string.IsNullOrEmpty(SubAccount.Value)) return;\n"
+     "    if (string.IsNullOrEmpty(Account.Value)) return;\n}\n"
+     "void Lines_OnDataChanged() {\n    var n = Lines.RowCount;\n}\n",
+     "PartnerNameSnapshot.Value を読む"),
+    # **呼び名ごとに 1 件ずつ撃つ**——1 つ落としても母数も検体も動かない呼び名を作らない。
+    ("表示の字を読んでいる", _read_module(list_data_only=()),
+     _snapshot_read("    Partner.DisplayText = PartnerNameSnapshot.DisplayText;\n"),
+     "PartnerNameSnapshot.DisplayText を読む"),
+    # **一覧のレイアウトは明細の欄を置いていない**ので、そこから `Lines` を読むと空になる。
+    # **呼び名ごとに 1 件ずつ撃つ**——落としても母数も検体も動かない呼び名を作らない。
+    ("一覧の手が明細の行を読む", _read_module(),
+     _snapshot_read("    var rows = Lines.Rows;\n"), "Lines.Rows を読む"),
+    ("一覧の手が明細の件数を読む", _read_module(),
+     _snapshot_read("    var n = Lines.RowCount;\n"), "Lines.RowCount を読む"),
+    ("一覧の手が明細の総数を読む", _read_module(),
+     _snapshot_read("    var n = Lines.TotalCount;\n"), "Lines.TotalCount を読む"),
+    ("一覧の手がページ数を読む", _read_module(),
+     _snapshot_read("    var n = Lines.PageCount;\n"), "Lines.PageCount を読む"),
+]
+
+# **正しい姿**。ここで鳴る関門は、赤を無視させる。
+SELFTEST_READ_OK = [
+    ("本番と同じ形", _read_module(), _READ_SCRIPT, _row_module()),
+    # **`ModuleSearcher` で引いた行の欄は、このレイアウトの話ではない。**
+    ("他のインスタンスの欄を読んでいる", _read_module(list_data_only=()),
+     _snapshot_read("    foreach (var found in new ModuleSearcher<Other>().Execute())\n"
+                    "    {\n"
+                    "        Partner.DisplayText = found.PartnerNameSnapshot.Value;\n"
+                    "    }\n"), _row_module()),
+    ("コメントの中に書いてあるだけ", _read_module(list_data_only=()),
+     _snapshot_read("    // PartnerNameSnapshot.Value を読む手をここに書く。\n"), _row_module()),
+    ("文言の中に書いてあるだけ", _read_module(list_data_only=()),
+     _snapshot_read('    Partner.DisplayText = "PartnerNameSnapshot.Value";\n'), _row_module()),
+    # **書き込みは見ていない**（取ってこない欄へ入れた値がどうなるかは未実測）。
+    ("書き込んでいるだけ", _read_module(list_data_only=()),
+     _snapshot_read('    PartnerNameSnapshot.Value = "";\n'), _row_module()),
+    # **UI の呼び名は見ていない**（描くものが無いだけで、空の値は計算に混ざらない）。
+    ("UI の呼び名を触っているだけ", _read_module(list_data_only=()),
+     _snapshot_read("    Partner.IsVisible = PartnerNameSnapshot.IsVisible;\n"), _row_module()),
+    # **`Id` と `OptimisticLocking` はレイアウトに出さなくても来る。**
+    ("Id を読んでいる",
+     _read_module(list_data_only=(),
+                  extra_fields=[{"Name": "Id", "TypeFullName": "X.IdFieldDesign"}]),
+     _snapshot_read("    Partner.DisplayText = Id.Value;\n"), _row_module()),
+    ("楽観ロックを読んでいる",
+     _read_module(list_data_only=(),
+                  extra_fields=[{"Name": "OptimisticLocking",
+                                 "TypeFullName": "X.OptimisticLockingFieldDesign"}]),
+     _snapshot_read("    Partner.DisplayText = OptimisticLocking.Value;\n"), _row_module()),
+    # **検索レイアウトは読みの対象にしない**（`.Value` に値が来ない別系統。CLB の 48 番）。
+    ("検索の手が .Value を読んでいる", _read_module(search_hook="Search_OnInitialization"),
+     _READ_SCRIPT + "void Search_OnInitialization()\n{\n"
+     "    if (string.IsNullOrEmpty(PartnerNameSnapshot.Value)) return;\n}\n", _row_module()),
+    # **名前つきの一覧レイアウトも指せる**（本番の `Partner.Registrations` が `"Embedded"`）。
+    ("名前つきの一覧レイアウトを指している", _read_module(lines_layout="Embedded"), _READ_SCRIPT,
+     _row_module(layout="Embedded")),
+    # **子の `DataOnlyFields` でも救われる**（画面に出さずに値だけ持つ）。
+    ("子が DataOnlyFields で持っている", _read_module(), _READ_SCRIPT,
+     _row_module(placed=(), data_only=("Amount", "Memo"))),
 ]
 
 
@@ -2357,6 +3070,239 @@ def selftest():
             failures.append(f"母数の枝「{label}」が実デザインで 1 欄も実っていない"
                             "（枝が死んでも合計のラチェットは鳴らない）")
 
+    # レイアウトが取ってこない欄の読み（D-33）。**デザインとスクリプトの組で見る。**
+    def _read_findings(doc, script, row=None, accessors=DATA_ACCESSORS):
+        found = []
+        modules = [(_self_path(), doc)]
+        if row is not None:
+            modules.append((_self_path(name=f"{SELFTEST_ROW_MODULE}.mod.json"), row))
+        check_layout_reads(modules, [(_self_path(name="SelfTest.mod.cs"), script)],
+                           found, accessors)
+        return found
+
+    def _says(findings, says):
+        return [f for f in findings
+                if (f[0], f[1]) == (SEV_ERROR, "D-33") and says in f[3]]
+
+    for case in SELFTEST_READ_CASES:
+        label, doc, script, says = case[:4]
+        row = case[4] if len(case) > 4 else None
+        findings = _read_findings(doc, script, row)
+        if not _says(findings, says):
+            failures.append(f"取ってこない欄の読み（{label}）: D-33 が「{says}」と鳴らない"
+                            f"（出たのは {[(f[0], f[1], f[3]) for f in findings]}）")
+
+    for label, doc, script, row in SELFTEST_READ_OK:
+        findings = _read_findings(doc, script, row)
+        if findings:
+            failures.append(f"正しい形（{label}）で鳴った: {[(f[0], f[1], f[3]) for f in findings]}")
+
+    # **検体の数は「以上」ではなく実数で持つ**（qa/02 のラウンド 103）。
+    # 下限だと、**どれを 1 つ消しても緑**——2026-09-16 に 11 件すべてで実測した。
+    for label, cases, expected in [("壊れ方", SELFTEST_READ_CASES, 19),
+                                   ("正しい姿", SELFTEST_READ_OK, 11)]:
+        if len(cases) != expected:
+            failures.append(f"取ってこない欄の読みの検体（{label}）が {len(cases)} 件"
+                            f"（{expected} 件のはず。減らすなら、この数も一緒に直す）")
+
+    # **除外の理由を、1 つずつ対照実験で確かめる**（self-review スキル §9 の「対照実験があるか」）。
+    # **「鳴らない」ことは、その理由で鳴らないのか、別の理由で鳴らないのかを言わない**——
+    # 外すと鳴ることまで見て、初めて「その除外が効いている」と言える。
+    for label, name, replacement, script, accessors in [
+        ("コメントと文言", "_blank_keeping_interpolations", lambda text: text,
+         _snapshot_read("    // PartnerNameSnapshot.Value を読む手をここに書く。\n"),
+         DATA_ACCESSORS),
+        ("代入の左辺", "_is_write", lambda body, end: False,
+         _snapshot_read('    PartnerNameSnapshot.Value = "";\n'), DATA_ACCESSORS),
+        ("他のインスタンスの欄", "_field_read_re",
+         lambda accessors: re.compile(r"(?:this\.)?(\w+)\.(" + "|".join(accessors) + r")(?![\w])"),
+         _snapshot_read("    foreach (var found in new ModuleSearcher<Other>().Execute())\n"
+                        "    {\n"
+                        "        Partner.DisplayText = found.PartnerNameSnapshot.Value;\n"
+                        "    }\n"), DATA_ACCESSORS),
+        # **見た目の呼び名は、呼び名の表に足せば鳴る**（外し方が表なので、表で外す）。
+        ("見た目の呼び名", "", None,
+         _snapshot_read("    Partner.IsVisible = PartnerNameSnapshot.IsVisible;\n"),
+         DATA_ACCESSORS + ("IsVisible",)),
+    ]:
+        saved = globals().get(name)
+        if name:
+            globals()[name] = replacement
+        try:
+            findings = _read_findings(_read_module(list_data_only=()), script,
+                                      _row_module(), accessors)
+        finally:
+            if name:
+                globals()[name] = saved
+        if not _says(findings, "取ってこない"):
+            failures.append(f"除外「{label}」を外しても鳴らない"
+                            f"（正しい姿の検体が、別の理由で緑になっている）")
+
+    # **欄の手の枝が効いていることを、対で見る。**
+    # `Account` の `OnDataChanged` を外すと、`DropForeignSubAccount` の読みは
+    # **どのレイアウトにも属さなくなる**——言うことが「取ってこない」から「辿れない」へ変わる。
+    # **片方だけを見ると、枝を消しても「何か鳴った」で緑になる。**
+    unwired = _read_findings(_read_module(detail_placed=("Partner", "Account", "Lines"),
+                                          account_hook=""), _READ_SCRIPT, _row_module())
+    if _says(unwired, "取ってこない"):
+        failures.append("欄の手を外しても「取ってこない」と鳴った（枝の出どころが違う）")
+    if not _says(unwired, "辿れない"):
+        failures.append("欄の手を外した手が「辿れない」と鳴らない")
+
+    # **手の種類とレイアウトの種類が噛み合っていること。**
+    # `OnSearchDataChanged` は詳細では発火しないので、詳細の入口に数えてはいけない。
+    mixed = _read_findings(
+        _module(Fields=[{"Name": "Keyword", "TypeFullName": "X.TextFieldDesign",
+                         "OnSearchDataChanged": "Keyword_OnSearchDataChanged"}],
+                DetailLayouts={"": {"Layout": {"Rows": [{"Columns": [
+                    {"Layout": {"FieldName": "Keyword"}}]}]}}}),
+        "void Keyword_OnSearchDataChanged()\n{\n    var x = Other.Value;\n}\n")
+    if not _says(mixed, "辿れない"):
+        failures.append("検索の手を詳細に置いた形が「辿れない」と鳴らない"
+                        "（手の種類でレイアウトを絞れていない）")
+
+    # **母数は枝ごとに 0 を見る**（qa/03 L-15）。
+    for label in ("欄", "行"):
+        findings = []
+        check_layout_reads([], [], findings)
+        if not _says(findings, f"読む{label}が 1 つも見つからない"):
+            failures.append(f"読む{label}が 0 件でも鳴らない（ラチェットが死んでいる）")
+
+    # **配線の置き場**（`check_hook_wiring`）。表に無い場所へ手を書いたら鳴る。
+    for label, doc in [
+        ("欄の別の手", _module(Fields=[{"Name": "A", "OnValidateInput": "A_OnValidateInput"}])),
+        ("一覧ページの欄", _module(ListPageFieldDesign={"OnDoubleClickRow": "Open"})),
+        ("レイアウトの中の手", _module(DetailLayouts={"": {"Layout": {"OnKeyDown": "Key"}}})),
+    ]:
+        findings = []
+        check_hook_wiring([(_self_path(), doc)], [], findings)
+        if not _says(findings, "この置き場を数えていない"):
+            failures.append(f"数えていない置き場（{label}）で D-33 が鳴らない")
+
+    findings = []
+    wirings = check_hook_wiring(
+        [(_self_path(), _read_module())],
+        [("a.frm.json", {"Name": "A", "Left": {"Links": [{"Module": "X"}]}})], findings)
+    if findings or not wirings:
+        failures.append(f"数えている置き場だけの配線で鳴った: {[f[3] for f in findings]}"
+                        f"（走査 {wirings} か所）")
+
+    # **`report` は判定と分けてある**（self-review スキル §9 の「報告も検体に入っているか」）。
+    lines, code = report([], 3, {"母数": 7})
+    if code or lines[-1] != "検査ファイル数: 3 / error: 0 / warn: 0 / 母数: 7":
+        failures.append(f"報告（違反なし）が期待と違う: {lines[-1]!r} / 終了コード {code}")
+    lines, code = report([(SEV_ERROR, "D-33", "p", "m"), (SEV_WARN, "D-01", "q", "n")],
+                         3, {"母数": 0})
+    if (code != 1 or "error\tD-33\tp\tm" not in lines or "warn\tD-01\tq\tn" not in lines
+            or lines[-1] != "検査ファイル数: 3 / error: 1 / warn: 1 / 母数: 0"):
+        failures.append(f"報告（違反あり）が期待と違う: {lines!r} / 終了コード {code}")
+    lines, code = report([(SEV_WARN, "D-01", "q", "n")], 1, {})
+    if code:
+        failures.append("warn だけで終了コードが 1 になる")
+
+    # **常に取ってくる欄の表を、両側から守る**（self-review スキル §9 の 2 つ目）。
+    # **名前が実在するか**——CLB の予約名の表と突き合わせる。
+    for name in ALWAYS_LOADED_FIELDS:
+        if name not in RESERVED_FIELD_TYPES:
+            failures.append(f"ALWAYS_LOADED_FIELDS の {name} が CLB の予約名の表に無い")
+
+    # **レイアウトの手の表を、CLB の既定 JSON と突き合わせる**（同上。**書き忘れの側**）。
+    # `_defaults/` はデザイナが新規追加時に書き出すもので、**手を書けるキーの正典**である。
+    defaults = os.path.join(REPO_ROOT, "Designer", "ClaudeCodeForDesigner",
+                            "_defaults", "ModuleDesign.json")
+    if not os.path.exists(defaults):
+        failures.append(f"CLB の既定 JSON が無いので LAYOUT_HOOKS を突き合わせられない: {defaults}")
+    else:
+        spec = json.load(io.open(defaults, encoding="utf-8"))
+        for group, hooks in LAYOUT_HOOKS.items():
+            layout = next(iter((spec.get(group) or {}).values()), {})
+            found = tuple(sorted(k for k in layout if k.startswith("On")))
+            if found != tuple(sorted(hooks)):
+                failures.append(f"LAYOUT_HOOKS の {group} が CLB の既定と違う"
+                                f"（こちら {tuple(sorted(hooks))} / CLB {found}）")
+        for hook in FIELD_HOOKS:
+            if not any(hook in field for field in spec.get("Fields", []) or [{}]):
+                # 既定の Fields は空なので、欄の型の既定から探す。
+                types = glob.glob(os.path.join(os.path.dirname(defaults), "*FieldDesign.json"))
+                if not any(hook in json.load(io.open(t, encoding="utf-8")) for t in types):
+                    failures.append(f"FIELD_HOOKS の {hook} が CLB の欄の既定に無い")
+
+    # **枝ごとに、実デザインで実っているかを見る**（qa/03 L-17・self-review スキル §9 の「対照実験」）。
+    # **検体は「その枝の形を撃てば鳴る」ことしか言わない**——本番がその枝を使っていなければ、
+    # 枝を消しても本番の検査は 1 件も減らない。**減ることを、実デザインで確かめる。**
+    real_modules = [(p, d) for p, d in
+                    ((p, load_json(p, [])) for p in design_files("*.mod.json")) if d]
+    if len(real_modules) != len(design_files("*.mod.json")):
+        failures.append("実デザインに読めない JSON がある（母数の対照実験が当てにならない）")
+    real_scripts = [(p, io.open(p, encoding="utf-8").read())
+                    for p in design_files("*.mod.cs")]
+
+    def _real_reads(accessors=DATA_ACCESSORS):
+        return check_layout_reads(real_modules, real_scripts, [], accessors)
+
+    full = _real_reads()
+    for label, seen in full.items():
+        if not seen:
+            failures.append(f"実デザインで「{label}」を 1 つも数えていない")
+
+    # **呼び名を 1 つずつ落とす。** 落として何も変わらない呼び名は、**書いてあるだけ**である。
+    for accessor in DATA_ACCESSORS:
+        rest = tuple(a for a in DATA_ACCESSORS if a != accessor)
+        narrowed = _real_reads(rest)
+        if sum(narrowed.values()) < sum(full.values()):
+            continue
+        # 実デザインに無い呼び名は、検体の側で実っていること。
+        if any(_says(_read_findings(case[1], case[2],
+                                    case[4] if len(case) > 4 else None, DATA_ACCESSORS), case[3])
+               and not _says(_read_findings(case[1], case[2],
+                                            case[4] if len(case) > 4 else None, rest), case[3])
+               for case in SELFTEST_READ_CASES):
+            continue
+        failures.append(f"呼び名「{accessor}」を落としても、実デザインでも検体でも何も変わらない")
+
+    for label, name, replacement in [
+        ("レイアウトの手", "LAYOUT_HOOKS", {g: () for g in LAYOUT_HOOKS}),
+        ("欄の手", "FIELD_HOOKS", {}),
+        ("補間の穴", "_blank_keeping_interpolations",
+         lambda text: _blank(text, _STRINGS_AND_COMMENTS)),
+        ("呼び先への辿り", "_reached_methods",
+         lambda bodies, entries: {e for e in entries if e in bodies}),
+        ("明細の行の読み", "_row_reads", lambda body, accessors=None: iter(())),
+    ]:
+        saved = globals()[name]
+        globals()[name] = replacement
+        try:
+            narrowed = _real_reads()
+        finally:
+            globals()[name] = saved
+        if sum(narrowed.values()) >= sum(full.values()):
+            failures.append(f"母数の枝「{label}」を殺しても実デザインの読みが減らない"
+                            f"（{full} → {narrowed}）")
+
+    # **`DataOnlyFields` が実デザインで効いていることを、宣言 1 つずつ確かめる。**
+    # **「1 件でも鳴れば緑」では、3 つのうち 2 つが死んでも通る**（2026-09-16 の自己レビュー）。
+    import copy
+
+    declarations = [(path, group, name)
+                    for path, doc in real_modules
+                    for group, name, layout in layouts_of(doc)
+                    if layout.get("DataOnlyFields")]
+    if not declarations:
+        failures.append("実デザインに DataOnlyFields の宣言が 1 つも無い")
+    for path, group, name in declarations:
+        stripped = []
+        for other, doc in real_modules:
+            doc = copy.deepcopy(doc)
+            if other == path:
+                doc[group][name]["DataOnlyFields"] = []
+            stripped.append((other, doc))
+        findings = []
+        check_layout_reads(stripped, real_scripts, findings)
+        if not _says(findings, "取ってこない"):
+            failures.append(f"{relative(path)} の {group}/{name or '(既定)'} の DataOnlyFields を"
+                            "空にしても鳴らない（この宣言は何も支えていない）")
+
+
     # **配線**。検査を書いても main() から呼ばれていなければ効かない（qa/03 L-15）。
     source = io.open(__file__, encoding="utf-8").read()
     # **`main()` の中だけを見る。** ファイル末尾までを見ると、
@@ -2369,11 +3315,30 @@ def selftest():
     for name in WIRED_CHECKS:
         if f"{name}(" not in body:
             failures.append(f"{name} が main() から呼ばれていない")
+            continue
+        # **呼んでいるだけでは足りない。** 指摘の受け皿を渡していなければ、
+        # **その検査の指摘は 1 件も印字されない**のに `{name}(` は残るので緑になる
+        # （2026-09-16 の自己レビューで実測——`check_layout_reads(…, [])` が素通りした）。
+        if not name.startswith("check_"):
+            continue
+        start = body.index(f"{name}(") + len(name)
+        depth = 0
+        for index in range(start, len(body)):
+            if body[index] == "(":
+                depth += 1
+            elif body[index] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+        if "findings" not in body[start:index]:
+            failures.append(f"{name}() の呼び出しが findings を渡していない"
+                            "（指摘が捨てられ、何も印字されない）")
 
     for failure in failures:
         print(f"error\tSELFTEST\t{relative(__file__)}\t{failure}")
 
-    cases = len(SELFTEST_CASES) + len(SELFTEST_TRIM_CASES)
+    cases = (len(SELFTEST_CASES) + len(SELFTEST_TRIM_CASES)
+             + len(SELFTEST_READ_CASES) + len(SELFTEST_READ_OK))
     print(f"lint_design: すべて期待どおり（検体 {cases} 件）" if not failures
           else f"lint_design: {len(failures)} 件が期待と違う")
     return 1 if failures else 0
