@@ -219,7 +219,10 @@ public record AmendResult(
 /// <summary>差し戻しの内訳 1 件。</summary>
 /// <param name="Code">違反の識別子。画面はこれで分岐できる。</param>
 /// <param name="Message">利用者に見せる説明。</param>
-/// <param name="LineNo">対象の明細行。伝票全体の違反は null。</param>
+/// <param name="LineNo">
+/// 対象の明細行。<b>伝票全体の違反と、複数の行にまたがる違反は null</b>——
+/// 後者は場所を <c>Message</c> に並べる（docs/21 §2-6）。
+/// </param>
 public record AmendViolation(
     [property: JsonPropertyName("code")] string Code,
     [property: JsonPropertyName("message")] string Message,

@@ -6,7 +6,10 @@ namespace BusinessApp.AccountingCore.Shared;
 /// </summary>
 /// <param name="Code">違反の識別子。画面はこれで分岐し、文言は表示にだけ使う。</param>
 /// <param name="Message">利用者に見せる説明。</param>
-/// <param name="LineNo">対象の明細行。伝票全体の違反は null。</param>
+/// <param name="LineNo">
+/// 対象の明細行。<b>伝票全体の違反と、複数の行にまたがる違反は null</b>——
+/// 後者は<b>場所を本文に並べる</b>（docs/21 §2-6）ので、行は文が持つ。
+/// </param>
 /// <param name="Severity">
 /// 既定は <see cref="ViolationSeverity.Error"/>。
 /// <b>「戻り値が空なら OK」と書かない</b>こと。警告は返るが計上はできる。
