@@ -15,13 +15,13 @@ namespace BusinessApp.AccountingCore.Server.Masters.Infrastructure;
 /// <param name="moduleName">CLB のモジュール名。</param>
 /// <param name="table">DB の表（CLB の <c>DbTable</c> の写し）。</param>
 /// <param name="codeLabel">コードの欄の呼び名（CLB の <c>DisplayName</c> の写し）。</param>
-/// <param name="text"><b>長さの上限を持つ文字の欄</b>（docs/12 §2-2）。</param>
+/// <param name="texts"><b>長さの上限を持つ文字の欄</b>（docs/12 §2-2）。<b>1 つとは限らない。</b></param>
 /// <param name="parent">一意の範囲を絞る親（補助科目だけ）。</param>
 public sealed class CodedMaster(
     string moduleName,
     string table,
     string codeLabel,
-    CodedText text,
+    IReadOnlyList<CodedText> texts,
     CodedParent? parent = null)
 {
     /// <summary>CLB のモジュール名。</summary>
@@ -33,14 +33,15 @@ public sealed class CodedMaster(
     /// <summary>コードの欄の呼び名。</summary>
     public string CodeLabel { get; } = codeLabel;
 
-    /// <summary>長さの上限を持つ文字の欄。</summary>
+    /// <summary>長さの上限を持つ文字の欄。<b>空にしない。</b></summary>
     /// <remarks>
-    /// <b><c>null</c> を置けるようにしない。</b> コードを持つ 5 つのマスタは全部が名前を持ち、
+    /// <b><c>null</c> も空も置けるようにしない。</b> コードを持つ 5 つのマスタは全部が名前を持ち、
     /// <b>踏めない枝はカバレッジの穴になる</b>（ADR-0012）。
+    /// <b>1 つとは限らない</b>——勘定科目と補助科目はカナも持つ（2026-09-16。旧 Q-26 の決定）。
     /// <b>上限を置いていない文字の欄がどれかは</b>、`FieldLengthConsistencyTests` の
     /// 除外の表が理由つきで持つ（docs/12 §2-2 の「この表に無い文字の欄」）。
     /// </remarks>
-    public CodedText Text { get; } = text;
+    public IReadOnlyList<CodedText> Texts { get; } = texts;
 
     /// <summary>一意の範囲を絞る親。無ければ <c>null</c>。</summary>
     public CodedParent? Parent { get; } = parent;
@@ -64,7 +65,8 @@ public sealed class CodedMaster(
 /// <param name="fieldName">CLB のフィールド名。</param>
 /// <param name="column">DB の列。</param>
 /// <param name="label">利用者に見せる呼び名。</param>
-public sealed class CodedText(string fieldName, string column, string label)
+/// <param name="maxLength">この欄の上限（<c>MasterTextLength</c>）。</param>
+public sealed class CodedText(string fieldName, string column, string label, int maxLength)
 {
     /// <summary>CLB のフィールド名。</summary>
     public string FieldName { get; } = fieldName;
@@ -74,6 +76,16 @@ public sealed class CodedText(string fieldName, string column, string label)
 
     /// <summary>利用者に見せる呼び名。</summary>
     public string Label { get; } = label;
+
+    /// <summary>この欄の上限。</summary>
+    /// <remarks>
+    /// <b>欄ごとに持つ</b>（2026-09-16。旧 Q-26 の決定でカナが加わった）。
+    /// <b>2026-09-16 までは全部が <c>MasterTextLength.MasterName</c> で、関門が直に書いていた</b>——
+    /// <b>カナは名前の 2 倍</b>なので、同じ数では持てなくなった。
+    /// <b>3 者一致（C# の定数・DDL のトリガ・デザインのプレースホルダ）は
+    /// <c>FieldLengthConsistencyTests</c> が毎回突き合わせる。</b>
+    /// </remarks>
+    public int MaxLength { get; } = maxLength;
 }
 
 /// <summary>

@@ -20,7 +20,7 @@ using BusinessApp.TestSupport;
 public class TextLengthGuardTests
 {
     /// <summary>
-    /// 上限を持つ 10 の列と、行を 1 本入れるのに要る他の列。
+    /// 上限を持つ列と、行を 1 本入れるのに要る他の列。
     /// </summary>
     /// <remarks>
     /// <b>母数は <see cref="FieldLengthConsistencyTests.TextLengthFields"/> と対になる。</b>
@@ -34,8 +34,22 @@ public class TextLengthGuardTests
         { "tax_categories", "name", "code, taxation_type", "'X1', 'out_of_scope'", MasterTextLength.MasterName, false, "" },
         { "fiscal_years", "label", "code, start_date, end_date, status", "'X1', '2030-04-01', '2031-03-31', 'open'", MasterTextLength.MasterName, false, "" },
         { "partners", "name", "code", "'X1'", MasterTextLength.PartnerName, false, "" },
-        { "partners", "name_kana", "code, name", "'X1', '検証'", MasterTextLength.PartnerName, true, "" },
+        { "partners", "name_kana", "code, name", "'X1', '検証'", MasterTextLength.PartnerNameKana, true, "" },
         { "partners", "address", "code, name", "'X1', '検証'", MasterTextLength.Address, true, "" },
+
+        // **カナは名前と別の上限を持つ**（旧 Q-26 の決定。2026-09-16）。
+        // **名前も埋めて行を作る**——`name` は `NOT NULL` である。
+        { "accounts", "name_kana", "code, category, name", "'X1', 'asset', '検証'", MasterTextLength.MasterNameKana, true, "" },
+        { "sub_accounts", "name_kana", "account_id, code, name", "1, 'X1', '検証'", MasterTextLength.MasterNameKana, true, "" },
+
+        // **自社情報は 1 行しか持てない**（`CHECK (id = 1)`）ので、
+        // **`id` を明示して入れ、初期データの行は先に空にする**——
+        // 自動採番に任せると 2 件目が `id = 2` になり、長さのトリガより先に `CHECK` が鳴る。
+        { "company_profile", "name", "id, fiscal_year_end_month", "1, 3", MasterTextLength.CompanyName, false, EmptyCompanyProfile },
+        { "company_profile", "name_kana", "id, fiscal_year_end_month, name", "1, 3, '検証'", MasterTextLength.CompanyNameKana, true, EmptyCompanyProfile },
+        { "company_profile", "representative_name", "id, fiscal_year_end_month, name", "1, 3, '検証'", MasterTextLength.RepresentativeName, true, EmptyCompanyProfile },
+        { "company_profile", "address", "id, fiscal_year_end_month, name", "1, 3, '検証'", MasterTextLength.CompanyAddress, true, EmptyCompanyProfile },
+        { "company_profile", "phone_number", "id, fiscal_year_end_month, name", "1, 3, '検証'", MasterTextLength.PhoneNumber, true, EmptyCompanyProfile },
         {
             "journal_entries", "description",
             "fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at",
@@ -61,6 +75,92 @@ public class TextLengthGuardTests
         "INSERT INTO journal_entries"
         + " (fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at)"
         + " VALUES (1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00');";
+
+    /// <summary>
+    /// 自社情報の検体を入れる前に、初期データの 1 行を空にする。
+    /// </summary>
+    /// <remarks>
+    /// <b>自社情報は 1 行しか持てない</b>（<c>CHECK (id = 1)</c>。ADR-0005）。
+    /// <b>空にしないと、長さのトリガより先に <c>CHECK</c> が鳴る</b>——
+    /// <c>Rejected.ByTrigger</c> は文言で見分けるので、別の理由で断られたことに気づけない。
+    /// </remarks>
+    private const string EmptyCompanyProfile = "DELETE FROM company_profile;";
+
+    /// <summary>
+    /// <b>郵便番号は書式で断る</b>（長さではない。docs/12 §2-2。旧 Q-26 の決定）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>ここが唯一の振る舞いの見張りである。</b> 掃引（<c>knockout.ps1</c>）は
+    /// <see cref="FieldLengthConsistencyTests"/> を殺し手から外している（定義文を読むだけだから）ので、
+    /// <b>この 2 本を撃たないと、書式のトリガは誰も見張っていないことになる</b>
+    /// （2026-09-16 の自己レビューで指摘された）。</para>
+    /// <para><b>数えられない値も撃つ</b>——<c>GLOB</c> は途中の U+0000 で止まるので、
+    /// 書式が合った先にいくらでも隠せる（qa/03 の L-48）。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData("1234567")]
+    [InlineData("123-456")]
+    [InlineData("12a-4567")]
+    [InlineData("１23-4567")]
+    public void 書式の合わない郵便番号は追加でも更新でも断られる(string value)
+    {
+        using var db = Prepared(EmptyCompanyProfile);
+        var insert = "INSERT INTO company_profile (id, fiscal_year_end_month, name, postal_code)"
+                     + " VALUES (1, 3, '検証', ";
+
+        Rejected.ByTrigger(db, $"{insert}'{value}');", "「郵便番号」は", value);
+
+        // **更新も同じ形で断る。** 片方だけ置くと、作るときは断られるのに直すときは通る。
+        TestDatabase.Execute(db, $"{insert}'123-4567');");
+        Rejected.ByTrigger(
+            db,
+            $"UPDATE company_profile SET postal_code = '{value}' WHERE id = 1;",
+            "「郵便番号」は",
+            value);
+    }
+
+    /// <summary>
+    /// <b>書式が合っていても、数えられない値は断る</b>（BLOB・NUL・壊れた UTF-8）。
+    /// </summary>
+    /// <remarks>
+    /// <b><c>GLOB</c> は途中の U+0000 で止まる</b>ので、<c>'123-4567' || NUL || 任意</c> が
+    /// 書式の検査だけなら素通りする（qa/03 の L-48 と同じ型）。
+    /// </remarks>
+    [Fact]
+    public void 郵便番号に数えられない値は入らない()
+    {
+        using var db = Prepared(EmptyCompanyProfile);
+        var hidden = System.Text.Encoding.UTF8.GetBytes("123-4567" + "\0" + new string('b', 30));
+
+        Rejected.ByTrigger(
+            db,
+            "INSERT INTO company_profile (id, fiscal_year_end_month, name, postal_code)"
+            + $" VALUES (1, 3, '検証', CAST(x'{Convert.ToHexString(hidden)}' AS TEXT));",
+            "に使えない字が入っている。",
+            "company_profile.postal_code");
+    }
+
+    /// <summary>
+    /// <b>正しい書式は追加でも更新でも通る</b>（<c>NULL</c> も通る）。
+    /// </summary>
+    /// <remarks>
+    /// <b>「断られないこと」を別に置く。</b> 断る側だけだと、
+    /// <b>全部断る形に壊しても緑のまま</b>になる。
+    /// </remarks>
+    [Fact]
+    public void 正しい郵便番号と_NULL_は通る()
+    {
+        using var db = Prepared(EmptyCompanyProfile);
+
+        TestDatabase.Execute(
+            db,
+            "INSERT INTO company_profile (id, fiscal_year_end_month, name, postal_code)"
+            + " VALUES (1, 3, '検証', '123-4567');");
+        TestDatabase.Execute(db, "UPDATE company_profile SET postal_code = '000-0000' WHERE id = 1;");
+        TestDatabase.Execute(db, "UPDATE company_profile SET postal_code = NULL WHERE id = 1;");
+
+        Assert.Null(TestDatabase.ScalarOf<string>(db, "SELECT postal_code FROM company_profile WHERE id = 1"));
+    }
 
     /// <summary>検体の土台。マスタと、必要なら親の行。</summary>
     private static Microsoft.Data.Sqlite.SqliteConnection Prepared(string setup)

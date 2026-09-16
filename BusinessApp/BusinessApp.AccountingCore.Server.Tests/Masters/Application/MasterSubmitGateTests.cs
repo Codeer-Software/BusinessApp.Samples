@@ -249,6 +249,52 @@ public class MasterSubmitGateTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// <b>カナは名前と別の上限で断る</b>（旧 Q-26 の決定。2026-09-16。docs/12 §2-2）。
+    /// </summary>
+    /// <remarks>
+    /// <b>名前の 2 倍である。</b> 同じ数にすると、
+    /// <b>名前を上限いっぱいまで書いた科目が、その読みを入れられない</b>
+    /// （「株式会社」4 字の読みは「カブシキガイシャ」8 字）。
+    /// <b>名前の上限（30）で断っていないことを、いまの文字数まで見て確かめる</b>——
+    /// 欄ごとの上限を取り違えると、カナが 30 文字で断られても文言はそれらしく見える。
+    /// </remarks>
+    [Theory]
+    [InlineData("Account")]
+    [InlineData("SubAccount")]
+    public async Task 長すぎるカナはカナの上限で断る(string module)
+    {
+        using var server = new AccountingServer();
+
+        var fields = module == "SubAccount"
+            ? new[] { Text("Code", "Z9"), Text("Name", "名前"), Text("NameKana", new string('ア', 61)), Account(server, "1100") }
+            : [Text("Code", "Z9"), Text("Name", "名前"), Text("NameKana", new string('ア', 61))];
+
+        var thrown = await Rejected(server, Adding(module, New(module, fields)));
+
+        Assert.EndsWith(
+            "「カナ」は 60 文字以内です。いまは 61 文字あります。短くして入力し直してください。",
+            thrown.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>名前の上限を超えるカナは通る</b>（カナの上限までなら）。
+    /// </summary>
+    /// <remarks>
+    /// <b>「断られないこと」を別に置く。</b> 上の検体だけだと、
+    /// <b>カナの上限を 30 に取り違えても「61 文字で断る」は緑のまま</b>である。
+    /// </remarks>
+    [Fact]
+    public async Task 名前の上限を超えるカナは通る()
+    {
+        using var server = new AccountingServer();
+
+        Assert.True(await Submit(
+            server,
+            Adding("Account", New("Account", Text("Code", "Z8"), Text("Name", "名前"), Text("NameKana", new string('ア', 60))))));
+    }
+
     /// <summary>補助科目も同じ上限で断る。<b>親を指すので別に書く。</b></summary>
     [Fact]
     public async Task 長すぎる補助科目名も断る()
@@ -368,7 +414,7 @@ public class MasterSubmitGateTests
     {
         using var server = new AccountingServer();
         Assert.Equal(
-            "Label", MasterSubmitGate.Coded.Single(m => m.ModuleName == "FiscalYear").Text.FieldName);
+            "Label", MasterSubmitGate.Coded.Single(m => m.ModuleName == "FiscalYear").Texts[0].FieldName);
 
         var thrown = await Rejected(
             server,
@@ -667,7 +713,9 @@ public class MasterSubmitGateTests
 
             // **文字の欄の欄名・列・呼び名も写しである**（docs/12 §2-2）。
             // **欄名が `Name` とは限らない**（会計年度は `Label`）ので、記述子から引く。
-            if (master.Text is CodedText text)
+            // **欄は 1 つとは限らない**（勘定科目と補助科目はカナも持つ。2026-09-16）。
+            Assert.NotEmpty(master.Texts);
+            foreach (var text in master.Texts)
             {
                 var field = design.RootElement.GetProperty("Fields").EnumerateArray()
                     .Single(f => f.GetProperty("Name").GetString() == text.FieldName);

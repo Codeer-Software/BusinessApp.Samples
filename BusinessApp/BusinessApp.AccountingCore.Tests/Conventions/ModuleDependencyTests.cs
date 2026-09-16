@@ -34,6 +34,9 @@ public class ModuleDependencyTests
         ["Departments"] = [],
         ["Periods"] = ["Shared"],
 
+        // 自社情報。**何にも依存しない**——郵便番号の書式は、会計の型を 1 つも知らない規則である。
+        ["Settings"] = [],
+
         // 記帳。マスタと制度の上に載る。**取引先部品を知ってよいのはここだけ**（下の表）。
         ["Journals"] = ["Shared", "Accounts", "Departments", "Periods", "ConsumptionTax"],
     };

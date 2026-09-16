@@ -1,6 +1,8 @@
 namespace BusinessApp.AccountingCore.Server.Settings.Application;
 
+using BusinessApp.AccountingCore.Settings;
 using BusinessApp.Partners;
+using BusinessApp.ServerSupport;
 
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
@@ -24,6 +26,53 @@ public sealed class CompanyProfileSubmitGate
 {
     /// <summary>自社情報のモジュール名。</summary>
     public const string ModuleName = "CompanyProfile";
+
+    /// <summary>
+    /// <b>長さの上限を持つ文字の欄</b>（docs/12 §2-2。旧 Q-26 の決定。2026-09-16）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>欄の呼び名と列は画面の写しである</b>
+    /// （docs/20 §4 の「已むを得ない重複」。ずれていないことは
+    /// <c>CompanyProfileSubmitGateTests.写した呼び名と列はデザインと一致する</c> が見る）。</para>
+    /// <para><b>3 つに割ってあるのは、断る順を画面の並びに合わせるためである</b>
+    /// （<c>PartnerSubmitGate</c> と同じ理由——型は 1 つずつしか返さないので、
+    /// 順が画面と食い違うと利用者は上と下を往復させられる）。
+    /// 画面の並びは 会社名 → カナ → 法人番号 → 代表者名 → 郵便番号 → 住所 → 電話番号 → 決算月 である。</para>
+    /// <para><b>郵便番号はここに載せない</b>——長さではなく<b>書式</b>の規則だからである（<see cref="PostalCode"/>）。
+    /// <b>電話番号は逆に長さだけ</b>で、書式は置かない（内線・国番号・区切り記号の形が割れる）。</para>
+    /// <para><b>法人番号もここに載せない</b>——桁ちょうどの別の規則で、<see cref="CorporateNumber"/> が持つ。</para>
+    /// </remarks>
+    /// <summary>法人番号より上にある文字の欄。</summary>
+    private static readonly (string Field, string Column, string Label, int Max)[] BeforeCorporateNumber =
+    [
+        ("Name", "name", "会社名", MasterTextLength.CompanyName),
+        ("NameKana", "name_kana", "カナ", MasterTextLength.CompanyNameKana),
+    ];
+
+    /// <summary>法人番号と郵便番号の間にある文字の欄。</summary>
+    private static readonly (string Field, string Column, string Label, int Max)[] BetweenCorporateNumberAndPostalCode =
+    [
+        ("RepresentativeName", "representative_name", "代表者名", MasterTextLength.RepresentativeName),
+    ];
+
+    /// <summary>郵便番号より下にある文字の欄。</summary>
+    private static readonly (string Field, string Column, string Label, int Max)[] AfterPostalCode =
+    [
+        ("Address", "address", "住所", MasterTextLength.CompanyAddress),
+        ("PhoneNumber", "phone_number", "電話番号", MasterTextLength.PhoneNumber),
+    ];
+
+    /// <summary>
+    /// 3 つを繋いだ全体（デザインとの突き合わせが使う）。
+    /// </summary>
+    /// <remarks>
+    /// <b>3 つの後に宣言する。</b> 静的フィールドの初期化は<b>宣言順</b>なので、
+    /// 先に置くと中身が <c>null</c> のまま繋ぐことになる。
+    /// </remarks>
+    public static readonly (string Field, string Column, string Label, int Max)[] TextFields =
+    [
+        .. BeforeCorporateNumber, .. BetweenCorporateNumberAndPostalCode, .. AfterPostalCode,
+    ];
 
     /// <summary>決算月の下限（1 月）。</summary>
     private const int FirstMonth = 1;
@@ -61,10 +110,97 @@ public sealed class CompanyProfileSubmitGate
             .SelectMany(d => d.Add.Concat(d.Update))
             .Where(d => d.Name == ModuleName);
 
+    /// <summary>
+    /// <b>断る順は画面の並びに合わせる</b>（<c>PartnerSubmitGate</c> と同じ理由）。
+    /// </summary>
+    /// <remarks>
+    /// 型は 1 つずつしか返さない（開発者の指示。2026-09-08。逐語「即エラー。次へ進まない」）ので、
+    /// <b>順が画面と食い違うと、利用者は上と下を往復させられる</b>。
+    /// </remarks>
     private static void Reject(ModuleData data)
     {
-        RejectBadFiscalYearEndMonth(data);
+        RejectLongText(data, BeforeCorporateNumber);
         RejectBadCorporateNumber(data);
+        RejectLongText(data, BetweenCorporateNumberAndPostalCode);
+        RejectBadPostalCode(data);
+        RejectLongText(data, AfterPostalCode);
+        RejectBadFiscalYearEndMonth(data);
+    }
+
+    /// <summary>
+    /// 文字の欄の上限（docs/12 §2-2）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>載っていない欄は触っていない。</b> CLB は変更されたフィールドしか送ってこない（qa/01 F-11）。</para>
+    /// <para><b>前後の空白を落とし、落とした姿を差分に書き戻す</b>（取引先の関門と同じ）。
+    /// <b>比べるときだけ落とすと、関門が数えた長さと DDL が数える長さが食い違う</b>（qa/03 の L-14）。</para>
+    /// </remarks>
+    private static void RejectLongText(ModuleData data, (string Field, string Column, string Label, int Max)[] fields)
+    {
+        foreach (var (field, _, label, max) in fields)
+        {
+            if (!data.Fields.TryGetValue(field, out var found))
+            {
+                continue;
+            }
+
+            // **読めない型は断る**（<c>MasterSubmitGate</c> と同じ。fail-open にしない）——
+            // `as` で `null` に落とすと「触られていない」と見分けが付かず、
+            // **欄の型を変えた日に、その欄を見る検査がまとめて素通しへ落ちる**（`UnreadableFieldException` の注記）。
+            if (found is not TextFieldData text)
+            {
+                throw UnreadableFieldException.For(data.Name, field, found);
+            }
+
+            // **`null` は `null` のままにする**（空文字を書き込むと「無いは NULL」が崩れる。docs/20 §7）。
+            // **空白だけの値を NULL へ寄せるのは <c>BlankTextNormalizer</c> の仕事**で、
+            // 会計コアの入口で関門より先に走っている——ここで二重に寄せない。
+            if (text.Value is string value)
+            {
+                text.Value = MasterTextLength.Normalize(value);
+            }
+
+            if (MasterTextLength.DescribeProblem(label, text.Value, max) is string problem)
+            {
+                throw new CompanyProfileRejectedException(problem);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 郵便番号の書式（<see cref="PostalCode"/>）。
+    /// </summary>
+    /// <remarks>
+    /// <b>空欄は NULL に倒す</b>（法人番号と同じ作法）——空文字と「入っていない」を DB で区別させない。
+    /// <b>書式が合わない値は断る。</b> 書き換えて直すことはしない
+    /// （「1234567」に「-」を足さない。ADR-0047 の線）。
+    /// </remarks>
+    private static void RejectBadPostalCode(ModuleData data)
+    {
+        if (!data.Fields.TryGetValue("PostalCode", out var found))
+        {
+            return;
+        }
+
+        // **読めない型は断る**（上の文字の欄と同じ）。
+        if (found is not TextFieldData text)
+        {
+            throw UnreadableFieldException.For(data.Name, "PostalCode", found);
+        }
+
+        var value = PostalCode.Normalize(text.Value);
+        if (value.Length == 0)
+        {
+            text.Value = null;
+            return;
+        }
+
+        text.Value = value;
+
+        if (PostalCode.DescribeProblem(value) is string problem)
+        {
+            throw new CompanyProfileRejectedException(problem);
+        }
     }
 
     /// <summary>
@@ -105,10 +241,15 @@ public sealed class CompanyProfileSubmitGate
     {
         // CLB は変更されたフィールドしか送ってこない（qa/01 F-11）。
         // 送られていない項目は「変えていない」なので、検査しない。
-        if (!data.Fields.TryGetValue("CorporateNumber", out var field)
-            || field is not TextFieldData number)
+        if (!data.Fields.TryGetValue("CorporateNumber", out var field))
         {
             return;
+        }
+
+        // **読めない型は断る**（2026-09-16 に揃えた。それまでここだけ素通しだった）。
+        if (field is not TextFieldData number)
+        {
+            throw UnreadableFieldException.For(data.Name, "CorporateNumber", field);
         }
 
         var value = CorporateNumber.Normalize(number.Value);

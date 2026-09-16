@@ -1160,7 +1160,7 @@ public class PartnerSubmitGateTests
     /// </remarks>
     [Theory]
     [InlineData("Name", "取引先名", 100)]
-    [InlineData("NameKana", "カナ", 100)]
+    [InlineData("NameKana", "カナ", 200)]
     [InlineData("Address", "所在地", 200)]
     public async Task 長すぎる欄は呼び名といまの文字数で断る(string field, string label, int max)
     {
@@ -1184,7 +1184,7 @@ public class PartnerSubmitGateTests
     /// </remarks>
     [Theory]
     [InlineData("Name", "name", 100)]
-    [InlineData("NameKana", "name_kana", 100)]
+    [InlineData("NameKana", "name_kana", 200)]
     [InlineData("Address", "address", 200)]
     public async Task 上限ちょうどの欄は_DB_まで通る(string field, string column, int max)
     {
