@@ -105,11 +105,11 @@ public static class JournalEntryValidator
         var partner = partners.Find(partnerId);
         if (partner is null)
         {
-            if (places.TrySayOnce(partnerId, out var unknownLine, out var unknownUsedIn))
+            if (places.TrySayOnce(partnerId, out var unknownLine, out var unknownRows))
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.PartnerUnknown,
-                    $"取引先が取引先マスタにありません。{unknownUsedIn}"
+                    $"取引先が取引先マスタにありません。{UsedIn(unknownRows)}"
                     + "別の取引先を選ぶか、取引先マスタに登録してください。",
                     unknownLine,
                     severity));
@@ -118,11 +118,11 @@ public static class JournalEntryValidator
             return;
         }
 
-        if (!partner.IsActive && places.TrySayOnce(partnerId, out var lineNo, out var usedIn))
+        if (!partner.IsActive && places.TrySayOnce(partnerId, out var lineNo, out var rows))
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PartnerInactive,
-                $"取引先「{partner.Name}」は無効なので、新しい計上には使えません。{usedIn}"
+                $"取引先「{partner.Name}」は「有効」がオフです。{UsedIn(rows)}"
                 + "別の取引先を選ぶか、取引先マスタで有効に戻してください。",
                 lineNo,
                 severity));
@@ -319,6 +319,13 @@ public static class JournalEntryValidator
         var accountPlaces = new RejectionPlaces<AccountId>();
         var departmentPlaces = new RejectionPlaces<DepartmentId>();
         var subAccountPlaces = new RejectionPlaces<SubAccountId>();
+
+        // **要件の断りは、科目ごとに 1 件にまとめる**（docs/21 §2-6）。
+        // **文が科目の名前を持つ**ので、同じ科目の行では同じ文が並ぶ
+        // ——売掛金を 5 行書けば「取引先を要する」の断りが 5 つ出ていた（2026-09-16 の自己レビュー）。
+        // **鍵は科目、場所は行**である。
+        var requirements = new RequirementPlaces();
+
         foreach (var line in entry.Lines.OrderBy(l => l.LineNo))
         {
             accountPlaces.Note(line.AccountId, PlaceOf(line));
@@ -328,11 +335,44 @@ public static class JournalEntryValidator
                 departmentPlaces.Note(departmentId, PlaceOf(line));
             }
 
+            if (context.Accounts.Find(line.AccountId) is not AccountDefinition owner)
+            {
+                continue;
+            }
+
+            // **要件の断りは、その断りに届く行だけ控える。**
+            // **判定は断る側と同じ述語を使う**ので、2 か所に同じ条件を書かない。
+            //
+            // **場所は行そのもの**（`PlaceOf` で親へ畳まない）。
+            // **税行が本体行から継ぐのは部門だけ**である（<see cref="ValidateTaxLine"/> が強制するのは
+            // 借方貸方・部門・税区分・用途区分）。**取引先と補助科目を親へ畳むと、
+            // 文が名乗る科目と指す行が食い違い**、**本体行を直しても税行の分が残って弾かれ続ける**。
+            if (NeedsPartner(line, entry, owner))
+            {
+                requirements.Partner.Note(line.AccountId, line.LineNo);
+            }
+
+            if (NeedsSubAccount(line, owner))
+            {
+                requirements.SubAccount.Note(line.AccountId, line.LineNo);
+            }
+
+            if (HasUnwantedSubAccount(line, owner, context.SubAccounts))
+            {
+                requirements.SubAccountNotAllowed.Note(line.AccountId, line.LineNo);
+            }
+
+            // **部門だけは親へ畳む**——税行の部門は本体行と同じであることを強制しているので、
+            // 本体行を直せば税行も直る（<see cref="PlaceOf"/>）。
+            if (NeedsDepartment(line, owner))
+            {
+                requirements.Department.Note(line.AccountId, PlaceOf(line));
+            }
+
             // **補助科目は、無効の断りに届く行だけ控える**（<see cref="ReachesSubAccountRejection"/>）。
             // 「補助科目を使う」がオフの行や親が違う行を控えると、
             // **「有効に戻せば直る場所」に、有効に戻しても直らない行が混ざる**。
             if (line.SubAccountId is SubAccountId subAccountId
-                && context.Accounts.Find(line.AccountId) is AccountDefinition owner
                 && ReachesSubAccountRejection(owner, subAccountId, context.SubAccounts))
             {
                 subAccountPlaces.Note(subAccountId, PlaceOf(line));
@@ -362,11 +402,11 @@ public static class JournalEntryValidator
             var account = context.Accounts.Find(line.AccountId);
             if (account is null)
             {
-                if (accountPlaces.TrySayOnce(line.AccountId, out var unknownLine, out var unknownUsedIn))
+                if (accountPlaces.TrySayOnce(line.AccountId, out var unknownLine, out var unknownRows))
                 {
                     violations.Add(new Violation(
                         JournalViolationCodes.AccountUnknown,
-                        $"勘定科目が勘定科目マスタにありません。{unknownUsedIn}"
+                        $"勘定科目が勘定科目マスタにありません。{UsedIn(unknownRows)}"
                         + "別の勘定科目を選ぶか、勘定科目マスタに登録してください。",
                         unknownLine));
                 }
@@ -375,26 +415,29 @@ public static class JournalEntryValidator
             }
 
             if (!account.IsActive
-                && accountPlaces.TrySayOnce(line.AccountId, out var inactiveLine, out var inactiveUsedIn))
+                && accountPlaces.TrySayOnce(line.AccountId, out var inactiveLine, out var inactiveRows))
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.AccountInactive,
-                    $"勘定科目「{account.Name}」は無効なので、新しい計上には使えません。{inactiveUsedIn}"
+                    $"勘定科目「{account.Name}」は「有効」がオフです。{UsedIn(inactiveRows)}"
                     + "別の勘定科目を選ぶか、勘定科目マスタで有効に戻してください。",
                     inactiveLine,
                     InactiveSeverity(entry)));
             }
 
-            if (account.Category.IsProfitAndLoss() && line.DepartmentId is null)
+            if (NeedsDepartment(line, account)
+                && requirements.Department.TrySayOnce(line.AccountId, out var missingLine, out var missingRows))
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.DepartmentMissing,
-                    $"損益科目「{account.Name}」の行には部門が必要です。",
-                    line.LineNo));
+                    $"勘定科目「{account.Name}」には「部門」が必要です。{At(missingRows)}「部門」を選んでください。",
+                    missingLine));
             }
 
-            ValidatePartner(line, entry, account, context.HasSelectablePartner, violations);
-            ValidateSubAccount(line, entry, account, context.SubAccounts, subAccountPlaces, violations);
+            ValidatePartner(line, entry, account, context.HasSelectablePartner, requirements.Partner, violations);
+            ValidateSubAccount(
+                line, entry, account, context.SubAccounts, subAccountPlaces,
+                requirements.SubAccount, requirements.SubAccountNotAllowed, violations);
         }
     }
 
@@ -410,11 +453,11 @@ public static class JournalEntryValidator
         var department = departments.Find(departmentId);
         if (department is null)
         {
-            if (places.TrySayOnce(departmentId, out var unknownLine, out var unknownUsedIn))
+            if (places.TrySayOnce(departmentId, out var unknownLine, out var unknownRows))
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.DepartmentUnknown,
-                    $"部門が部門マスタにありません。{unknownUsedIn}"
+                    $"部門が部門マスタにありません。{UsedIn(unknownRows)}"
                     + "別の部門を選ぶか、部門マスタに登録してください。",
                     unknownLine));
             }
@@ -422,11 +465,11 @@ public static class JournalEntryValidator
             return;
         }
 
-        if (!department.IsActive && places.TrySayOnce(departmentId, out var lineNo, out var usedIn))
+        if (!department.IsActive && places.TrySayOnce(departmentId, out var lineNo, out var rows))
         {
             violations.Add(new Violation(
                 JournalViolationCodes.DepartmentInactive,
-                $"部門「{department.Name}」は無効なので、新しい計上には使えません。{usedIn}"
+                $"部門「{department.Name}」は「有効」がオフです。{UsedIn(rows)}"
                 + "別の部門を選ぶか、部門マスタで有効に戻してください。",
                 lineNo,
                 InactiveSeverity(entry)));
@@ -448,13 +491,8 @@ public static class JournalEntryValidator
     /// </remarks>
     private static void ValidatePartner(
         JournalLine line, JournalEntry entry, AccountDefinition account, bool hasSelectablePartner,
-        List<Violation> violations)
+        RejectionPlaces<AccountId> places, List<Violation> violations)
     {
-        if (!account.RequiresPartner || entry.PartnerOf(line) is not null)
-        {
-            return;
-        }
-
         // 補助科目と同じく、**踏めない案内をしない**（docs/21 §2-3。qa/02 R53-06）。
         // **どちらの欄かを括って言う**——同じ画面に「取引先」というラベルの欄が 2 つある。
         // **どちらを選んでも実効値が埋まる**（明細の一覧の列は ADR-0062 で足した）。
@@ -462,23 +500,33 @@ public static class JournalEntryValidator
         // 案内できるのは**一覧の列**と**伝票の欄**の 2 つだけである。
         // **選べる取引先が 1 件も無いときは、次の一手が「登録」か「有効に戻す」に変わる**——
         // 取引先は運用で無効にされるマスタなので（docs/13）、登録済みで全部無効なこともある。
+        if (!NeedsPartner(line, entry, account)
+            || !places.TrySayOnce(line.AccountId, out var lineNo, out var rows))
+        {
+            return;
+        }
+
         violations.Add(new Violation(
             JournalViolationCodes.PartnerRequired,
             hasSelectablePartner
-                ? $"勘定科目「{account.Name}」は「取引先を要する」がオンです。伝票の「取引先」か、この行の「取引先」を選んでください。"
+                ? $"勘定科目「{account.Name}」は「取引先を要する」がオンです。"
+                  + $"伝票の「取引先」か、{RowAt(lineNo, rows)}「取引先」を選んでください。"
                 : $"勘定科目「{account.Name}」は「取引先を要する」がオンですが、選べる取引先がありません。"
-                  + "取引先マスタに登録するか、無効にした取引先を有効に戻してから選んでください。",
-            line.LineNo,
+                  + "取引先マスタに登録するか、無効にした取引先を有効に戻してから、"
+                  + $"伝票の「取引先」か、{RowAt(lineNo, rows)}「取引先」を選んでください。",
+            lineNo,
             ReversalOnlySeverity(entry)));
     }
 
     private static void ValidateSubAccount(
         JournalLine line, JournalEntry entry, AccountDefinition account, SubAccountCatalog subAccounts,
-        RejectionPlaces<SubAccountId> places, List<Violation> violations)
+        RejectionPlaces<SubAccountId> places, RejectionPlaces<AccountId> wanted,
+        RejectionPlaces<AccountId> unwanted, List<Violation> violations)
     {
         if (line.SubAccountId is not SubAccountId subAccountId)
         {
-            if (account.UsesSubAccount)
+            if (NeedsSubAccount(line, account)
+                && wanted.TrySayOnce(line.AccountId, out var wantedLine, out var wantedRows))
             {
                 // **次の一手は、選べる補助科目があるかで変わる。** 1 つも無い科目に
                 // 「選んでください」と言うと、候補ダイアログが 0 件で開くだけで踏めない
@@ -486,10 +534,11 @@ public static class JournalEntryValidator
                 violations.Add(new Violation(
                     JournalViolationCodes.SubAccountRequired,
                     subAccounts.HasSelectable(account.Id)
-                        ? $"勘定科目「{account.Name}」は「補助科目を使う」がオンです。「補助科目」を選んでください。"
+                        ? $"勘定科目「{account.Name}」は「補助科目を使う」がオンです。"
+                          + $"{At(wantedRows)}「補助科目」を選んでください。"
                         : $"勘定科目「{account.Name}」は「補助科目を使う」がオンですが、選べる補助科目がありません。"
-                          + "補助科目マスタに登録してから選んでください。",
-                    line.LineNo,
+                          + $"補助科目マスタに登録してから、{At(wantedRows)}「補助科目」を選んでください。",
+                    wantedLine,
                     ReversalOnlySeverity(entry)));
             }
             return;
@@ -500,11 +549,11 @@ public static class JournalEntryValidator
         var subAccount = subAccounts.Find(subAccountId);
         if (subAccount is null)
         {
-            if (places.TrySayOnce(subAccountId, out var unknownLine, out var unknownUsedIn))
+            if (places.TrySayOnce(subAccountId, out var unknownLine, out var unknownRows))
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.SubAccountUnknown,
-                    $"補助科目が補助科目マスタにありません。{unknownUsedIn}"
+                    $"補助科目が補助科目マスタにありません。{UsedIn(unknownRows)}"
                     + "別の補助科目を選ぶか、補助科目マスタに登録してください。",
                     unknownLine));
             }
@@ -519,11 +568,16 @@ public static class JournalEntryValidator
         // 別の補助科目を選び直せという案内ではない。
         if (!account.UsesSubAccount)
         {
-            violations.Add(new Violation(
-                JournalViolationCodes.SubAccountNotAllowed,
-                $"勘定科目「{account.Name}」は「補助科目を使う」がオフです。「補助科目」を空にしてください。",
-                line.LineNo,
-                ReversalOnlySeverity(entry)));
+            if (unwanted.TrySayOnce(line.AccountId, out var unwantedLine, out var unwantedRows))
+            {
+                violations.Add(new Violation(
+                    JournalViolationCodes.SubAccountNotAllowed,
+                    $"勘定科目「{account.Name}」は「補助科目を使う」がオフです。"
+                    + $"{At(unwantedRows)}「補助科目」を空にしてください。",
+                    unwantedLine,
+                    ReversalOnlySeverity(entry)));
+            }
+
             return;
         }
 
@@ -538,16 +592,86 @@ public static class JournalEntryValidator
             return;
         }
 
-        if (!subAccount.IsActive && places.TrySayOnce(subAccountId, out var lineNo, out var usedIn))
+        if (!subAccount.IsActive && places.TrySayOnce(subAccountId, out var lineNo, out var rows))
         {
             violations.Add(new Violation(
                 JournalViolationCodes.SubAccountInactive,
-                $"補助科目「{subAccount.Name}」は無効なので、新しい計上には使えません。{usedIn}"
+                $"補助科目「{subAccount.Name}」は「有効」がオフです。{UsedIn(rows)}"
                 + "別の補助科目を選ぶか、補助科目マスタで有効に戻してください。",
                 lineNo,
                 InactiveSeverity(entry)));
         }
     }
+
+    /// <summary>
+    /// <b>要件の断りの控え</b>（docs/21 §2-6）。<b>断りごとに別の控えを持つ</b>——
+    /// 1 つを分け合うと、<b>先に来たほうが後を黙らせる</b>（<see cref="RejectionPlaces{TKey}"/> の注記）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>4 つのうち <see cref="SubAccount"/> と <see cref="SubAccountNotAllowed"/> は排他である</b>
+    /// （前者は「補助科目を使う」がオン、後者はオフ。鍵はどちらも科目）。
+    /// <b>この 2 つだけは共有しても結果が変わらない</b>ので、検体では撃てない——
+    /// 分けてあるのは<b>形を揃えるため</b>である。</para>
+    /// <para><b>この控えは、1 つの鍵の中で重さが一様であることに依存している。</b>
+    /// 重さは伝票の種別だけで決まる（<see cref="ReversalOnlySeverity"/>）ので、いまは一様である。
+    /// <b>行ごとに重さを変える日</b>（税行を作る回。<see cref="ValidatePartners"/> の注記）<b>には、
+    /// 鍵を（科目, 重さ）にするか控えを分けること</b>——でないと警告が差し戻しを食う。</para>
+    /// </remarks>
+    private sealed class RequirementPlaces
+    {
+        internal readonly RejectionPlaces<AccountId> Partner = new();
+        internal readonly RejectionPlaces<AccountId> SubAccount = new();
+        internal readonly RejectionPlaces<AccountId> SubAccountNotAllowed = new();
+        internal readonly RejectionPlaces<AccountId> Department = new();
+    }
+
+    /// <summary>その行に<b>取引先が要る</b>のに無いか（<c>E-PARTNER-REQUIRED</c>）。</summary>
+    /// <remarks><b>控える側と断る側が同じ述語を使う</b>——2 か所に同じ条件を書くと、片方だけ動く。</remarks>
+    private static bool NeedsPartner(JournalLine line, JournalEntry entry, AccountDefinition account)
+        => account.RequiresPartner && entry.PartnerOf(line) is null;
+
+    /// <summary>その行に<b>補助科目が要る</b>のに無いか（<c>E-SUBACCOUNT-REQUIRED</c>）。</summary>
+    private static bool NeedsSubAccount(JournalLine line, AccountDefinition account)
+        => line.SubAccountId is null && account.UsesSubAccount;
+
+    /// <summary>
+    /// その行に<b>持てない補助科目が付いている</b>か（<c>E-SUBACCOUNT-NOT-ALLOWED</c>）。
+    /// </summary>
+    /// <remarks>
+    /// <b>控える側だけが使う。</b> 断る側（<see cref="ValidateSubAccount"/>）は打ち切りの順で
+    /// <b>補助科目があること・実在すること</b>が確定しているので、<c>!UsesSubAccount</c> だけを見る。
+    /// <b>ここで 3 条件とも見るのは、前処理が打ち切りを通らないから</b>である。
+    /// </remarks>
+    private static bool HasUnwantedSubAccount(
+        JournalLine line, AccountDefinition account, SubAccountCatalog subAccounts)
+        => line.SubAccountId is SubAccountId subAccountId
+            && subAccounts.Find(subAccountId) is not null
+            && !account.UsesSubAccount;
+
+    /// <summary>その行に<b>部門が要る</b>のに無いか（<c>I-13</c>）。</summary>
+    private static bool NeedsDepartment(JournalLine line, AccountDefinition account)
+        => account.Category.IsProfitAndLoss() && line.DepartmentId is null;
+
+    /// <summary>場所の並びを「〜で使っています。」の 1 文にする（場所が 1 つ以下なら空）。</summary>
+    private static string UsedIn(string rows)
+        => rows.Length == 0 ? string.Empty : $"{rows} で使っています。";
+
+    /// <summary>
+    /// 欄の名前に付ける場所（<b>行の側を名乗る形</b>）。
+    /// <b>場所が 1 つなら「その行の」</b>——接頭辞（「行 3: 」）が行番号を運ぶ（docs/21 §3）。
+    /// <b>字は画面の凡例に合わせてある</b>
+    /// （「行ごとに相手方が違うときは、その行の「取引先」を選んでください。」）。
+    /// <b>場所が 1 つも無いなら「明細の」</b>——接頭辞も付かないので、
+    /// 「その行」が何も指さなくなる（行番号が 0 以下の行だけで使ったとき）。
+    /// </summary>
+    private static string RowAt(int? lineNo, string rows)
+        => rows.Length > 0 ? $"{rows} の"
+            : lineNo is null ? "明細の"
+            : "その行の";
+
+    /// <summary>欄の名前に付ける場所（場所が 1 つ以下なら空）。</summary>
+    private static string At(string rows)
+        => rows.Length == 0 ? string.Empty : $"{rows} の";
 
     /// <summary>
     /// <b>断りが指す場所</b>。<b>消費税行は本体行で代表させる</b>。
@@ -745,11 +869,15 @@ public static class JournalEntryValidator
         /// いま断るなら <c>true</c>。<b>同じ直し先の 2 回目からは <c>false</c></b>。
         /// </summary>
         /// <param name="lineNo">場所が 1 つならその行番号（伝票の欄なら <c>null</c>）。0 か複数なら <c>null</c>。</param>
-        /// <param name="usedIn">場所が複数なら並べ書き。1 つ以下なら空。</param>
-        internal bool TrySayOnce(TKey key, out int? lineNo, out string usedIn)
+        /// <param name="rows">
+        /// 場所が複数なら「伝票・行 1・行 2」の並び。1 つ以下なら空。
+        /// <b>文にするのは呼ぶ側である</b>——断りごとに言い方が違う
+        /// （「〜で使っています。」と「〜の「取引先」を選んでください。」）。
+        /// </param>
+        internal bool TrySayOnce(TKey key, out int? lineNo, out string rows)
         {
             lineNo = null;
-            usedIn = string.Empty;
+            rows = string.Empty;
             if (!_said.Add(key))
             {
                 return false;
@@ -758,7 +886,13 @@ public static class JournalEntryValidator
             // **指せない行番号は場所に出さない。** 0 や負の行番号を並べると
             // 「行 0 で使っています」と、存在しない行を名指しすることになる
             // （同じ線は ValidateStructure が引いている）。**全部落ちたら場所は言わない。**
-            var places = _used[key].Where(place => place is not int no || no > 0).ToList();
+            // **値で並べる**（控えに入れた順ではない）。**伝票（`null`）が先、次に行番号の順。**
+            // 入れた順に頼ると、親へ畳む場所（<see cref="PlaceOf"/>）が混ざったときに逆順になる。
+            var places = _used[key]
+                .Where(place => place is not int no || no > 0)
+                .OrderBy(place => place.HasValue)
+                .ThenBy(place => place)
+                .ToList();
             if (places.Count == 1)
             {
                 lineNo = places[0];
@@ -766,7 +900,7 @@ public static class JournalEntryValidator
             else if (places.Count > 1)
             {
                 var written = places.Select(place => place is int no ? $"行 {no}" : "伝票");
-                usedIn = $"{string.Join("・", written)} で使っています。";
+                rows = string.Join("・", written);
             }
 
             return true;

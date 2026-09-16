@@ -39,6 +39,17 @@ public static class AccountingFixture
     /// （2026-09-16 の自己レビュー。<see cref="OtherRetiredPartner"/> と同じ型）。
     /// </summary>
     public static readonly AccountId OtherRetiredExpense = new(9);
+    /// <summary><b>2 つ目の「取引先を要する」科目。</b> まとめる鍵が科目であることを撃つ。</summary>
+    public static readonly AccountId OtherReceivable = new(10);
+
+    /// <summary>
+    /// <b>損益科目で、「取引先を要する」がオンで、「補助科目を使う」もオンの科目。</b>
+    /// <b>同じ科目に 3 種類の要件の断りが同時に立つ</b>ことを撃つ——
+    /// 控えを 1 つに共有すると、先に来たほうが後を黙らせる（2026-09-16 の変異で判明）。
+    /// <b>撃てるのは「取引先 × 部門」「取引先 × 補助科目」「補助科目 × 部門」の 3 組</b>で、
+    /// 残る 1 組（補助科目の要る／持てない）は<b>排他なので撃てない</b>（同ファイルの注記）。
+    /// </summary>
+    public static readonly AccountId ServiceRevenue = new(11);
     public static readonly AccountId UnknownAccount = new(999);
 
     /// <summary><b>2 つ目のマスタに無い科目。</b> 同上。</summary>
@@ -90,6 +101,10 @@ public static class AccountingFixture
     [
         new(Cash, "1100", "現金", AccountCategory.Asset),
         new(OtherPayable, "2200", "未払金", AccountCategory.Liability),
+        // **本番の売上高（4010・4020・4030）は `requires_partner = 1` である**
+        // （`Designer/seed/004_accounts.sql`）。ここはオフのままにしてあるので、
+        // **`CashSale` は本番なら `E-PARTNER-REQUIRED` で断られる伝票**である（qa/03 L-17 の型）。
+        // **揃えるのは取引先を要する科目の検体をまとめて見直す回**（README の保留リスト）。
         new(Sales, "4000", "売上高", AccountCategory.Revenue),
         new(SuppliesExpense, "5200", "消耗品費", AccountCategory.Expense),
         new(RetiredExpense, "5900", "廃止した費用科目", AccountCategory.Expense, IsActive: false),
@@ -97,6 +112,9 @@ public static class AccountingFixture
         new(CurrentAccount, "1210", "当座預金", AccountCategory.Asset, UsesSubAccount: true),
         new(AccountsReceivable, "1300", "売掛金", AccountCategory.Asset, RequiresPartner: true),
         new(OtherRetiredExpense, "5910", "もう 1 つ廃止した費用科目", AccountCategory.Expense, IsActive: false),
+        new(OtherReceivable, "1310", "未収入金", AccountCategory.Asset, RequiresPartner: true),
+        new(ServiceRevenue, "4100", "役務収益", AccountCategory.Revenue,
+            UsesSubAccount: true, RequiresPartner: true),
     ];
 
     public static IReadOnlyList<SubAccountDefinition> SubAccounts { get; } =
