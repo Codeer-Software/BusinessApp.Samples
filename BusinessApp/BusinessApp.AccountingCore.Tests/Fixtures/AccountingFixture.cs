@@ -53,8 +53,18 @@ public static class AccountingFixture
     /// <summary>無効にした取引先。新たな計上には使えない（<c>E-PARTNER-INACTIVE</c>）。</summary>
     public static readonly PartnerId RetiredPartner = new(3);
 
+    /// <summary>
+    /// <b>2 つ目の無効な取引先。</b> 1 つだと「まとめる単位が取引先か、違反コードか」が縮退する
+    /// ——無効とマスタに無いの 2 件で撃つと、**コードでまとめる実装でも 2 件返って緑になる**
+    /// （2026-09-16 の自己レビュー。qa/03 L-02 と同じ型）。
+    /// </summary>
+    public static readonly PartnerId OtherRetiredPartner = new(4);
+
     /// <summary>マスタに無い取引先。</summary>
     public static readonly PartnerId UnknownPartner = new(999);
+
+    /// <summary><b>2 つ目のマスタに無い取引先。</b> 同上。</summary>
+    public static readonly PartnerId OtherUnknownPartner = new(998);
     public static readonly TaxCategoryId OutOfScope = new(1);
     public static readonly TaxCategoryId TaxablePurchase = new(2);
 
@@ -103,7 +113,7 @@ public static class AccountingFixture
                Calendar(septemberStatus, fiscalYearStatus), hasSelectablePartner);
 
     /// <summary>
-    /// 取引先の目録。<b>検体が指す 2 件</b>（<see cref="Partner"/>・<see cref="OtherPartner"/>）と、無効にした 1 件。
+    /// 取引先の目録。<b>検体が指す 2 件</b>（<see cref="Partner"/>・<see cref="OtherPartner"/>）と、無効にした 2 件。
     /// </summary>
     /// <remarks>
     /// <b>「選べる取引先が無い」側は、無効にした 1 件だけの目録にする</b>——「1 件も無い」ではなく
@@ -113,6 +123,7 @@ public static class AccountingFixture
     public static PartnerCatalog Partners(bool hasSelectable = true)
     {
         var retired = new PartnerDefinition(RetiredPartner, "取引をやめた先", IsActive: false);
+        var otherRetired = new PartnerDefinition(OtherRetiredPartner, "もう 1 社やめた先", IsActive: false);
 
         return hasSelectable
             ? new PartnerCatalog(
@@ -120,9 +131,10 @@ public static class AccountingFixture
                     new PartnerDefinition(Partner, "株式会社取引先", IsActive: true),
                     new PartnerDefinition(OtherPartner, "別の取引先", IsActive: true),
                     retired,
+                    otherRetired,
                 ],
                 hasSelectable: true)
-            : new PartnerCatalog([retired], hasSelectable: false);
+            : new PartnerCatalog([retired, otherRetired], hasSelectable: false);
     }
 
     public static FiscalCalendar Calendar(
