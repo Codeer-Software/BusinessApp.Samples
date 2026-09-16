@@ -4,7 +4,7 @@ status: current
 scope: 会計コア
 audience: [開発]
 growth: append
-updated: 2026-09-13
+updated: 2026-09-16
 supersedes: []
 related: [CLAUDE.md, ../docs/README.md, ../docs/22_層と実行場所.md, ../docs/21_画面の原則.md, ../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md]
 ---
@@ -70,6 +70,7 @@ related: [CLAUDE.md, ../docs/README.md, ../docs/22_層と実行場所.md, ../doc
 | 日時は `yyyy/MM/dd HH:mm` | `DateTimeFieldDesign` に `Format` を**必ず書く**。空だと既定が出て**秒まで並ぶ**（仕訳帳の「入力年月日」が `2026/08/24 18:56:09` になっていた。[qa/01 D-40](../docs/qa/01_CLB静かな失敗.md)）。`lint_design.py` の D-30 が要求する。**日付だけの欄（`DateFieldDesign`）は書かなくてよい**——ブラウザ標準の `<input type="date">` で、日本語環境では `yyyy/MM/dd` に見える |
 | ○/— フラグ列は中央寄せ | Boolean に `TrueText: "○"` / `FalseText: "—"` を付ける |
 | 検索条件は既定で開く | `SearchLayouts[""].Layout.IsExpanderDefaultOpened: true`（CLB の一般則 `LayoutGuidelines.md` とは逆の選択）。**検索欄を持つレイアウトだけ**——空の検索レイアウトを開くと空箱が出る（2026-08-30 に 9 モジュールへ適用） |
+| 検索の文字欄は前後の空白を落とす | **`ShouldTrimAfterEdit` では効かない**（[qa/01 E-09](../docs/qa/01_CLB静かな失敗.md)）。**`<欄>_OnSearchDataChanged` を置き、`var trimmed = <欄>.SearchValue?.Trim();` → 同じ字なら `return` → `<欄>.SearchValue = trimmed;`**（同じ字を書き戻さないのは、呼び直しを作らないため）。**書き方は 1 通りに揃える**——`lint_design.py` の D-32 は `Trim()` の形だけを通し、`TrimStart().TrimEnd()` も別メソッドへの委譲も赤にする。対象は**検索レイアウトに置いた文字の欄**と **`IsSimpleSearchParameter` の文字の欄**の両方。**`?q=` で復元した値には掛からない**（`change` が起きないため） |
 | 帳簿を並べ替えさせない | 列の `CanUserSort: false`。**PageFrame 側でも切る**（両方書く） |
 | 必須の欄に赤い `*` | 詳細レイアウトの**ラベル側**の要素に `"ClassName": "required-label"`（`app.css` の `::after` が印を出す）＋ フォームの先頭行に `RequiredLegendLabel`。**ラベルが `RelativeField` でその欄を指しているときは、CLB が自分で `*` を足すのでクラスを付けない**（付けると `*` が 2 つ並ぶ。qa/01 F-32。認証部品の `AppUser` がこの形）。**一覧・明細表の見出しには付けられない**——`ListElement.ClassName` は `<td>` にしか付かない（qa/01 D-16）ので、**見出しの文字列そのものに `*` を入れる**（「勘定科目 *」。したがって明細の印だけ黒い） |
 | ボタンの色は 3 値だけ | `Variant` に [21 §4](../docs/21_画面の原則.md) の 3 値以外を書かない |

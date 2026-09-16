@@ -640,6 +640,165 @@ def _check_marks_without_required(path, doc, findings):
         walk(doc.get(layouts, {}))
 
 
+def search_text_fields(doc, only=""):
+    """そのモジュールの**検索に使う文字の欄**を順に返す（D-32 の母数）。
+
+    **「検索に使う」を 2 通りの足し算で取る。**
+    **①検索レイアウトに置いた欄**——表を持つモジュールの検索欄はこちらで、
+    `IsSimpleSearchParameter` は立たない。
+    **②`IsSimpleSearchParameter` が立った欄**——クエリモジュールの `@p_…` で、
+    **レイアウトへ載せ忘れても引数としては生きている**。
+    **片方だけを見ると、もう片方が丸ごと網の外に出る**——実際、本番の 15 欄は
+    **全部が①**で、**②だけが拾う欄はいま 0 個**である（だから②の検体しか無いと、
+    ①を消しても selftest は緑のまま落ちる。2026-09-16 の自己レビュー）。
+
+    `only` に `"placed"` / `"parameter"` を渡すと**片方の枝だけ**を返す
+    （selftest が「どちらの枝も本番で実っているか」を見るために使う）。
+
+    **文字の欄だけを見る。** 検索レイアウトには `LinkFieldDesign` も置かれているが
+    （`JournalEntry.Partner` ほか）、**そちらで同じことが起きるかは未計測**である。
+    """
+    placed = set()
+
+    def visit(node):
+        name = node.get("FieldName")
+        if isinstance(name, str) and name:
+            placed.add(name)
+
+    _walk(doc.get("SearchLayouts") or {}, visit)
+
+    for field in doc.get("Fields", []):
+        if not field.get("TypeFullName", "").endswith("TextFieldDesign"):
+            continue
+        by_layout = field.get("Name", "") in placed
+        by_parameter = bool(field.get("IsSimpleSearchParameter"))
+        if only == "placed" and not by_layout:
+            continue
+        if only == "parameter" and not by_parameter:
+            continue
+        if by_layout or by_parameter:
+            yield field
+
+
+def _trims_search_value(body, name):
+    """その本文が、**その欄の `SearchValue` を `Trim()` して書き戻している**か。
+
+    返すのは `(書き戻している, Trim している)` の組——**2 つの壊れ方を言い分ける**ため。
+
+    **コメントと文字列リテラルを潰してから当てる**（D-28 と同じ作法）。
+    潰さないと「`// SearchValue = …Trim()` と説明に書いただけ」で緑になる。
+    **代入だけを見る**（`=(?!=)`）——`if (x == A.SearchValue)` という**比較**にも当たると、
+    値を入れていないのに緑になる。
+    **`Trim()` はその欄の `SearchValue` に掛かっているものだけを数える**——
+    `A.SearchValue = B.SearchValue.Trim();` は A を落としていない。
+    **識別子の境目を見る**（`(?<![\\w.])`）——見ないと `Name` が
+    `PartnerName.SearchValue` の一部として当たる。
+    """
+    code = _blank(_blank(body, _COMMENTS), _STRINGS)
+    key = re.escape(name)
+    writes = re.search(rf"(?<![\w.]){key}\.SearchValue\s*=(?!=)", code) is not None
+    trims = re.search(rf"(?<![\w.]){key}\.SearchValue\s*\??\s*\.Trim\s*\(", code) is not None
+    return writes, trims
+
+
+def _method_body(text, name):
+    """`void <name>()` の本文（`{` から対応する `}` まで）。無ければ `None`。
+
+    **`_methods` を使わない。** あちらは「次の見出しまで」で切るので、
+    **次の見出しが `void Foo() {` の形だと見出しに見えず、隣の本文まで飲む**
+    （2026-09-16 の自己レビューで実測）。飲むと、空の手が隣の中身で緑になる。
+    """
+    head = re.search(rf"(?<![\w.]){re.escape(name)}\s*\(\s*\)", text)
+    if head is None:
+        return None
+    start = text.find("{", head.end())
+    if start < 0:
+        return None
+
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start + 1:i]
+    return None
+
+
+def check_search_text_trim(modules, scripts, findings):
+    """**検索に使う文字の欄で、前後の空白を落としているか**（docs/21 §0）。
+
+    落とさないと、**打った語では当たらなくなる**（部分一致なら `'%語 %'`、
+    完全一致なら不一致）。画面には「該当なし」としか出ないので、
+    **利用者は自分の入力を疑わず「無い」と判断する**
+    （qa/01 E-09。貼り付けで空白が付くのはよくある）。
+    **落とす場所を画面にしたのは開発者の決定**（2026-09-16。SQL の側では落とさない）。
+
+    **`ShouldTrimAfterEdit` では守れない。** 検索フォームの入力は `SearchValue` に入り、
+    **そこでは落ちない**（1.3.20。2026-09-16 に仕訳帳・振替伝票の検索・取引先で実測。
+    **同じ欄でも詳細レイアウトでは落ちる**ので、設定を読んだだけでは気づけない）。
+    だから見るのは**スクリプトの手**である——`<欄>_OnSearchDataChanged` が
+    `<欄>.SearchValue` を `Trim()` して書き戻していること。
+
+    **書き方は 1 通りに揃える**——`Trim()` の形だけを通す（`TrimStart().TrimEnd()` は赤にする）。
+    **揃えないと「後ろだけ落とす」形が混ざり**、規則の「前後」と実装が静かにずれる。
+    **手の中に直接書く**（別のメソッドへ委ねる形も赤になる）。
+
+    **字面しか見ていない。** **到達しない枝**（`if (false)` の中・先に `return;` の後）に
+    書いてあっても緑になる（D-28 と同じ限界）。**実機で 1 度踏む**（qa/04 の台本）。
+    """
+    by_module = {}
+    for path, text in scripts:
+        by_module[os.path.basename(path)[:-len(".mod.cs")]] = text
+
+    seen = 0
+    for path, doc in modules:
+        module = doc.get("Name", "")
+        script = by_module.get(module, "")
+
+        for field in search_text_fields(doc):
+            seen += 1
+            name = field.get("Name", "")
+            handler = f"{name}_OnSearchDataChanged"
+            where = f"{module}.{name}"
+
+            if field.get("OnSearchDataChanged") != handler:
+                findings.append((SEV_ERROR, "D-32", relative(path),
+                                 f"{where}: 検索に使う文字の欄には "
+                                 f'OnSearchDataChanged: "{handler}" が要る'
+                                 "（前後の空白を落とす。ShouldTrimAfterEdit は"
+                                 "検索欄では効かない。docs/21 §0）"))
+                continue
+
+            body = _method_body(script, handler)
+            if body is None:
+                findings.append((SEV_ERROR, "D-32", relative(path),
+                                 f"{where}: {handler} がスクリプトに無い"
+                                 "（デザインにだけ書いても、CLB は黙って何もしない）"))
+                continue
+
+            writes, trims = _trims_search_value(body, name)
+            if not writes:
+                findings.append((SEV_ERROR, "D-32", relative(path),
+                                 f"{where}: {handler} が {name}.SearchValue に"
+                                 "落とした字を書き戻していない（欄の字が直らない）"))
+            elif not trims:
+                findings.append((SEV_ERROR, "D-32", relative(path),
+                                 f"{where}: {handler} が {name}.SearchValue を "
+                                 "Trim() していない（別の欄を落としていないか）"))
+
+    # **母数が 0 なら鳴らす**（qa/03 L-15）。検索の文字欄は必ずあるので、
+    # 0 は「違反が無い」ではなく**母数の取り方が壊れた**ことを言っている。
+    # **枝ごとの実りは selftest が実デザインに対して見る**——ここは合計しか見ておらず、
+    # **片方の枝が死んで 15 → 4 になっても沈黙する**からである（同じ自己レビュー）。
+    if not seen:
+        findings.append((SEV_ERROR, "D-32", relative(DESIGN_DIR),
+                         "検索に使う文字の欄が 1 つも見つからない"
+                         "（search_text_fields の母数の取り方を疑う）"))
+    return seen
+
+
 def app_of(path):
     """そのファイルが属するアプリ（`Modules/` のトップレベルのフォルダ）。"""
     modules_dir = os.path.join(DESIGN_DIR, "Modules")
@@ -1472,6 +1631,7 @@ def main() -> int:
     check_child_parent_keys(loaded_modules, findings)
     check_child_detail_screens(loaded_modules, loaded_frames, loaded_scripts, findings)
     check_module_references(loaded_modules, loaded_scripts, findings)
+    searched_texts = check_search_text_trim(loaded_modules, loaded_scripts, findings)
     check_role_conditions(loaded_modules, loaded_frames, findings)
     app_settings = os.path.join(DESIGN_DIR, "app.clprj")
     if os.path.exists(app_settings):
@@ -1492,7 +1652,8 @@ def main() -> int:
 
     print("")
     print(f"検査ファイル数: {len(design_files('*.mod.json')) + len(design_files('*.frm.json')) + len(design_files('*.mod.cs'))}"
-          f" / error: {len(errors)} / warn: {len(warns)}")
+          f" / error: {len(errors)} / warn: {len(warns)}"
+          f" / 検索の文字欄: {searched_texts} 欄を検査")
     return 1 if errors else 0
 
 
@@ -1593,6 +1754,7 @@ WIRED_CHECKS = [
     "check_module", "check_page_frame", "check_application_root",
     "check_script", "check_cross_frame_links", "check_child_parent_keys",
     "check_child_detail_screens", "check_module_references", "check_role_conditions",
+    "check_search_text_trim",
     "check_app_access_condition", "check_vocabulary", "check_exemptions",
 ]
 
@@ -1609,6 +1771,66 @@ def _module(**overrides):
            "DetailLayouts": {}, "SearchLayouts": {}, "ListLayouts": {}}
     doc.update(overrides)
     return doc
+
+
+def _trim_module(parameter=True, hooked=True, extra=None, name="Keyword"):
+    """検索の文字欄が 1 つあるモジュール（D-32 の検体）。
+
+    `parameter` が偽なら**検索レイアウトに置いた欄**（本番の 15 欄はすべてこの形で、
+    `IsSimpleSearchParameter` は立っていない）。真なら**クエリモジュールの引数**。
+    **両方の形で撃つ**——片方だけだと、もう片方の枝を消しても selftest が緑になる。
+    """
+    field = {"Name": name, "TypeFullName": "X.TextFieldDesign",
+             "IsSimpleSearchParameter": parameter,
+             "OnSearchDataChanged": f"{name}_OnSearchDataChanged" if hooked else ""}
+    layouts = {} if parameter else {
+        "": {"Layout": {"Rows": [{"Columns": [{"Layout": {"FieldName": name}}]}]}}}
+    return _module(Fields=[field] + list(extra or []), SearchLayouts=layouts)
+
+
+def _trim_body(name="Keyword", inner=None):
+    """`<name>_OnSearchDataChanged` の本文。`inner` を省くと**本番と同じ字面**になる。"""
+    if inner is None:
+        inner = (f"    var trimmed = {name}.SearchValue?.Trim();\n"
+                 f"    if (trimmed == {name}.SearchValue) return;\n"
+                 f"\n    {name}.SearchValue = trimmed;\n")
+    return f"void {name}_OnSearchDataChanged()\n{{\n{inner}}}\n"
+
+
+# **正しい姿は本番と同じ字面で書く**（qa/03 L-17。偽の検体は本番の形で作る）。
+_TRIMS_BODY = _trim_body()
+
+# D-32 の壊れ方。**(何を壊すか, デザイン, スクリプト, 指摘文に必ず入る語)**。
+# **鳴ったことだけを見ない**——どの壊れ方にどう言うかまで表明する。
+SELFTEST_TRIM_CASES = [
+    ("手をつないでいない（引数の欄）", _trim_module(hooked=False), _TRIMS_BODY,
+     "OnSearchDataChanged"),
+    # **本番の 15 欄はこちらの形である。** ①の枝を消すと、この検体だけが落ちる。
+    ("手をつないでいない（検索レイアウトの欄）",
+     _trim_module(parameter=False, hooked=False), _TRIMS_BODY, "OnSearchDataChanged"),
+    ("手がスクリプトに無い", _trim_module(), "void Other()\n{\n}\n", "スクリプトに無い"),
+    ("落とすだけで書き戻していない", _trim_module(),
+     _trim_body(inner="    var t = Keyword.SearchValue.Trim();\n"), "書き戻していない"),
+    ("比べているだけ", _trim_module(),
+     _trim_body(inner="    if (Keyword.SearchValue == Keyword.SearchValue.Trim()) return;\n"),
+     "書き戻していない"),
+    ("書き戻すが落としていない", _trim_module(),
+     _trim_body(inner='    Keyword.SearchValue = "";\n'), "Trim() していない"),
+    ("別の欄を落として書き戻している", _trim_module(),
+     _trim_body(inner="    Keyword.SearchValue = Other.SearchValue.Trim();\n"),
+     "Trim() していない"),
+    ("落としているのはコメントの中だけ", _trim_module(),
+     _trim_body(inner="    // Keyword.SearchValue = Keyword.SearchValue.Trim();\n"
+                      "    Keyword.SearchValue = Keyword.SearchValue;\n"), "Trim() していない"),
+    ("落としているのは文言の中だけ", _trim_module(),
+     _trim_body(inner='    var s = "Keyword.SearchValue.Trim()";\n'
+                      "    Keyword.SearchValue = s;\n"), "Trim() していない"),
+    # **欄名が他の欄名の接尾辞だと、境目を見ないと当たってしまう**（`Name` ⊂ `PartnerName`）。
+    ("接尾辞の同名で当たっている", _trim_module(name="Name"),
+     _trim_body(name="Name",
+                inner="    PartnerName.SearchValue = PartnerName.SearchValue.Trim();\n"),
+     "書き戻していない"),
+]
 
 
 def _required_module(class_name=REQUIRED_LABEL_CLASS, with_label=True, relative=False):
@@ -2083,6 +2305,58 @@ def selftest():
     if findings:
         failures.append("正しいアプリ全体の条件で鳴った")
 
+    # 検索の文字欄のトリム（D-32）。**デザインとスクリプトの組で見る。**
+    def _trim_findings(doc, script):
+        found = []
+        check_search_text_trim(
+            [(_self_path(), doc)], [(_self_path(name="SelfTest.mod.cs"), script)], found)
+        return found
+
+    for label, doc, script, says in SELFTEST_TRIM_CASES:
+        findings = _trim_findings(doc, script)
+        if not [f for f in findings if (f[0], f[1]) == (SEV_ERROR, "D-32") and says in f[3]]:
+            failures.append(f"検索の文字欄のトリム（{label}）: D-32 が「{says}」と鳴らない"
+                            f"（出たのは {[(f[0], f[1], f[3]) for f in findings]}）")
+
+    if len(SELFTEST_TRIM_CASES) < 8:
+        failures.append(f"検索の文字欄のトリムの検体が {len(SELFTEST_TRIM_CASES)} 件しかない"
+                        "（壊れ方を撃ち分ける検体を減らさない）")
+
+    # 正しい姿では鳴らない（検索に使っていない文字の欄は対象外である）
+    for label, doc, script in [
+        ("落としている検索の引数", _trim_module(), _TRIMS_BODY),
+        ("落としている検索レイアウトの欄", _trim_module(parameter=False), _TRIMS_BODY),
+        # **検索に出していない文字の欄は対象外**（伝票に写した取引先の名前がこれである）。
+        # **落としている欄と一緒に置く**——母数 0 のラチェットが先に鳴ってしまうため。
+        ("検索に使っていない文字の欄",
+         _trim_module(extra=[{"Name": "PartnerNameSnapshot",
+                              "TypeFullName": "X.TextFieldDesign"}]), _TRIMS_BODY),
+        # **隣の手の本文を飲まないこと**（`) {` の見出しは `_METHOD_HEAD` に当たらない）。
+        ("次の見出しが同じ行に `{` を書いている",
+         _trim_module(), _TRIMS_BODY + "void Helper() {\n    var x = 1;\n}\n"),
+    ]:
+        findings = _trim_findings(doc, script)
+        if findings:
+            failures.append(f"正しい{label}で鳴った: {[(f[0], f[1], f[3]) for f in findings]}")
+
+    # **母数が 0 なら鳴る**（qa/03 L-15）。検索の文字欄を 1 つも数えない形に戻したら、
+    # **違反が 0 件という緑**が出る。それを赤にするラチェットが生きていることを見る。
+    findings = []
+    check_search_text_trim([], [], findings)
+    if not [f for f in findings if (f[0], f[1]) == (SEV_ERROR, "D-32") and "1 つも" in f[3]]:
+        failures.append("検索の文字欄が 0 件でも鳴らない（ラチェットが死んでいる）")
+
+    # **枝ごとに本番で実っているかを見る**（qa/03 L-17）。
+    # **合計のラチェットでは、片方の枝が死んでも沈黙する**——本番の 15 欄は全部①なので、
+    # ①を消すと母数は 15 → 4 に落ちるのに `seen` は 0 にならない（2026-09-16 の自己レビュー）。
+    # **検体の側も両枝を撃っている**が、**実デザインで実っていることは、実デザインでしか言えない。**
+    real_modules = [d for d in (load_json(p, []) for p in design_files("*.mod.json")) if d]
+    for branch, label in (("placed", "検索レイアウトに置いた欄"),
+                          ("parameter", "IsSimpleSearchParameter の欄")):
+        if not [f for doc in real_modules for f in search_text_fields(doc, branch)]:
+            failures.append(f"母数の枝「{label}」が実デザインで 1 欄も実っていない"
+                            "（枝が死んでも合計のラチェットは鳴らない）")
+
     # **配線**。検査を書いても main() から呼ばれていなければ効かない（qa/03 L-15）。
     source = io.open(__file__, encoding="utf-8").read()
     # **`main()` の中だけを見る。** ファイル末尾までを見ると、
@@ -2099,7 +2373,8 @@ def selftest():
     for failure in failures:
         print(f"error\tSELFTEST\t{relative(__file__)}\t{failure}")
 
-    print(f"lint_design: すべて期待どおり（検体 {len(SELFTEST_CASES)} 件）" if not failures
+    cases = len(SELFTEST_CASES) + len(SELFTEST_TRIM_CASES)
+    print(f"lint_design: すべて期待どおり（検体 {cases} 件）" if not failures
           else f"lint_design: {len(failures)} 件が期待と違う")
     return 1 if failures else 0
 
