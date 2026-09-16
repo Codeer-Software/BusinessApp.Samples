@@ -97,6 +97,8 @@ Claude Code の Bash 権限は**コマンド文字列の前方一致**で判定�
           docs/decisions/0044-削除はごみ箱送りに一本化しrmを機械で止める.md の採らなかった案）。
 """
 
+import contextlib
+import io
 import json
 import os
 import re
@@ -168,8 +170,16 @@ OTHER_DELETION = _forms_regex(DELETION_FORMS)
 
 # **git 自身の破壊コマンド。** 「Git で戻せないか」を基準に据えた以上、
 # コミットしていない変更を消す git は、rm と同じ重さで扱う。
+# **`restore` と `checkout -f` と `switch --discard-changes` は 2026-09-16 に足した**——
+# **どれもコミットしていない変更を黙って捨てる**のに、`clean` と `reset --hard` しか見ていなかった
+# （自己レビューが実測。`git restore .` は素通りだった）。
+# **`worktree remove` と `branch -D` も同じ**——前者は作業ツリーごと、後者はマージしていない枝を捨てる。
 GIT_DESTRUCTIVE = re.compile(
-    r"\bgit\b[^;&|]*?\s(clean\b|reset\s+--hard\b|stash\s+(drop|clear)\b|checkout\s+--\s)",
+    r"\bgit\b[^;&|]*?\s("
+    r"clean\b|reset\s+--hard\b|stash\s+(drop|clear)\b"
+    r"|restore\b|checkout\b[^;&|]*\s--\s|checkout\s+(-f|--force)\b"
+    r"|switch\b[^;&|]*--discard-changes\b|worktree\s+remove\b|branch\s+-D\b"
+    r")",
     re.IGNORECASE,
 )
 
@@ -190,18 +200,40 @@ OVERWRITE_WORDS = (
     "cp", "copy", "Copy-Item", "mv", "move", "Move-Item", "ren", "rename", "Rename-Item",
     "tee", "Tee-Object", "Set-Content", "Add-Content", "Out-File", "New-Item",
     "Expand-Archive", "unzip", "dd",
+    # **`zip` と `Compress-Archive` は 2026-09-16 に足した**——
+    # **allow の棚卸し（`ALLOWED_TOOLS`）を作ったときに、書庫の名前で保護対象を潰せることに気づいた。**
+    "zip", "Compress-Archive",
+    # **`uniq` は 2 つ目の引数が出力先になる**（`uniq [OPTION]... [INPUT [OUTPUT]]`。2026-09-16 に実測）。
+    # **出力先かどうかを見分ける必要はない**——この守りは保護対象の名前が出たときだけ鳴るからである。
+    "uniq",
 )
 
 # 語ではない上書きの形。**削除側と同じく、名前ごとに検体で縛る。**
 OVERWRITE_FORMS = (
-    ("sed -i", r"\bsed\s+-i"),
-    ("-OutFile", r"-OutFile\b"),
-    ("curl -o", r"\bcurl\b[^;&|]*\s-[oO]\b"),
+    # **`sed` の直後の `-i` しか見ていなかった**（`sed -E -i` も `--in-place` も素通り。2026-09-16 に実測）。
+    ("sed -i", r"\bsed\b[^;&|]*\s(-[a-zA-Z]*i\b|--in-place\b)"),
+    # **PowerShell は仮引数を前方一致で解く**ので、`-outf` でも `-OutFile` に届く（2026-09-16 に実測）。
+    ("-OutFile", r"\s-outf\w*\b"),
+    # **`curl` がファイルを書く口は `-o` だけではない**（`--output`・`-c/--cookie-jar`・
+    # `-D/--dump-header`・`--etag-save`・`--trace`。2026-09-16 に `curl --help all` の逐語で数えた）。
+    ("curl -o", r"\bcurl\b[^;&|]*\s(-[oOcD]\b"
+                r"|--(output|cookie-jar|dump-header|etag-save|trace|trace-ascii)\b)"),
     # **`iconv -o`。** この環境の GNU libiconv 1.19 には `-o` が無い（2026-09-16 に実測。
     # `iconv -f UTF-8 -t UTF-8 -o /dev/null` は Usage を出して終わる）ので、
     # **ここで塞いでいるのは glibc 版の iconv が入った環境である**——公開リポジトリなので、
     # 手元に `-o` が無いことを理由に外さない。**リダイレクト経由の書き込みは下の「リダイレクト」が拾う。**
-    ("iconv -o", r"\biconv\b[^;&|]*\s-o\b"),
+    ("iconv -o", r"\biconv\b[^;&|]*\s(-o\b|--output\b)"),
+    # **`sort -o` は入力と関係のないファイルへ書ける**（`-o, --output=FILE`。2026-09-16 に棚卸しで気づいた）。
+    # **コマンドの位置で見る**——`\bsort\b` だと `rg --sort=path -o …` まで拒んだ（自己レビューが実測）。
+    ("sort -o", _BEFORE + r"sort\b[^;&|]*\s(-o\b|--output\b)"),
+    # **`awk -i inplace` はその場で書き換える**（GNU Awk の拡張。この環境に実体がある。2026-09-16 に実測）。
+    ("awk -i inplace", r"\bg?awk\b[^;&|]*\s-i\s+inplace\b"),
+    # **`dotnet` の `-o` / `--output`**（`publish` と `new`。`new --force` は既存を上書きする。2026-09-16 に実測）。
+    ("dotnet -o", r"\bdotnet\b[^;&|]*\s(-o\b|--output\b)"),
+    # **`Get-Item` が返す `FileInfo` のメソッド。** `(Get-Item a).CopyTo(<保護対象>, $true)` は
+    # 上書きの語を 1 つも書かずに通っていた（2026-09-16 に実測）。
+    # **`Replace` と `Create` は入れない**——文字列の `.Replace(` に当たって、読むだけの操作まで拒む。
+    ("FileInfo の書き込み", r"\.(CopyTo|MoveTo|OpenWrite|AppendText)\("),
     ("リダイレクト", REDIRECT),
     ("open の書き込み", r"\bopen\([^)]*['\"][wa]"),
     (".NET の書き込み", r"\[[\w.]*IO\.\w+\]::(Write|Append|Create)\w*"),
@@ -234,6 +266,121 @@ RECOVERABLE_SCRIPTS = (
 # **削除とは関係のない、1 語の `deny`。** ここに無い 1 語の規則は自己検査が咎める
 # （語彙から語を消したのに控えだけ残る、を捕まえるため）。**足すのは、削除でないと言い切れるものだけ。**
 NON_DELETION_DENY = frozenset()
+
+
+# **`allow` に載せた道具の棚卸し。**
+# **`allow` は確認のプロンプトを飛ばす**（この文書の冒頭）ので、**1 語足すたびに
+# 「Claude が確認なしで打てる道具」が 1 つ増える**。**`iconv` と `uv` を足した回は、
+# 2 つとも守りの語彙の外だった**——`uv venv` の消す形は、削除の語を 1 つも書かずに
+# ディレクトリを消せた（2026-09-16 に実測。どちらもこの表を作る前の話である）。
+#
+# **第 2 要素は「保護対象を消せる・上書きできるか」。**
+# **第 3 要素は、消せるなら「守りのどこで見ているか」**——
+# `DELETION_WORDS` の語・`DELETION_FORMS` の名前・`OVERWRITE_WORDS` の語・
+# `OVERWRITE_FORMS` の名前・`GIT_DESTRUCTIVE`・`RECOVERABLE_SCRIPTS` のどれかを、
+# **複数あれば「・」で並べて**書く。
+# **任意のコードを走らせる道具は `任意: ` を付ける**——名指しは**代表例であって網羅ではない**
+# （`python` は `shutil.copyfile` でも `os.replace` でも書ける。綴りを数え切ることはできない）。
+# **見ていないなら `見ない: <理由>`。** **消せないなら、消せない理由**（守りの名前をそのまま書かない）。
+#
+# **両側から検査する**——`allow` にあって表に無ければ赤、表にあって `allow` に無ければ赤。
+# **足し忘れも、外し忘れも、どちらも止まる。**
+# **「`ls`・`cat`・`echo` まで並べると表のほうが先に腐る」という見送りの理由は、
+# 両側から突き合わせることで消えている**——**表だけを古くすることができない**。
+#
+# **機械が見るのは 3 つまで**である。①字が書いてあるか ②名指しした守りが実在するか
+# ③**その道具で拒まれる検体が `SELFTEST` に 1 つ以上あるか**。
+# **その道具の書ける形を数え切ったかは見ない**——**それは人の仕事**である。
+# **「消せない」と書いた行は、2026-09-16 に `--help` の全文で数えた**（自己レビュー）。
+ALLOWED_TOOLS = (
+    # --- Bash
+    ("dotnet", True, "dotnet -o"),
+    ("git", True, "GIT_DESTRUCTIVE"),
+    ("gh", True, "見ない: この環境に入っておらず、当たり先を取る綴りを一次情報で数えていない"),
+    ("python", True, "任意: shutil.rmtree・os の削除・Path.unlink・open の書き込み・リダイレクト"),
+    ("py", True, "任意: shutil.rmtree・os の削除・Path.unlink・open の書き込み・リダイレクト"),
+    ("pwsh", True, "任意: .NET の削除・.NET の書き込み・.NET の移動・_sqlite.ps1 の退避・リダイレクト"),
+    ("powershell", True, "任意: .NET の削除・.NET の書き込み・.NET の移動・_sqlite.ps1 の退避・リダイレクト"),
+    ("ls", False, "読むだけ"),
+    ("cat", False, "読むだけ"),
+    ("head", False, "読むだけ"),
+    ("tail", False, "読むだけ"),
+    ("wc", False, "読むだけ"),
+    ("find", True, "find -delete"),
+    ("grep", False, "読むだけ"),
+    ("rg", True, "見ない: --pre と --hostname-bin が任意のコマンドを起動する。"
+                 "同じことは allow の python・pwsh で直接できるので、ここでは塞がない"),
+    ("sed", True, "sed -i"),
+    ("awk", True, "リダイレクト・awk -i inplace"),
+    ("sort", True, "sort -o"),
+    ("uniq", True, "uniq"),
+    ("diff", False, "読むだけ"),
+    ("echo", False, "自分では書かない"),
+    ("mkdir", False, "既にあるものを壊さない"),
+    ("cp", True, "cp"),
+    ("mv", True, "mv"),
+    ("touch", False, "中身を変えない（作るか、更新時刻を進めるだけ）"),
+    ("zip", True, "zip"),
+    ("unzip", True, "unzip"),
+    ("curl", True, "curl -o・リダイレクト"),
+    ("iconv", True, "iconv -o・リダイレクト"),
+    ("uv run", True, "任意: shutil.rmtree・os の削除・Path.unlink・open の書き込み・send2trash・リダイレクト"),
+    (f"pwsh -NoProfile -File {TRASH_SCRIPT}", True, "RECOVERABLE_SCRIPTS"),
+    # --- PowerShell
+    ("Get-ChildItem", True, ".NET の削除・FileInfo の書き込み"),
+    ("Get-Content", False, "読むだけ"),
+    ("Test-Path", False, "読むだけ"),
+    ("Get-Item", True, ".NET の削除・FileInfo の書き込み"),
+    ("New-Item", True, "New-Item"),
+    ("Copy-Item", True, "Copy-Item"),
+    ("Move-Item", True, "Move-Item"),
+    ("Get-Process", False, "読むだけ"),
+    ("Stop-Process", False, "ファイルに当たり先を持たない"),
+    ("Get-NetTCPConnection", False, "読むだけ"),
+    ("Invoke-WebRequest", True, "-OutFile・リダイレクト"),
+    ("Compress-Archive", True, "Compress-Archive"),
+    ("Expand-Archive", True, "Expand-Archive"),
+)
+
+# **`Bash(…)` の形を取らない `allow` の行。** 道具そのものの名前である。
+# **`Write` はこのフックが `decide_write` で見る。`Edit` は見ない**——
+# 線引きは冒頭の「`Write` と `Edit` の線引き」が持つ（`Edit` は `ask` で確認にとどめる）。
+# **ここも両側から検査する**——増えたら止まる。
+# **ただし「消せるか」は持たない**——当たり先を語彙で見る対象ではないからである。
+ALLOWED_TOOL_NAMES = frozenset({
+    "Read", "Grep", "Glob", "Write", "Edit", "WebSearch", "WebFetch", "mcp__claude-in-chrome",
+})
+
+# **違反の言い方の正典。** **枝を足したらここに 1 つ増える**ので、
+# **対照実験の一覧（`CONTROL_EXPECTATIONS`）と突き合わせれば、実験を書かずに枝を足せない。**
+FINDING_KINDS = {
+    "unlisted": "棚卸しに無い道具がある",
+    "stale": "allow に無い道具がある",
+    "shape": "の形でない規則がある",
+    "unlisted_name": "棚卸しに無い道具の名前がある",
+    "stale_name": "allow に無い道具の名前がある",
+    "empty": "覚え書きが空である",
+    "guard_as_reason": "守りの名前をそのまま書いている",
+    "tool_is_guard": "語彙に載っている道具を「消せない」と書いている",
+    "no_reason": "に理由が書いていない",
+    "unknown_guard": "名指しする守りが実在しない",
+    "no_specimen": "その道具で拒まれる検体が 1 つも無い",
+    "not_recoverable": "RECOVERABLE_SCRIPTS の道具を呼んでいない",
+}
+
+# **対照実験が踏むべき枝の一覧は、上の表そのもの**である（数ではなく字で釘付けする）。
+CONTROL_EXPECTATIONS = frozenset(FINDING_KINDS.values())
+
+# **`selftest` が流す検査の一覧。字で書く**——**呼び出しを 1 行消すと赤くなる**
+# （2026-09-16 の自己レビュー。`_check_allow` の呼び出しを消しても「すべて期待どおり」だった）。
+CHECK_NAMES = frozenset({
+    "_check_vocabulary", "_check_canon", "_check_wiring", "_check_allow",
+    "_check_entrypoint", "_check_production_entrypoint",
+})
+
+ALLOW_RULE = re.compile(r"(Bash|PowerShell)\((.+):\*\)")
+UNGUARDED = "見ない: "
+ARBITRARY = "任意: "
 
 
 def _mention(scripts) -> re.Pattern:
@@ -517,7 +664,7 @@ def decide(command: str):
 
     if git_destructive:
         return "deny", (
-            "コミットしていない変更を消す git のコマンド（clean・reset --hard・stash drop 等）は使わない。"
+            "コミットしていない変更を消す git のコマンド（clean・reset --hard・restore・stash drop 等）は使わない。"
             "**消えたら git でも戻せない**（tools/claude/guard_delete.py）。"
             "要るなら開発者に相談する。ファイルを消したいだけなら " + USE_TRASH
         )
@@ -560,6 +707,7 @@ SELFTEST = [
     ("find . -name '*.tmp' -exec rm {} ;", "deny"),
     ("[System.IO.Directory]::Delete('work', $true)", "deny"),
     ("pwsh -c \"(Get-Item work).Delete()\"", "deny"),
+    ("pwsh -c \"Get-ChildItem work | ForEach-Object { $_.Delete() }\"", "deny"),
     ("python -c \"import shutil; shutil.rmtree('work')\"", "deny"),
     ("python -c \"import os; os.remove('work/x')\"", "deny"),
     ("python -c \"from pathlib import Path; Path('x').unlink()\"", "deny"),
@@ -575,6 +723,13 @@ SELFTEST = [
     ("rm -rf work\\scratchpad\\rev8", "deny"),
     # --- git 自身の破壊コマンド
     ("git clean -xdf", "deny"),
+    # **2026-09-16 に足した 6 形。** どれもコミットしていない変更を捨てる。
+    ("git restore .", "deny"),
+    ("git checkout HEAD -- docs/README.md", "deny"),
+    ("git checkout -f main", "deny"),
+    ("git switch --discard-changes main", "deny"),
+    ("git worktree remove --force wt/x", "deny"),
+    ("git branch -D feat/x", "deny"),
     ("git reset --hard HEAD~1", "deny"),
     ("git stash drop", "deny"),
     ("git stash clear", "deny"),
@@ -602,11 +757,33 @@ SELFTEST = [
     ("unzip a.zip -d LocalData/designs", "deny"),
     ("dd if=/dev/zero of=LocalData/db/x.db", "deny"),
     ("sed -i 's/a/b/' LocalData/db/x.db", "deny"),
+    ("sed -E -i 's/a/b/' LocalData/db/x.db", "deny"),
+    ("sed --in-place 's/a/b/' LocalData/db/x.db", "deny"),
     ("Invoke-WebRequest http://example.com -OutFile Designer/LocalEnvironment.md", "deny"),
     ("curl -o LocalData/db/x.db http://example.com", "deny"),
+    ("curl --output LocalData/db/x.db http://example.com", "deny"),
+    ("curl -c LocalData/db/x.db http://example.com", "deny"),
     # **`iconv` と `uv` を allow に足した回（2026-09-16）に足した 2 形。**
     # どちらも削除・上書きの語を 1 つも書かずに保護対象へ当てられる。
     ("iconv -f CP932 -t UTF-8 -o LocalData/db/x.db in.htm", "deny"),
+    ("iconv -f CP932 -t UTF-8 --output=LocalData/db/x.db in.htm", "deny"),
+    # **allow の棚卸しを作った回（2026-09-16）に足した 3 形。**
+    # どれも削除・上書きの語彙に無いまま、保護対象を潰せた。
+    # **確実に失う形を検体にする**——`zip <既存の非書庫>` は書庫として読めずに終わりうる。
+    ("zip -m LocalData/db/x.db work", "deny"),
+    ("zip -d LocalData/designs/App.zip *", "deny"),
+    ("Compress-Archive -Force work LocalData/db/x.db", "deny"),
+    ("sort -o LocalData/db/x.db in.txt", "deny"),
+    ("sort --output=LocalData/db/x.db in.txt", "deny"),
+    ("uniq in.txt LocalData/db/x.db", "deny"),
+    ("awk -i inplace '{print}' LocalData/db/x.db", "deny"),
+    ("dotnet publish -o LocalData/designs", "deny"),
+    ("pwsh -c \"(Get-Item a).CopyTo('LocalData/db/x.db', $true)\"", "deny"),
+    ("Invoke-WebRequest http://example.com -outf LocalData/db/x.db", "deny"),
+    # **棚卸しが名指す守りには、その道具で拒まれる検体が要る**（`_check_allow`）。
+    ("py -c \"import shutil; shutil.rmtree('work')\"", "deny"),
+    ("powershell -c \"[IO.File]::WriteAllText('LocalData/db/x.db','')\"", "deny"),
+    (f"{T} LocalData/db/x.db", "deny"),
     ("uv venv --clear --force LocalData/db", "deny"),
     ("echo x > .claude/settings.local.json", "deny"),
     ("python -c \"open('LocalData/db/x.db','w')\"", "deny"),
@@ -939,6 +1116,176 @@ def _check_wiring(failed: int) -> int:
     return failed
 
 
+def guard_names() -> set:
+    """**守りの名前の全部。** 棚卸しの第 3 要素は、ここに無い名前を書けない。
+
+    **1 か所から作る**——語彙も形の名前もここで導くので、
+    **語を消せば名前も消え、棚卸しの側が赤くなる**。
+    """
+    return ({word.lower() for word in DELETION_WORDS}
+            | {name.lower() for name, _ in DELETION_FORMS}
+            | {word.lower() for word in OVERWRITE_WORDS}
+            | {name.lower() for name, _ in OVERWRITE_FORMS}
+            | {"git_destructive", "recoverable_scripts"})
+
+
+def deny_specimens() -> tuple:
+    """`SELFTEST` のうち、**拒むことを期待している検体**。"""
+    return tuple(command for command, expected in SELFTEST if expected == "deny")
+
+
+def _has_specimen(tool: str, specimens) -> bool:
+    """その道具で**拒まれる検体があるか**。**コマンドの位置に名前が出ること**まで見る。"""
+    pattern = re.compile(_BEFORE + re.escape(tool) + r"\b", re.IGNORECASE)
+    return any(pattern.search(command) for command in specimens)
+
+
+def allow_findings(allow, tools, tool_names, names, specimens) -> list:
+    """**棚卸しの検査。純関数**——`settings.json` を読む側と分けてある（印字も入口も検体に入る）。
+
+    引数は**全部外から渡す**——表も除外表も差し替えられないと、**対照実験が書けない**。
+    """
+    found = []
+    in_settings = set()
+    bare = set()
+    for rule in allow:
+        rule = str(rule)
+        matched = ALLOW_RULE.fullmatch(rule)
+        if matched:
+            in_settings.add(matched.group(2))
+        elif rule.startswith("Bash(") or rule.startswith("PowerShell("):
+            # **形が違う行を道具の名前の側へ落とさない。**
+            # 落とすと `ALLOWED_TOOL_NAMES` に書くだけで通り、**棚卸しの検算を迂回できる**。
+            found.append(f"settings.json の allow に、`Bash(<語>:*)` {FINDING_KINDS['shape']}: {rule}"
+                         "（形を揃えるか、覆う道具の行に畳む）")
+        else:
+            bare.add(rule)
+
+    listed = {tool for tool, _, _ in tools}
+    for tool in sorted(in_settings - listed):
+        found.append(f"settings.json の allow に、{FINDING_KINDS['unlisted']}: {tool}"
+                     "（guard_delete.py の ALLOWED_TOOLS に足して、消せるかどうかを決める）")
+    for tool in sorted(listed - in_settings):
+        found.append(f"棚卸しに載っているのに、{FINDING_KINDS['stale']}: {tool}"
+                     "（allow から外したなら ALLOWED_TOOLS からも外す）")
+
+    for tool in sorted(bare - tool_names):
+        found.append(f"settings.json の allow に、{FINDING_KINDS['unlisted_name']}: {tool}"
+                     "（guard_delete.py の ALLOWED_TOOL_NAMES に足す）")
+    for tool in sorted(tool_names - bare):
+        found.append(f"棚卸しに載っているのに、{FINDING_KINDS['stale_name']}: {tool}")
+
+    for tool, destroys, note in tools:
+        if not note.strip():
+            found.append(f"{tool} の{FINDING_KINDS['empty']}（消せるなら守りの名前、消せないなら理由）")
+            continue
+        if not destroys:
+            if note.lower() in names:
+                found.append(f"{tool} は「消せない」なのに、{FINDING_KINDS['guard_as_reason']}: {note}")
+            if tool.lower() in names:
+                found.append(f"{FINDING_KINDS['tool_is_guard']}: {tool}"
+                             "（語彙に載っている＝この守りが見ている道具である）")
+            continue
+        if note.startswith(UNGUARDED):
+            if not note[len(UNGUARDED):].strip():
+                found.append(f"{tool} の「{UNGUARDED.strip()}」{FINDING_KINDS['no_reason']}")
+            continue
+        body = note[len(ARBITRARY):] if note.startswith(ARBITRARY) else note
+        for part in body.split("・"):
+            if part.lower() not in names:
+                found.append(f"{tool} が{FINDING_KINDS['unknown_guard']}: {part}"
+                             "（DELETION_WORDS・DELETION_FORMS・OVERWRITE_WORDS・"
+                             "OVERWRITE_FORMS・GIT_DESTRUCTIVE・RECOVERABLE_SCRIPTS のどれか）")
+        if not _has_specimen(tool, specimens):
+            found.append(f"{tool} は守りを名指ししているのに、{FINDING_KINDS['no_specimen']}"
+                         "（SELFTEST に deny の検体を 1 つ置く）")
+        if "RECOVERABLE_SCRIPTS" in body.split("・") \
+                and not any(path in tool for path, _ in RECOVERABLE_SCRIPTS):
+            found.append(f"{tool} は戻せる道具だと書いているが、{FINDING_KINDS['not_recoverable']}")
+
+    return found
+
+
+def _check_allow(failed: int) -> int:
+    """**`allow` に足した道具が、守りの棚卸しに載っているか。**
+
+    **`deny` と `ask` は正典と両方向で結んであるのに、`allow` は形しか見ていなかった**
+    （2026-09-16 の自己レビュー）。**`allow` は確認を飛ばす**ので、
+    **語を 1 つ足すたびに「確認なしで打てる道具」が増える**。
+    """
+    try:
+        settings = json.loads(SETTINGS.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(f"NG  {short(SETTINGS)} を読めない: {exc}")
+        return failed + 1
+
+    allow = [str(rule) for rule in settings.get("permissions", {}).get("allow", [])]
+    names = guard_names()
+    specimens = deny_specimens()
+    for finding in allow_findings(allow, ALLOWED_TOOLS, ALLOWED_TOOL_NAMES, names, specimens):
+        failed += 1
+        print(f"NG  {finding}")
+
+    # **対照実験。** **検査の枝を 1 つずつ壊して、その枝の文が出ることを見る**——
+    # 枝があるだけでは足りない（**別の枝が同じ検体に当たっていれば、壊しても鳴らない**。
+    # 型は `_check_vocabulary` と同じ）。
+    # **踏んだ枝の一覧を `CONTROL_EXPECTATIONS` と字で突き合わせる**ので、
+    # **実験の並びを空にしても・1 つ抜いても・枝を足して実験を書き忘れても赤くなる。**
+    def without(name):
+        """棚卸しから 1 行抜く（**どの行かを字で書く**——添字だと並べ替えで別の行を撃つ）。"""
+        return tuple(row for row in ALLOWED_TOOLS if row[0] != name)
+
+    def replaced(row):
+        """棚卸しの 1 行だけを差し替える（**道具の顔ぶれは変えない**ので、表の過不足は鳴らない）。"""
+        return without(row[0]) + (row,)
+
+    kinds = FINDING_KINDS
+    controls = (
+        ("棚卸しから dotnet の行を抜く", kinds["unlisted"],
+         allow, without("dotnet"), ALLOWED_TOOL_NAMES, names, specimens),
+        ("棚卸しに allow に無い行を足す", kinds["stale"],
+         allow, ALLOWED_TOOLS + (("xyzzy", False, "読むだけ"),), ALLOWED_TOOL_NAMES, names, specimens),
+        ("allow に形の違う規則を足す", kinds["shape"],
+         allow + ["Bash(export FOO=1)"], ALLOWED_TOOLS, ALLOWED_TOOL_NAMES, names, specimens),
+        ("allow に知らない道具の名前を足す", kinds["unlisted_name"],
+         allow + ["NotebookEdit"], ALLOWED_TOOLS, ALLOWED_TOOL_NAMES, names, specimens),
+        ("除外表から道具の名前を 1 つ抜く", kinds["stale_name"],
+         allow, ALLOWED_TOOLS, ALLOWED_TOOL_NAMES | {"NotebookEdit"}, names, specimens),
+        ("覚え書きを空にする", kinds["empty"],
+         allow, replaced(("ls", False, "")), ALLOWED_TOOL_NAMES, names, specimens),
+        ("「消せない」に守りの名前を書く", kinds["guard_as_reason"],
+         allow, replaced(("ls", False, "cp")), ALLOWED_TOOL_NAMES, names, specimens),
+        ("語彙に載っている道具を「消せない」にする", kinds["tool_is_guard"],
+         allow, replaced(("cp", False, "読むだけ")), ALLOWED_TOOL_NAMES, names, specimens),
+        ("「見ない」の理由を空にする", kinds["no_reason"],
+         allow, replaced(("cp", True, UNGUARDED)), ALLOWED_TOOL_NAMES, names, specimens),
+        ("実在しない守りを名指しする", kinds["unknown_guard"],
+         allow, replaced(("cp", True, "存在しない守り")), ALLOWED_TOOL_NAMES, names, specimens),
+        ("拒まれる検体の無い道具に守りを名指しさせる", kinds["no_specimen"],
+         allow, replaced(("ls", True, "cp")), ALLOWED_TOOL_NAMES, names, specimens),
+        ("戻せる道具ではないのにそう名乗る", kinds["not_recoverable"],
+         allow, replaced(("dotnet", True, "RECOVERABLE_SCRIPTS・cp")), ALLOWED_TOOL_NAMES, names, specimens),
+    )
+
+    seen = set()
+    for label, expected, *probe in controls:
+        if any(expected in finding for finding in allow_findings(*probe)):
+            seen.add(expected)
+        else:
+            failed += 1
+            print(f"NG  対照実験が鳴らない: {label}（「{expected}」を期待）")
+
+    # **この突き合わせは控えである。** 上の実験は 1 つずつ自分で鳴るので、
+    # **ここを潰しても単体では何も変わらない**（潰したことは、実験の並びを空にして初めて見える）。
+    # **消さないこと**——実験ごと消されたときと、**枝を足して実験を書き忘れたとき**に鳴るのは、ここだけである。
+    if seen != CONTROL_EXPECTATIONS:
+        failed += 1
+        print("NG  対照実験が踏んだ枝が、字で書いた一覧と違う: "
+              f"足りない {sorted(CONTROL_EXPECTATIONS - seen)} / 余分 {sorted(seen - CONTROL_EXPECTATIONS)}")
+
+    return failed
+
+
 def _run_hook(payload, argv=None, cwd=None, env=None):
     """**本体（main）を実際に動かす。** 判定関数だけを検査すると、入口を殺しても緑になる。
 
@@ -1060,15 +1407,13 @@ def _check_production_entrypoint(failed: int) -> int:
 
 
 def selftest() -> int:
-    global CANON, main_repo_root  # 下で差し替えを試すため（関数の先頭でしか宣言できない）
+    global CANON, SETTINGS, main_repo_root  # 下で差し替えを試すため（関数の先頭でしか宣言できない）
     failed = 0
     for command, expected in SELFTEST:
         actual, _ = decide(command)
         if actual != expected:
             failed += 1
             print(f"NG  期待 {expected} / 実際 {actual}: {command!r}")
-
-    failed = _check_vocabulary(failed)
 
     # **理由文も表明する。** ADR-0044 は「拒むときに次の一手を示す」を関門の中核に置いている。
     _, reason = decide("rm work/x")
@@ -1125,13 +1470,32 @@ def selftest() -> int:
         finally:
             main_repo_root = genuine_main_repo_root
 
-    failed = _check_canon(failed)
-    failed = _check_wiring(failed)
-    failed = _check_entrypoint(failed)
-    failed = _check_production_entrypoint(failed)
+    # **どの検査を流すかを字で釘付けする**（`CHECK_NAMES`）。**1 行消せば赤くなる。**
+    checks = (_check_vocabulary, _check_canon, _check_wiring, _check_allow,
+              _check_entrypoint, _check_production_entrypoint)
+    running = {check.__name__ for check in checks}
+    if running != CHECK_NAMES:
+        failed += 1
+        print("NG  流す検査の並びが、字で書いた一覧と違う: "
+              f"足りない {sorted(CHECK_NAMES - running)} / 余分 {sorted(running - CHECK_NAMES)}")
+    for check in checks:
+        failed = check(failed)
 
     # 正典が読めないときに素通りしないか（fail-open にしていないか）。
     # **この一手は表では書けない**——表は正典が読める前提の判定しか並べられないため。
+    # **`settings.json` を読めないときに素通りしないか**（fail-open にしていないか）。
+    # **関門そのものは保護対象に載せていない**ので、改名も無確認でできる（docs/33 §1）。
+    readable_settings, SETTINGS = SETTINGS, SETTINGS.with_name("settings.json.存在しない")
+    try:
+        # **理由文はここでは出さない**（緑の回に NG の行が混ざると、読み手が数えられない）。
+        with contextlib.redirect_stdout(io.StringIO()):
+            silenced = _check_allow(0)
+        if silenced != 1:
+            failed += 1
+            print("NG  settings.json を読めないのに、allow の棚卸しが素通りした")
+    finally:
+        SETTINGS = readable_settings
+
     readable, CANON = CANON, CANON.with_name("protected_paths.json.存在しない")
     try:
         if decide("rm -rf work/tmp")[0] != "deny":
