@@ -186,6 +186,40 @@ _ROW_LOOP = re.compile(r"\bforeach\s*\(\s*var\s+(\w+)\s+in\s+(?:this\.)?(\w+)\.R
 _ROW_CAST = re.compile(r"\bvar\s+(\w+)\s*=\s*\(\s*(\w+)\s*\)\s*(\w+)\s*;")
 
 
+# 行レベルの条件（D-34。qa/01 F-06・F-14・F-23）。
+#
+# **見るのは書き込みの条件だけ。** `DataWriteCondition` は**画面とサーバの両方で同じ判定をする**
+# （`_specs/ModuleDesign.md`「クライアント・サーバーの両方で同じ判定をする（サーバーは `Submit`
+# 受信時に強制するので、スクリプトから `Module.Submit()` を呼んでも回避できない）」）ので、
+# **画面が条件の欄を取ってこないと、画面の側が先に書き込みを止める**（2026-09-16 に実測。qa/04）。
+#
+# **`DataReadCondition` は入れない。** あちらは**サーバ側で SQL に自動付与される**
+# （`Docs/AppPatterns/auth_personal_data.md`「`DataReadCondition` は**サーバー側で SQL に自動付与**
+# される (= URL 直接アクセスでも漏れない)」）ので、**画面が欄を取ってくるかの話ではない**。
+# **本プロジェクトの 22 モジュールとも空**である（2026-09-16 に数えた）。
+DATA_CONDITIONS = ("DataWriteCondition",)
+
+# **条件を突き合わせるレイアウトの種類。** **詳細だけを見る**——2026-09-16 に 1.3.20 で
+# 実測したのが詳細だからである（qa/04 の同日）。**一覧で行を編集する形は測っていない。**
+CONDITION_LAYOUTS = ("DetailLayouts",)
+
+# 条件の変数（`SearchTargetVariable`）を書ける置き場のうち、**D-34 が数えているもの**。
+# `User*Condition` は `AppUser` の欄を見る（サーバ側で今の利用者に当てる）ので、行の話ではない。
+CONDITION_ROOTS = ("UserWriteCondition", "UserReadCondition") + DATA_CONDITIONS
+
+# **数えていない置き場**と、その理由（D-34。`READ_CONDITION_EXEMPTIONS` と同じ作法）。
+# **片側（書いた名前が実在するか）だけでは、書き忘れは 1 件も見つからない**ので、
+# `check_condition_wiring` が**逆向き**——表に無い置き場に条件の変数があれば赤——を見る。
+CONDITION_WIRING_EXEMPTIONS = {
+    "Fields/[]/SearchCondition":
+        "欄の**候補の絞り込み**（`LinkField` / `ListField` の検索条件）。"
+        "**左辺（`SearchTargetVariable`）は候補側のモジュールの欄**で、行の条件とは別の機構である。"
+        "**右辺（`Variable`）にこちらの欄を書く形は同じ機構に乗る**"
+        "（`JournalLine` の補助科目の絞りが `Account.Value` を見ている）ので、"
+        "**次に検査を足す回**に覆う（docs/README の保留リスト）",
+}
+
+
 # 参照してはならない向き（ADR-0025 §4）。`Modules/` のトップレベルのフォルダ＝アプリ（部品）で
 # 判定する（Designer/Project.md のフォルダ規約）——モジュール名を並べると、増えるたびに腐る。
 # **認証部品（Platform）は誰が参照してもよい**——権限の条件は AppUser の列でしか書けない（qa/01 F-21）。
@@ -1280,6 +1314,215 @@ def check_layout_reads(modules, scripts, findings, accessors=DATA_ACCESSORS):
     return counts
 
 
+def condition_variables(condition):
+    """その条件が見ている**変数の道**（`Status.Value` の形）を順に返す。
+
+    **比較の両側を見る。** `SearchTargetVariable` は左辺、`Variable` は右辺である
+    （`FieldVariableMatchCondition`）。**右辺にこちらの欄を書く形もある**ので、片側だけでは足りない。
+    **`CurrentUser.` で始まる道は落とす**——いまの利用者の欄で、このモジュールの欄ではない。
+
+    **木を全部たどる。** デザイナが書く条件は `MultiMatchCondition` → `FieldMatchCondition` →
+    `FieldValueMatchCondition` と**入れ子になる**（`_specs/SearchConditions.md`
+    「デザイナ UI が生成する形」）。直下だけを見ると、その形が丸ごと素通りする。
+    """
+    found = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            for key in ("SearchTargetVariable", "Variable"):
+                path = node.get(key)
+                if isinstance(path, str) and path and not path.startswith("CurrentUser."):
+                    found.append(path)
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(condition)
+    return found
+
+
+def _is_query_module(doc):
+    """SQL で行を作るモジュールか（`QueryFieldDesign` を持つ）。"""
+    return any(f.get("TypeFullName", "").endswith("QueryFieldDesign")
+               for f in doc.get("Fields", []))
+
+
+def condition_wirings(doc):
+    """デザインの中で**条件の変数を書いてある置き場**を `(道, 変数)` で順に返す。"""
+    found = []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            variable = node.get("SearchTargetVariable")
+            if isinstance(variable, str) and variable:
+                found.append((tuple(path), variable))
+            for key, value in node.items():
+                walk(value, path + [key])
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, path + ["[]"])
+
+    walk(doc, [])
+    return found
+
+
+def _wiring_place(path):
+    """その道の**置き場の名前**（`CONDITION_ROOTS` の名前か、免除表の鍵か、そのままの道）。"""
+    if path and path[0] in CONDITION_ROOTS:
+        return path[0]
+    joined = "/".join(path)
+    for prefix in CONDITION_WIRING_EXEMPTIONS:
+        if joined.startswith(prefix):
+            return prefix
+    return joined
+
+
+def check_condition_wiring(modules, findings):
+    """**条件の変数を書ける置き場が、D-34 の数えている置き場に収まっているか**（qa/01 F-06）。
+
+    D-34 が突き合わせるのは `CONDITION_ROOTS` の条件だけである。**CLB にはその外にも
+    条件を書ける場所がある**——欄の `SearchCondition`（候補の絞り込み）、
+    `ListPageFieldDesign.SearchCondition` ほか。**そこに書いた条件は D-34 の網から静かに外れる**ので、
+    **逆向き**——表に無い置き場に条件の変数があれば赤——を見る
+    （self-review スキル §9 の「除外表・許可表は両側から守っているか」）。
+
+    **免除表は両側から守る**——載せた鍵が実デザインに 1 件も無ければ、その行はもう要らない。
+    """
+    seen = 0
+    used = set()
+    for path, doc in modules:
+        module = doc.get("Name", "")
+        for where, variable in condition_wirings(doc):
+            seen += 1
+            place = _wiring_place(where)
+            if place in CONDITION_ROOTS:
+                continue
+            if place in CONDITION_WIRING_EXEMPTIONS:
+                used.add(place)
+                continue
+            findings.append((SEV_ERROR, "D-34", relative(path),
+                             f"{module}: {'/'.join(where)} に条件の変数（{variable}）があるが、"
+                             "D-34 はこの置き場を数えていない"
+                             "（取ってくる側が決まらず、条件の欄が検査から落ちる。"
+                             "CONDITION_ROOTS に足すか、理由を書いて "
+                             "CONDITION_WIRING_EXEMPTIONS に載せる）"))
+
+    for place, reason in CONDITION_WIRING_EXEMPTIONS.items():
+        if place not in used and modules:
+            findings.append((SEV_ERROR, "D-34", relative(DESIGN_DIR),
+                             f"免除表の {place} が実デザインに 1 件も無い"
+                             f"（もう要らないなら落とす。理由: {reason[:30]}…）"))
+    return seen
+
+
+def check_condition_fields(modules, findings):
+    """**行レベルの書き込み条件が見ている欄を、詳細レイアウトが取ってくるか**（qa/01 F-06）。
+
+    **見る範囲と限界はここが持つ**（qa/01 は症状と前提だけを持つ。同じことを 2 か所に書かない）。
+
+    - **見るのは `DataWriteCondition` だけ**（`DATA_CONDITIONS` に理由）。
+    - **突き合わせるのは詳細レイアウトだけ**（`CONDITION_LAYOUTS` に理由）。
+      **一覧で行を編集する形は測っていない。**
+    - **比較の両側の欄を見る**（`condition_variables`）。`CurrentUser.` の側は見ない。
+    - **クエリモジュールには行条件が効かない**（qa/01 F-23）ので、書いてあること自体を赤にする。
+    - **多段の道**（`Partner.Name.Value`）は数えていない——リンク先の欄は `LinkFieldNames` で
+      取ってくるもので、`DataOnlyFields` では来ない。
+    - **`ModuleName` は空でよい。** CLB の正典の形がそうである
+      （`_samples/PatternShowcaseAuth/Modules/PersonalMemo.mod.json` の行レベル権限は
+      `"ModuleName": ""` のまま `Creator.Value` を見る）。**別のモジュールを指す形だけ**を止める。
+    - **サーバ側でも同じ判定が走る**（`_specs/ModuleDesign.md`）が、**そちらは踏んでいない**
+      ——画面が先に止めるので、保存要求が飛ばない（qa/04 の 2026-09-16）。
+    """
+    counts = {"条件": 0, "欄": 0}
+    before = len(findings)
+    for path, doc in modules:
+        module = doc.get("Name", "")
+        fields = {f.get("Name") for f in doc.get("Fields", []) if f.get("Name")}
+        layouts = [(name, layout) for group, name, layout in layouts_of(doc)
+                   if group in CONDITION_LAYOUTS]
+
+        for key in DATA_CONDITIONS:
+            condition = doc.get(key) or {}
+            variables = condition_variables(condition.get("Condition") or {})
+            if not variables:
+                continue
+            counts["条件"] += 1
+
+            target = condition.get("ModuleName") or ""
+            if target and target != module:
+                findings.append((SEV_ERROR, "D-34", relative(path),
+                                 f"{module}.{key} が別のモジュール（{target}）の欄を見ている"
+                                 "（D-34 はこの形を数えていない。取ってくる側が決まらないので、"
+                                 "数え方を決めてから書く）"))
+                continue
+
+            if _is_query_module(doc):
+                findings.append((SEV_ERROR, "D-34", relative(path),
+                                 f"{module}.{key} を書いているが、"
+                                 "クエリモジュールに行レベルの条件は効かない（qa/01 F-23）"
+                                 "——**守られていると誤解する**。消して、絞り込みは SQL の "
+                                 "WHERE に書く"))
+                continue
+
+            if not layouts:
+                findings.append((SEV_ERROR, "D-34", relative(path),
+                                 f"{module}.{key} を書いているが、詳細レイアウトが 1 つも無い"
+                                 "（条件が見ている欄を取ってくるかを突き合わせられない。"
+                                 "D-34 はこの形を数えていない）"))
+                continue
+
+            for variable in variables:
+                parts = variable.split(".")
+                if len(parts) < 2:
+                    findings.append((SEV_ERROR, "D-34", relative(path),
+                                     f"{module}.{key} の {variable} が欄の名前だけである"
+                                     "（`<欄>.<呼び名>` で書く。欄の名前だけだと "
+                                     "SQL の組み立てが例外で落ちる）"))
+                    continue
+                if len(parts) > 2:
+                    findings.append((SEV_ERROR, "D-34", relative(path),
+                                     f"{module}.{key} の {variable} は多段の道である"
+                                     "（D-34 はこの形を数えていない。リンク先の欄は "
+                                     "LinkFieldNames で取ってくるもので、DataOnlyFields では来ない）"))
+                    continue
+
+                name = parts[0]
+                if name not in fields:
+                    findings.append((SEV_ERROR, "D-34", relative(path),
+                                     f"{module}.{key} が見ている {name} がモジュールに無い"
+                                     "（綴り違いなら、条件は書いたとおりに効かない）"))
+                    continue
+
+                for layout_name, layout in layouts:
+                    counts["欄"] += 1
+                    if name in loaded_fields(layout):
+                        continue
+                    where = f"{module}/DetailLayouts" + (f"/{layout_name}" if layout_name else "")
+                    findings.append((SEV_ERROR, "D-34", relative(path),
+                                     f"{where}: {key} が見ている {name} を、このレイアウトが"
+                                     "取ってこない（**条件を満たしている行でも、合図なく"
+                                     "書けなくなる**——入力欄がラベルに変わり、ボタンは"
+                                     "生きて見えるまま何も起きない。qa/01 F-06・F-14）。"
+                                     f"レイアウトに出すか DataOnlyFields に {name} を書く。"
+                                     "**見ているのは詳細レイアウトだけである**"))
+
+    # **母数は枝ごとに 0 を見る**（qa/03 L-15）。**理由で文言を分ける**——
+    # 「条件が 1 つも無い」は設計の話、「条件はあるのに突き合わせが 0」は検査の話である。
+    if not counts["条件"]:
+        findings.append((SEV_ERROR, "D-34", relative(DESIGN_DIR),
+                         "行レベルの書き込み条件が 1 つも見つからない"
+                         "（デザインから消えたのでなければ、condition_variables の読み方を疑う）"))
+    elif not counts["欄"] and len(findings) == before:
+        # **理由を言えたときは、このラチェットを鳴らさない**——
+        # 1 つの間違いで 2 件の error が出ると、直す先が読み取れなくなる。
+        findings.append((SEV_ERROR, "D-34", relative(DESIGN_DIR),
+                         "行レベルの書き込み条件はあるのに、突き合わせた欄が 1 つも無い"
+                         "（check_condition_fields の突き合わせ方を疑う）"))
+    return counts
+
+
 def app_of(path):
     """そのファイルが属するアプリ（`Modules/` のトップレベルのフォルダ）。"""
     modules_dir = os.path.join(DESIGN_DIR, "Modules")
@@ -2135,6 +2378,8 @@ def main() -> int:
     searched_texts = check_search_text_trim(loaded_modules, loaded_scripts, findings)
     layout_reads = check_layout_reads(loaded_modules, loaded_scripts, findings)
     check_hook_wiring(loaded_modules, loaded_frames, findings)
+    condition_reads = check_condition_fields(loaded_modules, findings)
+    check_condition_wiring(loaded_modules, findings)
     check_role_conditions(loaded_modules, loaded_frames, findings)
     app_settings = os.path.join(DESIGN_DIR, "app.clprj")
     if os.path.exists(app_settings):
@@ -2152,6 +2397,8 @@ def main() -> int:
         "検索の文字欄": searched_texts,
         "レイアウトが読む欄": layout_reads["欄"],
         "明細の行から読む欄": layout_reads["行"],
+        "行の条件": condition_reads["条件"],
+        "行の条件が見る欄": condition_reads["欄"],
     })
     for line in lines:
         print(line)
@@ -2256,6 +2503,7 @@ WIRED_CHECKS = [
     "check_script", "check_cross_frame_links", "check_child_parent_keys",
     "check_child_detail_screens", "check_module_references", "check_role_conditions",
     "check_search_text_trim", "check_layout_reads", "check_hook_wiring",
+    "check_condition_fields", "check_condition_wiring",
     "check_app_access_condition", "check_vocabulary", "check_exemptions",
     "report",
 ]
@@ -2543,6 +2791,121 @@ SELFTEST_READ_OK = [
     # **子の `DataOnlyFields` でも救われる**（画面に出さずに値だけ持つ）。
     ("子が DataOnlyFields で持っている", _read_module(), _READ_SCRIPT,
      _row_module(placed=(), data_only=("Amount", "Memo"))),
+]
+
+
+# 行レベルの条件が見ている欄（D-34。qa/01 F-06）。
+def _condition(variables, wrap=False):
+    """行レベルの条件の `Condition`。`wrap` で**デザイナが書く 2 段の入れ子**にする。
+
+    **2 段が本番の形である**（`JournalEntry.UserWriteCondition` が
+    `MultiMatchCondition` → 子、`Fields[].SearchCondition` が `MultiMatchCondition` →
+    `FieldMatchCondition` → 子）。**1 段だけで撃つと、木をたどるのをやめても緑になる。**
+    """
+    children = [{"SearchTargetVariable": v, "Comparison": "Equal",
+                 "Value": {"Value": "draft",
+                           "TypeFullName": "Codeer.LowCode.Blazor.Repository.StringValue"},
+                 "TypeFullName":
+                     "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchConditionNonNull"}
+                for v in variables]
+    if wrap:
+        children = [{"Children": children, "Name": "",
+                     "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldMatchCondition"}]
+    return {"IsOrMatch": False, "IsNot": False, "Children": children, "Name": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"}
+
+
+def _condition_module(name="SelfTest", module_name="SelfTest", variables=("Status.Value",),
+                      wrap=False, layouts=None, query=False, right_hand=None):
+    """D-34 の検体。**本番（`JournalEntry`）と同じ形**——自分の欄を見る条件と、詳細レイアウト。
+
+    `layouts` は `{レイアウト名: 置いた欄の並び}`。既定は「既定のレイアウトに `Status` を置く」。
+    `right_hand` を渡すと、比較の右辺（`Variable`）にその道を書く（`FieldVariableMatchCondition`）。
+    """
+    if layouts is None:
+        layouts = {"": ("Status",)}
+    fields = [{"Name": "Status", "TypeFullName": "X.SelectFieldDesign"},
+              {"Name": "Description", "TypeFullName": "X.TextFieldDesign"}]
+    if query:
+        fields.append({"Name": "Rows", "TypeFullName": "X.QueryFieldDesign"})
+
+    condition = _condition(variables, wrap)
+    if right_hand is not None:
+        condition["Children"].append(
+            {"SearchTargetVariable": "Status.Value", "Comparison": "Equal",
+             "Variable": right_hand,
+             "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldVariableMatchCondition"})
+
+    return _module(
+        Name=name, DbTable="" if query else "x", Fields=fields,
+        DataWriteCondition={"ModuleName": module_name, "Condition": condition},
+        DetailLayouts={key: {"Layout": {"Rows": [
+            {"Columns": [{"Layout": {"FieldName": n}} for n in placed]}]}}
+            for key, placed in layouts.items()})
+
+
+# D-34 の壊れ方。**(何を壊すか, モジュール, 指摘文に必ず入る語)**。
+SELFTEST_CONDITION_CASES = [
+    # **2026-09-16 に実機で踏んだ形である**（下書きなのに 1 文字も打てなくなった）。
+    ("条件の欄を詳細が取ってこない", _condition_module(layouts={"": ("Description",)}),
+     "DataOnlyFields に Status を書く"),
+    # **デザイナが書く 2 段の入れ子。** 木をたどらないと丸ごと素通りする。
+    ("入れ子が 2 段", _condition_module(layouts={"": ("Description",)}, wrap=True),
+     "DataOnlyFields に Status を書く"),
+    # **条件が 2 つの欄を見て、片方だけ置いてある形。** いちばんありそうな中途半端な形である。
+    ("2 つ見ていて片方だけ置いてある",
+     _condition_module(variables=("Status.Value", "Description.Value"),
+                       layouts={"": ("Status",)}),
+     "DataOnlyFields に Description を書く"),
+    # **比較の右辺にこちらの欄を書く形**（`FieldVariableMatchCondition`）。
+    ("右辺の欄を取ってこない", _condition_module(right_hand="Description.Value"),
+     "DataOnlyFields に Description を書く"),
+    # **名前つきの詳細レイアウトも 1 枚ずつ見る。**
+    ("名前つきのレイアウトだけが取ってこない",
+     _condition_module(layouts={"": ("Status",), "Card": ("Description",)}),
+     "SelfTest/DetailLayouts/Card"),
+    ("条件が名指しする欄がモジュールに無い", _condition_module(variables=("Stat.Value",)),
+     "モジュールに無い"),
+    ("条件が別のモジュールの欄を見ている", _condition_module(module_name="Other"),
+     "数えていない"),
+    # **`ModuleName` が空の形は CLB の正典である**（`PersonalMemo` の行レベル権限）。
+    # **飛ばすと、いちばん普通の書き方が丸ごと素通りする。**
+    ("ModuleName が空で、欄を取ってこない",
+     _condition_module(module_name="", layouts={"": ("Description",)}),
+     "DataOnlyFields に Status を書く"),
+    # **クエリモジュールに行条件は効かない**（qa/01 F-23）。「レイアウトに出せ」は誤った処方である。
+    ("クエリモジュールに条件を書いた", _condition_module(query=True, layouts={"": ()}),
+     "クエリモジュールに行レベルの条件は効かない"),
+    ("詳細レイアウトが 1 つも無い", _condition_module(layouts={}),
+     "詳細レイアウトが 1 つも無い"),
+    ("欄の名前だけを書いている", _condition_module(variables=("Status",)),
+     "欄の名前だけである"),
+    ("多段の道を書いている", _condition_module(variables=("Partner.Name.Value",)),
+     "多段の道である"),
+]
+
+# **正しい姿**。ここで鳴る関門は、赤を無視させる。
+SELFTEST_CONDITION_OK = [
+    ("本番と同じ形", _condition_module()),
+    ("2 段の入れ子でも置いてある", _condition_module(wrap=True)),
+    ("DataOnlyFields で持っている",
+     _module(Name="SelfTest", DbTable="x",
+             Fields=[{"Name": "Status"}, {"Name": "Description"}],
+             DataWriteCondition={"ModuleName": "", "Condition": _condition(("Status.Value",))},
+             DetailLayouts={"": {"DataOnlyFields": ["Status"],
+                                 "Layout": {"Rows": [{"Columns": []}]}}})),
+    # **`ModuleName` は空でよい**——CLB の正典の形がそうである（`PersonalMemo`）。
+    ("ModuleName が空", _condition_module(module_name="")),
+    # **右辺が `CurrentUser` の形は、こちらの欄ではない**（行レベル権限の定番）。
+    ("右辺が CurrentUser", _condition_module(right_hand="CurrentUser.Id.Value")),
+    # **利用者の条件は行の話ではない**（`AppUser` の欄を見る。サーバ側で当てる）。
+    ("利用者の条件だけ",
+     _module(Name="SelfTestUser", DbTable="x", Fields=[{"Name": "Status"}],
+             UserWriteCondition={"ModuleName": "AppUser",
+                                 "Condition": _condition(("AccountingRole.Value",))},
+             UserReadCondition={"ModuleName": "AppUser",
+                                "Condition": _condition(("AccountingRole.Value",))},
+             DetailLayouts={"": {"Layout": {"Rows": [{"Columns": []}]}}})),
 ]
 
 
@@ -3099,10 +3462,14 @@ def selftest():
 
     # **検体の数は「以上」ではなく実数で持つ**（qa/02 のラウンド 103）。
     # 下限だと、**どれを 1 つ消しても緑**——2026-09-16 に 11 件すべてで実測した。
-    for label, cases, expected in [("壊れ方", SELFTEST_READ_CASES, 19),
-                                   ("正しい姿", SELFTEST_READ_OK, 11)]:
+    for what, label, cases, expected in [
+        ("取ってこない欄の読み", "壊れ方", SELFTEST_READ_CASES, 19),
+        ("取ってこない欄の読み", "正しい姿", SELFTEST_READ_OK, 11),
+        ("行の条件が見る欄", "壊れ方", SELFTEST_CONDITION_CASES, 12),
+        ("行の条件が見る欄", "正しい姿", SELFTEST_CONDITION_OK, 6),
+    ]:
         if len(cases) != expected:
-            failures.append(f"取ってこない欄の読みの検体（{label}）が {len(cases)} 件"
+            failures.append(f"{what}の検体（{label}）が {len(cases)} 件"
                             f"（{expected} 件のはず。減らすなら、この数も一緒に直す）")
 
     # **除外の理由を、1 つずつ対照実験で確かめる**（self-review スキル §9 の「対照実験があるか」）。
@@ -3303,6 +3670,116 @@ def selftest():
                             "空にしても鳴らない（この宣言は何も支えていない）")
 
 
+    # 行レベルの条件が見ている欄（D-34。qa/01 F-06）。
+    # **母数を満たす相棒を必ず添える**——添えないと、母数 0 のラチェットが先に鳴って、
+    # 「正しい姿で鳴ったか」を `if findings:` の形で見られない。
+    def _condition_findings(doc):
+        found = []
+        check_condition_fields([(_self_path(), doc),
+                                (_self_path(name="Companion.mod.json"),
+                                 _condition_module(name="Companion", module_name="Companion"))],
+                               found)
+        return found
+
+    for label, doc, says in SELFTEST_CONDITION_CASES:
+        findings = _condition_findings(doc)
+        if not [f for f in findings
+                if (f[0], f[1]) == (SEV_ERROR, "D-34") and says in f[3]]:
+            failures.append(f"行の条件が見る欄（{label}）: D-34 が「{says}」と鳴らない"
+                            f"（出たのは {[(f[0], f[1], f[3]) for f in findings]}）")
+
+    # **相棒だけなら 1 件も鳴らない**（相棒が指摘を出していたら、上の検体の判定が濁る）。
+    findings = []
+    check_condition_fields([(_self_path(name="Companion.mod.json"),
+                             _condition_module(name="Companion", module_name="Companion"))],
+                           findings)
+    if findings:
+        failures.append(f"母数の相棒だけで鳴った: {[(f[1], f[3]) for f in findings]}")
+
+    for label, doc in SELFTEST_CONDITION_OK:
+        findings = _condition_findings(doc)
+        if findings:
+            failures.append(f"正しい形（{label}）で鳴った: {[(f[0], f[1], f[3]) for f in findings]}")
+
+    # **見るのは詳細だけである**（実測したのがそこだから）。**表そのものを字で釘付けにする**
+    # ——対照実験を `CONDITION_LAYOUTS` から組むと、**表を広げても実験が一緒に広がって釣り合う**。
+    if set(CONDITION_LAYOUTS) != {"DetailLayouts"}:
+        failures.append(f"CONDITION_LAYOUTS が {CONDITION_LAYOUTS} になっている"
+                        "（詳細だけと決めたのは 2026-09-16 の実測の範囲。広げるなら測り直す）")
+    if set(DATA_CONDITIONS) != {"DataWriteCondition"}:
+        failures.append(f"DATA_CONDITIONS が {DATA_CONDITIONS} になっている"
+                        "（DataReadCondition はサーバ側で SQL に付くので外してある。"
+                        "入れるなら測り直す）")
+
+    # **母数が枝ごとに 0 なら鳴る**（qa/03 L-15）。**理由で文言が分かれること**まで見る。
+    findings = []
+    check_condition_fields([], findings)
+    if not [f for f in findings if "条件が 1 つも見つからない" in f[3]]:
+        failures.append("行の条件が 0 件でも鳴らない（ラチェットが死んでいる）")
+    findings = []
+    check_condition_fields([(_self_path(), _condition_module(layouts={}))], findings)
+    if [f for f in findings if "突き合わせた欄が 1 つも無い" in f[3]]:
+        failures.append("詳細レイアウトが無い形で「突き合わせが 0」の文言が出た"
+                        "（そちらは「レイアウトが無い」で言うべきである）")
+
+    # **配線の置き場**（`check_condition_wiring`）。表に無い置き場に条件を書いたら鳴る。
+    for label, doc in [
+        ("一覧ページの欄の条件",
+         _module(ListPageFieldDesign={"SearchCondition": {"Condition": {"Children": [
+             {"SearchTargetVariable": "Status.Value"}]}}})),
+        ("並べ替えの条件",
+         _module(SortConditions=[{"Condition": {"Children": [
+             {"SearchTargetVariable": "Status.Value"}]}}])),
+    ]:
+        findings = []
+        check_condition_wiring([(_self_path(), doc)], findings)
+        if not [f for f in findings if "この置き場を数えていない" in f[3]]:
+            failures.append(f"数えていない置き場（{label}）で D-34 が鳴らない")
+
+    # **免除表は両側から守る**——載せた鍵が実デザインに 1 件も無ければ、その行はもう要らない。
+    findings = []
+    check_condition_wiring([(_self_path(), _module())], findings)
+    if not [f for f in findings if "実デザインに 1 件も無い" in f[3]]:
+        failures.append("免除表の行が実デザインに無くても鳴らない（表が腐っても気づけない）")
+
+    # **免除している置き場では鳴らない。**
+    findings = []
+    check_condition_wiring([(_self_path(), _module(Fields=[{"SearchCondition": {"Condition": {
+        "Children": [{"SearchTargetVariable": "IsActive.Value"}]}}}]))], findings)
+    if findings:
+        failures.append(f"免除した置き場で鳴った: {[(f[1], f[3]) for f in findings]}")
+
+    # **実デザインに対する対照実験**——本番の条件が本当に支えられているか。
+    # **剥ぎ先は字で書く**（`CONDITION_LAYOUTS` から組むと、表を広げても実験が追従して釣り合う）。
+    stripped = []
+    for path, doc in real_modules:
+        doc = copy.deepcopy(doc)
+        for layout in (doc.get("DetailLayouts") or {}).values():
+            layout["Layout"] = {}
+            layout["DataOnlyFields"] = []
+        stripped.append((path, doc))
+    findings = []
+    check_condition_fields(stripped, findings)
+    if not [f for f in findings if "取ってこない" in f[3]]:
+        failures.append("実デザインの詳細レイアウトを空にしても D-34 が鳴らない"
+                        "（本番の条件を 1 つも支えていない）")
+
+    # **本番の母数を実数で釘付けにする**（qa/02 のラウンド 103・115）。
+    # **1 件は 0 件より強くない**——`seen` の数え方がずれても、0 でなければ沈黙するからである。
+    # **2 件目が書かれた日にここが赤くなり、書いた人の目が 1 回入る。**
+    real = check_condition_fields(real_modules, [])
+    if real != {"条件": 1, "欄": 1}:
+        failures.append(f"本番の行レベルの条件の数が {real} になっている"
+                        "（増減したら、この数も一緒に直す）")
+
+    # **報告の行が検体の外に出ていないか**（qa/02 のラウンド 103・115）。
+    # `main()` が母数を印字に渡していることを、字面で見る。
+    main_source = io.open(__file__, encoding="utf-8").read()
+    for label in ("行の条件", "行の条件が見る欄"):
+        if f'"{label}": condition_reads[' not in main_source:
+            failures.append(f"main() が「{label}」を報告に渡していない（母数が印字から消える）")
+
+
     # **配線**。検査を書いても main() から呼ばれていなければ効かない（qa/03 L-15）。
     source = io.open(__file__, encoding="utf-8").read()
     # **`main()` の中だけを見る。** ファイル末尾までを見ると、
@@ -3311,7 +3788,9 @@ def selftest():
     after = source[source.index("def main("):]
     marker = chr(10) + "def "
     end = after.index(marker, 1) if marker in after[1:] else len(after)
-    body = after[:end]
+    # **注記は配線ではない。** 潰さないと、**呼び出しを `#` でコメントアウトしただけで緑になる**
+    # （2026-09-16 の自己レビューで実測）。
+    body = _blank(after[:end], _STRINGS + "|#[^" + chr(10) + "]*")
     for name in WIRED_CHECKS:
         if f"{name}(" not in body:
             failures.append(f"{name} が main() から呼ばれていない")
@@ -3338,7 +3817,8 @@ def selftest():
         print(f"error\tSELFTEST\t{relative(__file__)}\t{failure}")
 
     cases = (len(SELFTEST_CASES) + len(SELFTEST_TRIM_CASES)
-             + len(SELFTEST_READ_CASES) + len(SELFTEST_READ_OK))
+             + len(SELFTEST_READ_CASES) + len(SELFTEST_READ_OK)
+             + len(SELFTEST_CONDITION_CASES) + len(SELFTEST_CONDITION_OK))
     print(f"lint_design: すべて期待どおり（検体 {cases} 件）" if not failures
           else f"lint_design: {len(failures)} 件が期待と違う")
     return 1 if failures else 0
