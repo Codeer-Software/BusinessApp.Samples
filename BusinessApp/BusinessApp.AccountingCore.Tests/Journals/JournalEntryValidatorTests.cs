@@ -359,7 +359,7 @@ public class JournalEntryValidatorTests
 
         Assert.Equal(
             "勘定科目「当座預金」は「補助科目を使う」がオンですが、選べる補助科目がありません。"
-            + "補助科目マスタに登録してから選んでください。",
+            + "補助科目マスタに登録してから、「補助科目」を選んでください。",
             violation.Message);
     }
 
@@ -501,7 +501,7 @@ public class JournalEntryValidatorTests
 
         Assert.Equal(1, violation.LineNo);
         Assert.Equal(
-            "勘定科目「売掛金」は「取引先を要する」がオンです。伝票の「取引先」か、この行の「取引先」を選んでください。",
+            "勘定科目「売掛金」は「取引先を要する」がオンです。伝票の「取引先」か、その行の「取引先」を選んでください。",
             violation.Message);
     }
 
@@ -517,7 +517,7 @@ public class JournalEntryValidatorTests
 
         Assert.Equal(
             "勘定科目「売掛金」は「取引先を要する」がオンですが、選べる取引先がありません。"
-            + "取引先マスタに登録するか、無効にした取引先を有効に戻してから選んでください。",
+            + "取引先マスタに登録するか、無効にした取引先を有効に戻してから、伝票の「取引先」か、その行の「取引先」を選んでください。",
             violation.Message);
     }
 
@@ -960,7 +960,7 @@ public class JournalEntryValidatorTests
         var violation = AssertViolation(JournalViolationCodes.PartnerInactive, violations);
         Assert.Null(violation.LineNo);
         Assert.Equal(
-            "取引先「取引をやめた先」は無効なので、新しい計上には使えません。別の取引先を選ぶか、取引先マスタで有効に戻してください。",
+            "取引先「取引をやめた先」は「有効」がオフです。別の取引先を選ぶか、取引先マスタで有効に戻してください。",
             violation.Message);
         Assert.Equal(ViolationSeverity.Error, violation.Severity);
         Assert.Single(violations, v => v.Code == JournalViolationCodes.PartnerInactive);
@@ -1037,7 +1037,7 @@ public class JournalEntryValidatorTests
         var violation = AssertViolation(JournalViolationCodes.AccountInactive, violations);
         Assert.Null(violation.LineNo);
         Assert.Equal(
-            "勘定科目「廃止した費用科目」は無効なので、新しい計上には使えません。行 1・行 2 で使っています。"
+            "勘定科目「廃止した費用科目」は「有効」がオフです。行 1・行 2 で使っています。"
             + "別の勘定科目を選ぶか、勘定科目マスタで有効に戻してください。",
             violation.Message);
         Assert.Equal(ViolationSeverity.Error, violation.Severity);
@@ -1062,7 +1062,7 @@ public class JournalEntryValidatorTests
 
         Assert.Equal(1, violation.LineNo);
         Assert.Equal(
-            "勘定科目「廃止した費用科目」は無効なので、新しい計上には使えません。"
+            "勘定科目「廃止した費用科目」は「有効」がオフです。"
             + "別の勘定科目を選ぶか、勘定科目マスタで有効に戻してください。",
             violation.Message);
     }
@@ -1266,6 +1266,569 @@ public class JournalEntryValidatorTests
         Assert.Equal([1, 2], inactive.Select(v => v.LineNo).ToArray());
     }
 
+    /// <summary>
+    /// <b>要件の断りも、科目ごとに 1 件。</b> 同じ科目を何行で使っても文は 1 つで、場所を並べる
+    /// （docs/21 §2-6）——売掛金を 5 行書けば、直す前は同じ文が 5 つ並んでいた。
+    /// </summary>
+    [Fact]
+    public void 取引先を要する科目が何行あっても断りは_1_件で場所を並べる()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.AccountsReceivable, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.AccountsReceivable, 1_000),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 2_000,
+                department: AccountingFixture.SalesDepartment));
+
+        var violations = Validate(entry);
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerRequired, violations);
+        Assert.Null(violation.LineNo);
+        Assert.Equal(
+            "勘定科目「売掛金」は「取引先を要する」がオンです。"
+            + "伝票の「取引先」か、行 1・行 2 の「取引先」を選んでください。",
+            violation.Message);
+        Assert.Equal(ViolationSeverity.Error, violation.Severity);
+        Assert.True(violations.HasError());
+        Assert.Single(violations, v => v.Code == JournalViolationCodes.PartnerRequired);
+    }
+
+    /// <summary>1 行だけなら「この行の」で指す（接頭辞が行番号を運ぶ。docs/21 §3）。</summary>
+    [Fact]
+    public void 取引先を要する科目が_1_行だけなら行番号で指す()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.AccountsReceivable, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Sales, 1_000,
+                department: AccountingFixture.SalesDepartment));
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerRequired, Validate(entry));
+
+        Assert.Equal(1, violation.LineNo);
+        Assert.Equal(
+            "勘定科目「売掛金」は「取引先を要する」がオンです。"
+            + "伝票の「取引先」か、その行の「取引先」を選んでください。",
+            violation.Message);
+    }
+
+    /// <summary><b>科目が違えば別に断る。</b> まとめる鍵は科目である。</summary>
+    [Fact]
+    public void 取引先を要する科目が_2_つなら_2_件出る()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.AccountsReceivable, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.OtherReceivable, 1_000),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 2_000,
+                department: AccountingFixture.SalesDepartment));
+
+        var required = Validate(entry)
+            .Where(v => v.Code == JournalViolationCodes.PartnerRequired)
+            .ToArray();
+
+        Assert.Equal(2, required.Length);
+        Assert.Contains(required, v => v.LineNo == 1 && v.Message.Contains("売掛金", StringComparison.Ordinal));
+        Assert.Contains(required, v => v.LineNo == 2 && v.Message.Contains("未収入金", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// <b>伝票に取引先があれば断らない</b>（判定は実効値。docs/15 §1-2）——
+    /// <b>断りに届かない行を場所に数えない</b>ことを、この検体が押さえる。
+    /// </summary>
+    [Fact]
+    public void 伝票に取引先があれば取引先を要する科目の行は場所に数えない()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.AccountsReceivable, 1_000,
+                partner: AccountingFixture.Partner),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.AccountsReceivable, 1_000),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 2_000,
+                department: AccountingFixture.SalesDepartment));
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerRequired, Validate(entry));
+
+        Assert.Equal(2, violation.LineNo);
+        Assert.DoesNotContain("行 1", violation.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>補助科目が要る断りも、科目ごとに 1 件。</summary>
+    [Fact]
+    public void 補助科目を使う科目が何行あっても断りは_1_件で場所を並べる()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Cash, 2_000));
+
+        var violations = Validate(entry);
+
+        var violation = AssertViolation(JournalViolationCodes.SubAccountRequired, violations);
+        Assert.Null(violation.LineNo);
+        Assert.Equal(
+            "勘定科目「普通預金」は「補助科目を使う」がオンです。行 1・行 2 の「補助科目」を選んでください。",
+            violation.Message);
+        Assert.Equal(ViolationSeverity.Error, violation.Severity);
+        Assert.Single(violations, v => v.Code == JournalViolationCodes.SubAccountRequired);
+    }
+
+    /// <summary><b>選べる補助科目が無い科目でも、まとめ方は同じ。</b></summary>
+    [Fact]
+    public void 選べる補助科目が無い科目でも断りは_1_件で場所を並べる()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.CurrentAccount, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.CurrentAccount, 1_000),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Cash, 2_000));
+
+        var violation = AssertViolation(JournalViolationCodes.SubAccountRequired, Validate(entry));
+
+        Assert.Equal(
+            "勘定科目「当座預金」は「補助科目を使う」がオンですが、選べる補助科目がありません。"
+            + "補助科目マスタに登録してから、行 1・行 2 の「補助科目」を選んでください。",
+            violation.Message);
+    }
+
+    /// <summary>持てない補助科目の断りも、科目ごとに 1 件。</summary>
+    [Fact]
+    public void 補助科目を使わない科目が何行あっても断りは_1_件で場所を並べる()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 1_000,
+                department: AccountingFixture.SalesDepartment, subAccountId: AccountingFixture.MainBank),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 1_000,
+                department: AccountingFixture.SalesDepartment, subAccountId: AccountingFixture.MainBank),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Cash, 2_000));
+
+        var violations = Validate(entry);
+
+        var violation = AssertViolation(JournalViolationCodes.SubAccountNotAllowed, violations);
+        Assert.Null(violation.LineNo);
+        Assert.Equal(
+            "勘定科目「消耗品費」は「補助科目を使う」がオフです。行 1・行 2 の「補助科目」を空にしてください。",
+            violation.Message);
+        Assert.Single(violations, v => v.Code == JournalViolationCodes.SubAccountNotAllowed);
+    }
+
+    /// <summary>
+    /// <b>持てない補助科目の行は、そこで打ち切る。</b> まとめても打ち切りは変わらない
+    /// ——2 行目も親の一致や無効の検査へは進まない。
+    /// </summary>
+    [Fact]
+    public void 持てない補助科目の行はまとめても打ち切る()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 1_000,
+                department: AccountingFixture.SalesDepartment, subAccountId: AccountingFixture.RetiredBank),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 1_000,
+                department: AccountingFixture.SalesDepartment, subAccountId: AccountingFixture.RetiredBank),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Cash, 2_000));
+
+        var violations = Validate(entry);
+
+        Assert.Single(violations, v => v.Code == JournalViolationCodes.SubAccountNotAllowed);
+        Assert.DoesNotContain(violations, v => v.Code == JournalViolationCodes.SubAccountInactive);
+        // **打ち切りは親の一致の検査より前である**（続けると、この行に 2 つ目の断りが付く）。
+        Assert.DoesNotContain(violations, v => v.Code == JournalViolationCodes.SubAccountMismatch);
+    }
+
+    /// <summary>損益科目の部門の断りも、科目ごとに 1 件。<b>次の一手も付く</b>（docs/21 §2-3）。</summary>
+    [Fact]
+    public void 部門の要る科目が何行あっても断りは_1_件で場所を並べる()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 1_000),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Cash, 2_000));
+
+        var violations = Validate(entry);
+
+        var violation = AssertViolation(JournalViolationCodes.DepartmentMissing, violations);
+        Assert.Null(violation.LineNo);
+        Assert.Equal(
+            "勘定科目「消耗品費」には「部門」が必要です。行 1・行 2 の「部門」を選んでください。",
+            violation.Message);
+        Assert.True(violations.HasError());
+        Assert.Single(violations, v => v.Code == JournalViolationCodes.DepartmentMissing);
+    }
+
+    /// <summary>1 行だけなら行番号で指す（部門の側）。</summary>
+    [Fact]
+    public void 部門の要る科目が_1_行だけなら行番号で指す()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Cash, 1_000));
+
+        var violation = AssertViolation(JournalViolationCodes.DepartmentMissing, Validate(entry));
+
+        Assert.Equal(1, violation.LineNo);
+        Assert.Equal(
+            "勘定科目「消耗品費」には「部門」が必要です。「部門」を選んでください。",
+            violation.Message);
+    }
+
+    /// <summary><b>損益科目が 2 つなら 2 件。</b></summary>
+    [Fact]
+    public void 部門の要る科目が_2_つなら_2_件出る()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Sales, 1_000));
+
+        var missing = Validate(entry)
+            .Where(v => v.Code == JournalViolationCodes.DepartmentMissing)
+            .ToArray();
+
+        Assert.Equal(2, missing.Length);
+        Assert.Contains(missing, v => v.LineNo == 1 && v.Message.Contains("消耗品費", StringComparison.Ordinal));
+        Assert.Contains(missing, v => v.LineNo == 2 && v.Message.Contains("売上高", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// <b>勘定科目がマスタに無い行は、要件の場所に数えない。</b>
+    /// その行は勘定科目の断りで打ち切られ、要件の検査に届かない。
+    /// </summary>
+    [Fact]
+    public void 勘定科目がマスタに無い行は要件の場所に数えない()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.UnknownAccount, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 1_000),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Cash, 2_000));
+
+        var violation = AssertViolation(JournalViolationCodes.DepartmentMissing, Validate(entry));
+
+        Assert.Equal(2, violation.LineNo);
+        Assert.DoesNotContain("行 1", violation.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>同じ科目に 2 種類の要件が立つなら、どちらも出る。</b>
+    /// 控えを断りごとに分けていないと、<b>先に来たほうが後を黙らせる</b>。
+    /// </summary>
+    [Fact]
+    public void 同じ科目に要件が_2_つ立つならどちらも断る()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 2_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.ServiceRevenue, 1_000),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.ServiceRevenue, 1_000));
+
+        var violations = Validate(entry);
+
+        var missing = AssertViolation(JournalViolationCodes.DepartmentMissing, violations);
+        Assert.Equal(
+            "勘定科目「役務収益」には「部門」が必要です。行 2・行 3 の「部門」を選んでください。",
+            missing.Message);
+        var required = AssertViolation(JournalViolationCodes.PartnerRequired, violations);
+        Assert.Equal(
+            "勘定科目「役務収益」は「取引先を要する」がオンです。"
+            + "伝票の「取引先」か、行 2・行 3 の「取引先」を選んでください。",
+            required.Message);
+    }
+
+    /// <summary>
+    /// <b>補助科目が要る科目が 2 つなら 2 件。</b> まとめる鍵は科目である——
+    /// <b>しかも文面が違う</b>（片方は「選んでください」、片方は「登録してから」）。
+    /// </summary>
+    [Fact]
+    public void 補助科目を使う科目が_2_つなら_2_件出る()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.CurrentAccount, 1_000),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Cash, 2_000));
+
+        var required = Validate(entry)
+            .Where(v => v.Code == JournalViolationCodes.SubAccountRequired)
+            .ToArray();
+
+        Assert.Equal(2, required.Length);
+        Assert.Equal(
+            "勘定科目「普通預金」は「補助科目を使う」がオンです。「補助科目」を選んでください。",
+            Assert.Single(required, v => v.LineNo == 1).Message);
+        Assert.Equal(
+            "勘定科目「当座預金」は「補助科目を使う」がオンですが、選べる補助科目がありません。"
+            + "補助科目マスタに登録してから、「補助科目」を選んでください。",
+            Assert.Single(required, v => v.LineNo == 2).Message);
+    }
+
+    /// <summary><b>持てない補助科目の科目が 2 つなら 2 件。</b></summary>
+    [Fact]
+    public void 補助科目を使わない科目が_2_つなら_2_件出る()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 1_000,
+                department: AccountingFixture.SalesDepartment, subAccountId: AccountingFixture.MainBank),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.Cash, 1_000,
+                subAccountId: AccountingFixture.SubAccountOfCash));
+
+        var notAllowed = Validate(entry)
+            .Where(v => v.Code == JournalViolationCodes.SubAccountNotAllowed)
+            .ToArray();
+
+        Assert.Equal(2, notAllowed.Length);
+        Assert.Contains(notAllowed, v => v.LineNo == 1 && v.Message.Contains("消耗品費", StringComparison.Ordinal));
+        Assert.Contains(notAllowed, v => v.LineNo == 2 && v.Message.Contains("現金", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// <b>まとめた要件の断りは、取消では警告に落ちる</b>（<c>ReversalOnlySeverity</c>）。
+    /// <b>計上は止まらない</b>——規則より前に計上した伝票を取り消せなくしない（docs/15 §1・ADR-0004）。
+    /// <b>まとめ方は重さを見ていない</b>ので、場所の並びは変わらない。
+    /// </summary>
+    [Theory]
+    [InlineData(JournalViolationCodes.PartnerRequired)]
+    [InlineData(JournalViolationCodes.SubAccountRequired)]
+    [InlineData(JournalViolationCodes.SubAccountNotAllowed)]
+    public void 取消ではまとめた要件の断りが警告に落ちる(string code)
+    {
+        var entry = RequirementEntry(code) with
+        {
+            EntryType = EntryType.Reversal,
+            OriginalEntryId = new JournalEntryId(2),
+        };
+
+        var violations = Validate(entry);
+
+        var violation = AssertViolation(code, violations);
+        Assert.Equal(ViolationSeverity.Warning, violation.Severity);
+        Assert.Contains("行 1・行 2", violation.Message, StringComparison.Ordinal);
+        Assert.Single(violations, v => v.Code == code);
+        Assert.False(violations.HasError());
+    }
+
+    /// <summary><b>まとめた要件の断りは、通常の伝票では差し戻しである</b>（計上が止まる）。</summary>
+    [Theory]
+    [InlineData(JournalViolationCodes.PartnerRequired)]
+    [InlineData(JournalViolationCodes.SubAccountRequired)]
+    [InlineData(JournalViolationCodes.SubAccountNotAllowed)]
+    [InlineData(JournalViolationCodes.DepartmentMissing)]
+    public void まとめた要件の断りは通常の伝票では差し戻しになる(string code)
+    {
+        var violations = Validate(RequirementEntry(code));
+
+        var violation = AssertViolation(code, violations);
+        Assert.Equal(ViolationSeverity.Error, violation.Severity);
+        Assert.True(violations.HasError());
+        Assert.Null(violation.LineNo);
+        Assert.Contains("行 1・行 2", violation.Message, StringComparison.Ordinal);
+        Assert.Single(violations, v => v.Code == code);
+    }
+
+    /// <summary>同じ科目の 2 行が、その要件だけで断られる伝票を組む。</summary>
+    private static JournalEntry RequirementEntry(string code)
+    {
+        var (account, subAccount) = code switch
+        {
+            JournalViolationCodes.PartnerRequired => (AccountingFixture.AccountsReceivable, (SubAccountId?)null),
+            JournalViolationCodes.SubAccountRequired => (AccountingFixture.BankAccount, null),
+            JournalViolationCodes.SubAccountNotAllowed => (AccountingFixture.SuppliesExpense, AccountingFixture.MainBank),
+            _ => (AccountingFixture.SuppliesExpense, null),
+        };
+        var department = code == JournalViolationCodes.SubAccountNotAllowed
+            ? AccountingFixture.SalesDepartment
+            : (DepartmentId?)null;
+
+        return AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, account, 1_000,
+                department: department, subAccountId: subAccount),
+            AccountingFixture.Line(2, DebitCredit.Debit, account, 1_000,
+                department: department, subAccountId: subAccount),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Cash, 2_000));
+    }
+
+    /// <summary>
+    /// <b>補助科目が既に入っている行は、要る側の場所に数えない。</b>
+    /// 数えると「選んでください」と言われた行に、もう選んである行が混ざる。
+    /// </summary>
+    [Fact]
+    public void 補助科目が入っている行は要る側の場所に数えない()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000,
+                subAccountId: AccountingFixture.MainBank),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.BankAccount, 1_000),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Cash, 2_000));
+
+        var violation = AssertViolation(JournalViolationCodes.SubAccountRequired, Validate(entry));
+
+        Assert.Equal(2, violation.LineNo);
+        Assert.Equal(
+            "勘定科目「普通預金」は「補助科目を使う」がオンです。「補助科目」を選んでください。",
+            violation.Message);
+    }
+
+    /// <summary>
+    /// <b>マスタに無い補助科目の行は、持てない側の場所に数えない。</b>
+    /// その行の直し方は「空にする」ではなく「実在するものを選ぶ」である。
+    /// </summary>
+    [Fact]
+    public void マスタに無い補助科目の行は持てない側の場所に数えない()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                subAccountId: AccountingFixture.UnknownSubAccount),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                subAccountId: AccountingFixture.SubAccountOfCash),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 2_000,
+                department: AccountingFixture.SalesDepartment));
+
+        var violations = Validate(entry);
+
+        Assert.Equal(1, AssertViolation(JournalViolationCodes.SubAccountUnknown, violations).LineNo);
+        var notAllowed = AssertViolation(JournalViolationCodes.SubAccountNotAllowed, violations);
+        Assert.Equal(2, notAllowed.LineNo);
+        Assert.Equal(
+            "勘定科目「現金」は「補助科目を使う」がオフです。「補助科目」を空にしてください。",
+            notAllowed.Message);
+    }
+
+    /// <summary>
+    /// <b>場所が 1 つも残らないなら、行を名乗らない。</b>
+    /// 行番号が 0 以下の行は場所に出せない（存在しない行を名指ししない）ので、
+    /// 接頭辞も付かない——そこで「その行の」と言うと、指す先が無くなる。
+    /// </summary>
+    [Fact]
+    public void 場所が_1_つも残らないなら行を名乗らない()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(0, DebitCredit.Debit, AccountingFixture.AccountsReceivable, 1_000),
+            AccountingFixture.Line(1, DebitCredit.Credit, AccountingFixture.Cash, 1_000));
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerRequired, Validate(entry));
+
+        Assert.Null(violation.LineNo);
+        Assert.Equal(
+            "勘定科目「売掛金」は「取引先を要する」がオンです。"
+            + "伝票の「取引先」か、明細の「取引先」を選んでください。",
+            violation.Message);
+    }
+
+    /// <summary>
+    /// <b>消費税行は、要件の場所を親へ畳まない</b>（部門を除く）。
+    /// <b>税行が本体行から継ぐのは部門だけ</b>なので、取引先を親へ畳むと
+    /// <b>文が名乗る科目と指す行が食い違い</b>、本体行を直しても弾かれ続ける。
+    /// </summary>
+    [Fact]
+    public void 消費税行の要件は親へ畳まない()
+    {
+        var taxLine = AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.AccountsReceivable, 100) with
+        {
+            IsTaxLine = true,
+            ParentLineNo = 1,
+        };
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
+            taxLine,
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 1_100,
+                department: AccountingFixture.SalesDepartment));
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerRequired, Validate(entry));
+
+        // **行 1 は現金**である。親へ畳むと、売掛金の断りが現金の行を指す。
+        Assert.Equal(2, violation.LineNo);
+        Assert.Equal(
+            "勘定科目「売掛金」は「取引先を要する」がオンです。"
+            + "伝票の「取引先」か、その行の「取引先」を選んでください。",
+            violation.Message);
+    }
+
+    /// <summary>
+    /// <b>補助科目の要件も、消費税行を親へ畳まない。</b>
+    /// 税行が本体行から継ぐのは部門だけなので、畳むと<b>別の科目の行を名指しする</b>。
+    /// </summary>
+    [Fact]
+    public void 消費税行の補助科目の要件も親へ畳まない()
+    {
+        var taxLine = AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.BankAccount, 100) with
+        {
+            IsTaxLine = true,
+            ParentLineNo = 1,
+        };
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
+            taxLine,
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 1_100,
+                department: AccountingFixture.SalesDepartment));
+
+        var violation = AssertViolation(JournalViolationCodes.SubAccountRequired, Validate(entry));
+
+        // **行 1 は現金**である。親へ畳むと、普通預金の断りが現金の行を指す。
+        Assert.Equal(2, violation.LineNo);
+    }
+
+    /// <summary>
+    /// <b>場所は控えに入れた順ではなく、値の順に並べる。</b>
+    /// 部門だけは税行を親へ畳むので、<b>行番号の順に集めても場所が逆転しうる</b>
+    /// （行 3 の本体、行 5 の税行が行 2 を指す）。
+    /// </summary>
+    [Fact]
+    public void 場所は控えの順ではなく値の順に並べる()
+    {
+        var taxLine = AccountingFixture.Line(5, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 100) with
+        {
+            IsTaxLine = true,
+            ParentLineNo = 2,
+        };
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(3, DebitCredit.Debit, AccountingFixture.SuppliesExpense, 1_000),
+            taxLine,
+            AccountingFixture.Line(6, DebitCredit.Credit, AccountingFixture.Cash, 1_100));
+
+        var violation = AssertViolation(JournalViolationCodes.DepartmentMissing, Validate(entry));
+
+        Assert.Contains("行 2・行 3 の「部門」", violation.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>同じ科目に 3 つの要件が同時に立つなら、3 つとも出る。</b>
+    /// 控えを分けていないと、<b>先に来たほうが後を黙らせる</b>。
+    /// </summary>
+    [Fact]
+    public void 同じ科目に要件が_3_つ立つならどれも断る()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 2_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.ServiceRevenue, 1_000),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.ServiceRevenue, 1_000));
+
+        var violations = Validate(entry);
+
+        foreach (var code in new[]
+                 {
+                     JournalViolationCodes.PartnerRequired,
+                     JournalViolationCodes.SubAccountRequired,
+                     JournalViolationCodes.DepartmentMissing,
+                 })
+        {
+            var violation = AssertViolation(code, violations);
+            Assert.Contains("行 2・行 3", violation.Message, StringComparison.Ordinal);
+            Assert.Single(violations, v => v.Code == code);
+        }
+    }
+
     /// <summary>無効な部門の断りも、直し先ごとに 1 件。</summary>
     [Fact]
     public void 同じ無効な部門を何行で使っても断りは_1_件で場所を並べる()
@@ -1283,7 +1846,7 @@ public class JournalEntryValidatorTests
         var violation = AssertViolation(JournalViolationCodes.DepartmentInactive, violations);
         Assert.Null(violation.LineNo);
         Assert.Equal(
-            "部門「廃止した部門」は無効なので、新しい計上には使えません。行 1・行 2 で使っています。"
+            "部門「廃止した部門」は「有効」がオフです。行 1・行 2 で使っています。"
             + "別の部門を選ぶか、部門マスタで有効に戻してください。",
             violation.Message);
         Assert.Equal(ViolationSeverity.Error, violation.Severity);
@@ -1305,7 +1868,7 @@ public class JournalEntryValidatorTests
 
         Assert.Equal(1, violation.LineNo);
         Assert.Equal(
-            "部門「廃止した部門」は無効なので、新しい計上には使えません。"
+            "部門「廃止した部門」は「有効」がオフです。"
             + "別の部門を選ぶか、部門マスタで有効に戻してください。",
             violation.Message);
     }
@@ -1426,7 +1989,7 @@ public class JournalEntryValidatorTests
         var violation = AssertViolation(JournalViolationCodes.SubAccountInactive, violations);
         Assert.Null(violation.LineNo);
         Assert.Equal(
-            "補助科目「解約した口座」は無効なので、新しい計上には使えません。行 1・行 2 で使っています。"
+            "補助科目「解約した口座」は「有効」がオフです。行 1・行 2 で使っています。"
             + "別の補助科目を選ぶか、補助科目マスタで有効に戻してください。",
             violation.Message);
         Assert.Equal(ViolationSeverity.Error, violation.Severity);
@@ -1448,7 +2011,7 @@ public class JournalEntryValidatorTests
 
         Assert.Equal(1, violation.LineNo);
         Assert.Equal(
-            "補助科目「解約した口座」は無効なので、新しい計上には使えません。"
+            "補助科目「解約した口座」は「有効」がオフです。"
             + "別の補助科目を選ぶか、補助科目マスタで有効に戻してください。",
             violation.Message);
     }
@@ -1615,7 +2178,7 @@ public class JournalEntryValidatorTests
         var violation = AssertViolation(JournalViolationCodes.PartnerInactive, violations);
         Assert.Null(violation.LineNo);
         Assert.Equal(
-            "取引先「取引をやめた先」は無効なので、新しい計上には使えません。伝票・行 1・行 2 で使っています。"
+            "取引先「取引をやめた先」は「有効」がオフです。伝票・行 1・行 2 で使っています。"
             + "別の取引先を選ぶか、取引先マスタで有効に戻してください。",
             violation.Message);
         Assert.Equal(ViolationSeverity.Error, violation.Severity);

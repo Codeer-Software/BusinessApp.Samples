@@ -210,7 +210,7 @@ public static class JournalLineRules
         => $"行番号 {lineNo} が 2 つの明細に付いています。行番号は画面が自動で振るので、明細を入力し直してください。";
 
     /// <summary>税区分が空（<see cref="JournalViolationCodes.TaxCategoryMissing"/>）。</summary>
-    public const string TaxCategoryMissing = "税区分を選んでください。税に関係のない行にも「対象外」を選びます。";
+    public const string TaxCategoryMissing = "「税区分」を選んでください。税に関係のない行にも「対象外」を選びます。";
 
     // --- 利用者が触ってよい場面が無い欄（qa/03 L-30）---
     //
