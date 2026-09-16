@@ -203,6 +203,16 @@ DATA_CONDITIONS = ("DataWriteCondition",)
 # 実測したのが詳細だからである（qa/04 の同日）。**一覧で行を編集する形は測っていない。**
 CONDITION_LAYOUTS = ("DetailLayouts",)
 
+# **欄の絞り込みを突き合わせるレイアウトの種類**（D-35。qa/01 F-44）。
+#
+# **`CHECKED_LAYOUTS` と値は同じだが、理由が違うので分ける**（D-34 の `CONDITION_LAYOUTS` と同じ作法）。
+# あちらは「**読み**を突き合わせる場所」、こちらは「**絞り込みが効く**場所」である。
+# **検索レイアウトを外した理由も違う**——CLB の `CLAUDE.md` の 65 番は
+# 「候補絞り込みの `Variable` が参照するのは `Value` だが、検索フォームの入力は `SearchValue` に入る」
+# ため「そのままでは連動しない」と書き、**処方は `OnSearchDataChanged` で写すこと**（`DataOnlyFields` ではない）。
+# **直し方が違うので外した。そちらは測っていない。**
+CANDIDATE_LAYOUTS = ("DetailLayouts", "ListLayouts")
+
 # 条件の変数（`SearchTargetVariable`）を書ける置き場のうち、**D-34 が数えているもの**。
 # `User*Condition` は `AppUser` の欄を見る（サーバ側で今の利用者に当てる）ので、行の話ではない。
 CONDITION_ROOTS = ("UserWriteCondition", "UserReadCondition") + DATA_CONDITIONS
@@ -213,10 +223,9 @@ CONDITION_ROOTS = ("UserWriteCondition", "UserReadCondition") + DATA_CONDITIONS
 CONDITION_WIRING_EXEMPTIONS = {
     "Fields/[]/SearchCondition":
         "欄の**候補の絞り込み**（`LinkField` / `ListField` の検索条件）。"
-        "**左辺（`SearchTargetVariable`）は候補側のモジュールの欄**で、行の条件とは別の機構である。"
-        "**右辺（`Variable`）にこちらの欄を書く形は同じ機構に乗る**"
-        "（`JournalLine` の補助科目の絞りが `Account.Value` を見ている）ので、"
-        "**次に検査を足す回**に覆う（docs/README の保留リスト）",
+        "**左辺（`SearchTargetVariable`）は候補側のモジュールの欄**なので、"
+        "こちらのレイアウトが取ってくるかの話ではない。"
+        "**右辺（`Variable`）にこちらの欄を書く形は D-35 が見る**",
 }
 
 
@@ -1384,7 +1393,10 @@ def check_condition_wiring(modules, findings):
 
     D-34 が突き合わせるのは `CONDITION_ROOTS` の条件だけである。**CLB にはその外にも
     条件を書ける場所がある**——欄の `SearchCondition`（候補の絞り込み）、
-    `ListPageFieldDesign.SearchCondition` ほか。**そこに書いた条件は D-34 の網から静かに外れる**ので、
+    `ListPageFieldDesign.SearchCondition`、**ページフレームの
+    `ListPageDesign.ListFieldDesign.SearchCondition`**（CLB の `CLAUDE.md` の 16 番が
+    「一覧ページのソートは PageFrame で設定」と、**ここを正典**にしている）ほか。
+    **だからモジュールとページフレームの両方を歩く。****そこに書いた条件は D-34 の網から静かに外れる**ので、
     **逆向き**——表に無い置き場に条件の変数があれば赤——を見る
     （self-review スキル §9 の「除外表・許可表は両側から守っているか」）。
 
@@ -1520,6 +1532,168 @@ def check_condition_fields(modules, findings):
         findings.append((SEV_ERROR, "D-34", relative(DESIGN_DIR),
                          "行レベルの書き込み条件はあるのに、突き合わせた欄が 1 つも無い"
                          "（check_condition_fields の突き合わせ方を疑う）"))
+    return counts
+
+
+def condition_right_hands(condition):
+    """欄の絞り込みが見ている**こちらの欄**（比較の右辺）を順に返す。
+
+    **拾うのは `FieldVariableMatchCondition` の `Variable` だけ**である——**型で拾う**。
+    `Variable` という名のプロパティは他にもあり（`SortCondition.Variable` は**候補側**の並べ替え、
+    `LinkField.ValueVariable` / `DisplayTextVariable` は**参照先**の取得式）、
+    **そちらはこちらのレイアウトの話ではない**。
+    **`FieldMatchCondition` に `Condition` を書いた形は CLB が黙って捨てる**
+    （`_specs/SearchConditions.md`「**デシリアライズ時に黙って捨てられ、空の条件になる**」）ので、
+    型で拾えばその形も自然に外れる。
+
+    **空文字も返す**（右辺を選び忘れた形）——落とすと、母数にも指摘にも出ない。
+    **`CurrentUser.` で始まる道は落とす**（いまの利用者の欄）。
+    **木を全部たどる**——デザイナが書く条件は `FieldMatchCondition` で 1 段深くなる。
+    """
+    found = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("TypeFullName", "").endswith("FieldVariableMatchCondition"):
+                right = node.get("Variable")
+                if isinstance(right, str) and not right.startswith("CurrentUser."):
+                    found.append(right)
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(condition)
+    return found
+
+
+def _rows_not_candidates(field):
+    """その欄の絞り込みが出すのは**行**か（`ListField` ほか）。`LinkField` / `SelectField` は候補である。"""
+    return any(field.get("TypeFullName", "").endswith(kind)
+               for kind in ("ListFieldDesign", "DetailListFieldDesign", "TileListFieldDesign"))
+
+
+def candidate_filter_targets(doc):
+    """`(欄, 右辺の欄, レイアウトの種類, レイアウト名, 常に来る欄か)` を順に返す（D-35 の母数）。
+
+    **突き合わせるのは、その欄を取ってくるレイアウトだけ**である（`CANDIDATE_LAYOUTS`）。
+    """
+    for field in doc.get("Fields", []):
+        name = field.get("Name")
+        # **`SearchCondition` ごと歩く。** `Condition` の下だけだと `SortConditions` が網に入らず、
+        # **型で拾う判定が空回りする**（2026-09-16 の自己レビューで実測）。
+        for right in condition_right_hands(field.get("SearchCondition") or {}):
+            parts = right.split(".")
+            target = parts[0] if len(parts) == 2 else ""
+            for group, layout_name, layout in layouts_of(doc):
+                if group not in CANDIDATE_LAYOUTS or name not in loaded_fields(layout):
+                    continue
+                yield field, right, target, group, layout_name, target in ALWAYS_LOADED_FIELDS
+
+
+def check_candidate_filters(modules, findings):
+    """**欄の絞り込みが見ているこちらの欄を、その欄を取ってくるレイアウトが取ってくるか**（qa/01 F-44）。
+
+    **見る範囲と限界はここが持つ**（qa/01 は症状と前提だけを持つ）。
+
+    `LinkField` / `SelectField` / `ListField` ほか 12 の型が `SearchCondition` を持てる
+    （`_defaults/*FieldDesign.json`）。その条件は**この行の欄**を右辺にできる
+    （`JournalLine.SubAccount` が「その行の勘定科目に属する補助科目だけ」を出す形）。
+    **右辺はこちらの欄なので、レイアウトが取ってこなければ空になる**（F-34 と同じ機構）。
+
+    **2026-09-16 に 1.3.20 で実測した**（記録は qa/04 の同日）。明細の一覧から `Account` の列を
+    外すと、補助科目の**候補ダイアログ**は `(0件)` になった。**測ったのはこの 1 つ**である:
+    `LinkField` の候補・一覧のレイアウト・`AND` ＋ `Equal` の条件。
+    **`ListField` の行の取得で同じになるか、`IsOrMatch` / `IsNot` / 他の比較でどうなるかは測っていない。**
+    **なぜ 0 件になるかも測っていない**（空と突き合わせたのか、条件ごと壊れたのか）。
+
+    **見ていないもの**——
+    ①**検索レイアウト**（`CANDIDATE_LAYOUTS`）。**直し方が違う**——CLB の `CLAUDE.md` 65 番は
+    「候補絞り込みの `Variable` が参照するのは `Value` だが、検索フォームの入力は `SearchValue` に入る」
+    ため「そのままでは連動しない」と書き、処方は `OnSearchDataChanged` で `SearchValue` を `Value` へ
+    写すことである（`DataOnlyFields` ではない）。**そちらは測っていない。**
+    ②**そのレイアウトが画面から開けるか**——`CanNavigateToDetail: false` の詳細レイアウトも同じに数える。
+    ③**`AnchorTagFieldDesign` の `IdVariable` / `TitleVariable`**——こちらの欄を指すが、
+    本番の 10 本はどれもクエリモジュールで、**レイアウトに出していなくてもリンクは通っている**
+    （qa/04 の台本 B-05）。**機構が違うらしいが測っていない。**
+    ④**直る側**（`DataOnlyFields` に入れれば直ること）——**踏んでいない**。
+    """
+    counts = {"組": 0, "常に来る欄": 0}
+    for path, doc in modules:
+        module = doc.get("Name", "")
+        fields = {f.get("Name") for f in doc.get("Fields", []) if f.get("Name")}
+
+        for field in doc.get("Fields", []):
+            name = field.get("Name")
+            rights = condition_right_hands(field.get("SearchCondition") or {})
+            if not rights:
+                continue
+            placed = [g for g, _, layout in layouts_of(doc)
+                      if g in CANDIDATE_LAYOUTS and name in loaded_fields(layout)]
+            if not placed:
+                findings.append((SEV_ERROR, "D-35", relative(path),
+                                 f"{module}.{name} の絞り込みがこちらの欄を見ているが、"
+                                 "詳細にも一覧にもこの欄を出していない"
+                                 "（D-35 はこの形を数えていない。絞りが効く場所が決まらない）"))
+                continue
+
+            for right in rights:
+                parts = right.split(".")
+                if not right:
+                    findings.append((SEV_ERROR, "D-35", relative(path),
+                                     f"{module}.{name} の絞り込みの右辺が空である"
+                                     "（欄を選び忘れている。条件は書いたとおりに効かない）"))
+                    continue
+                if len(parts) < 2:
+                    findings.append((SEV_ERROR, "D-35", relative(path),
+                                     f"{module}.{name} の絞り込みの右辺 {right} が欄の名前だけである"
+                                     "（`<欄>.<呼び名>` で書く）"))
+                    continue
+                if len(parts) > 2:
+                    findings.append((SEV_ERROR, "D-35", relative(path),
+                                     f"{module}.{name} の絞り込みの右辺 {right} は多段の道である"
+                                     "（D-35 はこの形を数えていない。リンク先の欄は "
+                                     "LinkFieldNames で取ってくるもので、DataOnlyFields では来ない）"))
+                    continue
+
+                target = parts[0]
+                if target not in fields:
+                    findings.append((SEV_ERROR, "D-35", relative(path),
+                                     f"{module}.{name} の絞り込みが見ている {target} が"
+                                     "モジュールに無い（条件は書いたとおりに効かない。"
+                                     "0 件になるか例外になるかは測っていない）"))
+                    continue
+
+                shows = "行" if _rows_not_candidates(field) else "候補"
+                for other, _, _, group, layout_name, always in candidate_filter_targets(doc):
+                    if other is not field:
+                        continue
+                    layout = doc[group][layout_name]
+                    if always:
+                        # **`Id` などは常に来る**ので、この組は原理的に赤くならない。
+                        # **母数に混ぜない**——混ぜると、赤くなりうる組が 0 になっても沈黙する。
+                        counts["常に来る欄"] += 1
+                        continue
+                    counts["組"] += 1
+                    if target in loaded_fields(layout):
+                        continue
+                    where = f"{module}/{group}" + (f"/{layout_name}" if layout_name else "")
+                    findings.append((SEV_ERROR, "D-35", relative(path),
+                                     f"{where}: {name} の絞り込みが {target} を見ているが、"
+                                     f"このレイアウトは {target} を取ってこない"
+                                     f"（**{shows}が 1 件も出なくなる**——"
+                                     "絞りが緩むのではなく、全部落ちる。"
+                                     "候補ダイアログで `(0件)` になることを 2026-09-16 に実測した）。"
+                                     f"レイアウトに出すか DataOnlyFields に {target} を書く。"
+                                     "qa/01 F-44"))
+
+    # **母数は「赤くなりうる組」で 0 を見る**（qa/03 L-15）。
+    # **常に来る欄（`Id`）の組を混ぜない**——混ぜると、赤くなりうる組が全部消えても沈黙する。
+    if not counts["組"]:
+        findings.append((SEV_ERROR, "D-35", relative(DESIGN_DIR),
+                         "絞り込みがこちらの欄を見ている組で、赤くなりうるものが 1 つも無い"
+                         "（condition_right_hands の読み方を疑う）"))
     return counts
 
 
@@ -2379,7 +2553,8 @@ def main() -> int:
     layout_reads = check_layout_reads(loaded_modules, loaded_scripts, findings)
     check_hook_wiring(loaded_modules, loaded_frames, findings)
     condition_reads = check_condition_fields(loaded_modules, findings)
-    check_condition_wiring(loaded_modules, findings)
+    check_condition_wiring(loaded_modules + loaded_frames, findings)
+    candidate_filters = check_candidate_filters(loaded_modules, findings)
     check_role_conditions(loaded_modules, loaded_frames, findings)
     app_settings = os.path.join(DESIGN_DIR, "app.clprj")
     if os.path.exists(app_settings):
@@ -2399,6 +2574,8 @@ def main() -> int:
         "明細の行から読む欄": layout_reads["行"],
         "行の条件": condition_reads["条件"],
         "行の条件が見る欄": condition_reads["欄"],
+        "絞り込みが見る欄": candidate_filters["組"],
+        "うち常に来る欄": candidate_filters["常に来る欄"],
     })
     for line in lines:
         print(line)
@@ -2503,7 +2680,7 @@ WIRED_CHECKS = [
     "check_script", "check_cross_frame_links", "check_child_parent_keys",
     "check_child_detail_screens", "check_module_references", "check_role_conditions",
     "check_search_text_trim", "check_layout_reads", "check_hook_wiring",
-    "check_condition_fields", "check_condition_wiring",
+    "check_condition_fields", "check_condition_wiring", "check_candidate_filters",
     "check_app_access_condition", "check_vocabulary", "check_exemptions",
     "report",
 ]
@@ -2906,6 +3083,151 @@ SELFTEST_CONDITION_OK = [
              UserReadCondition={"ModuleName": "AppUser",
                                 "Condition": _condition(("AccountingRole.Value",))},
              DetailLayouts={"": {"Layout": {"Rows": [{"Columns": []}]}}})),
+]
+
+
+def _search_condition(rights=("Account.Value",), wrap=False, sort_variable="Department.Value"):
+    """**本番（`JournalLine.SubAccount`）と同じ形**の `SearchCondition`。
+
+    本番は `Condition.Children` が **2 本**——`IsActive.Value` の `FieldValueMatchCondition`
+    （**左辺だけで右辺が無い**）と、`Account.Value` の `FieldVariableMatchCondition` である。
+    **左辺だけの節を落とすことが、検体で撃たれていないと空回りする**ので、常に置く。
+
+    **並べ替えの変数は、わざと検体モジュールの欄の名前にする**（`Department.Value`）——
+    本番は候補側の欄（`DisplayOrder.Value`）だが、**それだと型で落とすのをやめても
+    「モジュールに無い」で鳴ってしまい、狙った理由で赤くならない**（2026-09-16 の自己レビュー）。
+
+    **左辺は右辺と別の名前にする**（`OwnerAccount.Value`）——同じ字にすると、
+    **左右を取り違える書き換えと区別が付かない**（qa/03 L-02 の縮退）。
+    """
+    children = [{"SearchTargetVariable": "IsActive.Value", "Comparison": "Equal",
+                 "Value": {"Value": True,
+                           "TypeFullName": "Codeer.LowCode.Blazor.Repository.BooleanValue"},
+                 "TypeFullName":
+                     "Codeer.LowCode.Blazor.Repository.Match.FieldValueMatchCondition"}]
+    children += [{"SearchTargetVariable": "OwnerAccount.Value", "Comparison": "Equal",
+                  "Variable": right,
+                  "TypeFullName":
+                      "Codeer.LowCode.Blazor.Repository.Match.FieldVariableMatchCondition"}
+                 for right in rights]
+    if wrap:
+        children = [children[0],
+                    {"Children": children[1:], "Name": "",
+                     "TypeFullName":
+                         "Codeer.LowCode.Blazor.Repository.Match.FieldMatchCondition"}]
+    return {"LimitCount": 50, "SelectFields": [],
+            "SortConditions": [{"Variable": sort_variable, "IsDescending": False},
+                               {"Variable": "Code.Value", "IsDescending": False}],
+            "SortFieldVariable": "", "SortDescending": False, "ModuleName": "SubAccount",
+            "Condition": {"IsOrMatch": False, "IsNot": False, "Children": children, "Name": "",
+                          "TypeFullName":
+                              "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"}}
+
+
+def _filter_module(name="SelfTest", rights=("Account.Value",), wrap=False, kind="LinkFieldDesign",
+                   second=None, layouts=None, data_only=(), sort_variable="Department.Value"):
+    """D-35 の検体。`layouts` は `{(種類, 名前): 置いた欄の並び}`。
+
+    既定は「詳細と一覧の既定のレイアウトに、絞りを持つ欄と右辺の欄を置く」。
+    `second` を渡すと、**2 つ目の欄にも絞りを持たせる**（打ち切りの書き換えを捕まえる）。
+    """
+    if layouts is None:
+        layouts = {("DetailLayouts", ""): ("SubAccount", "Account"),
+                   ("ListLayouts", ""): ("SubAccount", "Account")}
+    fields = [{"Name": "SubAccount", "TypeFullName": f"X.{kind}",
+               "SearchCondition": _search_condition(rights, wrap, sort_variable)},
+              {"Name": "Account", "TypeFullName": "X.LinkFieldDesign"},
+              {"Name": "Department", "TypeFullName": "X.LinkFieldDesign"},
+              {"Name": "Id", "TypeFullName": "X.IdFieldDesign"}]
+    if second is not None:
+        fields.append({"Name": "Partner", "TypeFullName": "X.LinkFieldDesign",
+                       "SearchCondition": _search_condition((second,))})
+
+    doc = _module(Name=name, DbTable="x", Fields=fields, DetailLayouts={}, ListLayouts={})
+    for (group, layout_name), placed in layouts.items():
+        if group == "ListLayouts":
+            doc[group][layout_name] = {"DataOnlyFields": list(data_only),
+                                       "Elements": [[{"FieldName": n} for n in placed]]}
+        else:
+            doc[group][layout_name] = {"DataOnlyFields": list(data_only),
+                                       "Layout": {"Rows": [
+                                           {"Columns": [{"Layout": {"FieldName": n}}
+                                                        for n in placed]}]}}
+    return doc
+
+
+# D-35 の壊れ方。**(何を壊すか, モジュール, 指摘文に必ず入る語)**。
+# **表明語には「どこを直すか」まで入れる**（qa/03 L-17。隣の D-34 に揃える）。
+SELFTEST_FILTER_CASES = [
+    # **2026-09-16 に実機で踏んだ形である**（候補が `(0件)` になった）。
+    ("一覧が右辺の欄を取ってこない",
+     _filter_module(layouts={("DetailLayouts", ""): ("SubAccount", "Account"),
+                             ("ListLayouts", ""): ("SubAccount",)}),
+     "SelfTest/ListLayouts: SubAccount の絞り込みが Account を見ている"),
+    ("詳細が右辺の欄を取ってこない",
+     _filter_module(layouts={("DetailLayouts", ""): ("SubAccount",),
+                             ("ListLayouts", ""): ("SubAccount", "Account")}),
+     "SelfTest/DetailLayouts: SubAccount の絞り込みが Account を見ている"),
+    # **2 枚とも落ちる形。** 最初の 1 枚で打ち切る書き換えを捕まえる。
+    ("詳細も一覧も取ってこない",
+     _filter_module(layouts={("DetailLayouts", ""): ("SubAccount",),
+                             ("ListLayouts", ""): ("SubAccount",)}),
+     "SelfTest/DetailLayouts: SubAccount の絞り込みが Account を見ている"),
+    # **名前つきのレイアウトも 1 枚ずつ見る**（本番に `PartnerRegistrationList/ListLayouts/Embedded`）。
+    ("名前つきのレイアウトが取ってこない",
+     _filter_module(layouts={("DetailLayouts", ""): ("SubAccount", "Account"),
+                             ("ListLayouts", "Embedded"): ("SubAccount",)}),
+     "SelfTest/ListLayouts/Embedded"),
+    ("入れ子が 2 段",
+     _filter_module(wrap=True, layouts={("DetailLayouts", ""): ("SubAccount", "Account"),
+                                        ("ListLayouts", ""): ("SubAccount",)}),
+     "DataOnlyFields に Account を書く"),
+    ("右辺が 2 つあって片方を取ってこない",
+     _filter_module(rights=("Account.Value", "Department.Value")),
+     "DataOnlyFields に Department を書く"),
+    # **2 つの欄がそれぞれ絞りを持つ形。** 最初の欄で打ち切る書き換えを捕まえる。
+    ("2 つ目の欄の絞りが取ってこない",
+     _filter_module(second="Department.Value",
+                    layouts={("DetailLayouts", ""): ("SubAccount", "Account", "Partner"),
+                             ("ListLayouts", ""): ("SubAccount", "Account", "Partner")}),
+     "Partner の絞り込みが Department を見ている"),
+    ("右辺の欄がモジュールに無い", _filter_module(rights=("Accnt.Value",)),
+     "Accnt がモジュールに無い"),
+    ("右辺が多段の道", _filter_module(rights=("Partner.Name.Value",)),
+     "Partner.Name.Value は多段の道である"),
+    ("右辺が欄の名前だけ", _filter_module(rights=("Account",)),
+     "Account が欄の名前だけである"),
+    ("右辺が空", _filter_module(rights=("",)), "右辺が空である"),
+    ("絞りを持つ欄をどこにも出していない",
+     _filter_module(layouts={("DetailLayouts", ""): ("Account",),
+                             ("ListLayouts", ""): ("Account",)}),
+     "詳細にも一覧にもこの欄を出していない"),
+    # **`ListField` の絞りは候補ダイアログではなく行の取得**なので、言うことが違う。
+    ("明細の行の絞りが取ってこない",
+     _filter_module(kind="ListFieldDesign",
+                    layouts={("DetailLayouts", ""): ("SubAccount",),
+                             ("ListLayouts", ""): ("SubAccount", "Account")}),
+     "行が 1 件も出なくなる"),
+]
+
+# **正しい姿**。
+SELFTEST_FILTER_OK = [
+    # **この 1 件が、並べ替えの変数を型で落とすことも釘付けしている**——
+    # `SortConditions` の変数はわざと `Department.Value`（こちらの欄）にしてあるので、
+    # **型で落とすのをやめると、この「正しい姿」が鳴る**。
+    ("本番と同じ形", _filter_module()),
+    ("2 段の入れ子でも置いてある", _filter_module(wrap=True)),
+    ("右辺を DataOnlyFields で持っている",
+     _filter_module(data_only=("Account",),
+                    layouts={("DetailLayouts", ""): ("SubAccount",),
+                             ("ListLayouts", ""): ("SubAccount",)})),
+    ("右辺が CurrentUser", _filter_module(rights=("CurrentUser.Id.Value",),
+                                        layouts={("DetailLayouts", ""): ("SubAccount",),
+                                                 ("ListLayouts", ""): ("SubAccount",)})),
+    # **常に来る欄は、置いていなくても来る**（母数の「常に来る欄」に入る）。
+    ("右辺が Id", _filter_module(rights=("Id.Value",),
+                               layouts={("DetailLayouts", ""): ("SubAccount",),
+                                        ("ListLayouts", ""): ("SubAccount",)})),
 ]
 
 
@@ -3780,6 +4102,137 @@ def selftest():
             failures.append(f"main() が「{label}」を報告に渡していない（母数が印字から消える）")
 
 
+    # 欄の絞り込みが見るこちらの欄（D-35。qa/01 F-44）。
+    # **母数を満たす相棒を添える**（別名・別構成にする。同じ形だと検体が 1 件減っても気づけない）。
+    def _filter_companion():
+        return _filter_module(name="FilterCompanion", second="Department.Value",
+                              layouts={("DetailLayouts", ""): ("SubAccount", "Account",
+                                                               "Partner", "Department")})
+
+    def _filter_findings(doc):
+        found = []
+        check_candidate_filters([(_self_path(), doc),
+                                 (_self_path(name="FilterCompanion.mod.json"),
+                                  _filter_companion())], found)
+        return found
+
+    for label, doc, says in SELFTEST_FILTER_CASES:
+        findings = _filter_findings(doc)
+        if not [f for f in findings
+                if (f[0], f[1]) == (SEV_ERROR, "D-35") and says in f[3]]:
+            failures.append(f"絞り込みが見る欄（{label}）: D-35 が「{says}」と鳴らない"
+                            f"（出たのは {[(f[0], f[1], f[3]) for f in findings]}）")
+
+    findings = []
+    check_candidate_filters([(_self_path(name="FilterCompanion.mod.json"), _filter_companion())],
+                            findings)
+    if findings:
+        failures.append(f"母数の相棒だけで鳴った: {[(f[1], f[3]) for f in findings]}")
+
+    for label, doc in SELFTEST_FILTER_OK:
+        findings = _filter_findings(doc)
+        if findings:
+            failures.append(f"正しい形（{label}）で鳴った: {[(f[0], f[1], f[3]) for f in findings]}")
+
+    # **指摘先のファイルも 1 件で釘付けする**（`where` だけでは、どのファイルを開くかが固定されない）。
+    findings = _filter_findings(
+        _filter_module(layouts={("DetailLayouts", ""): ("SubAccount", "Account"),
+                                ("ListLayouts", ""): ("SubAccount",)}))
+    if not [f for f in findings if f[2] == relative(_self_path())]:
+        failures.append(f"D-35 の指摘先が検体のファイルを指していない: {[f[2] for f in findings]}")
+
+    # **2 枚とも落ちる形では、2 つの `where` が両方出る**（最初の 1 枚で打ち切らせない）。
+    findings = _filter_findings(
+        _filter_module(layouts={("DetailLayouts", ""): ("SubAccount",),
+                                ("ListLayouts", ""): ("SubAccount",)}))
+    for where in ("SelfTest/DetailLayouts:", "SelfTest/ListLayouts:"):
+        if not [f for f in findings if where in f[3]]:
+            failures.append(f"2 枚とも落ちる形で「{where}」が出ない（1 枚で打ち切っている）")
+
+    for what, label, cases, expected in [
+        ("絞り込みが見る欄", "壊れ方", SELFTEST_FILTER_CASES, 13),
+        ("絞り込みが見る欄", "正しい姿", SELFTEST_FILTER_OK, 5),
+    ]:
+        if len(cases) != expected:
+            failures.append(f"{what}の検体（{label}）が {len(cases)} 件"
+                            f"（{expected} 件のはず。減らすなら、この数も一緒に直す）")
+
+    # **見るレイアウトの表を字で釘付けにする。** D-33 の `CHECKED_LAYOUTS` とは別の定数である
+    # ——値が同じでも理由が違うので、片方の都合で広げた日にもう片方が黙って変わらないようにする。
+    if set(CANDIDATE_LAYOUTS) != {"DetailLayouts", "ListLayouts"}:
+        failures.append(f"CANDIDATE_LAYOUTS が {CANDIDATE_LAYOUTS} になっている"
+                        "（検索レイアウトは直し方が違う（CLB の 65 番）ので外してある。"
+                        "入れるなら測り直す）")
+
+    # **母数が 0 なら鳴る**（qa/03 L-15）。
+    findings = []
+    check_candidate_filters([], findings)
+    if not [f for f in findings if "赤くなりうるものが 1 つも無い" in f[3]]:
+        failures.append("絞り込みの組が 0 件でも鳴らない（ラチェットが死んでいる）")
+
+    # **実デザインに対する対照実験**——**2026-09-16 に実機で踏んだ形そのもの**を毎回撃つ。
+    # **剥ぎ先は字で書く。**
+    stripped = []
+    for path, doc in real_modules:
+        doc = copy.deepcopy(doc)
+        if doc.get("Name") == "JournalLine":
+            for row in doc["ListLayouts"][""]["Elements"]:
+                for cell in row:
+                    if cell.get("FieldName") == "Account":
+                        cell["FieldName"] = ""
+        stripped.append((path, doc))
+    findings = []
+    check_candidate_filters(stripped, findings)
+    if not [f for f in findings
+            if "JournalLine/ListLayouts: SubAccount の絞り込みが Account を見ている" in f[3]]:
+        failures.append("JournalLine の一覧から Account を外しても D-35 が鳴らない"
+                        "（2026-09-16 に実機で踏んだ形が、機械では捉えられていない）")
+
+    # **本番の母数は、数ではなく「どの組か」を字で釘付けする**（qa/02 のラウンド 117）。
+    # **数だけだと、別の数え方でも同じ数になる書き換えが素通りする**
+    # （2026-09-16 の自己レビューで、`seen` の加算位置を変えても 4 のままだった）。
+    real_pairs = sorted((doc.get("Name", ""), field.get("Name"), target, group, layout_name,
+                         always)
+                        for _, doc in real_modules
+                        for field, right, target, group, layout_name, always
+                        in candidate_filter_targets(doc))
+    expected_pairs = [
+        ("JournalEntry", "Lines", "Id", "DetailLayouts", "", True),
+        ("JournalLine", "SubAccount", "Account", "DetailLayouts", "", False),
+        ("JournalLine", "SubAccount", "Account", "ListLayouts", "", False),
+        ("Partner", "Registrations", "Id", "DetailLayouts", "", True),
+    ]
+    if real_pairs != expected_pairs:
+        failures.append(f"本番の絞り込みの組が変わった: {real_pairs}"
+                        f"（増減したら、この一覧も一緒に直す）")
+
+    # **印字する母数も、その一覧から出た数と揃っていること。**
+    # **揃えないと、数え方をすげ替えても同じ数になる書き換えが素通りする**（qa/02 のラウンド 117）。
+    real_counts = check_candidate_filters(real_modules, [])
+    if real_counts != {"組": sum(1 for pair in expected_pairs if not pair[5]),
+                       "常に来る欄": sum(1 for pair in expected_pairs if pair[5])}:
+        failures.append(f"印字する母数 {real_counts} が、釘付けした組の一覧と合っていない")
+
+    # **母数は「見た組」であって「通った組」ではない。**
+    # **違反があっても数が変わらないこと**を見る——変わるなら、通った組だけを数えている。
+    if check_candidate_filters(stripped, []) != real_counts:
+        failures.append("違反のある実デザインで母数が変わった（通った組だけを数えている）")
+    # **空の入力では 0 になること**（返り値を固定した書き換えを捕まえる）。
+    if check_candidate_filters([], []) != {"組": 0, "常に来る欄": 0}:
+        failures.append("入力が空でも母数が 0 にならない（母数が固定されている）")
+
+    # **何も壊していない実デザインで、この関門が緑になること**（self-review スキル §9 の 3 つ目）。
+    # **指摘の受け皿を捨てない**——捨てると、本検査が赤くなっても selftest は緑のままになる。
+    for label, check in (("D-33", lambda out: check_layout_reads(real_modules, real_scripts, out)),
+                         ("D-34", lambda out: check_condition_fields(real_modules, out)),
+                         ("D-35", lambda out: check_candidate_filters(real_modules, out))):
+        findings = []
+        check(findings)
+        if findings:
+            failures.append(f"何も壊していない実デザインで {label} が鳴った: "
+                            f"{[(f[1], f[3][:40]) for f in findings]}")
+
+
     # **配線**。検査を書いても main() から呼ばれていなければ効かない（qa/03 L-15）。
     source = io.open(__file__, encoding="utf-8").read()
     # **`main()` の中だけを見る。** ファイル末尾までを見ると、
@@ -3818,7 +4271,8 @@ def selftest():
 
     cases = (len(SELFTEST_CASES) + len(SELFTEST_TRIM_CASES)
              + len(SELFTEST_READ_CASES) + len(SELFTEST_READ_OK)
-             + len(SELFTEST_CONDITION_CASES) + len(SELFTEST_CONDITION_OK))
+             + len(SELFTEST_CONDITION_CASES) + len(SELFTEST_CONDITION_OK)
+             + len(SELFTEST_FILTER_CASES) + len(SELFTEST_FILTER_OK))
     print(f"lint_design: すべて期待どおり（検体 {cases} 件）" if not failures
           else f"lint_design: {len(failures)} 件が期待と違う")
     return 1 if failures else 0
