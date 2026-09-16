@@ -1017,6 +1017,183 @@ public class JournalEntryValidatorTests
         Assert.Equal(where == "line" ? 1 : null, violation.LineNo);
     }
 
+    /// <summary>
+    /// <b>断りは取引先ごとに 1 件。ただし場所は捨てない。</b>
+    /// 同じ取引先を伝票と明細で使っても、同じ文を並べない（2026-09-16 の自己レビュー）。
+    /// <b>行番号は付けず、使っている場所を文に並べる</b>——
+    /// 直し方の 1 つ（別の取引先を選ぶ）は<b>場所ごと</b>なので、1 か所だけ示すと残りを直さなくてよく読める。
+    /// </summary>
+    [Fact]
+    public void 同じ取引先を伝票と明細で使っても断りは_1_件で場所を並べる()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.RetiredPartner),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.RetiredPartner),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 2_000,
+                department: AccountingFixture.SalesDepartment)) with
+        {
+            PartnerId = AccountingFixture.RetiredPartner,
+        };
+
+        var violations = Validate(entry);
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerInactive, violations);
+        Assert.Null(violation.LineNo);
+        Assert.Equal(
+            "取引先「取引をやめた先」は無効なので、新しい計上には使えません。伝票・行 1・行 2 で使っています。"
+            + "別の取引先を選ぶか、取引先マスタで有効に戻してください。",
+            violation.Message);
+        Assert.Equal(ViolationSeverity.Error, violation.Severity);
+        Assert.True(violations.HasError());
+        Assert.Single(violations, v => v.Code == JournalViolationCodes.PartnerInactive);
+    }
+
+    /// <summary>伝票が取引先を持たなくても、明細の繰り返しは 1 件にまとめ、行番号を並べる。</summary>
+    [Fact]
+    public void 明細だけで同じ取引先を繰り返しても断りは_1_件で場所を並べる()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.RetiredPartner),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.RetiredPartner),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 2_000,
+                department: AccountingFixture.SalesDepartment));
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerInactive, Validate(entry));
+
+        Assert.Null(violation.LineNo);
+        Assert.Contains("行 1・行 2 で使っています。", violation.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("伝票", violation.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>場所の並びは行番号の順である。</b> ドメインの型は並びを持たないので、
+    /// <b>渡す順を逆にしても同じ文になる</b>ことを固定する（実装の <c>OrderBy</c> が消えたら赤くなる）。
+    /// </summary>
+    [Fact]
+    public void 場所の並びは渡した順ではなく行番号の順()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 2_000,
+                department: AccountingFixture.SalesDepartment),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.RetiredPartner),
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.RetiredPartner));
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerInactive, Validate(entry));
+
+        Assert.Contains("行 1・行 2 で使っています。", violation.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>まとめる単位は取引先であって、違反の種類ではない。</b>
+    /// <b>無効な 2 社</b>——同じコード・同じ重さ——を別の行に置いても <b>2 件出る</b>。
+    /// 1 件にまとめると、片方の直し忘れに気づけない。
+    /// </summary>
+    [Fact]
+    public void 無効な取引先が_2_社なら_2_件出る()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.RetiredPartner),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.OtherRetiredPartner),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 2_000,
+                department: AccountingFixture.SalesDepartment));
+
+        var violations = Validate(entry);
+
+        var inactive = violations.Where(v => v.Code == JournalViolationCodes.PartnerInactive).ToArray();
+        Assert.Equal(2, inactive.Length);
+        Assert.Contains(inactive, v => v.LineNo == 1 && v.Message.Contains("取引をやめた先", StringComparison.Ordinal));
+        Assert.Contains(inactive, v => v.LineNo == 2 && v.Message.Contains("もう 1 社やめた先", StringComparison.Ordinal));
+        // **1 か所ずつなので、場所の並べ書きは付かない。**
+        Assert.DoesNotContain(inactive, v => v.Message.Contains("で使っています", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// <b>マスタに無い側も、取引先ごとに 1 件。</b> 文は取引先の名前を持てない（マスタに無いので）が、
+    /// <b>2 社なら 2 件出る</b>——文が同じでも、行番号が別の直し先を指している。
+    /// </summary>
+    [Fact]
+    public void マスタに無い取引先も取引先ごとに数える()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.UnknownPartner),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.OtherUnknownPartner),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 2_000,
+                department: AccountingFixture.SalesDepartment));
+
+        var unknown = Validate(entry)
+            .Where(v => v.Code == JournalViolationCodes.PartnerUnknown)
+            .ToArray();
+
+        Assert.Equal(2, unknown.Length);
+        Assert.Equal([1, 2], unknown.Select(v => v.LineNo).ToArray());
+    }
+
+    /// <summary>同じ「マスタに無い」取引先を繰り返したときは、1 件にまとめて場所を並べる。</summary>
+    [Fact]
+    public void マスタに無い同じ取引先を繰り返しても断りは_1_件で場所を並べる()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.UnknownPartner),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.UnknownPartner),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 2_000,
+                department: AccountingFixture.SalesDepartment));
+
+        var violations = Validate(entry);
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerUnknown, violations);
+        Assert.Null(violation.LineNo);
+        Assert.Equal(
+            "取引先が取引先マスタにありません。行 1・行 2 で使っています。"
+            + "別の取引先を選ぶか、取引先マスタに登録してください。",
+            violation.Message);
+        Assert.Single(violations, v => v.Code == JournalViolationCodes.PartnerUnknown);
+    }
+
+    /// <summary>
+    /// <b>まとめる仕掛けが、有効な相手を巻き込まない。</b>
+    /// 伝票に有効な相手、行 2 に無効な相手を置くと、<b>無効な側だけが 1 件</b>出る。
+    /// </summary>
+    [Fact]
+    public void 有効な相手と無効な相手が混ざっても無効な側だけを断る()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.OtherPartner),
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                partner: AccountingFixture.RetiredPartner),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.Sales, 2_000,
+                department: AccountingFixture.SalesDepartment)) with
+        {
+            PartnerId = AccountingFixture.Partner,
+        };
+
+        var violations = Validate(entry);
+
+        var violation = AssertViolation(JournalViolationCodes.PartnerInactive, violations);
+        Assert.Equal(2, violation.LineNo);
+        Assert.DoesNotContain(
+            violations, v => v.Code == JournalViolationCodes.PartnerUnknown);
+    }
+
     /// <summary>有効な取引先なら、伝票にも明細にも何も言わない（検体が縮退していないことも見る）。</summary>
     [Fact]
     public void 有効な取引先には何も言わない()

@@ -41,8 +41,10 @@ public static class JournalEntryValidator
     /// <remarks>
     /// <para><b>科目・補助科目・部門と同じ形</b>（<c>E-*-UNKNOWN</c> / <c>E-*-INACTIVE</c>）。取引先だけ見ていなかった——
     /// マスタに無い識別子は DB の外部キーの生の失敗になり、無効にした取引先も新たな計上に使えた（qa/03 L-14 の型。2026-09-10）。</para>
-    /// <para><b>伝票の取引先は伝票として 1 回、明細の取引先は行ごとに見る。</b> 明細が空なら伝票の値が実効値になる
-    /// （<see cref="JournalEntry.PartnerOf"/>）ので、行ごとに実効値を見ると同じ断りが行数だけ並ぶ。</para>
+    /// <para><b>伝票の取引先は伝票として、明細の取引先は行として見る。</b> 明細が空なら伝票の値が実効値になる
+    /// （<see cref="JournalEntry.PartnerOf"/>）が、<b>実効値では見ない</b>——
+    /// 断りは<b>利用者が触れる欄</b>を指す必要があり、実効値で見ると「伝票の欄を直す」と「行の欄を直す」が混ざる。
+    /// <b>同じ取引先が何か所にあっても断りは 1 件</b>にまとめ、<b>場所は文に並べる</b>（docs/21 §2-6）。</para>
     /// <para><b>重さは、利用者が直せるかで決める</b>（<see cref="ReversalOnlySeverity"/> の注記と同じ線）。
     /// <b>伝票の取引先も明細の取引先も、訂正の下書きで選び直せる</b>ので、外すのは取消だけ（<see cref="ReversalOnlySeverity"/>）——
     /// 訂正でも外すと、無効にした相手の新しい記帳を訂正経由で帳簿へ入れられる。
@@ -60,22 +62,68 @@ public static class JournalEntryValidator
     /// </remarks>
     private static void ValidatePartners(JournalEntry entry, PartnerCatalog partners, List<Violation> violations)
     {
-        if (entry.PartnerId is PartnerId entryPartner)
+        // **同じ直し先の断りを、行数だけ並べない**（規則は docs/21 §2-6。理由もそちらが持つ）。
+        // **見つけたのは 2026-09-16 の自己レビュー**（qa/02 のラウンド 109。直したのはラウンド 118）。
+        //
+        // ここが持つのは実装の事情だけである——
+        // **まとめる鍵は取引先の識別子**（違反の種類ではない。2 社が無効なら 2 件出る）。
+        // **場所は伝票が先、次に行番号の順**（ドメインの型は並びを持たないので、ここで決める）。
+        // **場所が 1 つなら行番号だけを付け、複数なら文に並べる**（docs/21 §2-6）。
+        var places = new Dictionary<PartnerId, List<int?>>();
+        var order = new List<PartnerId>();
+
+        void Note(PartnerId partnerId, int? lineNo)
         {
-            ValidatePartner(entryPartner, entry, partners, null, violations);
+            if (!places.TryGetValue(partnerId, out var found))
+            {
+                places[partnerId] = found = [];
+                order.Add(partnerId);
+            }
+
+            found.Add(lineNo);
         }
 
-        foreach (var line in entry.Lines.Where(l => l.PartnerId is not null))
+        if (entry.PartnerId is PartnerId entryPartner)
         {
-            ValidatePartner(line.PartnerId!.Value, entry, partners, line.LineNo, violations);
+            Note(entryPartner, null);
+        }
+
+        // **行番号の順に並べる。** ドメインの型は並びを持たないので、ここで決める
+        // （並べないと、場所の並べ書きが読み込みの順に左右される）。
+        foreach (var line in entry.Lines.Where(l => l.PartnerId is not null).OrderBy(l => l.LineNo))
+        {
+            Note(line.PartnerId!.Value, line.LineNo);
+        }
+
+        foreach (var partnerId in order)
+        {
+            ValidatePartner(partnerId, places[partnerId], entry, partners, violations);
         }
     }
 
+    /// <summary>その取引先を使っている場所の並べ書き。1 か所なら空（行番号だけで足りる）。</summary>
+    private static string UsedIn(List<int?> places)
+    {
+        if (places.Count < 2)
+        {
+            return string.Empty;
+        }
+
+        var written = places.Select(p => p is int lineNo ? $"行 {lineNo}" : "伝票");
+        return $"{string.Join("・", written)} で使っています。";
+    }
+
     private static void ValidatePartner(
-        PartnerId partnerId, JournalEntry entry, PartnerCatalog partners, int? lineNo, List<Violation> violations)
+        PartnerId partnerId, List<int?> places, JournalEntry entry, PartnerCatalog partners,
+        List<Violation> violations)
     {
         // 伝票の取引先も明細の取引先も、訂正の下書きで選び直せる（明細の列は 2026-09-16 に足した）。
         var severity = ReversalOnlySeverity(entry);
+
+        // **場所が 1 つのときだけ行番号を付ける。** 複数あるのに 1 つだけ付けると、
+        // **他の場所を直さなくてよいように読める**。
+        var lineNo = places.Count == 1 ? places[0] : null;
+        var usedIn = UsedIn(places);
 
         // **次の一手まで言う**（docs/21 §2-3）。読み手の経理担当は取引先を保守する役でもある（docs/02）。
         var partner = partners.Find(partnerId);
@@ -83,7 +131,8 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PartnerUnknown,
-                "取引先が取引先マスタにありません。別の取引先を選ぶか、取引先マスタに登録してください。",
+                $"取引先が取引先マスタにありません。{usedIn}"
+                + "別の取引先を選ぶか、取引先マスタに登録してください。",
                 lineNo,
                 severity));
             return;
@@ -93,7 +142,7 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PartnerInactive,
-                $"取引先「{partner.Name}」は無効なので、新しい計上には使えません。"
+                $"取引先「{partner.Name}」は無効なので、新しい計上には使えません。{usedIn}"
                 + "別の取引先を選ぶか、取引先マスタで有効に戻してください。",
                 lineNo,
                 severity));
