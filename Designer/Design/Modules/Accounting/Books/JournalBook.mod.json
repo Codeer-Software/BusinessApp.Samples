@@ -444,7 +444,7 @@
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": true,
       "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
+      "OnSearchDataChanged": "Keyword_OnSearchDataChanged",
       "DisplayName": "摘要・内容",
       "IsRequired": false,
       "OnDataChanged": "",

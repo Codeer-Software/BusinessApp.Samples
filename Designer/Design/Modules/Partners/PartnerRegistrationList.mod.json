@@ -168,7 +168,7 @@
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": true,
       "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
+      "OnSearchDataChanged": "RegistrationNoKeyword_OnSearchDataChanged",
       "DisplayName": "登録番号",
       "IsRequired": false,
       "OnDataChanged": "",

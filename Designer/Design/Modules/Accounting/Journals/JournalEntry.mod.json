@@ -193,7 +193,7 @@
       "IsUpdateProtected": false,
       "IsSimpleSearchParameter": false,
       "AllowEmptySearch": false,
-      "OnSearchDataChanged": "",
+      "OnSearchDataChanged": "Description_OnSearchDataChanged",
       "DisplayName": "摘要",
       "IsRequired": false,
       "OnDataChanged": "",
