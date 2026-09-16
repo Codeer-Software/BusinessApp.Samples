@@ -201,7 +201,7 @@ public static class JournalEntryValidator
     /// </remarks>
     private static void ValidateItemDescriptions(JournalEntry entry, List<Violation> violations)
     {
-        foreach (var line in entry.Lines)
+        foreach (var line in entry.Lines.OrderBy(l => l.LineNo))
         {
             var length = JournalLineRules.CountCharacters(line.ItemDescription);
             if (length > JournalLineRules.TextMaxLength)
@@ -326,6 +326,17 @@ public static class JournalEntryValidator
         // **鍵は科目、場所は行**である。
         var requirements = new RequirementPlaces();
 
+        // **行ごとに値を入れる欄の断りも、同じ文が行数だけ並ぶ**（docs/21 §2-6）。
+        // **直し先になるマスタも、原因になる科目も無い**ので、**鍵は違反コード**である。
+        // **載せてよいのは、そのコードの文が 1 つだけのもの**——
+        // **1 つのコードに文が 2 つ以上あると、先に来たほうが後を黙らせる**
+        // （`E-TAX-INHERIT` は 4 文、`E-TAX-PARENT` は 3 文あるので載せられない）。
+        // **一覧と「文が 1 つだけ」は `GroupedRejectionTests` が実物と突き合わせている。**
+        //
+        // **控えは 1 つでよい**——`RequirementPlaces` は形を揃えるために分けたが、
+        // **こちらは鍵がコードなので、混ざりようがない。**
+        var lineFieldPlaces = new RejectionPlaces<string>();
+
         foreach (var line in entry.Lines.OrderBy(l => l.LineNo))
         {
             accountPlaces.Note(line.AccountId, PlaceOf(line));
@@ -333,6 +344,21 @@ public static class JournalEntryValidator
             if (line.DepartmentId is DepartmentId departmentId)
             {
                 departmentPlaces.Note(departmentId, PlaceOf(line));
+            }
+
+            // **親へ畳むのは、`ValidateTaxLine` が本体行と同一を強制する値だけ**である
+            // ——**部門と税区分**（docs/11 §2「消費税行の部門・用途区分・税区分は本体行から引き継ぐ」）。
+            // **強制していない値は自分の行番号で数える**（金額・取引先・補助科目）——
+            // そちらは**税行そのものの不整合**で、本体行を直しても消えない。
+            // **取引先を引き継ぐ案は未承認**（docs/11 §2）。**通すことにした回には、ここも見直す。**
+            if (NeedsAmount(line))
+            {
+                lineFieldPlaces.Note(JournalViolationCodes.AmountNotPositive, line.LineNo);
+            }
+
+            if (NeedsTaxCategory(line))
+            {
+                lineFieldPlaces.Note(JournalViolationCodes.TaxCategoryMissing, PlaceOf(line));
             }
 
             if (context.Accounts.Find(line.AccountId) is not AccountDefinition owner)
@@ -362,8 +388,7 @@ public static class JournalEntryValidator
                 requirements.SubAccountNotAllowed.Note(line.AccountId, line.LineNo);
             }
 
-            // **部門だけは親へ畳む**——税行の部門は本体行と同じであることを強制しているので、
-            // 本体行を直せば税行も直る（<see cref="PlaceOf"/>）。
+            // **部門は親へ畳む**（税区分と同じ理由。上の注記）。
             if (NeedsDepartment(line, owner))
             {
                 requirements.Department.Note(line.AccountId, PlaceOf(line));
@@ -383,17 +408,25 @@ public static class JournalEntryValidator
         // 渡された順のままだと「①行 2: …②行 1: …」になる。
         foreach (var line in entry.Lines.OrderBy(l => l.LineNo))
         {
-            if (!line.Amount.IsPositive)
+            if (NeedsAmount(line)
+                && lineFieldPlaces.TrySayOnce(
+                    JournalViolationCodes.AmountNotPositive, out var amountLine, out var amountRows))
             {
                 violations.Add(new Violation(
-                    JournalViolationCodes.AmountNotPositive, JournalLineRules.AmountNotPositive, line.LineNo));
+                    JournalViolationCodes.AmountNotPositive,
+                    $"{At(amountRows)}{JournalLineRules.AmountNotPositive}",
+                    amountLine));
             }
 
             // 既定値のまま（未設定）の税区分を通さない。NULL と「対象外」を 2 通りで表さない（docs/11 §1）。
-            if (line.TaxCategoryId == default)
+            if (NeedsTaxCategory(line)
+                && lineFieldPlaces.TrySayOnce(
+                    JournalViolationCodes.TaxCategoryMissing, out var categoryLine, out var categoryRows))
             {
                 violations.Add(new Violation(
-                    JournalViolationCodes.TaxCategoryMissing, JournalLineRules.TaxCategoryMissing, line.LineNo));
+                    JournalViolationCodes.TaxCategoryMissing,
+                    $"{At(categoryRows)}{JournalLineRules.TaxCategoryMissing}",
+                    categoryLine));
             }
 
             ValidateTaxLine(line, entry, violations);
@@ -652,6 +685,15 @@ public static class JournalEntryValidator
     private static bool NeedsDepartment(JournalLine line, AccountDefinition account)
         => account.Category.IsProfitAndLoss() && line.DepartmentId is null;
 
+    /// <summary>その行の<b>金額が 1 円以上でない</b>か（<c>E-AMOUNT</c>）。</summary>
+    private static bool NeedsAmount(JournalLine line) => !line.Amount.IsPositive;
+
+    /// <summary>
+    /// その行の<b>税区分が既定値のまま</b>か（<c>E-TAX-CATEGORY</c>）。
+    /// <b>NULL と「対象外」を 2 通りで表さない</b>（docs/11 §1）。
+    /// </summary>
+    private static bool NeedsTaxCategory(JournalLine line) => line.TaxCategoryId == default;
+
     /// <summary>場所の並びを「〜で使っています。」の 1 文にする（場所が 1 つ以下なら空）。</summary>
     private static string UsedIn(string rows)
         => rows.Length == 0 ? string.Empty : $"{rows} で使っています。";
@@ -831,8 +873,12 @@ public static class JournalEntryValidator
     /// 断るときに<b>最初の 1 回だけ</b>文を作る（<see cref="TrySayOnce"/>）。</para>
     /// <para><b>場所が 1 つなら行番号で指し、複数なら文に並べる</b>（docs/21 §2-6・§3）。
     /// 1 つのときに並べ書きを出さないのは、<b>「行 N:」で足りるところに同じことを 2 回書かない</b>ため。</para>
-    /// <para><b>まとめる鍵は直し先の識別子</b>である——違反の種類ではない。
-    /// 無効なマスタが 2 つあれば 2 件出る（片方の直し忘れに気づけなくなるから）。</para>
+    /// <para><b>まとめる鍵は 3 通りある</b>（docs/21 §2-6）——
+    /// <b>直し先の識別子</b>（マスタの「無効」「マスタに無い」）・
+    /// <b>その断りを起こしている勘定科目</b>（要件）・<b>違反コードそのもの</b>（行ごとの欄）。
+    /// <b>どれも「同じ文になるものを 1 つに畳む」ための手段</b>である。
+    /// <b>鍵が違えば別に言う</b>——無効なマスタが 2 つあれば 2 件出る
+    /// （片方の直し忘れに気づけなくなるから）。</para>
     /// <para><b>同じ鍵で、種類の違う断りが 2 つ立つことは無い。</b>
     /// 「マスタに無い」と「無効」はカタログの引き当てが決めるので<b>排他</b>で、前者は必ずその場で打ち切る。
     /// <b>3 つ目の検査をこの控えに足すときは、先に来たほうが後を黙らせないかを確かめる</b>——
