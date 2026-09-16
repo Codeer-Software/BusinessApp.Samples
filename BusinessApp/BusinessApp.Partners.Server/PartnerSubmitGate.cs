@@ -30,7 +30,9 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     private static readonly (string Field, string Label, int Max)[] AboveCorporateNumber =
     [
         ("Name", "取引先名", MasterTextLength.PartnerName),
-        ("NameKana", "カナ", MasterTextLength.PartnerName),
+        // **カナは名前の 2 倍**（旧 Q-26 の決定。2026-09-16。docs/12 §2-2）——
+        // **名前を上限いっぱいまで書いた取引先が、その読みを入れられない**形にしないため。
+        ("NameKana", "カナ", MasterTextLength.PartnerNameKana),
     ];
 
     /// <summary>法人番号より下にある文字の欄（docs/12 §2-2）。</summary>

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 
 using BusinessApp.AccountingCore.Journals;
+using BusinessApp.AccountingCore.Settings;
 using BusinessApp.Partners;
 using BusinessApp.ServerSupport;
 using BusinessApp.TestSupport;
@@ -88,7 +89,7 @@ public class FieldLengthConsistencyTests
     }
 
     /// <summary>
-    /// <b>文字の欄の上限</b>を持つ 10 の欄（マスタと取引先は docs/12 §2-2、伝票は docs/10 §4-2-1）。
+    /// <b>文字の欄の上限</b>を持つ欄（マスタ・取引先・自社情報は docs/12 §2-2、伝票は docs/10 §4-2-1）。
     /// </summary>
     /// <remarks>
     /// <b>ここは手で書くが、手で保たない。</b> <see cref="上限を持たない文字の欄は理由つきで数え上げてある"/> が
@@ -103,8 +104,19 @@ public class FieldLengthConsistencyTests
         { "TaxCategory", "tax_categories", "Name", "name", MasterTextLength.MasterName },
         { "FiscalYear", "fiscal_years", "Label", "label", MasterTextLength.MasterName },
         { "Partner", "partners", "Name", "name", MasterTextLength.PartnerName },
-        { "Partner", "partners", "NameKana", "name_kana", MasterTextLength.PartnerName },
+        // **カナは名前と別の上限を持つ**（旧 Q-26 の決定。2026-09-16）。
+        { "Partner", "partners", "NameKana", "name_kana", MasterTextLength.PartnerNameKana },
         { "Partner", "partners", "Address", "address", MasterTextLength.Address },
+        { "Account", "accounts", "NameKana", "name_kana", MasterTextLength.MasterNameKana },
+        { "SubAccount", "sub_accounts", "NameKana", "name_kana", MasterTextLength.MasterNameKana },
+
+        // **自社情報の 5 欄**（旧 Q-26 の決定。2026-09-16）。
+        // **郵便番号はここに載せない**——長さではなく書式の規則で、下で別に突き合わせている。
+        { "CompanyProfile", "company_profile", "Name", "name", MasterTextLength.CompanyName },
+        { "CompanyProfile", "company_profile", "NameKana", "name_kana", MasterTextLength.CompanyNameKana },
+        { "CompanyProfile", "company_profile", "RepresentativeName", "representative_name", MasterTextLength.RepresentativeName },
+        { "CompanyProfile", "company_profile", "Address", "address", MasterTextLength.CompanyAddress },
+        { "CompanyProfile", "company_profile", "PhoneNumber", "phone_number", MasterTextLength.PhoneNumber },
 
         // **伝票の 2 欄だけ、上限を決めた文書も定数も違う**（docs/10 §4-2-1・`JournalLineRules`）。
         // 数が同じ 200 でも、**動く理由が違うので写さない**。
@@ -122,18 +134,11 @@ public class FieldLengthConsistencyTests
     private static readonly IReadOnlyDictionary<string, string> TextFieldsWithoutLimit =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["Account.NameKana"] = "読みは表記より長いので、名前と同じ数にはできない（05 の問い）",
-            ["SubAccount.NameKana"] = "同上",
-            ["CompanyProfile.Name"] = "自社情報は 1 行しかなく、上限を決めていない（05 の問い）",
-            ["CompanyProfile.NameKana"] = "同上",
-            ["CompanyProfile.RepresentativeName"] = "同上",
-            ["CompanyProfile.PostalCode"] = "同上。書式の規則を先に決める話でもある",
-            ["CompanyProfile.Address"] = "同上",
-            ["CompanyProfile.PhoneNumber"] = "同上。書式の規則を先に決める話でもある",
+            ["CompanyProfile.PostalCode"] = "8 文字ちょうどの書式。長さの表ではなく、この表の下で突き合わせている",
             ["CompanyProfile.CorporateNumber"] = "13 桁ちょうど。別の規則で、この表の下で突き合わせている",
             ["Partner.CorporateNumber"] = "同上",
             ["PartnerInvoiceRegistration.RegistrationNo"] = "T ＋ 13 桁ちょうど。別の規則",
-            ["PartnerInvoiceRegistration.PublishedName"] = "公表システムの写しで、長さは相手が決める（05 の問い）",
+            ["PartnerInvoiceRegistration.PublishedName"] = "公表システムの写しで、長さは相手が決める（開発者の決定。2026-09-16。docs/12 §2-2-1）",
             ["JournalEntry.PartnerNameSnapshot"] = "計上時の写しで、利用者は打たない（ADR-0018）",
             ["JournalLine.PartnerNameSnapshot"] = "同上",
             ["JournalLine.AppliedRuleVersion"] = "同上（適用した版の写し）",
@@ -272,6 +277,74 @@ public class FieldLengthConsistencyTests
     }
 
     /// <summary>
+    /// 郵便番号の書式も、C# と DDL とデザインで一致する。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>長さではなく書式の規則である</b>（旧 Q-26 の決定。2026-09-16。docs/12 §2-2）。
+    /// 7 桁 ＋ 区切りで 8 文字ちょうどにしかならないので、「N 文字以内」の形が当たらない。</para>
+    /// <para><b>DDL は <c>GLOB</c> を桁の数だけ並べて書く</b>（法人番号と同じ作法）ので、その並びを数える。
+    /// <b>追加と更新の 2 本とも見る</b>——片方だけ緩めると、作るときは断られるのに直すときは通る。</para>
+    /// <para><b>デザインはプレースホルダで見せ、<c>MaxLength</c> は使わない</b>——黙って切るから（qa/01 A-10）。</para>
+    /// </remarks>
+    [Fact]
+    public void 郵便番号の書式は_CSharp_と_DDL_とデザインで一致する()
+    {
+        var design = FieldOf("CompanyProfile", "PostalCode");
+
+        Assert.False(
+            design.TryGetProperty("MaxLength", out var max) && max.ValueKind == JsonValueKind.Number,
+            "CompanyProfile.PostalCode に MaxLength がある。黙って切るので使わない（21 §1）");
+        Assert.Equal(PostalCode.FormatDescription, design.GetProperty("Placeholder").GetString());
+        Assert.True(
+            design.GetProperty("ShouldTrimAfterEdit").GetBoolean(),
+            "CompanyProfile.PostalCode の ShouldTrimAfterEdit が false（前後の空白が書式に数えられる）");
+
+        using var db = SchemaSeed.Create();
+        foreach (var kind in new[] { "insert", "update" })
+        {
+            var definition = TestDatabase.ScalarOf<string>(
+                db,
+                "SELECT sql FROM sqlite_master WHERE type = 'trigger'"
+                + $" AND name = 'trg_company_profile_postal_code_format_{kind}'");
+
+            Assert.False(
+                string.IsNullOrEmpty(definition),
+                $"trg_company_profile_postal_code_format_{kind} が無い");
+
+            // **1 つ目だけを見ない**（`WHEN` 節と本文の `WHERE` で 2 度書く。長さの守りと同じ）。
+            var globs = Regex.Matches(definition, @"postal_code NOT GLOB '(?<pattern>[^']+)'");
+            Assert.Equal(2, globs.Count);
+            Assert.All(
+                globs,
+                glob => Assert.Equal(
+                    string.Concat(Enumerable.Repeat("[0-9]", PostalCode.PrefixLength))
+                    + PostalCode.Separator
+                    + string.Concat(Enumerable.Repeat("[0-9]", PostalCode.SuffixLength)),
+                    glob.Groups["pattern"].Value));
+
+            // **数えられない値も、長さの守りと同じ 3 つで断る**（qa/03 の L-48）。
+            // **`GLOB` は途中の U+0000 で止まる**ので、書式が合った先にいくらでも隠せる。
+            // **骨格を名指しで表明する**——3 枝を消しても `GLOB` の検査だけでは気づけない。
+            Assert.Contains(
+                "instr(CAST(NEW.postal_code AS BLOB), x'00') > 0", definition, StringComparison.Ordinal);
+            Assert.Contains("typeof(NEW.postal_code) = 'blob'", definition, StringComparison.Ordinal);
+            Assert.Contains(
+                "LENGTH(CAST(NEW.postal_code AS BLOB)) > 4 * LENGTH(NEW.postal_code)",
+                definition,
+                StringComparison.Ordinal);
+
+            // **断りの文言も C# と同じ字にする**（桁を変えた日に DDL だけが古くならないため）。
+            Assert.Contains(PostalCode.FormatDescription, definition, StringComparison.Ordinal);
+
+            if (kind == "update")
+            {
+                Assert.Contains(
+                    "BEFORE UPDATE OF postal_code ON company_profile", definition, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    /// <summary>
     /// <b>デザインにある文字の欄は、上限を持つか、理由つきで外してあるかのどちらかである。</b>
     /// </summary>
     /// <remarks>
@@ -399,7 +472,7 @@ public class FieldLengthConsistencyTests
     /// <para><b>表名・列・呼び名・上限を伏せてから比べる。</b> 残るのが骨格である。</para>
     /// </remarks>
     [Fact]
-    public void 文字の欄のトリガ20本は同じ条件を持つ()
+    public void 文字の欄のトリガは母数のぶんだけ同じ条件を持つ()
     {
         using var db = SchemaSeed.Create();
         var shapes = new Dictionary<string, List<string>>(StringComparer.Ordinal);

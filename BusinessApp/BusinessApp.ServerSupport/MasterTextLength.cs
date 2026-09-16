@@ -32,11 +32,49 @@ public static class MasterTextLength
     /// </remarks>
     public const int MasterName = 30;
 
-    /// <summary>取引先の<b>名前・カナ</b>の上限。</summary>
+    /// <summary>取引先の<b>名前</b>の上限。</summary>
     /// <remarks>
     /// <b>法人の正式名称が入る余地</b>を採りつつ、一覧が崩れない側に寄せた（docs/12 §2-2）。
     /// </remarks>
     public const int PartnerName = 100;
+
+    /// <summary>取引先の<b>カナ</b>の上限。</summary>
+    /// <remarks>
+    /// <b>読みは表記より長い</b>——「株式会社」4 字の読みは「カブシキガイシャ」8 字である。
+    /// <b>名前を上限いっぱいまで書いた取引先が、その読みを入れられない</b>形にしないために、
+    /// <b>名前の 2 倍</b>を採る（開発者の決定。2026-09-16。docs/12 §2-2）。
+    /// <b>2026-09-16 までは名前と同じ 100 だった。</b>
+    /// <b>市販ソフトのカナの上限は調べていない</b>（docs/12 §2-2。旧 Q-26 に明記して諮った）——
+    /// <see cref="MasterName"/> が市販の実測を引いているのと違い、<b>ここは当てはめだけである</b>。
+    /// </remarks>
+    public const int PartnerNameKana = 200;
+
+    /// <summary>勘定科目・補助科目の<b>カナ</b>の上限。</summary>
+    /// <remarks><b>名前（30）の 2 倍</b>（開発者の決定。2026-09-16。理由は <see cref="PartnerNameKana"/> と同じ）。</remarks>
+    public const int MasterNameKana = 60;
+
+    /// <summary>自社情報の<b>会社名</b>の上限。</summary>
+    /// <remarks><b>取引先の名前と揃える</b>（開発者の決定。2026-09-16）——自社も取引の相手方になりうる。</remarks>
+    public const int CompanyName = 100;
+
+    /// <summary>自社情報の<b>カナ</b>の上限。</summary>
+    /// <remarks><b>取引先のカナと揃える</b>（開発者の決定。2026-09-16）。</remarks>
+    public const int CompanyNameKana = 200;
+
+    /// <summary>自社情報の<b>代表者名</b>の上限。</summary>
+    /// <remarks>
+    /// <b>人名 1 つ分</b>（開発者の決定。2026-09-16）。
+    /// <b>マスタの名前と同じ数だが、動く理由が違うので写さない</b>
+    /// （あちらは市販ソフトの実測、こちらは人名の長さ）。
+    /// </remarks>
+    public const int RepresentativeName = 30;
+
+    /// <summary>自社情報の<b>電話番号</b>の上限。</summary>
+    /// <remarks>
+    /// <b>書式は置かない</b>（開発者の決定。2026-09-16）——内線・国番号・区切り記号の形が割れるので、
+    /// <b>長さだけを見る</b>。郵便番号だけが書式の規則を持つ（<c>PostalCode</c>）。
+    /// </remarks>
+    public const int PhoneNumber = 20;
 
     /// <summary>取引先の<b>所在地</b>の上限。</summary>
     /// <remarks>
@@ -44,6 +82,15 @@ public static class MasterTextLength
     /// 市区町村・番地と建物名を 2 欄に分ける社より 1 欄あたりを長く採る。
     /// </remarks>
     public const int Address = 200;
+
+    /// <summary>自社情報の<b>住所</b>の上限。</summary>
+    /// <remarks>
+    /// <b>取引先の所在地と同じ数にする</b>（開発者の決定。2026-09-16）。
+    /// <b>同じ数でも別の定数にしてある</b>——<b>動く理由が違う</b>（あちらは相手方の住所、こちらは自社の住所）ので、
+    /// 片方だけを動かす決定が来た日に、定数の分割から始めずに済む
+    /// （<see cref="RepresentativeName"/> と同じ判断）。
+    /// </remarks>
+    public const int CompanyAddress = 200;
 
     /// <summary>前後の空白を落とした姿。<b>保存するのはこの形</b>。</summary>
     /// <remarks>

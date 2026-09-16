@@ -77,7 +77,7 @@
       "DbColumn": "name_kana",
       "IsMultiline": false,
       "IsAutoFitRows": false,
-      "Placeholder": "100 文字以内",
+      "Placeholder": "200 文字以内",
       "TextEditEmptyType": "StringEmpty",
       "ShouldTrimAfterEdit": true,
       "AutoTab": false,

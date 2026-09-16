@@ -91,7 +91,7 @@ public static class SchemaKnockout
                 "sqlite_master と pragma_* でスキーマの形を読む。トリガ 26 本の名前の実在を表明しており、"
                 + "どれを外しても振る舞いと無関係に赤くなる",
             ["TextLengthGuardTests.トリガは母数のぶんだけある"] =
-                "文字の欄のトリガ 16 本の名前と本数を sqlite_master から数える。"
+                "文字の欄のトリガの名前と本数を sqlite_master から数える（数はここに書かない）。"
                 + "どれを外しても振る舞いと無関係に赤くなる",
             ["MasterCodeGuardTests.コードを持つ6つの表すべてに追加と更新のトリガがある"] =
                 "code_format のトリガ 12 本の名前の実在を表明する",

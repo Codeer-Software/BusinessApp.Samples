@@ -42,14 +42,25 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// </remarks>
     public static readonly IReadOnlyList<CodedMaster> Coded =
     [
-        new("Account", "accounts", "科目コード", new("Name", "name", "科目名")),
-        new("SubAccount", "sub_accounts", "補助科目コード", new("Name", "name", "補助科目名"),
+        // **カナは名前の 2 倍**（旧 Q-26 の決定。2026-09-16）——
+        // 「株式会社」4 字の読みは「カブシキガイシャ」8 字で、名前と同じ数にすると
+        // **名前を上限いっぱいまで書いた科目が、その読みを入れられない**。
+        new("Account", "accounts", "科目コード",
+            [new("Name", "name", "科目名", MasterTextLength.MasterName),
+             new("NameKana", "name_kana", "カナ", MasterTextLength.MasterNameKana)]),
+        new("SubAccount", "sub_accounts", "補助科目コード",
+            [new("Name", "name", "補助科目名", MasterTextLength.MasterName),
+             new("NameKana", "name_kana", "カナ", MasterTextLength.MasterNameKana)],
             new("account_id", "Account")),
-        new("Department", "departments", "部門コード", new("Name", "name", "部門名")),
-        new("TaxCategory", "tax_categories", "税区分コード", new("Name", "name", "税区分名")),
+        // **部門・税区分・会計年度はカナを持たない**（デザインに欄が無い）。
+        new("Department", "departments", "部門コード",
+            [new("Name", "name", "部門名", MasterTextLength.MasterName)]),
+        new("TaxCategory", "tax_categories", "税区分コード",
+            [new("Name", "name", "税区分名", MasterTextLength.MasterName)]),
         // **会計年度の欄は `Name` ではなく `Label` である。** 決め打ちにすると、
         // ここだけ関門が黙って素通しになる（旧 Q-20 の問いは会計年度を「マスタの名前」に含めていた）。
-        new("FiscalYear", "fiscal_years", "年度コード", new("Label", "label", "年度名")),
+        new("FiscalYear", "fiscal_years", "年度コード",
+            [new("Label", "label", "年度名", MasterTextLength.MasterName)]),
     ];
 
     /// <summary>部品の組み立て。</summary>
@@ -115,26 +126,30 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// </remarks>
     private static void RejectLongText(CodedMaster master, ModuleData data)
     {
-        if (!data.Fields.TryGetValue(master.Text.FieldName, out var found))
+        // **欄ごとに上限が違う**（名前は 30、カナは 60。旧 Q-26 の決定。2026-09-16）。
+        // **記述子から回す**——ここで欄名を決め打ちにすると、カナを足した日に片方だけ守られる。
+        foreach (var coded in master.Texts)
         {
-            return;
-        }
+            if (!data.Fields.TryGetValue(coded.FieldName, out var found))
+            {
+                continue;
+            }
 
-        if (found is not TextFieldData text)
-        {
-            throw UnreadableFieldException.For(data.Name, master.Text.FieldName, found);
-        }
+            if (found is not TextFieldData text)
+            {
+                throw UnreadableFieldException.For(data.Name, coded.FieldName, found);
+            }
 
-        // **`null` は `null` のままにする**（空文字を書き込むと「無いは NULL」が崩れる。docs/20 §7）。
-        if (text.Value is string value)
-        {
-            text.Value = MasterTextLength.Normalize(value);
-        }
+            // **`null` は `null` のままにする**（空文字を書き込むと「無いは NULL」が崩れる。docs/20 §7）。
+            if (text.Value is string value)
+            {
+                text.Value = MasterTextLength.Normalize(value);
+            }
 
-        if (MasterTextLength.DescribeProblem(
-                master.Text.Label, text.Value, MasterTextLength.MasterName) is string problem)
-        {
-            throw new MasterRejectedException(problem);
+            if (MasterTextLength.DescribeProblem(coded.Label, text.Value, coded.MaxLength) is string problem)
+            {
+                throw new MasterRejectedException(problem);
+            }
         }
     }
 

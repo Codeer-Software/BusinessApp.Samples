@@ -5,13 +5,18 @@ using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.Repository.Data;
 using BusinessApp.AccountingCore.Server.Settings.Application;
+using BusinessApp.AccountingCore.Settings;
+using BusinessApp.ServerSupport;
 
 /// <summary>
 /// 自社情報を保存するときの関門（<see cref="CompanyProfileSubmitGate"/>）。
 /// </summary>
 /// <remarks>
-/// <b>見るのは法人番号だけ</b>である。取引先の法人番号と<b>同じ判定</b>を通すことがこの関門の要点で、
-/// 判定と文言は <see cref="BusinessApp.Partners.CorporateNumber"/> が 1 か所で持つ。
+/// <b>見るのは 4 つ</b>——決算月・文字の欄の上限（docs/12 §2-2）・郵便番号の書式・法人番号である。
+/// <b>判定と文言はそれぞれの型が 1 か所で持つ</b>
+/// （<see cref="BusinessApp.ServerSupport.MasterTextLength"/>・
+/// <see cref="BusinessApp.AccountingCore.Settings.PostalCode"/>・
+/// <see cref="BusinessApp.Partners.CorporateNumber"/>）。
 /// ここが確かめるのは「その判定に通していること」と「空欄の扱い」である。
 /// </remarks>
 public class CompanyProfileSubmitGateTests
@@ -45,6 +50,14 @@ public class CompanyProfileSubmitGateTests
             data.Fields["Name"] = new TextFieldData { Value = name };
         }
 
+        return data;
+    }
+
+    /// <summary>欄を 1 つだけ触った更新（実機で来る形。触った欄しか載らない）。</summary>
+    private static ModuleData Field(string field, string? value)
+    {
+        var data = new ModuleData { Name = CompanyProfileSubmitGate.ModuleName };
+        data.Fields[field] = new TextFieldData { Value = value };
         return data;
     }
 
@@ -179,27 +192,6 @@ public class CompanyProfileSubmitGateTests
 
         await new CompanyProfileSubmitGate().SubmitAsync(
             [Updating(Profile(name: "株式会社アルタイルシステムズ"))], save.SaveAsync);
-
-        Assert.True(save.Called);
-    }
-
-    /// <summary>
-    /// 法人番号の欄が<b>文字の欄でない</b>形で来ても落ちない。
-    /// </summary>
-    /// <remarks>
-    /// CLB は宣言した型でしか送らないので画面からは来ないが、
-    /// 型で分岐している以上、外れたときに例外ではなく素通しになることを固定しておく。
-    /// </remarks>
-    [Fact]
-    public async Task 想定していない型の法人番号は素通しする()
-    {
-        var save = new SaveSpy();
-        var profile = Profile();
-        // **検査に落ちる番号を使う。** 正しい番号だと「非テキストは素通し」と
-        // 「非テキストも検査する」のどちらの実装でも緑になり、何も表明しない（qa/03 L-03）。
-        profile.Fields["CorporateNumber"] = new NumberFieldData { Value = 1835678256246m };
-
-        await new CompanyProfileSubmitGate().SubmitAsync([Updating(profile)], save.SaveAsync);
 
         Assert.True(save.Called);
     }
@@ -352,4 +344,191 @@ public class CompanyProfileSubmitGateTests
 
         Assert.False(save.Called);
     }
+
+    /// <summary>
+    /// <b>文字の欄は、呼び名といまの文字数で断る</b>（docs/12 §2-2。旧 Q-26 の決定。2026-09-16）。
+    /// </summary>
+    /// <remarks>
+    /// <b>欄ごとに上限が違う</b>ので、<b>5 欄とも撃つ</b>——1 つにまとめると、
+    /// 表から 1 行落としても緑のままになる。
+    /// </remarks>
+    [Theory]
+    [InlineData("Name", "会社名", 100)]
+    [InlineData("NameKana", "カナ", 200)]
+    [InlineData("RepresentativeName", "代表者名", 30)]
+    [InlineData("Address", "住所", 200)]
+    [InlineData("PhoneNumber", "電話番号", 20)]
+    public async Task 長すぎる文字の欄は呼び名といまの文字数で断る(string field, string label, int max)
+    {
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => new CompanyProfileSubmitGate().SubmitAsync(
+                [Updating(Field(field, new string('あ', max + 1)))], save.SaveAsync));
+
+        // **接頭の「保存できません。」はこの規則の持ち物ではない**ので、末尾だけを見る
+        // （`MasterSubmitGateTests` と同じ作法）。
+        Assert.EndsWith(
+            $"「{label}」は {max} 文字以内です。いまは {max + 1} 文字あります。短くして入力し直してください。",
+            thrown.Message,
+            StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>上限ちょうどは通り、前後の空白は落として保存する。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>両端を撃たないと <c>&gt;</c> と <c>&gt;=</c> の取り違えが見えない。</b>
+    /// <b>落とした姿を差分に書き戻す</b>——比べるときだけ落とすと、
+    /// 関門が数えた長さと DDL が数える長さが食い違う（qa/03 の L-14）。
+    /// </remarks>
+    [Theory]
+    [InlineData("Name", 100)]
+    [InlineData("NameKana", 200)]
+    [InlineData("RepresentativeName", 30)]
+    [InlineData("Address", 200)]
+    [InlineData("PhoneNumber", 20)]
+    public async Task 上限ちょうどは通り前後の空白は落ちる(string field, int max)
+    {
+        var save = new SaveSpy();
+        var data = Field(field, "  " + new string('あ', max) + "  ");
+
+        await new CompanyProfileSubmitGate().SubmitAsync([Updating(data)], save.SaveAsync);
+
+        Assert.True(save.Called);
+        Assert.Equal(new string('あ', max), ((TextFieldData)data.Fields[field]).Value);
+    }
+
+    /// <summary>
+    /// <b>読めない型の欄は断る</b>（<c>MasterSubmitGate</c> と同じ。fail-open にしない）。
+    /// </summary>
+    /// <remarks>
+    /// <b><c>as</c> で <c>null</c> に落とすと「触られていない」と見分けが付かず、
+    /// 欄の型を変えた日に、その欄を見る検査がまとめて素通しへ落ちる</b>
+    /// （<see cref="UnreadableFieldException"/> の注記。2026-09-16 に 3 つとも揃えた）。
+    /// <b>これは利用者の誤りではない</b>ので、文言はホストが定型文へ差し替える。
+    /// </remarks>
+    [Theory]
+    [InlineData("Name")]
+    [InlineData("PostalCode")]
+    [InlineData("CorporateNumber")]
+    public async Task 読めない型の欄は断る(string field)
+    {
+        var save = new SaveSpy();
+        var data = new ModuleData { Name = CompanyProfileSubmitGate.ModuleName };
+        data.Fields[field] = new NumberFieldData { Value = 1m };
+
+        var thrown = await Assert.ThrowsAsync<UnreadableFieldException>(
+            () => new CompanyProfileSubmitGate().SubmitAsync([Updating(data)], save.SaveAsync));
+
+        Assert.Equal(CompanyProfileSubmitGate.ModuleName, thrown.Module);
+        Assert.Equal(field, thrown.Field);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>写した呼び名と列が、デザイン JSON と一致する</b>（docs/20 §4 の「已むを得ない重複」）。
+    /// </summary>
+    /// <remarks>
+    /// <b>ラベルは差し戻しの文言に出る。</b> ずれると、画面に無い語を名指しして
+    /// 「どの欄のことか」が分からなくなる。
+    /// <b>列も見る</b>——ずれると、DDL のトリガが画面の書かない列を守り続ける。
+    /// <c>MasterSubmitGateTests.写した表とラベルはデザインと一致する</c> と同じ形である
+    /// （2026-09-16 の自己レビューで、自社情報に無いことを 2 人に指摘された）。
+    /// </remarks>
+    [Fact]
+    public void 写した呼び名と列はデザインと一致する()
+    {
+        var path = Directory
+            .EnumerateFiles(
+                BusinessApp.TestSupport.TestDatabase.ModulesDirectory,
+                $"{CompanyProfileSubmitGate.ModuleName}.mod.json",
+                SearchOption.AllDirectories)
+            .Single();
+        using var design = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        var fields = design.RootElement.GetProperty("Fields");
+
+        Assert.Equal("company_profile", design.RootElement.GetProperty("DbTable").GetString());
+        Assert.NotEmpty(CompanyProfileSubmitGate.TextFields);
+
+        foreach (var (field, column, label, _) in CompanyProfileSubmitGate.TextFields)
+        {
+            var design_ = fields.EnumerateArray().Single(f => f.GetProperty("Name").GetString() == field);
+            Assert.Equal(column, design_.GetProperty("DbColumn").GetString());
+            Assert.Equal(label, design_.GetProperty("DisplayName").GetString());
+        }
+
+        // **書式の欄も同じ写しである**（郵便番号・法人番号）。
+        foreach (var (field, label) in new[]
+                 {
+                     ("PostalCode", PostalCode.Label),
+                     ("CorporateNumber", BusinessApp.Partners.CorporateNumber.Label),
+                 })
+        {
+            var design_ = fields.EnumerateArray().Single(f => f.GetProperty("Name").GetString() == field);
+            Assert.Equal(label, design_.GetProperty("DisplayName").GetString());
+        }
+    }
+
+    /// <summary>
+    /// <b>郵便番号は書式で断る</b>（旧 Q-26 の決定。2026-09-16）。
+    /// </summary>
+    /// <remarks>
+    /// <b>判定と文言は <see cref="BusinessApp.AccountingCore.Settings.PostalCode"/> が持つ。</b>
+    /// ここが確かめるのは「その判定に通していること」である。
+    /// </remarks>
+    [Theory]
+    [InlineData("1234567")]
+    [InlineData("123-456")]
+    [InlineData("１23-4567")]
+    public async Task 書式の合わない郵便番号は止める(string value)
+    {
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => new CompanyProfileSubmitGate().SubmitAsync(
+                [Updating(Field("PostalCode", value))], save.SaveAsync));
+
+        Assert.EndsWith(PostalCode.DescribeProblem(value)!, thrown.Message, StringComparison.Ordinal);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>書式の合う郵便番号は通り、前後の空白は落として保存する。</b>
+    /// </summary>
+    [Fact]
+    public async Task 書式の合う郵便番号は通る()
+    {
+        var save = new SaveSpy();
+        var data = Field("PostalCode", "  123-4567  ");
+
+        await new CompanyProfileSubmitGate().SubmitAsync([Updating(data)], save.SaveAsync);
+
+        Assert.True(save.Called);
+        Assert.Equal("123-4567", ((TextFieldData)data.Fields["PostalCode"]).Value);
+    }
+
+    /// <summary>
+    /// <b>空欄の郵便番号は NULL に倒す</b>（法人番号と同じ作法）。
+    /// </summary>
+    /// <remarks>
+    /// <b>空文字と「入っていない」を DB で区別させない</b>——
+    /// 区別が付かない 2 通りの「空」が混ざると、突合も表示も両方を扱うことになる（docs/20 §7）。
+    /// </remarks>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task 空欄の郵便番号は_NULL_に倒す(string? value)
+    {
+        var save = new SaveSpy();
+        var data = Field("PostalCode", value);
+
+        await new CompanyProfileSubmitGate().SubmitAsync([Updating(data)], save.SaveAsync);
+
+        Assert.True(save.Called);
+        Assert.Null(((TextFieldData)data.Fields["PostalCode"]).Value);
+    }
+
 }
