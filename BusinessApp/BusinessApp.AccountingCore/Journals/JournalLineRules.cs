@@ -186,13 +186,13 @@ public static class JournalLineRules
     // --- 差し戻しの文言（ここが正典。両方の層がこれを使う）---
 
     /// <summary>金額が 0 以下（<see cref="JournalViolationCodes.AmountNotPositive"/>）。</summary>
-    public const string AmountNotPositive = "金額は 1 円以上にしてください。減額は借方と貸方を入れ替えて表します。";
+    public const string AmountNotPositive = "「金額」は 1 円以上にしてください。減額は借方と貸方を入れ替えて表します。";
 
     /// <summary>金額に 1 円未満の端数がある（<see cref="JournalViolationCodes.AmountNotStorable"/>）。</summary>
-    public const string AmountHasFraction = "金額は 1 円単位で入力してください。";
+    public const string AmountHasFraction = "「金額」は 1 円単位で入力してください。";
 
     /// <summary>金額が扱える大きさを超えている（同上）。</summary>
-    public const string AmountTooLarge = "金額が大きすぎます。桁を確かめてください。";
+    public const string AmountTooLarge = "「金額」が大きすぎます。桁を確かめてください。";
 
     // 行番号は画面が自動で振る（利用者は編集できない。開発者の決定。2026-08-30）。
     // だから下の 2 つは、画面を通らない経路（取込・API）でしか出ない。
@@ -280,7 +280,7 @@ public static class JournalLineRules
 
     public const string AccountMissing = "勘定科目を選んでください。";
 
-    public const string AmountMissing = "金額を入力してください。";
+    public const string AmountMissing = "「金額」を入力してください。";
 
     public const string TransactionDateMissing = "取引日を入力してください。";
 

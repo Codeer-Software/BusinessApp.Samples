@@ -664,26 +664,229 @@ public class JournalEntryValidatorTests
         Assert.Empty(Validate(entry));
     }
 
+    /// <summary>
+    /// <b>行ごとの欄の断りも、1 件にまとめて場所を並べる</b>（docs/21 §2-6）。
+    /// <b>鍵は違反コード</b>——直し先になるマスタも、原因になる科目も無い。
+    /// </summary>
     [Fact]
-    public void 金額が零以下の明細は計上できない()
+    public void 金額が零以下の明細が何行あっても断りは_1_件で場所を並べる()
     {
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 0),
-            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 0));
+            AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 0),
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.OtherPayable, 0));
 
-        AssertViolation(JournalViolationCodes.AmountNotPositive, Validate(entry));
+        var violations = Validate(entry);
+
+        var violation = AssertViolation(JournalViolationCodes.AmountNotPositive, violations);
+        Assert.Null(violation.LineNo);
+        Assert.Equal(
+            "行 1・行 2・行 3 の「金額」は 1 円以上にしてください。減額は借方と貸方を入れ替えて表します。",
+            violation.Message);
+        Assert.Equal(ViolationSeverity.Error, violation.Severity);
+        Assert.True(violations.HasError());
+        Assert.Single(violations, v => v.Code == JournalViolationCodes.AmountNotPositive);
+    }
+
+    /// <summary>1 行だけなら「行 N:」で指し、並べ書きは出さない。</summary>
+    [Fact]
+    public void 金額が零以下の明細が_1_行だけなら行番号で指す()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 0),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
+
+        var violation = AssertViolation(JournalViolationCodes.AmountNotPositive, Validate(entry));
+
+        Assert.Equal(1, violation.LineNo);
+        Assert.Equal(
+            "「金額」は 1 円以上にしてください。減額は借方と貸方を入れ替えて表します。",
+            violation.Message);
+    }
+
+    /// <summary>税区分の側も同じ形でまとめる。</summary>
+    [Fact]
+    public void 税区分のない明細が何行あっても断りは_1_件で場所を並べる()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                taxCategoryId: default(TaxCategoryId)),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000,
+                taxCategoryId: default(TaxCategoryId)));
+
+        var violations = Validate(entry);
+
+        var violation = AssertViolation(JournalViolationCodes.TaxCategoryMissing, violations);
+        Assert.Null(violation.LineNo);
+        Assert.Equal(
+            "行 1・行 2 の「税区分」を選んでください。税に関係のない行にも「対象外」を選びます。",
+            violation.Message);
+        Assert.Equal(ViolationSeverity.Error, violation.Severity);
+        Assert.True(violations.HasError());
+        Assert.Single(violations, v => v.Code == JournalViolationCodes.TaxCategoryMissing);
+    }
+
+    /// <summary>
+    /// <b>鍵が違えば別に言う。</b> 金額と税区分は<b>同じ重さの別のコード</b>なので、
+    /// 1 枚の伝票で<b>2 件出る</b>。
+    /// </summary>
+    [Fact]
+    public void 金額と税区分が別の行で欠けたら_2_件出て場所も別になる()
+    {
+        // **場所の集合を別にする**——同じにすると、**控えを共有する実装でも緑**になる。
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 0),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000,
+                taxCategoryId: default(TaxCategoryId)));
+
+        var violations = Validate(entry);
+
+        var amount = AssertViolation(JournalViolationCodes.AmountNotPositive, violations);
+        Assert.Equal(1, amount.LineNo);
+        Assert.Equal(
+            "「金額」は 1 円以上にしてください。減額は借方と貸方を入れ替えて表します。",
+            amount.Message);
+
+        var category = AssertViolation(JournalViolationCodes.TaxCategoryMissing, violations);
+        Assert.Equal(2, category.LineNo);
+        Assert.Equal(
+            "「税区分」を選んでください。税に関係のない行にも「対象外」を選びます。",
+            category.Message);
+    }
+
+    /// <summary>
+    /// <b>明細の内容の断りも、行番号の順に出す。</b> 文字数が同じなら<b>完全に同じ文</b>が並ぶので、
+    /// <b>渡された順のままだと「①行 2・②行 1」になる</b>（docs/21 §3）。
+    /// </summary>
+    [Fact]
+    public void 明細の内容の断りは渡した順ではなく行番号の順に出る()
+    {
+        var tooLong = new string('あ', JournalLineRules.TextMaxLength + 1);
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000) with
+            {
+                ItemDescription = tooLong,
+            },
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000) with
+            {
+                ItemDescription = tooLong,
+            });
+
+        var tooLongViolations = Validate(entry)
+            .Where(v => v.Code == JournalViolationCodes.ItemDescriptionTooLong)
+            .ToArray();
+
+        Assert.Equal([1, 2], tooLongViolations.Select(v => v.LineNo).ToArray());
+    }
+
+    /// <summary>
+    /// <b>税区分は本体行から継ぐ値</b>（docs/11 §2）なので、<b>消費税行は本体行で代表させる</b>。
+    /// 代表させないと、<b>利用者が編集できない行</b>を次の一手として名指しする。
+    /// </summary>
+    [Fact]
+    public void 税区分の断りは消費税行を本体行で代表させる()
+    {
+        var taxLine = AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 100,
+            taxCategoryId: default(TaxCategoryId)) with
+        {
+            IsTaxLine = true,
+            ParentLineNo = 1,
+        };
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000,
+                taxCategoryId: default(TaxCategoryId)),
+            taxLine,
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_100));
+
+        var violation = AssertViolation(JournalViolationCodes.TaxCategoryMissing, Validate(entry));
+
+        Assert.Equal(1, violation.LineNo);
+        Assert.Equal(
+            "「税区分」を選んでください。税に関係のない行にも「対象外」を選びます。",
+            violation.Message);
+    }
+
+    /// <summary>
+    /// <b>金額は継がない値</b>なので、<b>消費税行は自分の行番号で数える</b>——
+    /// 本体行を直しても、税行の金額は直らない。
+    /// </summary>
+    [Fact]
+    public void 金額の断りは消費税行を自分の行番号で数える()
+    {
+        var taxLine = AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.Cash, 0) with
+        {
+            IsTaxLine = true,
+            ParentLineNo = 1,
+        };
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
+            taxLine,
+            AccountingFixture.Line(3, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
+
+        var violation = AssertViolation(JournalViolationCodes.AmountNotPositive, Validate(entry));
+
+        Assert.Equal(2, violation.LineNo);
+    }
+
+    /// <summary>
+    /// <b>行番号が 0 以下の行だけなら、場所が 1 つも残らない</b>——
+    /// 存在しない行を名指ししない（<c>ValidateStructure</c> と同じ線）。
+    /// <b>どの行かは `E-LINE-NO` が別に言う。</b>
+    /// </summary>
+    [Fact]
+    public void 行番号が_0_以下の行だけなら金額の断りは場所を持たない()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(0, DebitCredit.Debit, AccountingFixture.Cash, 0),
+            AccountingFixture.Line(1, DebitCredit.Credit, AccountingFixture.OtherPayable, 0));
+
+        var violations = Validate(entry);
+
+        var violation = AssertViolation(JournalViolationCodes.AmountNotPositive, violations);
+        Assert.Equal(1, violation.LineNo);
+        AssertViolation(JournalViolationCodes.LineNoInvalid, violations);
     }
 
     [Fact]
-    public void 税区分のない明細は計上できない()
+    public void 金額が負の明細も計上できない()
+    {
+        // **文が名指ししているのは負の金額である**（「減額は借方と貸方を入れ替えて表します」）。
+        // 境界の 0 は上の検体が押さえているので、ここは**文の名宛人**を通す。
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, -1_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, -1_000));
+
+        var violation = AssertViolation(JournalViolationCodes.AmountNotPositive, Validate(entry));
+
+        Assert.Null(violation.LineNo);
+        Assert.Equal(
+            "行 1・行 2 の「金額」は 1 円以上にしてください。減額は借方と貸方を入れ替えて表します。",
+            violation.Message);
+    }
+
+    [Fact]
+    public void 税区分のない明細が_1_行だけなら行番号で指す()
     {
         var entry = AccountingFixture.Entry(
             Ordinary,
             AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000, taxCategoryId: default(TaxCategoryId)),
             AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
 
-        AssertViolation(JournalViolationCodes.TaxCategoryMissing, Validate(entry));
+        var violation = AssertViolation(JournalViolationCodes.TaxCategoryMissing, Validate(entry));
+
+        Assert.Equal(1, violation.LineNo);
+        Assert.Equal(
+            "「税区分」を選んでください。税に関係のない行にも「対象外」を選びます。",
+            violation.Message);
     }
 
     [Fact]

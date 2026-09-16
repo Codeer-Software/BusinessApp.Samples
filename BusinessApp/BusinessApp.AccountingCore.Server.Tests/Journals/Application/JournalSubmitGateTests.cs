@@ -552,7 +552,7 @@ public class JournalSubmitGateTests
                 }));
 
         Assert.False(saved);
-        Assert.Equal("保存できません。行 1: 金額を入力してください。", error.Message);
+        Assert.Equal("保存できません。行 1: 「金額」を入力してください。", error.Message);
         Assert.Equal(0, server.Scalar<long>("select count(*) from journal_entries"));
     }
 
