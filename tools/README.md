@@ -3,7 +3,7 @@ title: tools — 開発スクリプト
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-09-16
+updated: 2026-09-17
 supersedes: []
 related: [../docs/README.md]
 ---
@@ -28,8 +28,8 @@ related: [../docs/README.md]
 | [`clb/_sqlite.ps1`](clb/_sqlite.ps1) | **`worktree_db.ps1` と `db_snapshot.ps1` が共有する小道具**（稼働 DB のパス・写しの健全性・退避と巻き戻し・使用中かの判定・空き名探し・表示用のパス畳み）。**単体では動かない** |
 | [`clb/db_snapshot.ps1`](clb/db_snapshot.ps1) | **稼働 DB の退避と復元**（[ADR-0046](../docs/decisions/0046-稼働DBの退避と復元を戻せる道具に閉じる.md)・[33 §1](../docs/33_失わないためのルール.md)）。`-Save` / `-Restore` / `-List`。**写しは `VACUUM INTO` で取る**（ファイルの複製は、古い内容と新しい内容が混ざった**壊れた写し**になりうる）。**何も消さず、戻す前に必ず現状を退避する**ので、`trash.ps1` と同じく確認を待たずに実行してよい |
 | [`server/wait-server.ps1`](server/wait-server.ps1) | 開発サーバ（`http://localhost:5085`）の起動を待つ |
-| [`clb/sql.ps1`](clb/sql.ps1) | `sql` CLI のラッパ。結果 JSON を標準出力に返し、**一時ファイルを作らない** |
-| [`clb/migrate.ps1`](clb/migrate.ps1) | **DB マイグレーションのランナー**（ADR-0020）。`-Adopt` / `-Apply` / `-Status` / `-Verify`。書き方は [`Designer/migrations/README`](../Designer/migrations/README.md) |
+| [`clb/sql.ps1`](clb/sql.ps1) | `sql` CLI のラッパ。結果 JSON を標準出力に返し、**一時ファイルを作らない**。**DDL（`CREATE`・`DROP`・`ALTER`）は拒む**——通すのは `-File Designer/ddl/*`（追跡済み・未変更）と、`-AllowDdlOnce -Reason "<理由>"` で置いた印（次の 1 回だけ）。判定は純粋関数で、`-SelfTest` は**配線ごと**撃つ（分岐を消しても鳴る）。**なぜ拒むかは [docs/33 §2](../docs/33_失わないためのルール.md)、経緯は [ADR-0064](../docs/decisions/0064-稼働DBのスキーマはmigrateだけで動かし適用の記録はコミットごとに突き合わせる.md)**。`-SelfTest` あり |
+| [`clb/migrate.ps1`](clb/migrate.ps1) | **DB マイグレーションのランナー**（ADR-0020）。`-Adopt` / `-Apply` / `-Status` / `-Verify`。**`-Verify` はスキーマの同値・未適用の有無・適用済みのチェックサムの 3 つを見る**（コミット前フックが流す。[ADR-0064](../docs/decisions/0064-稼働DBのスキーマはmigrateだけで動かし適用の記録はコミットごとに突き合わせる.md)）。書き方は [`Designer/migrations/README`](../Designer/migrations/README.md) |
 | [`clb/designcheck.ps1`](clb/designcheck.ps1) | `designcheck` のラッパ。結果は固定パスに上書きし続ける |
 | [`clb/lint_design.py`](clb/lint_design.py) | **CLB デザインの静的検査**。`designcheck` が緑でも壊れるもの（[qa/01](../docs/qa/01_CLB静かな失敗.md)）のうち JSON とスクリプトで判るものを検出する。`--selftest` で**検査そのものを検査する**——関門を殺す／error を warn に格下げする／`main()` の配線を消す・指摘の受け皿を渡さない／印字と終了コードを壊す／検体を減らす／**言うべき直し方を薄める**／**母数の枝を殺す**、のどれでも鳴る。**通し数は書かない**（足すたびに腐る。[qa/01 §0](../docs/qa/01_CLB静かな失敗.md) と同じ理由）。最後のふたつは**実デザインに対する対照実験**である——検体は「その形なら鳴る」しか言わないので、**枝を殺すと本番で数える読みが減ること**まで見る |
 | [`clb/knockout.ps1`](clb/knockout.ps1) | **制約ノックアウト**（[ADR-0053](../docs/decisions/0053-制約ノックアウトはDDLを1つずつ外し振る舞いのテストだけで赤になるかを見る.md)・[qa/05 §4](../docs/qa/05_観点網羅の計器.md)）。**DDL の制約を 1 つずつ外し、`Schema.Tests` が赤にならない制約＝誰もテストしていない制約を報告する**。`-Only` / `-Kind` / `-List`。**時間がかかるのでコミット前フックには載せていない**——流す回は [ADR-0053 決定 7](../docs/decisions/0053-制約ノックアウトはDDLを1つずつ外し振る舞いのテストだけで赤になるかを見る.md)（**Claude の判断。開発者は未承認**）。外す点と外し方の正典は `BusinessApp.TestSupport` の `SchemaKnockout` で、このスクリプトは回すだけ |
@@ -127,7 +127,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 | 段 | 中身 |
 |---|---|
 | **凍結ファイルの検査** | `check_frozen.py --selftest` → `check_frozen.py`（**凍結されたファイルの変更・削除・改名**。適用済みマイグレーションと `baseline/`。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
-| **失うことを止める道具の自己検査** | 失うことを止める道具の自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`・`worktree_db.ps1 -SelfTest`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる） |
+| **失うことを止める道具の自己検査** | 失うことを止める道具の自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`・`worktree_db.ps1 -SelfTest`・`sql.ps1 -SelfTest`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる。**最後の 1 つは DDL の関門**——[ADR-0064](../docs/decisions/0064-稼働DBのスキーマはmigrateだけで動かし適用の記録はコミットごとに突き合わせる.md)） |
 | **改行の検査** | `normalize_eol.py --selftest` → `normalize_eol.py --check`（**作業コピーの改行が LF か**。`git ls-files --eol` が判定の正典で、**何を LF にすべきかは `.gitattributes` が決める**——この道具は拡張子の一覧を持たない。1 秒で終わるので前に置く） |
 | **秘密の検査** | `lint_secrets.py`（秘密・絶対パスの混入） |
 | **ドキュメント規約の検査** | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |

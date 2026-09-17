@@ -325,6 +325,20 @@ switch ($true) {
         if (Test-Adopted) {
             $files = Get-MigrationFiles
             $applied = Get-AppliedMigrations
+
+            # **適用済みの編集も、ここで見る。**
+            # ADR-0020 は「適用済みファイルは編集禁止（チェックサムで機械強制）」と決めているが、
+            # **その強制は -Apply にしか無かった**——-Apply は配達物を足した人しか流さないので、
+            # **編集された適用済みファイルは、次に誰かが -Apply するまで緑のまま残る**。
+            # 実際に 0038 がそうなっていた（2026-09-16 に発見。qa/03 の L-51）。
+            # **コミット前フックが流すのは -Verify である**（tools/git-hooks/pre-commit）ので、
+            # ここに置いて初めて「毎回」になる。
+            $integrityErrors = @(Get-IntegrityErrors -Applied $applied -Files $files -BaselineVersion (Get-BaselineVersion))
+            foreach ($message in $integrityErrors) {
+                Write-Host $message
+                if ($exitCode -eq 0) { $exitCode = 1 }
+            }
+
             $maxApplied = 0
             if ($applied.Count -gt 0) { $maxApplied = ($applied | Measure-Object -Property version -Maximum).Maximum }
             $pending = @($files | Where-Object { $_.Version -gt $maxApplied })
@@ -337,6 +351,7 @@ switch ($true) {
             Write-Host '（この DB はまだ採用されていない。適用状況の検査はしていない）'
         }
 
+        if ($exitCode -ne 0) { Write-Host 'migrate.ps1 -Verify: NG（上の行が理由。同値・未適用・適用済みのチェックサムの 3 つを見ている）' }
         exit $exitCode
     }
 }

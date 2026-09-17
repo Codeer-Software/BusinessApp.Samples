@@ -38,11 +38,14 @@ python tools/clb/check_frozen.py
 # 「消さない・戻す前に必ず退避する」なので、それを機械で表明できないと allow の前提が立たない。**
 # 4 つめはワークツリーの稼働 DB の更新。**行き先を決める判定がここでしか守られていない**——
 # 緩めると本体の稼働 DB を上書きしうるので、db_snapshot と同じ理由で載せる。
+# 5 つめは sql.ps1 の DDL の関門（ADR-0064）。**稼働 DB のスキーマを記録なしに動かせる経路を塞ぐ**判定で、
+# 語彙を狭めても誰も気づかないので、検体で縛る。
 stage "失うことを止める道具の自己検査"
 python tools/claude/guard_delete.py --selftest
 pwsh -NoProfile -File tools/claude/trash.ps1 -SelfTest
 pwsh -NoProfile -File tools/clb/db_snapshot.ps1 -SelfTest
 pwsh -NoProfile -File tools/clb/worktree_db.ps1 -SelfTest
+pwsh -NoProfile -File tools/clb/sql.ps1 -SelfTest
 
 # 作業コピーの改行が LF であること。**リポジトリに入る中身は .gitattributes が正規化する**ので
 # 常に LF だが、**作業コピーだけがずれる**——Windows の Write ツールと python の write_text が
