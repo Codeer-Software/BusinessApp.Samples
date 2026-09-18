@@ -61,7 +61,7 @@ def print_stats(docs: List[Doc]) -> None:
         rows.append((body, d.rel))
         total += body
     rows.sort(reverse=True)
-    print("== current の行数（decisions/ を除く） ==")
+    print("== current の行数（{} を除く） ==".format("・".join(REFERENCE_PREFIXES)))
     for body, rel in rows:
         print("{:>6}  {}".format(body, rel))
     print("{:>6}  {}".format(total, "合計"))
