@@ -77,10 +77,23 @@ Claude Code の Bash 権限は**コマンド文字列の前方一致**で判定�
   `-m "docs: branch -D を拒む"` はどれも拒まれる（2026-09-17 に実測）。
   **コミットの説明文は `-F <ファイル>` で渡す**（[30 §8]）。
   `-[A-Za-z]*[CDMf]` は**その字を含む短い指定の束すべて**に当たる（`git branch -vC` など）。
-- **ブランチを消す・reflog を捨てる別の綴りは見ない。** どれも 2026-09-17 に実測した:
-  `git update-ref -d refs/heads/<ブランチ>` は**マージの検査を通らずにブランチを消せる**。
-  `git reflog expire --expire=now --all` と `git gc --prune=now` は、
-  **「reflog を掘れば戻る」という上の前提そのものを壊す**。
+- **`find` の形だけ区切りを見ない。** `DELETION_FORMS` の `find -delete` は `\bfind\b.*(…)` なので、
+  **`find` と `-delete` が別のコマンドに分かれていても当たる**——
+  `find . -name '*.orig'; git branch --delete feat/x` は「ごみ箱送りを使え」という
+  **無関係な理由で**拒まれる（2026-09-17 に実測）。**締めない**（開発者の指示。2026-09-18）——
+  **守りを狭める向きの変更**で、失うのは案内文の的確さだけだからである。
+- **拒みすぎる形が 3 つある。どれも直さない**（絞ると取りこぼす。qa/03 の L-59）。
+  `git update-ref --help`（形ごと拒むので読むだけの綴りも止まる）・
+  `git reflog expire --dry-run`（何も消さない空打ち）・
+  `git restore --staged`（ステージから下ろすだけ。`git reset <パス>` が通る）。
+  **`git clean -n` の空打ちと同じ代償**である（ADR-0044 の決定 4）。
+- **素の `git gc` は通すが、それは「刈らない」という意味ではない。**
+  `git-gc.adoc` の逐語（2026-09-18 に実測）は
+  "Prune loose objects older than date (default is 2 weeks ago …)" と "`--prune` is on by default."
+  ——**`--prune` を書かなくても既定で刈る**。拒んでいるのは**期限を縮める指定**だけである。
+- **ブランチを消す・reflog を捨てる綴りを、まだ 3 つ見ていない。** どれも 2026-09-18 に実測した:
+  `git prune --expire=now`・`git repack -ad`・**短い指定を束ねた形**（`git checkout -fq` は
+  `checkout` の形が束を見ないので素通りする。`branch` と `update-ref` は束を覆っている）。
   `git push origin --delete` は `settings.json` の `Bash(git push:*)` が止めるので穴ではない。
 - **閉じた上書きの経路は限られる。** `Write` ツールと、**`OVERWRITE_WORDS` / `OVERWRITE_FORMS` に
   載っている語が出て、かつ保護対象の名前も出る**シェルのコマンドだけである。
@@ -183,13 +196,13 @@ def _forms_regex(forms):
 
 OTHER_DELETION = _forms_regex(DELETION_FORMS)
 
-# **git 自身の破壊コマンド。** 8 形が消すのは**元から git に入っていないもの**
+# **git 自身の破壊コマンド。3 つの類型がある。** 第 1 の 8 形が消すのは**元から git に入っていないもの**
 # （追跡外のファイル・コミットしていない変更）で、文字どおり戻せない。
 # **`restore` と `checkout -f` と `switch --discard-changes` は 2026-09-16 に足した**——
 # **どれもコミットしていない変更を黙って捨てる**のに、`clean` と `reset --hard` しか見ていなかった
 # （自己レビューが実測。`git restore .` は素通りだった）。
 #
-# **`branch` の強制を拒む理由は、この 8 形と違う。ブランチはコミット済みなので git で戻せる**
+# **第 2 の類型——`branch` の強制を拒む理由は、この 8 形と違う。ブランチはコミット済みなので git で戻せる**
 # ——`git branch -D` は `Deleted branch x (was <SHA>).` と SHA を印字する。
 # **それでも拒むのは、載せる基準の 2 句目「戻し損ねたことに気づけるか」に当たるから**である
 # （基準の正典は `protected_paths.json` の `_README_criteria`。判断は docs/33 §1）。
@@ -213,7 +226,7 @@ OTHER_DELETION = _forms_regex(DELETION_FORMS)
 # ——見るのは「削除かどうか」ではなく「**強制かどうか**」である。
 # **失わない `-f` も巻き添えで拒む**（まだ無いブランチへの `git branch -f new HEAD` は何も失わない）。
 #
-# **前置きと区切りは 9 形で共有する**（`GIT_PREFIX`）。**写すと片方だけ古くなる。**
+# **前置きと区切りは全ての形で共有する**（`GIT_PREFIX`）。**写すと片方だけ古くなる。**
 # **区切りを `[^;&|]` より狭めない**——`branch` の初回は字を絞って地の文の過剰検出を避けようとしたが、
 # **`git branch "feat/x" -D`（囲った名前が強制の指定より前）が素通りした**（自己レビューが実測）。
 # **見逃した強制は戻せないが、過剰な拒否は書き方を変えれば済む**——8 形と同じ側へ倒す。
@@ -235,6 +248,24 @@ GIT_DESTRUCTIVE_FORMS = (
     ("git worktree remove", r"worktree\s+remove\b"),
     # **囲い字を読み飛ばす**（`REDIRECT` と同じ作法）——`git branch "-D" x` が素通りしていた。
     ("git branch の強制", r"branch\b[^;&|]*\s[\"']?" + _GIT_FORCE),
+    # **2026-09-18 に足した 3 形**（開発者の指示）。**どれもブランチの守りの前提を壊す。**
+    # `update-ref -d` は**マージの検査を通らずにブランチを消す**——
+    # `branch -D` を拒んでも、ここが開いていれば回り道できる。
+    # 後ろの 2 つは**「reflog を掘れば戻る」という、`branch` を拒む理由の前提そのもの**を消す。
+    # **`update-ref` は形ごと拒む。** `-d` だけを見ると、**2 引数の形が素通りする**——
+    # `git update-ref <ref> <oid>` は**マージも fast-forward も検査せずにブランチ先端を上書きする**
+    # （`git-update-ref.adoc` の DESCRIPTION "stores the <new-oid> in the <ref>"。2026-09-18 に実測）。
+    # 失うものは `git branch -f` と同じなので、片方を拒んで片方を通す理由が無い。
+    # **`--stdin` の穴も同時に閉じる**（標準入力の `delete <ref>` は字に出ないので、`-d` では拾えなかった）。
+    # **この repo で `git update-ref` を打つ道具は 0 件**（`tools/`・`tools/git-hooks/`・`.claude/skills/` を確認）。
+    ("git update-ref", r"update-ref\b"),
+    # **囲い字と行継続を読み飛ばす**——`branch` で塞いだ穴（qa/03 L-59）を、隣の形に写す。
+    # `drop` は `expire` より強い（`git reflog -h` の逐語は
+    # `git reflog drop [--all [--single-worktree] | <refs>...]`。2026-09-18 に実測）。
+    ("git reflog を消す", r"reflog\b[^;&|]*\s[\"']?(?:expire|delete|drop)\b"),
+    # `--no-prune` には当たらない（`--prune` の字がそのままでは出ない）。**素の `git gc` は通す**
+    # ——ただし通す側の代償は「限界」に書いた（`--prune` は既定で on である）。
+    ("git gc --prune", r"gc\b[^;&|]*--prune\b"),
 )
 
 
@@ -246,6 +277,56 @@ def _git_regex(forms):
 
 
 GIT_DESTRUCTIVE = _git_regex(GIT_DESTRUCTIVE_FORMS)
+
+# **`deny` の控えを、git の形と両方向で結ぶ**（開発者の指示。2026-09-18）。
+# **フックが落ちたときに残るのは `settings.json` の `deny` だけ**である
+# ——`allow` に `Bash(git:*)` があるので、**`deny` に無い形は確認なしで走る**。
+# 削除の語は 1 語ずつ両方向で結んであるのに、**git だけ `clean` の 1 形しか控えが無かった**
+# （2026-09-17 の自己レビューが実測）。
+#
+# **書き方の正典は公式ドキュメント**である（<https://code.claude.com/docs/en/permissions>。
+# 2026-09-18 に実測）。**`:*` は末尾の ` *` と同値**——逐語は
+# "The `:*` suffix is an equivalent way to write a trailing wildcard, so `Bash(ls:*)`
+# matches the same commands as `Bash(ls *)`"。**そして末尾の空白は規則の一部である**——
+# "The space before a trailing `*` is part of the rule. `Bash(ls *)` requires a space after `ls`,
+# so `lsof` doesn't match. `Bash(ls*)` has no space, so it matches `lsof` too"。
+# **だから `=` が続く綴りを止めたい行は `:*` では書けない**——`Bash(git gc --prune:*)` は
+# **いちばん止めたい `--prune=now` に当たらない**（2026-09-18 の自己レビューが実測して直した）。
+# **空白を含む前置きは効く**（同ページの `Bash(git log * main)` の表）。
+# **PowerShell も同形**——"PowerShell permission rules use the same shape as Bash rules"。
+#
+# **だから第 2 要素は「前置き」ではなく、括弧の中に書く字そのもの**である。
+# **書けない形は理由を字で残す**（`NON_DELETION_DENY` と同じ作法。**空にすると赤くなる**）。
+# **控えは完全ではない。** 同ページが挙げる抜け道が**そのまま当たる**——
+# `git -C . <形>`・`git -c k=v <形>`・`git '<形>'`・`/usr/bin/git <形>`・`sh -c '…'`、
+# および**指定の並びを変えた形**（`git switch main --discard-changes`）と**連結の後ろ**（`cd x && …`）。
+# **フックはこれらを拾う**（`GIT_PREFIX`）。**控えは素の形を止めるためのものである。**
+GIT_DENY_FALLBACK = (
+    ("git clean", ("git clean:*",), ""),
+    ("git reset --hard", ("git reset --hard:*",), ""),
+    ("git stash drop", ("git stash drop:*", "git stash clear:*"), ""),
+    ("git restore", ("git restore:*",), ""),
+    ("git worktree remove", ("git worktree remove:*",), ""),
+    # 空白を置かない `*`——`-f` を束ねた `-fq` まで覆う（`:*` だと `-f ` しか覆わない）。
+    ("git checkout -f", ("git checkout -f*", "git checkout --force:*"), ""),
+    ("git switch --discard-changes", ("git switch --discard-changes:*",), ""),
+    ("git update-ref", ("git update-ref:*",), ""),
+    ("git reflog を消す",
+     ("git reflog expire:*", "git reflog delete:*", "git reflog drop:*"), ""),
+    # **`:*` では `--prune=now` に当たらない**（上の逐語）。空白を置かない `*` で書く。
+    ("git gc --prune", ("git gc --prune*",), ""),
+    ("git checkout --", (),
+     "書けない——`git checkout <パス>` はブランチの切り替えと字が同じで、"
+     "控えを置くと `git checkout main` まで止まる"),
+    ("git branch の強制", (),
+     "書けない——強制の指定はブランチ名の後ろにも書ける（`git branch feat/x -D`）"),
+)
+
+# **`deny` の側にあってよい git の行のうち、この表から作れないもの。**
+# **理由を字で残す**（`NON_DELETION_DENY` と同じ作法）——書かないと逆向きの検査が赤くなる。
+NON_GIT_FALLBACK_DENY = {
+    "git push:*": "外部公開は開発者の担当（docs/34 §1 の 5）。守りの形ではない",
+}
 
 # ファイルへのリダイレクト（`> 先` `>> 先`）。**`>` を素で拾わない。**
 # `2>/dev/null`・`2>&1`・`'->'`・`>=`・`> 1` は上書きではないのに当たっていて、
@@ -359,12 +440,12 @@ NON_DELETION_DENY = frozenset()
 ALLOWED_TOOLS = (
     # --- Bash
     ("dotnet", True, "dotnet -o"),
-    # **9 形を 1 語で名乗らない**——`git clean` の検体 1 つで満たされるので、
+    # **形の数だけ名乗る。1 語で済ませない**——`git clean` の検体 1 つで満たされるので、
     # **`branch` の形を丸ごと消してもこの行は緑**のままだった（qa/03 L-56 の型）。
     # **`allow_findings` が逆向きに縛る**ので、1 語へ戻すと赤くなる。
     ("git", True, "git clean・git reset --hard・git stash drop・git restore・git checkout --"
                   "・git checkout -f・git switch --discard-changes・git worktree remove"
-                  "・git branch の強制"),
+                  "・git branch の強制・git update-ref・git reflog を消す・git gc --prune"),
     ("gh", True, "見ない: この環境に入っておらず、当たり先を取る綴りを一次情報で数えていない"),
     ("python", True, "任意: shutil.rmtree・os の削除・Path.unlink・open の書き込み・リダイレクト"),
     ("py", True, "任意: shutil.rmtree・os の削除・Path.unlink・open の書き込み・リダイレクト"),
@@ -438,8 +519,19 @@ FINDING_KINDS = {
     "unnamed_git": "git の形を名指ししている道具が 1 つも無い",
 }
 
+# **git の控えの検査が踏むべき枝**（数ではなく字で釘付けする。`FINDING_KINDS` と同じ作法）。
+GIT_FALLBACK_KINDS = {
+    "missing_fallback": "控えの表に無い git の形がある",
+    "orphan_fallback": "守りに無い形が控えの表にある",
+    "missing_deny": "settings.json の deny に無い",
+    "no_reason": "控えも「書けない理由」も無い",
+    "dead_prefix": "控えに書いた字が、フック自身に拒まれない",
+    "orphan_deny": "deny の git の行を、表からも除外表からも作れない",
+}
+
 # **対照実験が踏むべき枝の一覧は、上の表そのもの**である（数ではなく字で釘付けする）。
 CONTROL_EXPECTATIONS = frozenset(FINDING_KINDS.values())
+GIT_FALLBACK_EXPECTATIONS = frozenset(GIT_FALLBACK_KINDS.values())
 
 # **`selftest` が流す検査の一覧。字で書く**——**呼び出しを 1 行消すと赤くなる**
 # （2026-09-16 の自己レビュー。`_check_allow` の呼び出しを消しても「すべて期待どおり」だった）。
@@ -734,13 +826,17 @@ def decide(command: str):
 
     if git_destructive:
         return "deny", (
-            "コミットしていない変更を消す git のコマンド（clean・reset --hard・restore・stash drop 等）は、"
-            "**消えたら git でも戻せない**ので使わない。"
-            "**枝を強制的に動かす git branch**（-D・-M・-C・-f／--force）は reflog には残るが、"
-            "**掘り出せるのは何を失ったかを既に知っている人だけ**なので、同じく使わない"
-            "（tools/claude/guard_delete.py。守るのは「戻し損ねたことに気づけないもの」である）。"
-            "**枝の片付けは git branch -d（--delete）で行う**——"
-            "いま checkout している枝（上流があれば上流）にマージ済みの枝だけを消すので、失う枝が無い。"
+            "この守りが拒む git は 3 つに分かれる（tools/claude/guard_delete.py。"
+            "守るのは「戻し損ねたことに気づけないもの」である）。"
+            "① コミットしていない変更を消すもの（clean・reset --hard・restore・stash drop 等）"
+            "——**消えたら git でも戻せない**。"
+            "② ブランチを強制的に動かすもの（branch -D・-M・-C・-f／--force、update-ref）"
+            "——**reflog には残るが、掘り出せるのは何を失ったかを既に知っている人だけ**。"
+            "③ reflog そのものを消すもの（reflog expire・delete・drop、gc --prune）"
+            "——**②の戻り先そのものを消す**ので、いちばん戻らない。"
+            "**作業コピーを戻したいなら git stash を使う**——捨てずに退避し、git stash list に出る。"
+            "**ブランチの片付けは git branch -d（--delete）で行う**——"
+            "いま checkout しているブランチ（上流があれば上流）にマージ済みのものだけを消すので、失うものが無い。"
             "要るなら開発者に相談する。ファイルを消したいだけなら " + USE_TRASH
         )
 
@@ -824,6 +920,21 @@ SELFTEST = [
     ("git branch --merged main | xargs -r git branch -D", "deny"),   # 先頭以外の git
     ("git -C ../wt branch -D feat/x", "deny"),                       # git と形のあいだの大域指定
     ("git \\\n    clean -xdf", "deny"),                              # git と形のあいだの改行
+    # **2026-09-18 に足した 3 形。綴りごとに 1 つずつ置く**（qa/03 L-55）。
+    ("git update-ref -d refs/heads/feat/x", "deny"),
+    ("git update-ref -dm reason refs/heads/feat/x", "deny"),   # 短い指定を束ねた形
+    ("git update-ref refs/heads/feat/x HEAD", "deny"),         # 2 引数＝検査なしの上書き
+    ("git reflog expire --expire=now --all", "deny"),
+    ("git reflog delete HEAD@{2}", "deny"),
+    ("git reflog drop --all", "deny"),                     # expire より強い
+    # **形ごと拒むので、読むだけの綴りも巻き添えになる。**
+    # **この 1 行が `-d` だけを見る形への後戻りを止める**（戻すと None に落ちる）。
+    ("git update-ref --help", "deny"),
+    ('git reflog "expire" --all', "deny"),                 # 囲い字（qa/03 L-59）
+    ("git reflog \\\n    expire --all", "deny"),             # 行継続
+    ("git -C ../wt reflog expire --all", "deny"),          # 大域指定
+    ("git gc --prune=now", "deny"),
+    ("git gc --prune", "deny"),          # 値を書かない形（既定の期限で刈る）
     ("git reset --hard HEAD~1", "deny"),
     ("git stash drop", "deny"),
     ("git stash clear", "deny"),
@@ -990,6 +1101,12 @@ SELFTEST = [
     # `--format` は `--forc` の前置きに当たらない（`--for` まで縮めると当たってしまう）。
     ("git branch -a --format='%(refname)'", None),
     ("git branch --merged main | xargs -r git branch -d", None),
+    # **足した 3 形が、隣の無害な綴りまで飲み込んでいないか。**
+    ("git reflog show main", None),
+    ("git reflog list", None),
+    ("git reflog exists refs/heads/main", None),
+    ("git gc --auto", None),
+    ("git gc --no-prune", None),
     ("dotnet build", None),
 ]
 
@@ -1192,15 +1309,55 @@ def _check_wiring(failed: int) -> int:
             print(f"NG  settings.json の deny に、削除の語彙にも除外にも無い 1 語の規則がある: "
                   f"{'・'.join(rules)}（guard_delete.py の DELETION_WORDS か NON_DELETION_DENY に足す）")
 
-    # git 自身の破壊コマンドは 1 語ではないので、名指しで見る（`GIT_DESTRUCTIVE_FORMS` の代表）。
-    # **控えが覆うのは 9 形のうち 1 形だけである**——`allow` に `Bash(git:*)` があるので、
-    # **フックが落ちると残り 8 形は確認なしで走る**（2026-09-17 に実測して字にした）。
-    # **9 形を両方向で結んでいないのはここだけ**だが、`deny` を広げるのは
-    # `settings.json` を触ることなので開発者に諮る（docs/34 §1 の 2。docs/05 の問い）。
-    for required in ("Bash(git clean:*)", "PowerShell(git clean:*)"):
-        if required not in deny:
+    # **git の形と `deny` の控えを両方向で結ぶ**（規則は `GIT_DENY_FALLBACK` の上のコメント）。
+    decision = lambda command: decide(command)[0]  # noqa: E731（対照実験で差し替える）
+    for finding in git_fallback_findings(GIT_DENY_FALLBACK, GIT_DESTRUCTIVE_FORMS,
+                                         deny, NON_GIT_FALLBACK_DENY, decision):
+        failed += 1
+        print(f"NG  {finding}")
+
+    # **対照実験。** 枝を 1 つずつ壊して、その枝の文が出ることを見る。
+    # **踏んだ枝を `GIT_FALLBACK_EXPECTATIONS` と字で突き合わせる**ので、
+    # **実験を空にしても・1 つ抜いても・枝を足して実験を書き忘れても赤くなる。**
+    def fb_without(name):
+        return tuple(row for row in GIT_DENY_FALLBACK if row[0] != name)
+
+    def fb_replaced(row):
+        return fb_without(row[0]) + (row,)
+
+    forms = GIT_DESTRUCTIVE_FORMS
+    table = GIT_DENY_FALLBACK
+    exempt = NON_GIT_FALLBACK_DENY
+    kinds = GIT_FALLBACK_KINDS
+    controls = (
+        ("控えの表から 1 行抜く", kinds["missing_fallback"],
+         fb_without("git gc --prune"), forms, deny, exempt, decision),
+        ("守りに無い形を控えに足す", kinds["orphan_fallback"],
+         table + (("git xyzzy", (), "実験"),), forms, deny, exempt, decision),
+        ("deny から 1 行抜く", kinds["missing_deny"],
+         table, forms, deny - {"Bash(git clean:*)"}, exempt, decision),
+        ("控えも理由も空にする", kinds["no_reason"],
+         fb_replaced(("git clean", (), "   ")), forms, deny, exempt, decision),
+        # **控えの字とフックを同時に綴り違いへ写した事故**（deny にも置いて missing_deny を避ける）。
+        ("控えの字を綴り違いにする", kinds["dead_prefix"],
+         fb_replaced(("git restore", ("git restor:*",), "")), forms,
+         deny | {"Bash(git restor:*)", "PowerShell(git restor:*)"}, exempt, decision),
+        ("除外表を空にする", kinds["orphan_deny"], table, forms, deny, {}, decision),
+    )
+
+    seen = set()
+    for label, expected, *probe in controls:
+        if any(expected in finding for finding in git_fallback_findings(*probe)):
+            seen.add(expected)
+        else:
             failed += 1
-            print(f"NG  settings.json の deny に {required} が無い（フックが落ちたときの控え）")
+            print(f"NG  git の控えの対照実験が鳴らない: {label}（「{expected}」を期待）")
+
+    if seen != GIT_FALLBACK_EXPECTATIONS:
+        failed += 1
+        print("NG  git の控えの対照実験が踏んだ枝が、字で書いた一覧と違う: "
+              f"足りない {sorted(GIT_FALLBACK_EXPECTATIONS - seen)} / "
+              f"余分 {sorted(seen - GIT_FALLBACK_EXPECTATIONS)}")
 
     # **控えは生成規則で突き合わせる。** 部分文字列で見ると `Edit(LocalDataX/**)` でも緑になる。
     # **`Write` の行は控えにならない**——権限判定はファイルを書く道具を `Edit(パス)` の形だけで見て、
@@ -1340,6 +1497,49 @@ def allow_findings(allow, tools, tool_names, names, specimens) -> list:
             found.append(f"{FINDING_KINDS['unnamed_git']}: {name}"
                          "（ALLOWED_TOOLS の git の覚え書きに足す）")
 
+    return found
+
+
+def git_fallback_findings(fallback, forms, deny, exempt, decision) -> list:
+    """**git の形と `deny` の控えを、両方向で突き合わせる。純関数。**
+
+    **引数を全部外から渡す**——表も `deny` も差し替えられないと、**対照実験が書けない**
+    （`allow_findings` と同じ設計理由）。
+
+    **`dead_prefix` が要る理由**——控えの字とフックの正規表現を**同時に綴り違いへ写す**と、
+    表どうしの突き合わせは全緑のまま、どちらも当たらなくなる。
+    **控えの字で組んだコマンドを、フック自身が拒むこと**まで見る。
+    """
+    found = []
+    kinds = GIT_FALLBACK_KINDS
+    table = {name: (rules, reason) for name, rules, reason in fallback}
+    guarded = {name for name, _ in forms}
+    for name in sorted(guarded - set(table)):
+        found.append(f"{kinds['missing_fallback']}: {name}（控えの字か、書けない理由を書く）")
+    for name in sorted(set(table) - guarded):
+        found.append(f"{kinds['orphan_fallback']}: {name}")
+
+    generated = set()
+    for name, rules, reason in fallback:
+        if not rules:
+            if not reason.strip():
+                found.append(f"git の形「{name}」に、{kinds['no_reason']}")
+            continue
+        for body in rules:
+            for shell in ("Bash", "PowerShell"):
+                rule = f"{shell}({body})"
+                generated.add(rule)
+                if rule not in deny:
+                    found.append(f"{rule} が {kinds['missing_deny']}（フックが落ちたときの控え）")
+            probe = body.replace(":*", "").replace("*", "").rstrip() + " x"
+            if decision(probe) != "deny":
+                found.append(f"git の形「{name}」の {kinds['dead_prefix']}: {body}（{probe}）")
+
+    for rule in sorted(str(r) for r in deny):
+        matched = re.fullmatch(r"(?:Bash|PowerShell)\((git .*)\)", rule)
+        if matched and rule not in generated and matched.group(1) not in exempt:
+            found.append(f"{kinds['orphan_deny']}: {rule}"
+                         "（GIT_DENY_FALLBACK か NON_GIT_FALLBACK_DENY に足す）")
     return found
 
 
@@ -1564,7 +1764,7 @@ def selftest() -> int:
     # それを捨てれば誰も気づかない**（§9 の観点 5）。**理由文を丸ごと元へ戻しても全緑**だった
     # （2026-09-17 に実測）。**他の理由文に出ない字**を期待値にする（qa/03 L-33）。
     _, reason = decide("git branch -D feat/x")
-    for phrase in ("branch -d", "戻し損ねたことに気づけない"):
+    for phrase in ("branch -d", "git stash", "戻し損ねたことに気づけない"):
         if phrase not in (reason or ""):
             failed += 1
             print(f"NG  git の強制を拒む理由文に「{phrase}」が出ていない")
