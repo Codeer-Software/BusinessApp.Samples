@@ -3,7 +3,7 @@ title: seed — 初期データ
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-09-13
+updated: 2026-09-18
 supersedes: []
 related: [../ddl/README.md, ../../docs/02_ペルソナ.md, ../../docs/12_マスタ台帳.md]
 ---
@@ -78,7 +78,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
 > **次の 1 リクエストから入れなくなり**（[qa/01 F-28](../../docs/qa/01_CLB静かな失敗.md)）、
 > 画面から戻す手が無くなる。`sql` CLI で直す:
 > `UPDATE app_users SET is_sysadmin = 1, can_access_app = 1 WHERE user_name = 'admin';`
-> **保存の手前で止める関門はまだ無い**（[qa/02](../../docs/qa/02_自己レビュー記録.md) R27-10）。
+> **保存の手前で止める関門はまだ無い**（[qa/02](../../docs/qa/02_自己レビュー記録/2026-08.md) R27-10）。
 
 > **なぜ 3 を人がやるか。** 上に書いたとおり `hash` / `salt` を SQL で作れないので、**アカウントを作る操作は画面からしかできない。**
 > 値は追跡外に置く（[31 §3](../../docs/31_検証のルール.md)）。

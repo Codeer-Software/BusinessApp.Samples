@@ -3,7 +3,7 @@ title: ddl — スキーマ定義
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-09-14
+updated: 2026-09-18
 supersedes: []
 related: [../Project.md, ../../docs/10_会計ドメイン設計.md, ../../docs/12_マスタ台帳.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---
@@ -179,4 +179,4 @@ CLB の予約名 `LogicalDelete` は**どのテーブルにも置かない**。
 **残すと決めてある**。
 **7 本目は `partner_invoice_registrations` の表の `UNIQUE (partner_id, registration_no, valid_from)`** で、
 **011 が入って日付が ISO に揃った日に包まれた**——それまでは日付として読めない値だけが
-この `UNIQUE` に届いていた（[qa/02 のラウンド 89](../../docs/qa/02_自己レビュー記録.md)）。
+この `UNIQUE` に届いていた（[qa/02 のラウンド 89](../../docs/qa/02_自己レビュー記録/2026-09.md)）。

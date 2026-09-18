@@ -510,7 +510,8 @@ QUESTION_HEADING = re.compile(r"^##[ 	]+Q-([0-9]+)(?![0-9])", re.M)
 QUESTION_REFERENCE = re.compile(r"(旧[ 	]*)?Q-([0-9]+)(?![0-9])")
 # 閉じた番号を指してよい 2 つ。改正法の略称の外し方（00 §6）と同じ切り方である
 # ——**当時の記録**（qa/02）と**検査の検体**（tools/docs/）
-QUESTION_CHECK_EXEMPT = ("docs/qa/02_自己レビュー記録.md", "tools/docs/")
+# 本書（.md）と、配下の年月ファイル（02_自己レビュー記録/YYYY-MM.md）の両方
+QUESTION_CHECK_EXEMPT = ("docs/qa/02_自己レビュー記録.md", "docs/qa/02_自己レビュー記録/", "tools/docs/")
 
 
 def check_question_numbers(docs: List[Doc], findings: List[Finding]) -> None:
@@ -523,7 +524,7 @@ def check_question_numbers(docs: List[Doc], findings: List[Finding]) -> None:
     （qa/02 のラウンド 87）。
 
     **`旧 Q-20` のように「旧」を付けた行は当たらない**——閉じたことを述べる記述はそのまま要る。
-    丸ごと外すのは **`docs/qa/02_自己レビュー記録.md`（当時の記録）と `tools/docs/`（検査の検体）**だけ。
+    丸ごと外すのは **`docs/qa/02_自己レビュー記録.md` とその配下の年月ファイル（当時の記録）と `tools/docs/`（検査の検体）**だけ。
     """
     try:
         with open(os.path.join(REPO_ROOT, QUESTION_DOC), "r", encoding="utf-8") as f:
