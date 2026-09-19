@@ -3,7 +3,7 @@ title: seed — 初期データ
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-09-18
+updated: 2026-09-20
 supersedes: []
 related: [../ddl/README.md, ../../docs/02_ペルソナ.md, ../../docs/12_マスタ台帳.md]
 ---
@@ -70,7 +70,10 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
 3. **`admin` でログインし、システム管理の画面で 2 人を作る**——
    `soumu_ippan`（経理担当）と `soumu_bucho`（経理責任者＝総務部長。[docs/02](../../docs/02_ペルソナ.md)）。
    **利用者名は役職から採る**（開発者が決めた。2026-08-31。**役割そのままの名前は長くて打つのが面倒**だから）。
-   **作ったら識別名とパスワードを `Designer/LocalEnvironment.md`（Git 追跡外）の「開発用アカウント」節に書く**（雛形は `LocalEnvironment.md.sample`。[ADR-0039](../../docs/decisions/0039-開発用アカウントの資格情報はGit追跡外に置く.md)）
+   **識別名とパスワードは、`Designer/LocalEnvironment.md`（Git 追跡外）の「開発用アカウント」節に
+   開発者があらかじめ書いたものを使う**（雛形は `LocalEnvironment.md.sample`。[ADR-0039](../../docs/decisions/0039-開発用アカウントの資格情報はGit追跡外に置く.md)）。
+   **この登録は Claude が行ってよい。表に行が 1 つも無いときだけ開発者に頼む**
+   （規則と理由は [docs/31 §3](../../docs/31_検証のルール.md)）
 4. **`dev/001_demo_user_roles.sql` を流す**（`sql` CLI）。役割が付く
 
 > **締め出してしまったときの戻し方。** 役割は画面から自分でも編集できるので、
@@ -80,7 +83,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
 > `UPDATE app_users SET is_sysadmin = 1, can_access_app = 1 WHERE user_name = 'admin';`
 > **保存の手前で止める関門はまだ無い**（[qa/02](../../docs/qa/02_自己レビュー記録/2026-08.md) R27-10）。
 
-> **なぜ 3 を人がやるか。** 上に書いたとおり `hash` / `salt` を SQL で作れないので、**アカウントを作る操作は画面からしかできない。**
+> **なぜ 3 を画面からやるか。** 上に書いたとおり `hash` / `salt` を SQL で作れないので、**アカウントを作る操作は画面からしかできない。**
 > 値は追跡外に置く（[31 §3](../../docs/31_検証のルール.md)）。
 > **役割の付与（4）は機械で再現できる**ので、そこだけをファイルにしてある——
 > DB を作り直すたびに、役割の割り当てを手で思い出さずに済む。
