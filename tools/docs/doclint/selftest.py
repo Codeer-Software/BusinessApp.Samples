@@ -895,7 +895,7 @@ def _check_link_label_forms() -> List[str]:
         ("docs/a.md", "`13 §4`", "10_会計ドメイン設計.md", True),
         # 当たってはいけない形
         ("docs/a.md", "15 §1-2", "15_記帳の枠組み.md", False),
-        ("docs/a.md", "ADR-0013", "decisions/0013-x.md", False),
+        ("docs/a.md", "ADR-0013", "decisions/0013-x.md", False),  # lint-docs:ignore 検体
         ("docs/a.md", "取引先の設計", "13_取引先設計.md", False),
         ("docs/a.md", "13 §4", "https://example.com/13", False),
         ("docs/a.md", "80 §3", "../tools/README.md", False),

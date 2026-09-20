@@ -11,7 +11,7 @@ using BusinessApp.TestSupport;
 /// <para><b>軽く守る。</b> 反転（インターフェース）は要求しない。上の層が下のどの層を参照してもよい。
 /// 禁じるのは 2 つだけ——<b>Infrastructure が Application・Presentation を参照する</b>ことと、
 /// <b>Application が Presentation を参照する</b>こと。</para>
-/// <para><b>層の名前が「名前空間として使われている」字面で見る</b>（ADR-0013 の決定 4 と同じ手法。外部ライブラリを使わない）。
+/// <para><b>層の名前が「名前空間として使われている」字面で見る</b>（ADR-0050 §8 が引き継いだ「検出は文字列の出現で行う」と同じ手法。外部ライブラリを使わない）。
 /// 完全修飾（`BusinessApp.AccountingCore.Server.Journals.Presentation`）だけでなく、
 /// <b>ファイルスコープ名前空間の内側では外側の名前空間の子を短く書ける</b>ので、
 /// `using Presentation;`・`using Shared.Presentation;`・`Presentation.JournalAmendmentEndpoint.Create(...)` も当てる
