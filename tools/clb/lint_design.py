@@ -1616,7 +1616,7 @@ def check_candidate_filters(modules, findings):
     ②**そのレイアウトが画面から開けるか**——`CanNavigateToDetail: false` の詳細レイアウトも同じに数える。
     ③**`AnchorTagFieldDesign` の `IdVariable` / `TitleVariable`**——こちらの欄を指すが、
     本番の 10 本はどれもクエリモジュールで、**レイアウトに出していなくてもリンクは通っている**
-    （qa/04 の台本 B-05）。**機構が違うらしいが測っていない。**
+    （qa/04 の BOK-05）。**機構が違うらしいが測っていない。**
     ④**直る側**（`DataOnlyFields` に入れれば直ること）——**踏んでいない**。
     """
     counts = {"組": 0, "常に来る欄": 0}

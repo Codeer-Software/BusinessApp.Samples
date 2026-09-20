@@ -64,7 +64,7 @@ Claude Code の Bash 権限は**コマンド文字列の前方一致**で判定�
 **塞ぐ前は、`pwsh … db_snapshot.ps1 -Save -Name x > tools/claude/guard_delete.py` が `allow` になり、
 `| tee log.txt` は落ちるのに `> out.txt` は通る、という非対称があった**（2026-09-08 の自己レビューが実測）。
 **`tools/claude/` は `deny` にも `ask` にも載っていない**ので、
-`allow` を返せばそのまま実行される——**自動拒否が自分を守れない形だった。**
+`allow` を返せばそのまま実行される——**フックが自分自身を守れない形だった。**
 
 限界（承知のうえで残す）
 ------------------------
@@ -574,7 +574,7 @@ RECOVERABLE_ONLY = re.compile(
 # **コマンドが「その 1 本だけ」で終わっていない印。** ここに 1 つでも当たれば `allow` を出さない。
 # 改行・バッククォート・`$(` に加えて、**リダイレクトの `<` `>` も数える**
 # （2026-09-08 の自己レビューが実測。`| tee log.txt` は落ちるのに `> out.txt` は `allow` を取り、
-# **自動拒否そのものへ書き込めた**。プロセス置換 `<(…)` も同じ穴で、`allow` の上に任意のコマンドが乗った）。
+# **フックの設定そのものへ書き込めた**。プロセス置換 `<(…)` も同じ穴で、`allow` の上に任意のコマンドが乗った）。
 CHAINED = re.compile(r"[;&|<>\n\r`]|\$\(")
 
 MSYS_ABSOLUTE = re.compile(r"^/([A-Za-z])/(.*)$")
@@ -1056,7 +1056,7 @@ SELFTEST = [
     (f"{T} a | tee log.txt", None),
     (f"{T} $(cat list.txt)", None),
     # **リダイレクトも「1 本で終わっていない」印である**——ここを数え落として、
-    # 自動拒否そのものへ書き込む形が allow を取っていた（2026-09-08）
+    # フックの設定そのものへ書き込む形が allow を取っていた（2026-09-08）
     (f"{T} work/x > log.txt", None),
     (f"{S} -List > out.txt", None),
     (f"{S} -Save -Name x > tools/claude/guard_delete.py", None),
@@ -1136,7 +1136,7 @@ WRITE_SELFTEST = [
 
 
 def _triggered(command, deletion, other_deletion, overwrite, git_destructive) -> bool:
-    """その検体が、まだ「自動拒否の仕事」に当たるか（deny へ進む条件を 1 つでも満たすか）。
+    """その検体が、まだ「この守りの仕事」に当たるか（deny へ進む条件を 1 つでも満たすか）。
 
     **`PATH_TAKING_MENTION` も数える**——`trash.ps1` に保護対象を渡す形は、
     削除の語でも上書きの語でもなく、この言及だけで deny になるためである。
@@ -1251,9 +1251,9 @@ def _check_canon(failed: int) -> int:
 
 
 def _check_wiring(failed: int) -> int:
-    """**自動拒否が settings.json に配線されているか。**
+    """**フックが settings.json に配線されているか。**
 
-    フックの登録や deny を消しても検査が緑のままなら、自動拒否は配線ごと外せてしまう。
+    フックの登録や deny を消しても検査が緑のままなら、フックは配線ごと外せてしまう。
 
     **本番の形での起動は `_check_production_entrypoint` が見る**（`settings.json` の
     `command` と `shell` をそのまま使う）。**ここが保証していないのは `defaultMode` の設定である。**
@@ -1754,7 +1754,7 @@ def selftest() -> int:
             failed += 1
             print(f"NG  期待 {expected} / 実際 {actual}: {command!r}")
 
-    # **理由文も表明する。** ADR-0044 は「拒むときに次の一手を示す」を自動拒否の中核に置いている。
+    # **理由文も表明する。** ADR-0044 は「拒むときに次の一手を示す」をこの道具の中核に置いている。
     _, reason = decide("rm work/x")
     if TRASH_SCRIPT not in (reason or ""):
         failed += 1
@@ -1832,7 +1832,7 @@ def selftest() -> int:
     # 正典が読めないときに素通りしないか（fail-open にしていないか）。
     # **この一手は表では書けない**——表は正典が読める前提の判定しか並べられないため。
     # **`settings.json` を読めないときに素通りしないか**（fail-open にしていないか）。
-    # **自動拒否そのものは保護対象に載せていない**ので、改名も無確認でできる（docs/33 §1）。
+    # **この道具そのものは保護対象に載せていない**ので、改名も無確認でできる（docs/33 §1）。
     readable_settings, SETTINGS = SETTINGS, SETTINGS.with_name("settings.json.存在しない")
     try:
         # **理由文はここでは出さない**（緑の回に NG の行が混ざると、読み手が数えられない）。
