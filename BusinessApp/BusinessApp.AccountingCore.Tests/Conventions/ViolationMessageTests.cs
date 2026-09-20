@@ -19,7 +19,7 @@ using BusinessApp.AccountingCore.Tests.Fixtures;
 /// 字面だけだと組み立てた文（補間）を見落とし、走らせるだけだと
 /// <b>その経路を通らない文</b>（取消・訂正・計上の各所で作る <c>Violation</c>）を見落とす。</para>
 /// <para>見出しの語は <c>AccountingCore.Server</c> にあり、こちらからは参照できない
-/// （依存は一方通行。ADR-0013）ので、<b>語をここに写している</b>。
+/// （依存は一方通行。ADR-0050 §8）ので、<b>語をここに写している</b>。
 /// 写しがずれても困らない——**増える側に倒してある**（禁じたい語を並べただけ）。</para>
 /// </remarks>
 public class ViolationMessageTests

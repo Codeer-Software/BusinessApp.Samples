@@ -3,7 +3,7 @@ title: tools — 開発スクリプト
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-09-17
+updated: 2026-09-20
 supersedes: []
 related: [../docs/README.md]
 ---
@@ -32,9 +32,9 @@ related: [../docs/README.md]
 | [`clb/migrate.ps1`](clb/migrate.ps1) | **DB マイグレーションのランナー**（ADR-0020）。`-Adopt` / `-Apply` / `-Status` / `-Verify`。**`-Verify` はスキーマの同値・未適用の有無・適用済みのチェックサムの 3 つを見る**（コミット前フックが流す。[ADR-0064](../docs/decisions/0064-稼働DBのスキーマはmigrateだけで動かし適用の記録はコミットごとに突き合わせる.md)）。書き方は [`Designer/migrations/README`](../Designer/migrations/README.md) |
 | [`clb/designcheck.ps1`](clb/designcheck.ps1) | `designcheck` のラッパ。結果は固定パスに上書きし続ける |
 | [`clb/lint_design.py`](clb/lint_design.py) | **CLB デザインの静的検査**。`designcheck` が緑でも壊れるもの（[qa/01](../docs/qa/01_CLB静かな失敗.md)）のうち JSON とスクリプトで判るものを検出する。`--selftest` で**検査そのものを検査する**——関門を殺す／error を warn に格下げする／`main()` の配線を消す・指摘の受け皿を渡さない／印字と終了コードを壊す／検体を減らす／**言うべき直し方を薄める**／**母数の枝を殺す**、のどれでも鳴る。**通し数は書かない**（足すたびに腐る。[qa/01 §0](../docs/qa/01_CLB静かな失敗.md) と同じ理由）。最後のふたつは**実デザインに対する対照実験**である——検体は「その形なら鳴る」しか言わないので、**枝を殺すと本番で数える読みが減ること**まで見る |
-| [`clb/knockout.ps1`](clb/knockout.ps1) | **制約ノックアウト**（[ADR-0053](../docs/decisions/0053-制約ノックアウトはDDLを1つずつ外し振る舞いのテストだけで赤になるかを見る.md)・[qa/05 §4](../docs/qa/05_観点網羅の計器.md)）。**DDL の制約を 1 つずつ外し、`Schema.Tests` が赤にならない制約＝誰もテストしていない制約を報告する**。`-Only` / `-Kind` / `-List`。**時間がかかるのでコミット前フックには載せていない**——流す回は [ADR-0053 決定 7](../docs/decisions/0053-制約ノックアウトはDDLを1つずつ外し振る舞いのテストだけで赤になるかを見る.md)（**Claude の判断。開発者は未承認**）。外す点と外し方の正典は `BusinessApp.TestSupport` の `SchemaKnockout` で、このスクリプトは回すだけ |
+| [`clb/knockout.ps1`](clb/knockout.ps1) | **制約ノックアウト**（[ADR-0053](../docs/decisions/0053-制約ノックアウトはDDLを1つずつ外し振る舞いのテストだけで赤になるかを見る.md)・[qa/05 §4](../docs/qa/05_観点網羅の計器.md)）。**DDL の制約を 1 つずつ外し、`Schema.Tests` が赤にならない制約＝誰もテストしていない制約を報告する**。`-Only` / `-Kind` / `-List`。**時間がかかるのでコミット前フックには載せていない**——流す回は [ADR-0053 決定 7](../docs/decisions/0053-制約ノックアウトはDDLを1つずつ外し振る舞いのテストだけで赤になるかを見る.md)（**開発者の決定。2026-09-20**。もとは Claude の判断）。外す点と外し方の正典は `BusinessApp.TestSupport` の `SchemaKnockout` で、このスクリプトは回すだけ |
 | [`clb/sql_mutate.py`](clb/sql_mutate.py) | **SQL の変異点を数え、1 つだけ当てて書き出す**（[ADR-0056](../docs/decisions/0056-SQLミューテーションはクエリのSQLを1箇所ずつ壊し行動テストだけで赤になるかを見る.md)・[qa/05 §3](../docs/qa/05_観点網羅の計器.md)）。`list` / `spec` / `show` / `mask` / `audit` / `selftest`。**注記と文字列リテラルの中は数えない**（当てると等価ミュータントばかり増える）。**掃引はしない——数えて印字するだけ** |
-| [`clb/sql_sweep.ps1`](clb/sql_sweep.ps1) | **SQL ミューテーションの掃引**（同 ADR と [ADR-0058](../docs/decisions/0058-行セットの差分で殺す掃引は入力コーパスを持たず行動テストが流した入力をその場で当てる.md)）。**クエリの SQL を 1 箇所ずつ壊し、気づけない箇所を報告する**。**殺し方が 2 つある**——`-Mode Tests`（既定。A 案。**行動テストが赤になったか**）と `-Mode Rows`（B 案。**行動テストが流した入力で行セットが変わったか**）。**2 つの違いと使い分けは ADR-0058**（`-Only` / `-List`。注入はどちらも環境変数でファイルを書き換えない）。**コミット前フックには載せていない**（[ADR-0058 決定 9](../docs/decisions/0058-行セットの差分で殺す掃引は入力コーパスを持たず行動テストが流した入力をその場で当てる.md)。**Claude の判断。開発者は未承認**。載せるかは [05 の Q-27](../docs/05_開発者への問い.md)）。変異点の正典は `sql_mutate.py` で、このスクリプトは回すだけ |
+| [`clb/sql_sweep.ps1`](clb/sql_sweep.ps1) | **SQL ミューテーションの掃引**（同 ADR と [ADR-0058](../docs/decisions/0058-行セットの差分で殺す掃引は入力コーパスを持たず行動テストが流した入力をその場で当てる.md)）。**クエリの SQL を 1 箇所ずつ壊し、気づけない箇所を報告する**。**殺し方が 2 つある**——`-Mode Tests`（既定。A 案。**行動テストが赤になったか**）と `-Mode Rows`（B 案。**行動テストが流した入力で行セットが変わったか**）。**2 つの違いと使い分けは ADR-0058**（`-Only` / `-List`。注入はどちらも環境変数でファイルを書き換えない）。**`-Mode Rows` はコミット前フックに載っている**（[ADR-0058 決定 9](../docs/decisions/0058-行セットの差分で殺す掃引は入力コーパスを持たず行動テストが流した入力をその場で当てる.md)。**開発者の決定。2026-09-20。旧 Q-27**）。**`-Mode Tests` は分かかるので載せていない**。変異点の正典は `sql_mutate.py` で、このスクリプトは回すだけ |
 | [`clb/which_gates.py`](clb/which_gates.py) | **この回に流す計器を、差分から決めて印字する**（[31 §6](../docs/31_検証のルール.md) の判定を機械に当てたもの）。**流さない。決めて印字するだけ**——掃引は分かかるので、ここからも起こさない。**「流さない」も必ず印字する**（黙ると「言われなかったから流さなくてよい」に倒れる）。`--base` / `--selftest`。**未追跡の新しいファイルも見る**——`git diff` だけだと、クエリの SQL を新しく足した回に「触っていない」と報告する |
 | [`clb/scaffold_module.py`](clb/scaffold_module.py) | モジュール定義の足場作り。生成後は `Design/Modules/*.mod.json` が正典 |
 | [`git-hooks/pre-commit`](git-hooks/pre-commit) | コミット前の検証。`git config core.hooksPath tools/git-hooks` で有効にする |
@@ -131,8 +131,9 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 | **改行の検査** | `normalize_eol.py --selftest` → `normalize_eol.py --check`（**作業コピーの改行が LF か**。`git ls-files --eol` が判定の正典で、**何を LF にすべきかは `.gitattributes` が決める**——この道具は拡張子の一覧を持たない。1 秒で終わるので前に置く） |
 | **秘密の検査** | `lint_secrets.py`（秘密・絶対パスの混入） |
 | **ドキュメント規約の検査** | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
-| **CLB デザインの検査** | `lint_design.py --selftest` → `lint_design.py`（CLB デザインの静的検査）＋ `sql_mutate.py --selftest` ＋ `which_gates.py --selftest`（**変異点の数え方と計器の選び方。掃引そのものは載せない**——理由の現在形は [ADR-0058 決定 9](../docs/decisions/0058-行セットの差分で殺す掃引は入力コーパスを持たず行動テストが流した入力をその場で当てる.md)） |
+| **CLB デザインの検査** | `lint_design.py --selftest` → `lint_design.py`（CLB デザインの静的検査）＋ `sql_mutate.py --selftest` ＋ `which_gates.py --selftest`（**変異点の数え方と計器の選び方。`-Mode Tests` の掃引は載せない**——理由の現在形は [ADR-0058 決定 9](../docs/decisions/0058-行セットの差分で殺す掃引は入力コーパスを持たず行動テストが流した入力をその場で当てる.md)） |
 | **テスト・カバレッジ・スキーマ** | `dotnet test`（テスト・カバレッジ・スキーマ） |
+| **行セットの差分で殺す掃引** | `sql_sweep.ps1 -Mode Rows`（**クエリの SQL を 1 点ずつ壊し、行セットが変わらない点を報告する**。[ADR-0058](../docs/decisions/0058-行セットの差分で殺す掃引は入力コーパスを持たず行動テストが流した入力をその場で当てる.md) の決定 9。**開発者の決定。2026-09-20**。**直前の `dotnet test` の後に置くのは、ビルドを二度しないで済むからである**（掃引は自分でビルドするので、順を入れ替えても壊れない）。`-Mode Tests` は分かかるので載せない——流す契機は [31 §6](../docs/31_検証のルール.md)） |
 | **稼働 DB とスキーマ正典の同値検査** | `migrate.ps1 -Verify`（稼働 DB とスキーマ正典の同値。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
 | **ミューテーションテスト** | `dotnet stryker`（ミューテーション。**5 プロジェクト**——会計コアの純粋層とサーバ層、取引先部品の純粋層とサーバ層、共有インフラ。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)・[ADR-0025 §6](../docs/decisions/0025-取引先を部品として分ける.md)） |
 

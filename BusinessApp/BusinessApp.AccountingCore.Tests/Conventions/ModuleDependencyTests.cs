@@ -3,7 +3,7 @@ namespace BusinessApp.AccountingCore.Tests.Conventions;
 using System.Text.RegularExpressions;
 
 /// <summary>
-/// モジュール間の依存方向（ADR-0013）。
+/// モジュール間の依存方向（ADR-0050 §8）。
 /// </summary>
 /// <remarks>
 /// <para>会計は本質的に相互参照が多いので「モジュール間の依存ゼロ」は成立しない。
