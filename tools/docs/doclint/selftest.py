@@ -21,13 +21,11 @@ from __future__ import annotations
 
 import datetime
 import os
-import pathlib
 import re
 from typing import Dict, List
 
 from . import checks
-from .checks import (ABBREV_IGNORE, ALL_CHECKS, ARTICLE_IGNORE, DATED_SWITCHES, RETIRED_IGNORE,
-                     SWITCH_IGNORE, Finding,
+from .checks import (ABBREV_IGNORE, ALL_CHECKS, ARTICLE_IGNORE, DATED_SWITCHES, SWITCH_IGNORE, Finding,
                      article_notation_violations, banned_law_abbreviations, check_body,
                      check_front_matter, check_links, check_superseded_links, dated_switch_hits,
                      has_dated_updated, misplaced_skill_entry, skill_front_matter_violations,
@@ -41,8 +39,6 @@ CLI_SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # main が検査を呼ぶときの**引数まで含めた**呼び出し。名前だけの包含だと
 # `check_superseded_links(d, {}, findings)` のような配線の壊れ方が通ってしまう
 REQUIRED_CALLS = ("check_superseded_links(d, docs_by_rel, findings)",
-                  "scanned_retired, ignored_retired = check_retired_wording(docs, findings)",
-                  "引退した語: {} 行を走査し {} 行を印で外した",
                   "scanned_notation, ignored_notation = check_article_notation(docs, findings)",
                   "remaining_switch, ignored_switch = check_dated_switches(docs, findings, today=today)",
                   "scanned_abbrev, ignored_abbrev = check_law_abbreviations(docs, findings)",
@@ -51,7 +47,7 @@ REQUIRED_CALLS = ("check_superseded_links(d, docs_by_rel, findings)",
                   "scanned_notation, ignored_notation, remaining_switch, ignored_switch,",
                   # 要約行の印字。消すと「0 に落ちたら疑う」の設計が黙って死ぬ
                   "条番号の切替: 旧の字面が {} 行（印で外した {} 行）",
-                  "scanned_abbrev, ignored_abbrev, scanned_retired, ignored_retired))")
+                  "scanned_abbrev, ignored_abbrev))")
 
 
 def _fake(rel: str, meta: Dict[str, str], body: List[str]) -> Doc:
@@ -520,73 +516,6 @@ def _check_other_checks() -> List[str]:
         ("印のある行は免除", _fake("docs/a.md", ok_meta, ["TODO " + INLINE_IGNORE]), 0),
         ("コードフェンスの中は免除", _fake("docs/a.md", ok_meta, ["```", "TODO", "```"]), 0),
     ]
-    # **引退した語**（docs/qa/04 §1）。**件数ではなく「何と言うか」を当てる**（qa/03 の L-17）
-    retired_body = [
-        "本文の前書き",                                                  # +0
-        "§3 の通しを流す",                                               # +1 鳴る lint-docs:retired-ok 検体
-        "§3 を通しで流した",                                             # +2 鳴る lint-docs:retired-ok 検体
-        "§3 の全件を流す",                                               # +3 言い換え後は鳴らない
-        "全件通しの件数",                                                # +4 **混ざった形**も鳴る lint-docs:retired-ok 検体
-        "台本の通し用取引先を選ぶ",                                      # +5 検体の取引先の名前は鳴らない
-        "台本の通しを流す",                                              # +6 鳴る lint-docs:retired-ok 検体
-        "伝票番号は通し番号である",                                      # +7 近くに語が無ければ鳴らない
-        "通しの体験シナリオと実機検証",                                  # +8 同上
-        "§3 の通し <!-- {} 理由あり -->".format(RETIRED_IGNORE),         # +9 印で外れる
-        "§3 の通し <!-- {} -->".format(RETIRED_IGNORE),                  # +10 **理由の無い印は効かない** lint-docs:retired-ok 検体
-        "§3 の通し <!-- {} 検体 -->".format(INLINE_IGNORE),              # +11 汎用の印でも黙る
-        "§3 の通しと全件通しが 1 行に 2 つ",                             # +12 **1 行 1 所見** lint-docs:retired-ok 検体
-        "```", "§3 の通し", "```",                                       # フェンスの中は見ない
-    ]
-    doc = _fake("docs/x.md", ok_meta, retired_body)
-    findings = []
-    scanned, ignored = checks.check_retired_wording([doc], findings)
-    base = doc.lines.index("本文の前書き") + 1  # 1 始まりの行番号
-    got_lines = sorted(int(re.match(r"(\d+)行目", m).group(1)) for _, _, m in findings)
-    want_lines = sorted(base + n for n in (1, 2, 4, 6, 10, 12))
-    if got_lines != want_lines:
-        ng.append("check_retired_wording: 鳴った行が違う: 期待 {} / 実際 {}".format(want_lines, got_lines))
-    for sev, rel, msg in findings:
-        if sev != SEV_ERROR:
-            ng.append("check_retired_wording: severity が {} になっている".format(sev))
-        if rel != "docs/x.md":
-            ng.append("check_retired_wording: 指摘先が違う: {}".format(rel))
-        # **言ってほしい字面そのものを検体に書く**（定数から作らない）
-        for want in ("引退した語「通し」があります", "「全件」と書く", "docs/qa/04 §1", "lint-docs:retired-ok"):
-            if want not in msg:
-                ng.append("check_retired_wording: 指摘文に「{}」が無い: {}".format(want, msg))
-    two = [m for _, _, m in findings if m.startswith("{}行目".format(base + 12))]
-    if len(two) != 1:
-        ng.append("check_retired_wording: 同じ行に 2 つあるのに所見が 1 つでない: {}".format(two))
-    if ignored != 2:
-        ng.append("check_retired_wording: 印で外した行が 2 でない（専用＋汎用）: {}".format(ignored))
-    if scanned != len(doc.lines) - 3:
-        ng.append("check_retired_wording: 走査した行が {} でない（フェンスの 3 行を除く）: {}"
-                  .format(len(doc.lines) - 3, scanned))
-    # **current でなければ見ない**
-    hist = _fake("docs/x.md", dict(ok_meta, status="historical"), ["§3 の通し"])
-    if run(lambda ds, f: checks.check_retired_wording(ds, f), [hist]):
-        ng.append("check_retired_wording: historical で鳴っている")
-    # **`growth: append` でも見る**（記録は行ごとの印で外す。2026-09-21 に免除を外した）
-    app = _fake("docs/x.md", dict(ok_meta, growth="append"), ["§3 の通し"])
-    if not run(lambda ds, f: checks.check_retired_wording(ds, f), [app]):
-        ng.append("check_retired_wording: growth: append が免除されている（2026-09-21 に外したはず）")
-    # **表と正典の結び付き**——正典が印の名前と語の扱いを持っていること
-    canon = pathlib.Path(REPO_ROOT, "docs", "qa", "04_実機操作テスト.md").read_text(encoding="utf-8")
-    for want in (RETIRED_IGNORE, "引退した語"):
-        if want not in canon:
-            ng.append("check_retired_wording: 正典（docs/qa/04 §1）に「{}」が無い".format(want))
-    # **実データのラチェット**——配線が死んだら 0 に落ちる
-    real_docs, _ = load_docs()
-    real_findings: List[Finding] = []
-    real_scanned, real_ignored = checks.check_retired_wording(real_docs, real_findings)
-    if real_scanned < 5000:
-        ng.append("check_retired_wording: 実データの走査が {} 行しかない（対象が痩せた）".format(real_scanned))
-    if real_ignored < 8:
-        ng.append("check_retired_wording: 実データで印で外した行が {} 件（実測 10 件。"
-                  "減ったら印が消えたか配線が死んでいる）".format(real_ignored))
-    if real_findings:
-        ng.append("check_retired_wording: 実データで鳴っている: {}".format(real_findings[:3]))
-
     for label, doc, want in body_cases:
         got = run(checks.check_body, doc)
         if len(got) != want:

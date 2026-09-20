@@ -3,7 +3,7 @@ title: tools — 開発スクリプト
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-09-20
+updated: 2026-09-21
 supersedes: []
 related: [../docs/README.md]
 ---
@@ -110,7 +110,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 - **ごみ箱から戻すのはエクスプローラで行う。** `trash.ps1` に復元機能は無い
 - **`-Name` は半角英数で始まる 64 文字以内**（`[0-9A-Za-z][0-9A-Za-z._-]*`）。日本語・空白・`/` は断る。
   **同名の退避があれば上書きせず断る**
-- **`db_snapshot.ps1` はパスを受け取る引数を持たない。** だから関門は、この道具への言及では
+- **`db_snapshot.ps1` はパスを受け取る引数を持たない。** だから自動拒否は、この道具への言及では
   保護対象の名前を探さない（[ADR-0046](../docs/decisions/0046-稼働DBの退避と復元を戻せる道具に閉じる.md) の決定 7）——
   `-Name` に保護対象と同じ字を書いても確認は出ない
 - **待ち受けは IPv4 と IPv6 で 2 行返る。** 同じプロセスなので `-Unique` で 1 つに畳む

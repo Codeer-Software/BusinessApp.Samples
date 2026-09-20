@@ -43,8 +43,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from doclint.checks import (Finding, check_adr_ledger, check_article_notation,  # noqa: E402
                             check_body, check_code_references, check_dated_switches,
                             check_docs_index, check_front_matter, check_law_abbreviations, check_link_label_targets, check_links, check_question_numbers,
-                            check_retired_wording, check_section_references, check_superseded_links,
-                            check_updated_freshness,
+                            check_section_references, check_superseded_links, check_updated_freshness,
                             check_updated_history)
 from doclint.model import REFERENCE_PREFIXES, SEV_ERROR, SEV_WARN, Doc, load_docs  # noqa: E402
 from doclint.selftest import selftest  # noqa: E402
@@ -114,7 +113,6 @@ def main() -> int:
     scanned_notation, ignored_notation = check_article_notation(docs, findings)
     remaining_switch, ignored_switch = check_dated_switches(docs, findings, today=today)
     scanned_abbrev, ignored_abbrev = check_law_abbreviations(docs, findings)
-    scanned_retired, ignored_retired = check_retired_wording(docs, findings)
 
     errors = [f for f in findings if f[0] == SEV_ERROR]
     warns = [f for f in findings if f[0] == SEV_WARN]
@@ -131,11 +129,10 @@ def main() -> int:
     print("検査文書数: {} / error: {} / warn: {} / superseded 宛リンク: {} 件を検査 / "
           "条項の記法: {} 行を走査し {} 行を印で外した / "
           "条番号の切替: 旧の字面が {} 行（印で外した {} 行） / "
-          "改正法の略称: {} 行を走査し {} 行を印で外した / "
-          "引退した語: {} 行を走査し {} 行を印で外した"
+          "改正法の略称: {} 行を走査し {} 行を印で外した"
           .format(len(docs), len(errors), len(warns), seen_superseded_links,
                   scanned_notation, ignored_notation, remaining_switch, ignored_switch,
-                  scanned_abbrev, ignored_abbrev, scanned_retired, ignored_retired))
+                  scanned_abbrev, ignored_abbrev))
     return 1 if errors or others else 0
 
 

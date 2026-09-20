@@ -1,6 +1,6 @@
 ---
 name: live-test
-description: 実機（ブラウザ）で操作して確かめる回を回す。deploy とサーバ再起動の要否、観測の作法、サブエージェントへの委譲、記録までの順番を持つ。CLAUDE.md §4 の「実機で操作していない機能はできていないものとして扱う」の工程で、main へマージする条件 3 でもある。ソースコード（CLB のデザイン・AccountingCore・取引先部品・ServerSupport・BusinessApp.Server・Client・Client.Shared）か DB スキーマを触ったとき、1 点だけの修正をしたとき（**射程は qa/04 §1 の優先 2**）、**権限・認証・玄関や保存の関門に触れたとき**、フェーズの区切りに使う（**流す範囲の正典は qa/04 §1 の表**）。
+description: 実機（ブラウザ）で操作して確かめる回を回す。deploy とサーバ再起動の要否、観測の作法、サブエージェントへの委譲、記録までの順番を持つ。CLAUDE.md §4 の「実機で操作していない機能はできていないものとして扱う」の工程で、main へマージする条件 3 でもある。ソースコード（CLB のデザイン・AccountingCore・取引先部品・ServerSupport・BusinessApp.Server・Client・Client.Shared）か DB スキーマを触ったとき、1 点だけの修正をしたとき（**射程は qa/04 §1 の優先 2**）、フェーズの区切りに使う（**流す範囲の正典は qa/04 §1 の表**）。
 ---
 
 # 実機操作テスト

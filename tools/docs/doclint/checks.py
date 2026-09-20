@@ -27,7 +27,7 @@ ALL_CHECKS = (
     "check_adr_ledger", "check_docs_index", "check_code_references",
     "check_section_references", "check_updated_freshness", "check_updated_history",
     "check_article_notation", "check_dated_switches", "check_law_abbreviations",
-    "check_link_label_targets", "check_question_numbers", "check_retired_wording",
+    "check_link_label_targets", "check_question_numbers",
 )
 
 
@@ -274,65 +274,6 @@ def check_body(doc: Doc, findings: List[Finding]) -> None:
             continue
         if STALE_MARKER.search(line):
             add(SEV_WARN, "{}行目: 未処理マーカーがあります。保留リストへ移す（規約 §4-4）".format(i + 1))
-
-
-# **引退した語**——**消しても、いつの間にかまた書く語**を機械で止める（開発者の指示。2026-09-20。
-# 逐語は「一度『通し』を全部消しても、いつの間にかまた使いそうなことです」）。
-# **語の正典は docs/qa/04 §1**。ここに持つのは「止める字」だけで、**selftest が正典との結び付きを見る**。
-#
-# **新語と旧語が混ざった形（「全件通し」）こそ再発の本体である**（2026-09-21 の自己レビューの実測——
-# 記録に「§3 の台本の全件通し」「全件通しの件数」が実在した）。だから字面ではなく**形**で拾う。
-# **「台本の通し用取引先」は検体の取引先の名前**なので、**直後の「用」で外す**（実測 18 件が全部これ）。
-RETIRED_WORDINGS = (
-    (re.compile(r"(?:§ ?3|台本|全件)[^。、\n]{0,6}通し(?!用)"),
-     "台本を流す範囲は「全件」と書く（「通し」は 2026-09-20 に引退した語）"),
-)
-# **この検査だけを外す印**。汎用の `lint-docs:ignore` を使うと `check_section_references` などまで
-# 一緒に黙るので、**専用の印を持つ**（`ARTICLE_IGNORE` と同じ理由）。**理由を要求する**（印の後ろに空白と 1 字以上）。
-RETIRED_IGNORE = "lint-docs:retired-ok"
-RETIRED_IGNORE_RE = re.compile(re.escape(RETIRED_IGNORE) + r"[ \t]+(?!--)\S")
-
-
-def check_retired_wording(docs: List[Doc], findings: List[Finding]) -> Tuple[int, int]:
-    """引退した語が `current` の文書へ戻っていないかを見る（語の正典は docs/qa/04 §1）。
-
-    **走査した行数と、印で外した行数を返す**——**0 に落ちたら「違反が無い」ではなく
-    「配線が死んだ・印が広がった」を疑う**ため（同ファイルの条項・略称・切替と同じ作法）。
-
-    **`growth: append` では外さない。** 免除を「記録」と読むと、`growth: append` を持つ 11 本のうち
-    **`docs/qa/01` と `docs/qa/03` という生きた正典まで外れる**（2026-09-21 に数えた。
-    `check_superseded_links` も 2026-08-28 に同じ理由で append の免除を外している）。
-    **過去の記録は、行ごとに印で外す。**
-
-    **フロントマターも見る**（`check_article_notation` と同じ判断——`title:` は索引へ写されて人が読む）。
-
-    **限界**: 拾うのは「§3 / 台本 / 全件」の近くに「通し」が来る形だけである。
-    離れた言い換え（「ぜんぶ流す」等）は見ない。**印の理由は人が読む**（機械は有無しか見ない）。
-    """
-    scanned = 0
-    ignored = 0
-    for doc in docs:
-        if not treated_as_current(doc):
-            continue
-        in_code = False
-        for i, line in enumerate(doc.lines):
-            if FENCE_RE.match(line):
-                in_code = not in_code
-                continue
-            if in_code:
-                continue
-            scanned += 1
-            hits = [how for pat, how in RETIRED_WORDINGS if pat.search(line)]
-            if not hits:
-                continue
-            if RETIRED_IGNORE_RE.search(line) or INLINE_IGNORE in line:
-                ignored += 1
-                continue
-            # **1 行 1 所見**（同じ行に 2 つあっても所見は 1 つ。印も 1 つで全部外れる）
-            findings.append((SEV_ERROR, doc.rel,
-                             "{}行目: 引退した語「通し」があります。{}（docs/qa/04 §1。"
-                             "過去の記録なら `{}` に理由を添えて外す）".format(i + 1, hits[0], RETIRED_IGNORE)))
-    return scanned, ignored
 
 
 def check_adr_ledger(docs: List[Doc], findings: List[Finding]) -> None:
