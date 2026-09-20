@@ -23,10 +23,12 @@ Claude Code からの読み取り許可は `.claude/settings.local.json` の
 
 ## 開発用アカウント（ADR-0039）
 
-`admin` は CLB の既定（`admin` / `admin`）。下の 2 つは管理画面で手作りする（`seed/README.md` の手順）。
-**作ったら、ここに書く。** ここに書いた行が、Claude がログインしてよいアカウントである。
+`admin` は CLB の既定（`admin` / `admin`）。下の 2 つはアプリの管理画面で作る（`seed/README.md` の手順）。
+
+**先に値を決めて、ここに書く。ここに書いた行を Claude が管理画面に登録し、ログインに使う**
+（規則は `docs/31_検証のルール.md` の §3）。
 
 | 識別名 | パスワード | 役割 |
 |---|---|---|
-| `soumu_bucho` | <作ったときのパスワード> | 経理責任者（`manager`）＋取引先の編集 |
-| `soumu_ippan` | <作ったときのパスワード> | 経理担当（`staff`）＋取引先の編集 |
+| `soumu_bucho` | <決めたパスワード> | 経理責任者（`manager`）＋取引先の編集 |
+| `soumu_ippan` | <決めたパスワード> | 経理担当（`staff`）＋取引先の編集 |

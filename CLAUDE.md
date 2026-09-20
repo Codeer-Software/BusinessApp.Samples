@@ -3,7 +3,7 @@ title: 会計コア構築ミッション（CLAUDE.md）
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-09-16
+updated: 2026-09-20
 supersedes: []
 related: [docs/README.md, Designer/CLAUDE.md, docs/30_作業のルール.md, docs/31_検証のルール.md, docs/33_失わないためのルール.md, docs/20_実装の原則.md, docs/32_調査のルール.md]
 ---
@@ -52,7 +52,7 @@ related: [docs/README.md, Designer/CLAUDE.md, docs/30_作業のルール.md, doc
 
 ### 0-5. 自律作業の前に
 
-- [30 §1 の表と §3](docs/30_作業のルール.md)（聞かずに進むかの判断・3 回で引く）を読み直す
+- [30 §1 の表と §3](docs/30_作業のルール.md)（聞かずに進むかの判断・3 回で中断する）を読み直す
 - [04_実装計画と現在地](docs/04_実装計画と現在地.md) の「次にやること」
 
 ## 1. ミッション（芯・変更不可）

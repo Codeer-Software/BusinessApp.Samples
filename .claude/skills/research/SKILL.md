@@ -73,7 +73,7 @@ description: 制度・法令・市販ソフトを調べて記録する回を回�
 
 - [docs/README](../../../docs/README.md) の索引と、引く側の文書からリンクする
 - **`git add` してから `python tools/docs/lint_docs.py` を流す**（追跡外の文書は検査されない）
-- **文書の追加は自己レビューを通す**（`self-review` スキルの文書 5 観点）
+- **文書の追加は自己レビューを通す**（`self-review` スキル §5 の文書の観点）
 
 ## やらないこと
 
