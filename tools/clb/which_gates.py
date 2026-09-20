@@ -6,7 +6,7 @@
 その判定を文章で持っている。**入力が差分なら、そのうち機械に当てられる分は機械の仕事である。**
 
 **流すのはこの道具の仕事ではない。決めて印字するだけ**——掃引は分かかるので、
-`-Mode Tests` はフックにも載せないし、ここからも起こさない
+`-Mode Tests` はフックに載せないし、ここからも起こさない（`-Mode Rows` はフックが毎回流す）
 （[ADR-0058](../../docs/decisions/0058-行セットの差分で殺す掃引は入力コーパスを持たず行動テストが流した入力をその場で当てる.md) の決定 9）。
 
 **「流さない」も必ず声に出す。** 黙ると「言われなかったから流さなくてよい」に倒れ、
@@ -66,7 +66,7 @@ QUERY_SQL_COUNT = 4
 
 PHASE_NOTE = "フェーズの区切りなら流す（差分からは決まらない。[04 §1]・ADR-0053 決定 7）"
 THROWS_NOTE = "「拒まれること」のテストを書いたなら `-Only <点>` で流す（中身を読まないと決まらない）"
-TESTS_NOTE = "クエリの SQL を書いたなら `-Mode Tests` も流す（弱い表明を見つけるのは A 案だけ。qa/03 L-46）"
+TESTS_NOTE = "`-Mode Rows` はコミット前フックが毎回流す（ADR-0058 決定 9）。ここで挙げるのは手で流す側だけである"
 SLOW_NOTE = "**分かかる。バックグラウンドで回し、その間ビルドしない**（31 §6）"
 
 
@@ -138,10 +138,10 @@ def decide(changed: Sequence[str], known: Optional[Set[str]] = None) -> List[Fin
     if modules:
         out.append(Finding(
             True,
-            "pwsh -NoProfile -File tools/clb/sql_sweep.ps1 -Mode Rows -Only " + ",".join(modules),
+            "pwsh -NoProfile -File tools/clb/sql_sweep.ps1 -Mode Tests -Only " + ",".join(modules),
             sweep_why, TESTS_NOTE))
     elif s_canon:
-        out.append(Finding(True, "pwsh -NoProfile -File tools/clb/sql_sweep.ps1 -Mode Rows",
+        out.append(Finding(True, "pwsh -NoProfile -File tools/clb/sql_sweep.ps1 -Mode Tests",
                            sweep_why, TESTS_NOTE))
     else:
         out.append(Finding(False, "tools/clb/sql_sweep.ps1",
@@ -237,7 +237,7 @@ def _selftest() -> int:
     KNOWN = {"GeneralLedger", "JournalBook"}
 
     def sweep(names=""):
-        base = "pwsh -NoProfile -File tools/clb/sql_sweep.ps1 -Mode Rows"
+        base = "pwsh -NoProfile -File tools/clb/sql_sweep.ps1 -Mode Tests"
         return base + (" -Only " + names if names else "")
 
     cases = [
@@ -303,8 +303,8 @@ def _selftest() -> int:
     skipped = decide([], KNOWN)
     if "フェーズの区切り" not in skipped[0].note or "拒まれること" not in skipped[0].note:
         ng.append("decide: knockout の行が、当てられない判定を言っていない")
-    if "-Mode Tests" not in skipped[1].note:
-        ng.append("decide: sql_sweep の行が -Mode Tests を言っていない")
+    if "コミット前フック" not in skipped[1].note or "-Mode Rows" not in skipped[1].note:
+        ng.append("decide: sql_sweep の行が「-Mode Rows はフックが流す」を言っていない")
     if "分かかる" not in decide(["Designer/ddl/x.sql"], KNOWN)[0].note:
         ng.append("decide: 流す側で所要（分かかる）を言っていない")
     if "ほか 2 件" not in _listed(["a", "b", "c", "d", "e"]) or "a・b・c" not in _listed(list("abcde")):
