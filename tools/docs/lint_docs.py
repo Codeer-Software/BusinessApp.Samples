@@ -19,7 +19,7 @@
 使い方:
     python tools/docs/lint_docs.py            # 規約違反の検査（error / warn）
     python tools/docs/lint_docs.py --stats    # current の行数など指標
-    python tools/docs/lint_docs.py --selftest # 検査そのものが空回りしていないか
+    python tools/docs/lint_docs.py --selftest # lint_docs.py 自身が空回りしていないか
     python tools/docs/lint_docs.py --today 2027-01-01  # 日付で発効する切替を先取りして洗う
 
 終了コード: 0 = error なし / 1 = error あり / 2 = 実行失敗
@@ -77,7 +77,7 @@ def print_stats(docs: List[Doc]) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description="ドキュメント規約の検査")
     ap.add_argument("--stats", action="store_true", help="指標を表示する")
-    ap.add_argument("--selftest", action="store_true", help="関門そのものを検査する")
+    ap.add_argument("--selftest", action="store_true", help="lint_docs.py 自身を検査する")
     ap.add_argument("--today", metavar="YYYY-MM-DD",
                     help="日付で発効する切替を、この日を今日として検査する（発効日の先取り）")
     args = ap.parse_args()
@@ -123,7 +123,7 @@ def main() -> int:
 
     print("")
     # superseded 宛リンクの数を必ず出す。0 に落ちたら「違反が無い」ではなく
-    # 「配線が死んだ・免除が広がりすぎた」を疑う（黙って素通りする関門を作らないため）
+    # 「配線が死んだ・免除が広がりすぎた」を疑う（黙って素通りする検査を作らないため）
     # 条番号の切替も件数を必ず出す。発効日前に 0 に落ちたら「切り替え済み」ではなく
     # 「配線が死んだ・印が広がった」を疑う（印で外した行も並べて出す理由）
     print("検査文書数: {} / error: {} / warn: {} / superseded 宛リンク: {} 件を検査 / "

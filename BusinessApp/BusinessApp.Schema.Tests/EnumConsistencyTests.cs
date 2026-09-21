@@ -152,7 +152,7 @@ public class EnumConsistencyTests
         Assert.Equal(["a", "b"], ValuesFromCheckConstraintIn(ddl, "t.kind"));
     }
 
-    /// <summary>区分値ではないものを拾わない（鳴りっぱなしの関門は、赤を無視させる）。</summary>
+    /// <summary>区分値ではないものを拾わない（鳴りっぱなしの検査は、赤を無視させる）。</summary>
     [Theory]
     // 真偽値は区分値ではない（対応する CLB の enum も C# の列挙型も持たない）。
     [InlineData("CREATE TABLE t (\n    is_active INTEGER NOT NULL CHECK (is_active IN (0, 1))\n);")]

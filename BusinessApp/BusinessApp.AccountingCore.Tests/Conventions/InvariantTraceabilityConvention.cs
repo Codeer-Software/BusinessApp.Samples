@@ -73,7 +73,7 @@ public static class InvariantTraceabilityConvention
     /// <summary>カタログのうち、番号の行に見えるのに読めなかったもの。</summary>
     /// <remarks>
     /// <b>読めなかった行は、静かに母数から落ちる。</b> 落ちた番号は未参照にも出てこないので、
-    /// <b>関門は緑になる</b>——だから「読めなかった行が 0 件」を別に見る。
+    /// <b>検査は緑になる</b>——だから「読めなかった行が 0 件」を別に見る。
     /// </remarks>
     public static IReadOnlyList<string> UnreadableCatalogRowsIn(string markdown)
     {

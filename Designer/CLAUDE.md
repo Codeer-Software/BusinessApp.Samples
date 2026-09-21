@@ -27,7 +27,7 @@
 - **`designcheck` / `sql` / `rename-*`（rename-field / rename-module / rename-pageframe / rename-layout / rename-enum / rename-enum-member / 一括の rename-batch）/ `ai-refresh` / `defaults` / `template-list` / `template-extract` は確認なしで実行してよい**。どの DB に SQL を流せるかは、各データソースの `designer.settings.json` の **`AllowCliSqlAccess`**（ユーザーが設定済み）が決める。`false` のデータソースには CLI からそもそも実行できないので、これが安全境界。`sql` と `designcheck` 以外は DB 接続せず完結する（詳細は `./ClaudeCodeForDesigner/CLAUDE.md`）
 - **`designer.settings.Development.json` は基本読まない・書かない（許可制）。** 接続文字列・デプロイ設定（秘密情報）の置き場で、デザイン作業でこの中身が必要になることは無い — データソースの名前と種別は `designer.settings.json`（秘密なし）にあり、DB のスキーマ・データ確認は `sql` / `designcheck` CLI が接続文字列を内部で解決してくれる。扱うのはユーザーが明示的に依頼したときだけ（`.claude/settings.json` の ask 設定で確認が出る）。**その場合も、許可を求める前に「このファイルの内容（接続文字列やパスワード）は読むと LLM への送信と会話ログへの記録が発生する」ことを一言伝え、リスクを了解したうえで承認してもらう**。データソースやデプロイ設定の追加は、デザイナのソリューションツリーで設定ファイルを右クリック（「データソースの追加」等）からもできるので、そちらを案内するのも良い
 - **このワークスペースはデザイナ 1.3.15 以降が前提**。古い exe に未知のサブコマンドを渡すと GUI が起動してしまい `--out` が生成されない。`--out` の JSON が出来ていない／ウィンドウが開いた場合は「その版が未対応」と判断し、**作業を進めずユーザーにデザイナのバージョンアップと Tools > Claude Code Workspace の再実行を促す**（ワークスペースはデザイナと同一バージョンの内容に更新される）
-- **ブラウザでの実機確認は、確認を取らずに積極的に行う**（開発者の指示。2026-08-23）。サーバ URL とブラウザは `LocalEnvironment.md` に記録してある。依存の導入（Playwright 等）や `.claude` の許可追加だけは、勝手に広げずユーザーに諮る（**操作制限を緩める決定は開発者**。正典は `../docs/34_開発者とClaudeの分担.md` の §1 の 8 と §1-3）
+- **ブラウザでの実機確認は、確認を取らずに積極的に行う**（開発者の指示。2026-08-23）。サーバ URL とブラウザは `LocalEnvironment.md` に記録してある。依存の導入（Playwright 等）や `.claude` の許可追加だけは、勝手に広げず開発者に諮る（**操作制限を緩める決定は開発者**。正典は `../docs/34_開発者とClaudeの分担.md` の §1 の 9 と §1-4）
 
 ### 2. ツールの使い方（許可ブロック・エラーを増やさない）
 - **スクリプトは Write/Edit ツールで作る。** シェルのヒアドキュメント（`cat > file <<EOF`）でスクリプトを量産しない（中身の `{}`・引用符が毎回ブロックされる）

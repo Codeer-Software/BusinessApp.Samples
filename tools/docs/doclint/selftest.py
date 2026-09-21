@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""doclint.selftest — 関門そのものを検査する（`lint_docs.py --selftest`）.
+"""doclint.selftest — `lint_docs.py` 自身を検査する（`--selftest`）.
 
 **中身を空にしても緑**という状態を作らないための検査である。見るもの:
 
@@ -82,7 +82,7 @@ def _check_updated_violation() -> List[str]:
 
 
 def _check_superseded_links() -> List[str]:
-    """「足したら一度わざと壊して鳴ることを確かめる」（ADR-0021 §4）を関門の中に固定してある。"""
+    """「足したら一度わざと壊して鳴ることを確かめる」（ADR-0021 §4）を検査の中に固定してある。"""
     ng = []
     dead = _fake("docs/decisions/0019-old.md",
                  {"status": "superseded",
@@ -385,7 +385,7 @@ def _check_skill_real_data() -> List[str]:
         sink: List[Finding] = []
         check_front_matter(doc, sink)
         if sink:
-            ng.append("実在のスキル {} が新しい関門で鳴っている: {}".format(doc.rel, sink))
+            ng.append("実在のスキル {} が新しい検査で鳴っている: {}".format(doc.rel, sink))
     return ng
 
 

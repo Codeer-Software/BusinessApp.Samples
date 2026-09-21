@@ -52,7 +52,7 @@ GIT = ["git", "-c", "core.quotepath=false"]
 # CRLF と LF が混ざった状態こそ「道具が環境ごとに違う結果を出す」当のものである
 NOT_LF = ("crlf", "mixed")
 # 追跡ファイルの下限。**0 件を「すべて LF」と報告しない**ための歯止めで、
-# 実測は 589 件（2026-09-15）。**減ったら関門ではなく読み取りを疑う**
+# 実測は 589 件（2026-09-15）。**減ったら検査ではなく読み取りを疑う**
 TRACKED_FLOOR = 100
 
 
@@ -248,7 +248,7 @@ def _selftest() -> int:
     if parse_eol("こわれた行\n") != []:
         ng.append("parse_eol: 形の違う行で落ちるか拾うかしている")
 
-    # ② **関門の赤を実際に見る**（`run_check` が通る経路。件数ではなく戻り値で）
+    # ② **検査の赤を実際に見る**（`run_check` が通る経路。件数ではなく戻り値で）
     original = globals()["eol_problems"]
     try:
         globals()["eol_problems"] = lambda: []

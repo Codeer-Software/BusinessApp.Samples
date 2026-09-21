@@ -84,7 +84,7 @@ function Test-DdlAllowedFile {
     return $full.StartsWith($ddlRoot, [System.StringComparison]::OrdinalIgnoreCase) -and $full.EndsWith('.sql', [System.StringComparison]::OrdinalIgnoreCase)
 }
 
-# 関門の判定そのもの。戻りは @{ Allowed; Lines; ConsumeMarker }。
+# DDL を拒む判定そのもの。戻りは @{ Allowed; Lines; ConsumeMarker }。
 #   IsAllowedFile   … -File が Designer/ddl/ の正典で、追跡済み・HEAD から未変更
 #   MarkerReason    … 印の中身（無ければ $null。空ファイルは ''）
 function Resolve-DdlDecision {
@@ -256,7 +256,7 @@ if ($Query -and $File) { throw '-Query と -File は同時に指定できない�
 
 . (Join-Path $PSScriptRoot '_designer.ps1')
 
-# --- DDL の関門（docs/33 §2・ADR-0064）
+# --- DDL を拒む判定（docs/33 §2・ADR-0064）
 $filePath = if ($File) { (Resolve-Path $File).Path } else { $null }
 $sqlText = if ($Query) { $Query } else { Get-Content -LiteralPath $filePath -Raw }
 $isAllowedFile = $false
