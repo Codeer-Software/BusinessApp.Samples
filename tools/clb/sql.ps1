@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    デザイナ exe の sql サブコマンドで SQL を実行し、結果 JSON を標準出力に返す。
+    デザイナ exe の sql サブコマンドで SQL を実行し、結果 JSON を標準出力に UTF-8（BOM 無し）で返す。
 
 .DESCRIPTION
     一時ファイルを作らない（docs/30_作業のルール.md §8）。
@@ -61,6 +61,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# 標準出力は UTF-8（BOM 無し）で書く。pwsh 7 の [Console]::OutputEncoding は日本語 Windows では shift_jis で、
+# 呼び手が Bash 道具（UTF-8 で読む）だと結果 JSON の日本語が化けていた（2026-09-20 の全件実測。docs/qa/04 の記録）。
+# exe からの取り込みは _designer.ps1 が CP932 で読んでいるので、化けていたのはここから先だけである。
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 $script:MarkerName = 'allow-ddl'
 
@@ -144,6 +150,13 @@ function Test-TrackedUnchanged {
 
 function Invoke-SelfTest {
     $failures = @()
+
+    # 標準出力の符号化。冒頭の固定を消すと日本語 Windows では shift_jis に戻り、ここが赤くなる
+    $enc = [Console]::OutputEncoding
+    if ($enc.WebName -ne 'utf-8') { $failures += "標準出力の符号化が utf-8 ではない（実際: $($enc.WebName)）" }
+    if ($enc.GetPreamble().Length -ne 0) { $failures += '標準出力の符号化に BOM が付いている' }
+    if ($OutputEncoding.WebName -ne 'utf-8') { $failures += "パイプの符号化（`$OutputEncoding）が utf-8 ではない（実際: $($OutputEncoding.WebName)）" }
+    $encodingChecks = 3
     $samples = @(
         @{ Sql = 'SELECT COUNT(*) FROM accounts;'; Ddl = $false },
         @{ Sql = "UPDATE schema_migrations SET checksum = 'x' WHERE version = 38;"; Ddl = $false },
@@ -231,7 +244,7 @@ function Invoke-SelfTest {
         Write-Host "sql.ps1 -SelfTest: $($failures.Count) 件失敗"
         return 1
     }
-    Write-Host "sql.ps1 -SelfTest: OK（DDL の判定 $($samples.Count) 件・パス $($paths.Count) 件・配線 $($decisions.Count) 件・印 $markerChecks 件）"
+    Write-Host "sql.ps1 -SelfTest: OK（DDL の判定 $($samples.Count) 件・パス $($paths.Count) 件・配線 $($decisions.Count) 件・印 $markerChecks 件・符号化 $encodingChecks 件）"
     return 0
 }
 
