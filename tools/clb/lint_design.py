@@ -92,9 +92,9 @@ READ_CONDITION_EXEMPTIONS = {
                   "（ADR-0033 決定④の例外）",
 }
 
-# 関門が名指ししている語（qa/02 R26-22）。
-# **デザイン側で名前が変わると、関門は何も言わずに外れて全テストが緑になる。**
-# `EnumConsistencyTests` の「3 者一致」と同じ作法を、関門の名指しにも当てる。
+# 検査が名指ししている語（qa/02 R26-22）。
+# **デザイン側で名前が変わると、検査は何も言わずに外れて全テストが緑になる。**
+# `EnumConsistencyTests` の「3 者一致」と同じ作法を、検査の名指しにも当てる。
 VOCABULARY_MODULE = "AppUser"
 
 # 役割の軸 → (デザイン enum の名前, 下位から上位への順)。
@@ -1616,7 +1616,7 @@ def check_candidate_filters(modules, findings):
     ②**そのレイアウトが画面から開けるか**——`CanNavigateToDetail: false` の詳細レイアウトも同じに数える。
     ③**`AnchorTagFieldDesign` の `IdVariable` / `TitleVariable`**——こちらの欄を指すが、
     本番の 10 本はどれもクエリモジュールで、**レイアウトに出していなくてもリンクは通っている**
-    （qa/04 の台本 B-05）。**機構が違うらしいが測っていない。**
+    （qa/04 の BOK-05）。**機構が違うらしいが測っていない。**
     ④**直る側**（`DataOnlyFields` に入れれば直ること）——**踏んでいない**。
     """
     counts = {"組": 0, "常に来る欄": 0}
@@ -2164,15 +2164,15 @@ def check_exemptions(modules, findings):
 
 
 def check_vocabulary(modules, enums, css, findings):
-    """**関門が名指ししている語が、デザインに実在するか**（qa/02 R26-22）。
+    """**検査が名指ししている語が、デザインに実在するか**（qa/02 R26-22）。
 
     D-22（役割の階層）も D-23（アプリ全体のアクセス条件）も D-20（必須の印）も、
     **文字列でしかデザインと結ばれていない**。`AppUser.AccountingRole` を改名した瞬間、
-    D-22 はどの条件にも当たらなくなり、**全テストが緑のまま関門だけが消える**。
+    D-22 はどの条件にも当たらなくなり、**全テストが緑のまま検査だけが消える**。
     `EnumConsistencyTests` が「デザイン enum・DDL の CHECK・C# の 3 者一致」を見ているのと
     同じ作法を、こちらにも当てる。
 
-    **役割の値まで見る。** 順序は関門の表にしか無い（enum は集合しか持たない）ので、
+    **役割の値まで見る。** 順序は検査の表にしか無い（enum は集合しか持たない）ので、
     **集合が一致すること**を確かめる——enum に値を足して表に足し忘れると、
     「上位が欠けていないか」の検査がその値を知らないまま緑になる。
     """
@@ -2182,7 +2182,7 @@ def check_vocabulary(modules, enums, css, findings):
 
     if VOCABULARY_MODULE not in fields_of:
         findings.append((SEV_ERROR, "D-27", where,
-                         f"関門が名指しする {VOCABULARY_MODULE} モジュールがデザインに無い"))
+                         f"検査が名指しする {VOCABULARY_MODULE} モジュールがデザインに無い"))
         return
 
     names = fields_of[VOCABULARY_MODULE]
@@ -2190,15 +2190,15 @@ def check_vocabulary(modules, enums, css, findings):
         field = variable.split(".", 1)[0]
         if field not in names:
             findings.append((SEV_ERROR, "D-27", where,
-                             f"関門が名指しする {VOCABULARY_MODULE}.{field} がデザインに無い"
-                             "（改名すると、その条件を見る関門が静かに外れる）"))
+                             f"検査が名指しする {VOCABULARY_MODULE}.{field} がデザインに無い"
+                             "（改名すると、その条件を見る検査が静かに外れる）"))
 
     values_of = {doc.get("Name"): {m.get("Value") for m in doc.get("Members", [])}
                  for doc in enums}
     for variable, (enum_name, order) in ROLE_HIERARCHY.items():
         if enum_name not in values_of:
             findings.append((SEV_ERROR, "D-27", where,
-                             f"関門が名指しする enum {enum_name} がデザインに無い"))
+                             f"検査が名指しする enum {enum_name} がデザインに無い"))
         elif values_of[enum_name] != set(order):
             findings.append((SEV_ERROR, "D-27", where,
                              f"{variable} の順位表 {order} が enum {enum_name} "
@@ -2283,10 +2283,10 @@ def check_page_frame(path, doc, findings, module_tables=None):
         # そのせいで、CLB マニュアルが正規に示す `Detail`——1 行しか持たないモジュールを
         # 一覧を挟まずに開く形（自社情報）と、表を持たない表示専用モジュールを載せる形
         # （ADR-0027 の `JournalEntryBoard`）——まで叩いていた。
-        # **関門は足したときが完成ではない**（docs/31_検証のルール.md §4）。
+        # **検査は足したときが完成ではない**（docs/31_検証のルール.md §4）。
         # **白リストで受ける。** 黒リスト（List だけ禁じる）にすると、`"list"` のような
         # 綴り違いや、CLB が将来増やす値が無言で通る——JSON の enum は大小を無視して読むので、
-        # `"list"` は D-05 が防いでいる「詳細が真っ白」を再現しつつ関門は緑になりうる
+        # `"list"` は D-05 が防いでいる「詳細が真っ白」を再現しつつ検査は緑になりうる
         # （2026-08-31 の自己レビュー）。
         page_type = link.get("ModulePageType") or "Auto"
         if page_type not in ("Auto", "ListToDetail", "List", "Detail"):
@@ -2929,7 +2929,7 @@ SELFTEST_READ_CASES = [
      _snapshot_read("    var n = Lines.PageCount;\n"), "Lines.PageCount を読む"),
 ]
 
-# **正しい姿**。ここで鳴る関門は、赤を無視させる。
+# **正しい姿**。ここで鳴る検査は、赤を無視させる。
 SELFTEST_READ_OK = [
     ("本番と同じ形", _read_module(), _READ_SCRIPT, _row_module()),
     # **`ModuleSearcher` で引いた行の欄は、このレイアウトの話ではない。**
@@ -3061,7 +3061,7 @@ SELFTEST_CONDITION_CASES = [
      "多段の道である"),
 ]
 
-# **正しい姿**。ここで鳴る関門は、赤を無視させる。
+# **正しい姿**。ここで鳴る検査は、赤を無視させる。
 SELFTEST_CONDITION_OK = [
     ("本番と同じ形", _condition_module()),
     ("2 段の入れ子でも置いてある", _condition_module(wrap=True)),
@@ -3241,7 +3241,7 @@ def _required_module(class_name=REQUIRED_LABEL_CLASS, with_label=True, relative=
                            "TypeFullName": "X.FieldLayoutDesign"}}]
     if with_label:
         # ラベル列は Middle 揃え（D-10）。**実物と同じ形で作る**——
-        # 検体が実データと違うと、正しい姿のはずが別の関門を鳴らす（qa/03 L-17）。
+        # 検体が実データと違うと、正しい姿のはずが別の検査を鳴らす（qa/03 L-17）。
         columns.insert(0, {"VerticalAlignment": "Middle",
                            "Layout": {"FieldName": "CodeLabel", "ClassName": class_name,
                                       "TypeFullName": "X.FieldLayoutDesign"}})
@@ -3309,14 +3309,14 @@ def _self_path(app="Accounting", name="SelfTest.mod.json"):
 
 
 def selftest():
-    """**関門が本当に鳴るかを、関門自身が確かめる。**
+    """**検査が本当に鳴るかを、検査自身が確かめる。**
 
     足したときに手で壊して確かめても、**次に緩めたときには誰も確かめない**
     （2026-08-31 の自己レビューで、D-05・D-10 を緩めた変更にテストが 1 本も無かった。qa/02 R26-21）。
     ここが赤くなったら、検査が空回りしている。
 
     **severity まで表明する。** ルールだけを見ると、`error` を `warn` に書き換えるだけで
-    **selftest も本検査も緑のまま、関門だけが消える**（同 R27-18）。
+    **selftest も本検査も緑のまま、検査だけが消える**（同 R27-18）。
     """
     failures = []
 
@@ -3336,7 +3336,7 @@ def selftest():
             failures.append(f"{label}: {expected}{f'（「{says}」と言う）' if says else ''} が鳴らない"
                             f"（出たのは {[(f[0], f[1], f[3]) for f in findings]}）")
 
-    # 正しい姿では鳴らない（鳴りっぱなしの関門は、赤を無視させる）
+    # 正しい姿では鳴らない（鳴りっぱなしの検査は、赤を無視させる）
     for label, doc in [
         ("表を持たないモジュール", _module()),
         ("書き込み条件と読み取り条件のあるモジュール",
@@ -3453,7 +3453,7 @@ def selftest():
         if findings:
             failures.append(f"正しいスクリプト（{label}）で鳴った: {[(f[1], f[3]) for f in findings]}")
 
-    # 関門が名指しする語の実在（D-27）
+    # 検査が名指しする語の実在（D-27）
     good_modules = [(_self_path("Platform", "AppUser.mod.json"),
                      {"Name": VOCABULARY_MODULE, "Fields": [
                          {"Name": "AccountingRole"}, {"Name": "PartnerRole"},
@@ -3482,7 +3482,7 @@ def selftest():
         findings = []
         check_vocabulary(modules, enums, css, findings)
         if (SEV_ERROR, "D-27") not in [(f[0], f[1]) for f in findings]:
-            failures.append(f"関門が名指しする語（{label}）: D-27 が鳴らない")
+            failures.append(f"検査が名指しする語（{label}）: D-27 が鳴らない")
 
     findings = []
     check_vocabulary(good_modules, good_enums, REQUIRED_LABEL_CLASS, findings)
@@ -4221,7 +4221,7 @@ def selftest():
     if check_candidate_filters([], []) != {"組": 0, "常に来る欄": 0}:
         failures.append("入力が空でも母数が 0 にならない（母数が固定されている）")
 
-    # **何も壊していない実デザインで、この関門が緑になること**（self-review スキル §9 の 3 つ目）。
+    # **何も壊していない実デザインで、この検査が緑になること**（self-review スキル §9 の 3 つ目）。
     # **指摘の受け皿を捨てない**——捨てると、本検査が赤くなっても selftest は緑のままになる。
     for label, check in (("D-33", lambda out: check_layout_reads(real_modules, real_scripts, out)),
                          ("D-34", lambda out: check_condition_fields(real_modules, out)),

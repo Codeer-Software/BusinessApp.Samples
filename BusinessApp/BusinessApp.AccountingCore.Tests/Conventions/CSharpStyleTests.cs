@@ -42,7 +42,7 @@ public class CSharpStyleTests
     /// </summary>
     /// <remarks>
     /// 3 つの表（csproj・<c>.editorconfig</c>・<c>EnforcedProjects</c>）は互いだけを照合しているので、
-    /// <b>3 か所を揃えて動かすと、整合したまま関門だけが消える</b>（qa/02 R8-12）。
+    /// <b>3 か所を揃えて動かすと、整合したまま検査だけが消える</b>（qa/02 R8-12）。
     /// ミューテーションスコアと同じ作法で下限を置く。<b>下げるときは qa/02 に理由を書いて下げる。</b>
     /// </remarks>
     [Fact]
@@ -436,15 +436,15 @@ public class CSharpStyleTests
     }
 
     // =====================================================================
-    // 4. 関門そのものの検査（わざと壊して鳴るか）
+    // 4. 検査そのものを壊して、鳴ることを見る
     // =====================================================================
 
     /// <summary>
     /// csproj の宣言の検査は、宣言を消す・打ち消す形の両方で鳴る。
     /// </summary>
     /// <remarks>
-    /// <b>「必要なプロパティが有る」ことは「関門が効いている」ことを意味しない。</b>
-    /// <c>NoWarn</c> を 1 行足せば、宣言を残したまま関門を殺せる（qa/02 R8-13）。
+    /// <b>「必要なプロパティが有る」ことは「検査が効いている」ことを意味しない。</b>
+    /// <c>NoWarn</c> を 1 行足せば、宣言を残したまま検査を殺せる（qa/02 R8-13）。
     /// </remarks>
     [Theory]
     [InlineData(Declared, 0)]
@@ -481,7 +481,7 @@ public class CSharpStyleTests
     /// <c>Directory.Build.props</c> に書いた抑制も見る。
     /// </summary>
     /// <remarks>
-    /// MSBuild はこれを暗黙に読み込むので、<b>csproj を 1 文字も触らずに関門を殺せる</b>
+    /// MSBuild はこれを暗黙に読み込むので、<b>csproj を 1 文字も触らずに検査を殺せる</b>
     /// （qa/02 R8-27）。必要プロパティの側は集約されると誤検知（＝安全側）だが、
     /// <b>抑制の側は逆向きに壊れる</b>ので非対称に見る。
     /// </remarks>
@@ -544,7 +544,7 @@ public class CSharpStyleTests
         Assert.NotEmpty(Problems(
             good + "\n[BusinessApp/BusinessApp.Server/**.cs]\ndotnet_diagnostic.IDE0055.severity = warning\n"));
 
-        // **上段の option を反転する**（severity はそのまま。ビルドの関門だけが消える）
+        // **上段の option を反転する**（severity はそのまま。ビルドの検査だけが消える）
         Assert.NotEmpty(Problems(good.Replace(
             "csharp_style_namespace_declarations = file_scoped",
             "csharp_style_namespace_declarations = block_scoped",
@@ -620,7 +620,7 @@ public class CSharpStyleTests
     /// </summary>
     /// <remarks>
     /// 入れると同じソースが 2 回出て、<c>.gitattributes</c> が「2 本ある」ことになる。
-    /// <b>関門が、作業のやり方で結果を変えてはいけない</b>（2026-08-26 に実際に鳴った）。
+    /// <b>検査が、作業のやり方で結果を変えてはいけない</b>（2026-08-26 に実際に鳴った）。
     /// </remarks>
     [Theory]
     [InlineData(".claude/worktrees/x/BusinessApp/A.cs", true)]

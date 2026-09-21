@@ -189,7 +189,7 @@ public class QueryModuleTests
     public void 順序に使えない代理キーを見つける(string sql, string expected)
         => Assert.Contains(expected, ForeignKeysInOrderBy(sql), StringComparer.Ordinal);
 
-    /// <summary>正しい書き方では鳴らない（鳴りっぱなしの関門は、赤を無視させる）。</summary>
+    /// <summary>正しい書き方では鳴らない（鳴りっぱなしの検査は、赤を無視させる）。</summary>
     [Theory]
     // 裸の id は**同着の解き方**として正しい（qa/02 R29-08）。
     [InlineData("select 1 order by date(e.posting_date) desc, e.id desc")]

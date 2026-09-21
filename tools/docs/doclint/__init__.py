@@ -6,7 +6,7 @@
 
   model.py     設定値・`Doc`・git 呼び出し・文書の読み込み・パス解決
   checks.py    検査 10 本と、その純粋な判定部分
-  selftest.py  関門そのものの検査（`--selftest`）
+  selftest.py  `lint_docs.py` 自身の検査（`--selftest`）
 
 入口は `tools/docs/lint_docs.py`（CLI と `main`）。**呼び出し方は変えていない。**
 分けたのは 1 ファイルが 770 行を超えたためで、普通のプログラムと同じ理由である

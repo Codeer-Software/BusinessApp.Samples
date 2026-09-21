@@ -129,6 +129,29 @@ public class JournalEntryValidatorTests
         Assert.Equal(broken.Lines[0].LineNo, violation.LineNo);
     }
 
+    /// <summary>
+    /// <b>上限ちょうどは通る。</b> 境界は <c>&gt;</c> であって <c>&gt;=</c> ではない
+    /// （2026-09-21 のミューテーションで <c>&gt;=</c> が生き残った——上限ちょうどの検体が無かった）。
+    /// </summary>
+    [Fact]
+    public void 上限ちょうどの内容は計上できる()
+    {
+        var entry = AccountingFixture.CashSale(Ordinary);
+        var exact = entry with
+        {
+            Lines =
+            [
+                entry.Lines[0] with
+                {
+                    ItemDescription = new string('い', JournalLineRules.TextMaxLength),
+                },
+                entry.Lines[1],
+            ],
+        };
+
+        Assert.DoesNotContain(Validate(exact), v => v.Code == JournalViolationCodes.ItemDescriptionTooLong);
+    }
+
     [Fact]
     public void 摘要の前後に空白があっても中身があれば計上できる()
     {
@@ -901,6 +924,30 @@ public class JournalEntryValidatorTests
         var violations = Validate(entry);
         Assert.Equal(ViolationSeverity.Error, AssertViolation(JournalViolationCodes.AccountInactive, violations).Severity);
         Assert.True(violations.HasError());
+    }
+
+    /// <summary>
+    /// <b>本体行が親行を指していても、断りはその行自身を指す。</b> <c>PlaceOf</c> が親で代表させるのは消費税行だけである
+    /// （2026-09-21 のミューテーションで、<c>IsTaxLine ? … : …</c> を <c>true ? …</c> にした変異が生き残った——
+    /// 親を持つ本体行は <c>ValidateTaxLine</c> が断るが、断っても <c>PlaceOf</c> は通るので、検体が無ければ場所が親にずれても気づけない）。
+    /// </summary>
+    [Fact]
+    public void 親行を指す本体行の断りは本体行自身を指す()
+    {
+        var lineWithParent = AccountingFixture.Line(2, DebitCredit.Debit, AccountingFixture.RetiredExpense, 1_000,
+            department: AccountingFixture.SalesDepartment) with
+        {
+            ParentLineNo = 1,
+        };
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Credit, AccountingFixture.Cash, 1_000),
+            lineWithParent);
+
+        var violations = Validate(entry);
+
+        Assert.Equal(2, AssertViolation(JournalViolationCodes.AccountInactive, violations).LineNo);
+        AssertViolation(JournalViolationCodes.TaxLineParentInvalid, violations);
     }
 
     [Theory]

@@ -3,7 +3,7 @@ title: tools — 開発スクリプト
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-09-20
+updated: 2026-09-21
 supersedes: []
 related: [../docs/README.md]
 ---
@@ -28,18 +28,18 @@ related: [../docs/README.md]
 | [`clb/_sqlite.ps1`](clb/_sqlite.ps1) | **`worktree_db.ps1` と `db_snapshot.ps1` が共有する小道具**（稼働 DB のパス・写しの健全性・退避と巻き戻し・使用中かの判定・空き名探し・表示用のパス畳み）。**単体では動かない** |
 | [`clb/db_snapshot.ps1`](clb/db_snapshot.ps1) | **稼働 DB の退避と復元**（[ADR-0046](../docs/decisions/0046-稼働DBの退避と復元を戻せる道具に閉じる.md)・[33 §1](../docs/33_失わないためのルール.md)）。`-Save` / `-Restore` / `-List`。**写しは `VACUUM INTO` で取る**（ファイルの複製は、古い内容と新しい内容が混ざった**壊れた写し**になりうる）。**何も消さず、戻す前に必ず現状を退避する**ので、`trash.ps1` と同じく確認を待たずに実行してよい |
 | [`server/wait-server.ps1`](server/wait-server.ps1) | 開発サーバ（`http://localhost:5085`）の起動を待つ |
-| [`clb/sql.ps1`](clb/sql.ps1) | `sql` CLI のラッパ。結果 JSON を標準出力に返し、**一時ファイルを作らない**。**DDL（`CREATE`・`DROP`・`ALTER`）は拒む**——通すのは `-File Designer/ddl/*`（追跡済み・未変更）と、`-AllowDdlOnce -Reason "<理由>"` で置いた印（次の 1 回だけ）。判定は純粋関数で、`-SelfTest` は**配線ごと**撃つ（分岐を消しても鳴る）。**なぜ拒むかは [docs/33 §2](../docs/33_失わないためのルール.md)、経緯は [ADR-0064](../docs/decisions/0064-稼働DBのスキーマはmigrateだけで動かし適用の記録はコミットごとに突き合わせる.md)**。`-SelfTest` あり |
+| [`clb/sql.ps1`](clb/sql.ps1) | `sql` CLI のラッパ。結果 JSON を標準出力に **UTF-8（BOM 無し）で**返し（Bash 道具からそのまま読める。2026-09-21 まで shift_jis で化けていた）、**一時ファイルを作らない**。**DDL（`CREATE`・`DROP`・`ALTER`）は拒む**——通すのは `-File Designer/ddl/*`（追跡済み・未変更）と、`-AllowDdlOnce -Reason "<理由>"` で置いた印（次の 1 回だけ）。判定は純粋関数で、`-SelfTest` は**配線ごと**撃つ（分岐を消しても鳴る）。**なぜ拒むかは [docs/33 §2](../docs/33_失わないためのルール.md)、経緯は [ADR-0064](../docs/decisions/0064-稼働DBのスキーマはmigrateだけで動かし適用の記録はコミットごとに突き合わせる.md)**。`-SelfTest` あり |
 | [`clb/migrate.ps1`](clb/migrate.ps1) | **DB マイグレーションのランナー**（ADR-0020）。`-Adopt` / `-Apply` / `-Status` / `-Verify`。**`-Verify` はスキーマの同値・未適用の有無・適用済みのチェックサムの 3 つを見る**（コミット前フックが流す。[ADR-0064](../docs/decisions/0064-稼働DBのスキーマはmigrateだけで動かし適用の記録はコミットごとに突き合わせる.md)）。書き方は [`Designer/migrations/README`](../Designer/migrations/README.md) |
 | [`clb/designcheck.ps1`](clb/designcheck.ps1) | `designcheck` のラッパ。結果は固定パスに上書きし続ける |
-| [`clb/lint_design.py`](clb/lint_design.py) | **CLB デザインの静的検査**。`designcheck` が緑でも壊れるもの（[qa/01](../docs/qa/01_CLB静かな失敗.md)）のうち JSON とスクリプトで判るものを検出する。`--selftest` で**検査そのものを検査する**——関門を殺す／error を warn に格下げする／`main()` の配線を消す・指摘の受け皿を渡さない／印字と終了コードを壊す／検体を減らす／**言うべき直し方を薄める**／**母数の枝を殺す**、のどれでも鳴る。**通し数は書かない**（足すたびに腐る。[qa/01 §0](../docs/qa/01_CLB静かな失敗.md) と同じ理由）。最後のふたつは**実デザインに対する対照実験**である——検体は「その形なら鳴る」しか言わないので、**枝を殺すと本番で数える読みが減ること**まで見る |
+| [`clb/lint_design.py`](clb/lint_design.py) | **CLB デザインの静的検査**。`designcheck` が緑でも壊れるもの（[qa/01](../docs/qa/01_CLB静かな失敗.md)）のうち JSON とスクリプトで判るものを検出する。`--selftest` で**検査そのものを検査する**——個々の検査を殺す／error を warn に格下げする／`main()` の配線を消す・指摘の受け皿を渡さない／印字と終了コードを壊す／検体を減らす／**言うべき直し方を薄める**／**母数の枝を殺す**、のどれでも鳴る。**通し数は書かない**（足すたびに腐る。[qa/01 §0](../docs/qa/01_CLB静かな失敗.md) と同じ理由）。最後のふたつは**実デザインに対する対照実験**である——検体は「その形なら鳴る」しか言わないので、**枝を殺すと本番で数える読みが減ること**まで見る |
 | [`clb/knockout.ps1`](clb/knockout.ps1) | **制約ノックアウト**（[ADR-0053](../docs/decisions/0053-制約ノックアウトはDDLを1つずつ外し振る舞いのテストだけで赤になるかを見る.md)・[qa/05 §4](../docs/qa/05_観点網羅の計器.md)）。**DDL の制約を 1 つずつ外し、`Schema.Tests` が赤にならない制約＝誰もテストしていない制約を報告する**。`-Only` / `-Kind` / `-List`。**時間がかかるのでコミット前フックには載せていない**——流す回は [ADR-0053 決定 7](../docs/decisions/0053-制約ノックアウトはDDLを1つずつ外し振る舞いのテストだけで赤になるかを見る.md)（**開発者の決定。2026-09-20**。もとは Claude の判断）。外す点と外し方の正典は `BusinessApp.TestSupport` の `SchemaKnockout` で、このスクリプトは回すだけ |
 | [`clb/sql_mutate.py`](clb/sql_mutate.py) | **SQL の変異点を数え、1 つだけ当てて書き出す**（[ADR-0056](../docs/decisions/0056-SQLミューテーションはクエリのSQLを1箇所ずつ壊し行動テストだけで赤になるかを見る.md)・[qa/05 §3](../docs/qa/05_観点網羅の計器.md)）。`list` / `spec` / `show` / `mask` / `audit` / `selftest`。**注記と文字列リテラルの中は数えない**（当てると等価ミュータントばかり増える）。**掃引はしない——数えて印字するだけ** |
 | [`clb/sql_sweep.ps1`](clb/sql_sweep.ps1) | **SQL ミューテーションの掃引**（同 ADR と [ADR-0058](../docs/decisions/0058-行セットの差分で殺す掃引は入力コーパスを持たず行動テストが流した入力をその場で当てる.md)）。**クエリの SQL を 1 箇所ずつ壊し、気づけない箇所を報告する**。**殺し方が 2 つある**——`-Mode Tests`（既定。A 案。**行動テストが赤になったか**）と `-Mode Rows`（B 案。**行動テストが流した入力で行セットが変わったか**）。**2 つの違いと使い分けは ADR-0058**（`-Only` / `-List`。注入はどちらも環境変数でファイルを書き換えない）。**`-Mode Rows` はコミット前フックに載っている**（[ADR-0058 決定 9](../docs/decisions/0058-行セットの差分で殺す掃引は入力コーパスを持たず行動テストが流した入力をその場で当てる.md)。**開発者の決定。2026-09-20。旧 Q-27**）。**`-Mode Tests` は分かかるので載せていない**。変異点の正典は `sql_mutate.py` で、このスクリプトは回すだけ |
-| [`clb/which_gates.py`](clb/which_gates.py) | **この回に流す計器を、差分から決めて印字する**（[31 §6](../docs/31_検証のルール.md) の判定を機械に当てたもの）。**流さない。決めて印字するだけ**——掃引は分かかるので、ここからも起こさない。**「流さない」も必ず印字する**（黙ると「言われなかったから流さなくてよい」に倒れる）。`--base` / `--selftest`。**未追跡の新しいファイルも見る**——`git diff` だけだと、クエリの SQL を新しく足した回に「触っていない」と報告する |
+| [`clb/which_gates.py`](clb/which_gates.py) | **この回に流す計器を、差分から決めて印字する**（名前の `gates` はコミット前フックの段のこと。[81 §1](../docs/81_略語と記号.md) の「関門」ではない）（[31 §6](../docs/31_検証のルール.md) の判定を機械に当てたもの）。**流さない。決めて印字するだけ**——掃引は分かかるので、ここからも起こさない。**「流さない」も必ず印字する**（黙ると「言われなかったから流さなくてよい」に倒れる）。`--base` / `--selftest`。**未追跡の新しいファイルも見る**——`git diff` だけだと、クエリの SQL を新しく足した回に「触っていない」と報告する |
 | [`clb/scaffold_module.py`](clb/scaffold_module.py) | モジュール定義の足場作り。生成後は `Design/Modules/*.mod.json` が正典 |
 | [`git-hooks/pre-commit`](git-hooks/pre-commit) | コミット前の検証。`git config core.hooksPath tools/git-hooks` で有効にする |
 | [`docs/lint_docs.py`](docs/lint_docs.py) | **ドキュメント規約の検査**（[docs/00 §6](../docs/00_ドキュメント規約/README.md)）。フロントマター・リンク切れ・索引の突合・**current でない文書へのコード参照**・**`current` の本文から `superseded` へのリンク**・**節への参照の指し先に節が実在するか**・**リンクの札と行き先の文書番号が一致するか**・**`updated:` の鮮度**（作業ツリーと履歴の両方）・**条項を [80 §3](../docs/80_参照法令一覧.md) の記法で書いているか**・**日付で発効する条番号の切替が残っていないか**（30 日前までは件数を印字するだけ、30 日前から warn、発効日以後は error。[ADR-0043](../docs/decisions/0043-日付で発効する条番号の切替を機械の関門に置き除外は行の印で表す.md)）。`--selftest` で検査そのものを検査する。**検査項目の正典は [00 §6](../docs/00_ドキュメント規約/README.md) の表**で、ここは道具の一覧である |
-| [`docs/doclint/`](docs/doclint/__init__.py) | 上の中身。`model.py`（設定値・`Doc`・git・読み込み）／`checks.py`（検査の本数は数えない。**正典は `ALL_CHECKS`** で、`selftest.py` が突合する）／`selftest.py`（関門の検査）。**入口は `lint_docs.py` のまま** |
+| [`docs/doclint/`](docs/doclint/__init__.py) | 上の中身。`model.py`（設定値・`Doc`・git・読み込み）／`checks.py`（検査の本数は数えない。**正典は `ALL_CHECKS`** で、`selftest.py` が突合する）／`selftest.py`（`lint_docs.py` 自身の検査）。**入口は `lint_docs.py` のまま** |
 | [`docs/lint_secrets.py`](docs/lint_secrets.py) | **公開リポジトリ向けの混入検査**。追跡ファイルに絶対パス・ユーザー名・接続文字列・API キー・秘密鍵が無いかを検査する |
 | [`docs/lint_secrets_allow.txt`](docs/lint_secrets_allow.txt) | 上記の誤検知抑制リスト |
 
@@ -110,7 +110,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 - **ごみ箱から戻すのはエクスプローラで行う。** `trash.ps1` に復元機能は無い
 - **`-Name` は半角英数で始まる 64 文字以内**（`[0-9A-Za-z][0-9A-Za-z._-]*`）。日本語・空白・`/` は断る。
   **同名の退避があれば上書きせず断る**
-- **`db_snapshot.ps1` はパスを受け取る引数を持たない。** だから関門は、この道具への言及では
+- **`db_snapshot.ps1` はパスを受け取る引数を持たない。** だから `guard_delete.py` は、この道具への言及では
   保護対象の名前を探さない（[ADR-0046](../docs/decisions/0046-稼働DBの退避と復元を戻せる道具に閉じる.md) の決定 7）——
   `-Name` に保護対象と同じ字を書いても確認は出ない
 - **待ち受けは IPv4 と IPv6 で 2 行返る。** 同じプロセスなので `-Unique` で 1 つに畳む
@@ -127,7 +127,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 | 段 | 中身 |
 |---|---|
 | **凍結ファイルの検査** | `check_frozen.py --selftest` → `check_frozen.py`（**凍結されたファイルの変更・削除・改名**。適用済みマイグレーションと `baseline/`。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
-| **失うことを止める道具の自己検査** | 失うことを止める道具の自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`・`worktree_db.ps1 -SelfTest`・`sql.ps1 -SelfTest`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる。**最後の 1 つは DDL の関門**——[ADR-0064](../docs/decisions/0064-稼働DBのスキーマはmigrateだけで動かし適用の記録はコミットごとに突き合わせる.md)） |
+| **失うことを止める道具の自己検査** | 失うことを止める道具の自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`・`worktree_db.ps1 -SelfTest`・`sql.ps1 -SelfTest`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる。**最後の 1 つは `sql.ps1` の DDL を拒む判定**——[ADR-0064](../docs/decisions/0064-稼働DBのスキーマはmigrateだけで動かし適用の記録はコミットごとに突き合わせる.md)） |
 | **改行の検査** | `normalize_eol.py --selftest` → `normalize_eol.py --check`（**作業コピーの改行が LF か**。`git ls-files --eol` が判定の正典で、**何を LF にすべきかは `.gitattributes` が決める**——この道具は拡張子の一覧を持たない。1 秒で終わるので前に置く） |
 | **秘密の検査** | `lint_secrets.py`（秘密・絶対パスの混入） |
 | **ドキュメント規約の検査** | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
@@ -137,8 +137,11 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 | **稼働 DB とスキーマ正典の同値検査** | `migrate.ps1 -Verify`（稼働 DB とスキーマ正典の同値。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
 | **ミューテーションテスト** | `dotnet stryker`（ミューテーション。**5 プロジェクト**——会計コアの純粋層とサーバ層、取引先部品の純粋層とサーバ層、共有インフラ。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)・[ADR-0025 §6](../docs/decisions/0025-取引先を部品として分ける.md)） |
 
-**マージが自動でコミットするときは `pre-merge-commit` から同じ段へ委譲する**——
-git はマージで `pre-commit` を呼ばないので、置かないと **`main` に入る瞬間だけ誰も見ていない**。
+**マージが自動でコミットするときは `pre-merge-commit` が呼ばれる**——git はマージで `pre-commit` を呼ばないので、置かないと **`main` に入る瞬間だけ誰も見ていない**。
+**これからコミットする木が、取り込むブランチ先端の木と同一なら、上の表の段のうち `migrate.ps1 -Verify` だけを流す**（稼働 DB は木の中に無いから）。
+**違うなら（`main` が先へ進んでいた合流・マージの中で編集した・取り込む親を 1 つに決められない）`pre-commit` へ委譲して全段を流す**
+（[ADR-0067](../docs/decisions/0067-マージコミットは木がブランチ先端と同じなら木から決まる段を流さない.md)。**ブランチの最終コミットが同じ木を全段で見ているから**。開発者の決定。2026-09-20）。
+判定だけ見たいときは `PRE_MERGE_COMMIT_EXPLAIN=1 sh tools/git-hooks/pre-merge-commit`（マージの途中で打つ。何も流さない）。
 
 有効にするのは clone 後の 1 回だけ。
 

@@ -60,7 +60,7 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// </summary>
     /// <remarks>
     /// 3 つの表（csproj・<c>.editorconfig</c>・<see cref="EnforcedProjects"/>）は互いだけを
-    /// 照合しているので、<b>3 か所を揃えて動かすと、整合したまま関門だけが消える</b>（qa/02 R8-12）。
+    /// 照合しているので、<b>3 か所を揃えて動かすと、整合したまま検査だけが消える</b>（qa/02 R8-12）。
     /// ミューテーションスコアの下限（ADR-0012）と同じ作法で置く。
     /// <b>下げるときは黙って下げず、理由を書いて下げる。</b>
     /// </remarks>
@@ -161,12 +161,12 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     private static readonly string[] RequiredProperties = ["TreatWarningsAsErrors", "EnforceCodeStyleInBuild"];
 
     /// <summary>
-    /// 宣言があっても関門を無効にできてしまうプロパティ。
+    /// 宣言があっても検査を無効にできてしまうプロパティ。
     /// </summary>
     /// <remarks>
     /// <c>TreatWarningsAsErrors</c> と <c>EnforceCodeStyleInBuild</c> を残したまま
-    /// <c>&lt;NoWarn&gt;IDE0055&lt;/NoWarn&gt;</c> を足せば関門は死ぬ（qa/02 R8-13）。
-    /// <b>「必要なプロパティが有る」ことは「関門が効いている」ことを意味しない。</b>
+    /// <c>&lt;NoWarn&gt;IDE0055&lt;/NoWarn&gt;</c> を足せば検査は死ぬ（qa/02 R8-13）。
+    /// <b>「必要なプロパティが有る」ことは「検査が効いている」ことを意味しない。</b>
     /// 抑制したいときは <c>#pragma</c> で 1 か所ずつ理由と一緒に（IDE0079 が不要な抑制を見張る）。
     /// </remarks>
     private static readonly string[] SuppressingProperties = ["NoWarn", "WarningsNotAsErrors"];
@@ -211,7 +211,7 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// </summary>
     /// <remarks>
     /// <b>ルートの 1 本だけを見てはいけない。</b> コンパイラはソースから上へ全部を積むので、
-    /// 下の階層に 3 行置くだけで関門を殺せる（qa/02 R8-26）。
+    /// 下の階層に 3 行置くだけで検査を殺せる（qa/02 R8-26）。
     /// </remarks>
     public IReadOnlyList<(string Path, string Text)> EditorConfigFiles()
         => [.. ConfigFiles(".editorconfig")];
@@ -224,7 +224,7 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// MSBuild が暗黙に読み込む設定（<c>Directory.Build.props</c> / <c>.targets</c>）。
     /// </summary>
     /// <remarks>
-    /// ここに <c>&lt;NoWarn&gt;</c> を書けば、csproj を 1 文字も触らずに関門を殺せる（qa/02 R8-27）。
+    /// ここに <c>&lt;NoWarn&gt;</c> を書けば、csproj を 1 文字も触らずに検査を殺せる（qa/02 R8-27）。
     /// </remarks>
     public IReadOnlyList<string> ImplicitBuildProperties()
         => [.. ConfigFiles("Directory.Build.props").Concat(ConfigFiles("Directory.Build.targets"))
@@ -369,7 +369,7 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// <param name="csproj">csproj の中身（無ければ null）。</param>
     /// <param name="implicitProperties">
     /// MSBuild が暗黙に読み込む設定（<c>Directory.Build.props</c> など）の中身。
-    /// <b>ここに <c>&lt;NoWarn&gt;</c> を書けば、csproj を 1 文字も触らずに関門を殺せる</b>（qa/02 R8-27）。
+    /// <b>ここに <c>&lt;NoWarn&gt;</c> を書けば、csproj を 1 文字も触らずに検査を殺せる</b>（qa/02 R8-27）。
     /// 必要プロパティの側は集約されると誤検知（＝安全側）だが、<b>抑制の側は逆向きに壊れる</b>。
     /// </param>
     public static IReadOnlyList<string> EnforcementProblems(
@@ -840,7 +840,7 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
            from id in element.Value.Split([';', ',', ' '], StringSplitOptions.RemoveEmptyEntries)
            where id.StartsWith("IDE", StringComparison.Ordinal)
            select $"{project}: {where} の <{element.Name.LocalName}> が {id} を抑制している。"
-                + "関門が死ぬので、抑制するなら #pragma で 1 か所ずつ（ADR-0021 §4-1）";
+                + "検査が死ぬので、抑制するなら #pragma で 1 か所ずつ（ADR-0021 §4-1）";
 
     /// <summary>Condition の有無によらず、すべての PropertyGroup の中身。</summary>
     private static IReadOnlyList<XElement> AllProperties(string xml)
@@ -853,7 +853,7 @@ public sealed class CSharpStyleConvention(string repositoryRoot)
     /// <para><c>.claude/worktrees/</c> は <b>このリポジトリの別のチェックアウト</b>である
     /// （<c>git worktree</c>）。入れると同じソースを 2 回数えることになり、
     /// <c>.gitattributes</c> は「2 本ある」、ソースは 2 倍の件数として見える。
-    /// <b>関門が、作業のやり方（ワークツリーを使ったかどうか）で結果を変えてはいけない。</b></para>
+    /// <b>検査が、作業のやり方（ワークツリーを使ったかどうか）で結果を変えてはいけない。</b></para>
     /// <para>2026-08-26 に実際に鳴った——前のセッションが残したワークツリーがあるだけで、
     /// 改行の固定の検査が落ちた。</para>
     /// </remarks>
@@ -880,7 +880,7 @@ public enum ForbiddenFormSet
     /// <summary>リポジトリ内のすべての C#（CLB スクリプトを含む）。</summary>
     Everywhere = 1,
 
-    /// <summary>ビルドの関門を敷いたプロジェクト。</summary>
+    /// <summary>ビルドの検査を敷いたプロジェクト。</summary>
     EnforcedProject = 2,
 
     /// <summary>利用者に見せる文言を組み立てる層。</summary>

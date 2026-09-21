@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    デザイナ exe の sql サブコマンドで SQL を実行し、結果 JSON を標準出力に返す。
+    デザイナ exe の sql サブコマンドで SQL を実行し、結果 JSON を標準出力に UTF-8（BOM 無し）で返す。
 
 .DESCRIPTION
     一時ファイルを作らない（docs/30_作業のルール.md §8）。
@@ -62,6 +62,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# 標準出力は UTF-8（BOM 無し）で書く。pwsh 7 の [Console]::OutputEncoding は日本語 Windows では shift_jis で、
+# 呼び手が Bash 道具（UTF-8 で読む）だと結果 JSON の日本語が化けていた（2026-09-20 の全件実測。docs/qa/04 の記録）。
+# exe からの取り込みは _designer.ps1 が CP932 で読んでいるので、化けていたのはここから先だけである。
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+
 $script:MarkerName = 'allow-ddl'
 
 # --- 純粋関数（-SelfTest が撃つ。DB・exe・git に触れない）
@@ -84,7 +90,7 @@ function Test-DdlAllowedFile {
     return $full.StartsWith($ddlRoot, [System.StringComparison]::OrdinalIgnoreCase) -and $full.EndsWith('.sql', [System.StringComparison]::OrdinalIgnoreCase)
 }
 
-# 関門の判定そのもの。戻りは @{ Allowed; Lines; ConsumeMarker }。
+# DDL を拒む判定そのもの。戻りは @{ Allowed; Lines; ConsumeMarker }。
 #   IsAllowedFile   … -File が Designer/ddl/ の正典で、追跡済み・HEAD から未変更
 #   MarkerReason    … 印の中身（無ければ $null。空ファイルは ''）
 function Resolve-DdlDecision {
@@ -144,6 +150,13 @@ function Test-TrackedUnchanged {
 
 function Invoke-SelfTest {
     $failures = @()
+
+    # 標準出力の符号化。冒頭の固定を消すと日本語 Windows では shift_jis に戻り、ここが赤くなる
+    $enc = [Console]::OutputEncoding
+    if ($enc.WebName -ne 'utf-8') { $failures += "標準出力の符号化が utf-8 ではない（実際: $($enc.WebName)）" }
+    if ($enc.GetPreamble().Length -ne 0) { $failures += '標準出力の符号化に BOM が付いている' }
+    if ($OutputEncoding.WebName -ne 'utf-8') { $failures += "パイプの符号化（`$OutputEncoding）が utf-8 ではない（実際: $($OutputEncoding.WebName)）" }
+    $encodingChecks = 3
     $samples = @(
         @{ Sql = 'SELECT COUNT(*) FROM accounts;'; Ddl = $false },
         @{ Sql = "UPDATE schema_migrations SET checksum = 'x' WHERE version = 38;"; Ddl = $false },
@@ -231,7 +244,7 @@ function Invoke-SelfTest {
         Write-Host "sql.ps1 -SelfTest: $($failures.Count) 件失敗"
         return 1
     }
-    Write-Host "sql.ps1 -SelfTest: OK（DDL の判定 $($samples.Count) 件・パス $($paths.Count) 件・配線 $($decisions.Count) 件・印 $markerChecks 件）"
+    Write-Host "sql.ps1 -SelfTest: OK（DDL の判定 $($samples.Count) 件・パス $($paths.Count) 件・配線 $($decisions.Count) 件・印 $markerChecks 件・符号化 $encodingChecks 件）"
     return 0
 }
 
@@ -256,7 +269,7 @@ if ($Query -and $File) { throw '-Query と -File は同時に指定できない�
 
 . (Join-Path $PSScriptRoot '_designer.ps1')
 
-# --- DDL の関門（docs/33 §2・ADR-0064）
+# --- DDL を拒む判定（docs/33 §2・ADR-0064）
 $filePath = if ($File) { (Resolve-Path $File).Path } else { $null }
 $sqlText = if ($Query) { $Query } else { Get-Content -LiteralPath $filePath -Raw }
 $isAllowedFile = $false

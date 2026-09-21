@@ -1,5 +1,107 @@
 #!/bin/sh
+#
 # マージが自動でコミットするとき、git は pre-commit ではなく **pre-merge-commit** を呼ぶ。
-# これが無いと「main に入る瞬間だけ、どの段も通らない」状態になる
-# （自己レビューの指摘。2026-08-27）。同じ検査へ委譲する。
-exec "$(dirname "$0")/pre-commit"
+# これが無いと「main に入る瞬間だけ、どの段も通らない」状態になる（自己レビューの指摘。2026-08-27）。
+#
+# **これからコミットする木が、取り込むブランチ先端の木と同一なら、木から決まる段は流さない**
+# （決定と理由は ADR-0067）。同じ木は、そのブランチの最終コミットの
+# pre-commit が既に全段で検査している。**違うなら全段を流す**——
+# main が先へ進んでいた合流と、マージコミットの中で編集した場合がそれに当たり、
+# **どちらも「どの親も持たない木」が main に入る**（実測: 全 154 マージ中 4 本）。
+# **判定できないとき（親を 1 つに決められない・木を書けない・先端の木を引けない）も全段へ倒す。**
+#
+# **稼働 DB とスキーマ正典の同値検査だけは、木が同じでも流す**——稼働 DB は木の中に無いので、
+# ブランチの最終コミットから時間が空くとずれうる（ADR-0064 の「コミットごとに突き合わせる」）。
+#
+# **失うもの**: rebase の衝突解決・cherry-pick・revert・am・--no-verify で作られた先端は pre-commit を
+# 通っていない。前はマージの全段がその唯一の網だったが、木が同じなら今は当たらない（ADR-0067 の帰結）。
+#
+# PRE_MERGE_COMMIT_EXPLAIN=1  判定だけ印字して何も流さない。終了コードは 軽い経路=0／全段=10
+# PRE_MERGE_COMMIT_SELFTEST=1 一時リポジトリで判定を 5 通り撃つ（pre-commit の「失うことを止める道具の自己検査」の段）
+
+self=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/$(basename -- "$0")
+
+# --- 自己検査 --------------------------------------------------------------
+if [ "${PRE_MERGE_COMMIT_SELFTEST:-}" = "1" ]; then
+    tmp=$(mktemp -d) || exit 1
+    trap 'rm -rf "$tmp"' EXIT
+    failures=0
+    g() { git -c user.name=selftest -c user.email=selftest@example.com -c core.hooksPath=/nonexistent "$@"; }
+    expect() {  # expect <期待の終了コード> <出力に含む字> <場合の名>
+        # 環境の SELFTEST を消して呼ぶ——消さないと子も自己検査に入り、無限に再帰する（2026-09-21 に実際に踏んだ）
+        out=$(PRE_MERGE_COMMIT_SELFTEST= PRE_MERGE_COMMIT_EXPLAIN=1 sh "$self" 2>&1); rc=$?
+        if [ "$rc" -ne "$1" ]; then echo "  NG $3: 終了コード $rc（期待 $1）"; failures=$((failures + 1)); fi
+        case "$out" in *"$2"*) ;; *) echo "  NG $3: 出力に「$2」が無い"; echo "$out" | sed 's/^/     /'; failures=$((failures + 1)) ;; esac
+    }
+    g init -q "$tmp/r" && cd "$tmp/r" || exit 1
+    echo a > f && g add f && g commit -q -m a
+    base=$(git symbolic-ref --short HEAD)
+    g checkout -q -b topic && echo b > f && g commit -q -am b && g checkout -q "$base"
+
+    expect 10 "取り込む親を 1 つに決められない" "MERGE_HEAD 無し"
+    g merge -q --no-commit --no-ff topic >/dev/null 2>&1
+    expect 0 "木がブランチ先端と同一" "木が同一"
+    echo c > g_ && g add g_
+    expect 10 "木がブランチ先端と異なる" "マージの中で編集"
+    g merge --abort
+    printf '%s\n%s\n' "$(git rev-parse topic)" "$(git rev-parse HEAD)" > "$(git rev-parse --git-dir)/MERGE_HEAD"
+    expect 10 "取り込む親を 1 つに決められない" "親が 2 つ"
+    rm -f "$(git rev-parse --git-dir)/MERGE_HEAD"
+    echo m > h && g add h && g commit -q -m m
+    g merge -q --no-commit --no-ff topic >/dev/null 2>&1
+    expect 10 "木がブランチ先端と異なる" "main が先へ進んでいた合流"
+    g merge --abort
+
+    if [ "$failures" -ne 0 ]; then echo "pre-merge-commit -SelfTest: $failures 件失敗"; exit 1; fi
+    echo "pre-merge-commit -SelfTest: OK（判定 5 件）"
+    exit 0
+fi
+
+# --- 本体 ------------------------------------------------------------------
+set -e
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+full() {
+    if [ "${PRE_MERGE_COMMIT_EXPLAIN:-}" = "1" ]; then
+        echo "[pre-merge-commit] EXPLAIN: 全段"
+        exit 10
+    fi
+    exec "$repo_root/tools/git-hooks/pre-commit"
+}
+
+git_dir=$(git rev-parse --git-dir)
+merge_head_file="$git_dir/MERGE_HEAD"
+
+# 取り込む親が「ちょうど 1 つ」と言えるときだけ先へ進む。MERGE_HEAD が無い・空・2 行以上（オクトパス）・
+# 読めない、はすべて全段へ倒す。**判定できないものを「同じ」に倒さない。**
+parents=""
+if [ -r "$merge_head_file" ]; then
+    parents=$(wc -l < "$merge_head_file" | tr -d ' ') || parents=""
+fi
+case "$parents" in
+    1) ;;
+    *)  echo "[pre-merge-commit] 取り込む親を 1 つに決められない（MERGE_HEAD の行数: ${parents:-読めない}） → 全段を流す"
+        full ;;
+esac
+
+index_tree=$(git write-tree) || { echo "[pre-merge-commit] これからコミットする木を書けない → 全段を流す"; full; }
+branch_tree=$(git rev-parse "$(cat "$merge_head_file")^{tree}") || { echo "[pre-merge-commit] 取り込む先端の木を引けない → 全段を流す"; full; }
+
+if [ "$index_tree" != "$branch_tree" ]; then
+    echo "[pre-merge-commit] 木がブランチ先端と異なる（$index_tree ≠ $branch_tree） → 全段を流す"
+    full
+fi
+
+echo "[pre-merge-commit] 木がブランチ先端と同一（$index_tree）"
+echo "[pre-merge-commit] → 木から決まる段は流さない（そのブランチの最終コミットで検査済み。ADR-0067）"
+echo "[pre-merge-commit]    飛ばした段: pre-commit の全段（一覧は tools/README の表）から migrate.ps1 -Verify を除いたもの"
+if [ "${PRE_MERGE_COMMIT_EXPLAIN:-}" = "1" ]; then
+    echo "[pre-merge-commit] EXPLAIN: 軽い経路（migrate.ps1 -Verify だけ）"
+    exit 0
+fi
+echo "[pre-merge-commit] → 稼働 DB とスキーマ正典の同値検査だけ流す（稼働 DB は木の中に無い）"
+pwsh -NoProfile -File tools/clb/migrate.ps1 -Verify
+
+echo "[pre-merge-commit] 緑（軽い経路）"

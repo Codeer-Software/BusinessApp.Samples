@@ -68,7 +68,7 @@ public class GroupedRejectionTests
     public void まとめている断りを集められている()
     {
         // **この網が空になる状態を許さない。** 集め方を壊すと、上の検査は
-        // 「一覧も実物も空」で黙って緑になる（関門は緑で失敗する。self-review スキル §9）。
+        // 「一覧も実物も空」で黙って緑になる（壊れた検査は赤で止まらない。self-review スキル §9）。
         Assert.NotEmpty(EmittedCodes());
     }
 

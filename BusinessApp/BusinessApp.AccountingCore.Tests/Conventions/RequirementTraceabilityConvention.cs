@@ -72,7 +72,7 @@ public static class RequirementTraceabilityConvention
     /// <remarks>
     /// <b>頭文字を本体より広く取る。</b> 本体と同じ字の集合で書くと、
     /// <b>カタログに新しい頭文字が入った日に、本体も緩い形も同時に見落とす</b>——
-    /// <b>母数は増えず、未参照も増えず、関門は緑のまま</b>である（qa/03 の L-15 の型）。
+    /// <b>母数は増えず、未参照も増えず、検査は緑のまま</b>である（qa/03 の L-15 の型）。
     /// <b>緩い形が緩くないなら、それは緩い形ではない。</b>
     /// </remarks>
     private static readonly Regex CatalogRowCandidate =
@@ -168,7 +168,7 @@ public static class RequirementTraceabilityConvention
     /// <summary>カタログのうち、項目の行に見えるのに読めなかったもの。</summary>
     /// <remarks>
     /// <b>読めなかった行は、静かに母数から落ちる。</b> 落ちた項目は未参照にも出てこないので、
-    /// <b>関門は緑になる</b>——だから「読めなかった行が 0 件」を別に見る。
+    /// <b>検査は緑になる</b>——だから「読めなかった行が 0 件」を別に見る。
     /// </remarks>
     public static IReadOnlyList<string> UnreadableCatalogRowsIn(string markdown)
     {
