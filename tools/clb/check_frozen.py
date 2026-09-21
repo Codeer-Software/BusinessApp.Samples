@@ -14,7 +14,8 @@
 **この検査が拾えないもの**（過大に表明しない）:
 
 - **`git commit` を経ない経路。** rebase の衝突解決・cherry-pick・revert・am は
-  git が `pre-commit` を呼ばない（マージだけは `pre-merge-commit` から委譲してある）
+  git が `pre-commit` を呼ばない（マージは `pre-merge-commit` が木を比べ、**同じならこの検査を流さない**——同じ木は直前のコミットで見ている。違えば `pre-commit` へ委譲する。ADR-0067。
+  **だから rebase 等で作った先端は、木が同じマージでもこの検査に当たらない**）
 - **索引に載せていない変更。** 見るのは `git diff --cached` である
 - **`core.hooksPath` を設定していない clone**（`tools/README` の有効化を 1 回だけ行う）
 - `migrate.ps1` は改行を LF に正規化してからハッシュを取るので、**改行だけの差**は
