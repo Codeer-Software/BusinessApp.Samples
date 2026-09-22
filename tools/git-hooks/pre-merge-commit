@@ -14,23 +14,17 @@
 #
 # **取り込む先端は `GITHEAD_<sha>` 環境変数から取る。`MERGE_HEAD` は見ない——このフックからは見えないからである。**
 # **git が `MERGE_HEAD` を書くのは「マージが止まったあと」**（衝突・`--no-commit`・フックが拒んだとき）で、
-# **このフックが走る時点では、どの経路でもまだ無い。** 2026-09-22 に 5 経路を実測した（打ち方と出力は qa/03 の L-63）——
-#
-#   | 経路 | 呼ばれるフック | フック実行中の MERGE_HEAD | GITHEAD_* |
-#   |---|---|---|---|
-#   | ふつうのマージ（自動でコミットする） | pre-merge-commit | **無い** | 1 つ |
-#   | main が先へ進んでいた合流 | pre-merge-commit | **無い** | 1 つ |
-#   | オクトパス | pre-merge-commit | **無い** | 2 つ |
-#   | 衝突した | **どちらも呼ばれない**（git がそこで止まる） | — | — |
-#   | `--no-commit` のあとの `git commit` | **pre-commit（全段）** | ある | 0 |
-#
-# **`MERGE_HEAD` で判定していた初版は、本物のマージでは軽い経路へ一度も入らなかった**
-# （2026-09-21・09-22 の 2 マージとも全段が流れた。qa/03 の L-63）。
+# **このフックが走る時点では、どの経路でもまだ無い。**
+# **経路ごとの実測（誰が呼ばれ、何が渡るか）は qa/03 の L-63 が持つ。**
+# **`MERGE_HEAD` で判定していた初版は、本物のマージでは軽い経路へ一度も入らなかった**（同）。
 # **`GITHEAD_*` は git がマージ戦略へ渡すもので、githooks(5) の約束ではない。**
 # 渡されなくなれば 0 個になり、**安全側（全段）へ倒れる**。
 #
 # **失うもの**: rebase の衝突解決・cherry-pick・revert・am・--no-verify で作られた先端は pre-commit を
 # 通っていない。前はマージの全段がその唯一の網だったが、木が同じなら今は当たらない（ADR-0067 の帰結）。
+#
+# **この判定の検体は `pre_merge_commit_selftest.py` が持つ**——**本物の `git merge` に呼ばせ、
+# 稼働 DB の同値検査と全段への委譲に切り株を置いて、流れたかどうかまで見る**（コミット前フックが毎回流す）。
 #
 # PRE_MERGE_COMMIT_EXPLAIN=1  判定だけ印字し、**何も流さずマージも止める**。
 #                             **このスクリプト自身の終了コードは 全段=10／軽い経路=11**だが、
@@ -38,239 +32,15 @@
 #                             **軽い経路でも 0 を返さない**——返すと、本物のマージが
 #                             `migrate.ps1 -Verify` を飛ばしたままコミットまで進んでしまう。
 #                             本物のマージで打ったら `git merge --abort` で戻す
-# PRE_MERGE_COMMIT_SELFTEST=1 使い捨てのリポジトリで検体を撃つ（下の「撃つ検体」）
 
-self=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/$(basename -- "$0")
-
-# **軽い経路で流す段。** 印字と実行が同じ 1 つの字から出るようにしてある
-# ——**印字だけ直して実行を落とす**（またはその逆）ができないようにするため。
-verify_script="tools/clb/migrate.ps1"
-verify_stage="$verify_script -Verify"
-
-# --- 自己検査 --------------------------------------------------------------
-#
-# **本物の `git merge` に呼ばせる。** 初版は `git merge --no-commit` で状態を作って
-# このファイルを直接呼んでいた。**それは git がこのフックを呼ばない経路**で、
-# `MERGE_HEAD` があるのもその経路だけだったので、**壊れていることを一度も言わなかった**
-# （qa/03 の L-63。検体の作り方が、本番の呼ばれ方と違っていた）。
-#
-# **撃つ検体**（`ran` が正典。数ではなく名前で釘付けする）——
-#   木が同一／main が先へ進んでいた合流／オクトパス（ここまで本物の `git merge`）／
-#   衝突（git がフックを呼ばず、締めくくりを pre-commit が受けることまで）／
-#   マージの外・先端の木を引けない（git に作れない場合なので写しを直接呼ぶ）／
-#   隔離（外側のマージの GITHEAD_* を落とせているか）／ハーネスの対照実験。
-#
-# **届かない場所を隠さない。** 検体はすべて EXPLAIN で撃つので、
-# **`$verify_stage` の実行そのものと `exec` での pre-commit への委譲には到達しない。**
-# 前者は「流す段」として印字する字を表明し、ファイルの実在まで見る。**後者は見ていない。**
-if [ "${PRE_MERGE_COMMIT_SELFTEST:-}" = "1" ]; then
-    set -e  # 検体を作る手が途中で折れたら、そこで止める（本番のリポジトリに git config を打たないため）
-    tmp=$(mktemp -d) || { echo "pre-merge-commit -SelfTest: 一時ディレクトリを作れない"; exit 1; }
-    trap 'cd /; rm -rf "$tmp"' EXIT
-
-    # **他のリポジトリで git を撃つので、git のローカル環境変数を落とす**（githooks(5) の明文）。
-    # 落とさないと、リンクワークツリーから呼ばれたとき GIT_DIR が絶対パスで渡り、
-    # **使い捨てのはずの git が本番のリポジトリに向く。**
-    unset $(git rev-parse --local-env-vars) 2>/dev/null || true
-
-    # 検体は使い捨てのリポジトリで撃つので、**本物の起点は落とす前に取らず、落としたあとに取る**
-    # （落とす前に取ると、汚れた GIT_DIR のまま「引けた」ことになる）
-    start_root=$(git rev-parse --show-toplevel 2>/dev/null) || start_root=""
-
-    # **外側のマージから引き継いだ `GITHEAD_*` を落とす。**
-    # 全段へ倒れたマージは `exec` で pre-commit を起こし、pre-commit はこの自己検査を流す。
-    # **`exec` は環境を保つ**ので、落とさないと内側の検体が「外側の 1 個＋内側の 1 個」を見て**全件赤になる**
-    # （2026-09-22 に実測。検体「隔離」がこれを見張る）。
-    scrub_githead() {
-        for v in $(env | sed -n 's/^\(GITHEAD_[0-9a-f][0-9a-f]*\)=.*/\1/p'); do unset "$v"; done
-        return 0
-    }
-
-    hooks="$tmp/hooks"
-    mkdir -p "$hooks" || { echo "pre-merge-commit -SelfTest: 検体のフック置き場を作れない"; exit 1; }
-    cp "$self" "$hooks/pre-merge-commit" || { echo "pre-merge-commit -SelfTest: 写しを作れない"; exit 1; }
-    chmod +x "$hooks/pre-merge-commit" || { echo "pre-merge-commit -SelfTest: 写しに実行権を付けられない"; exit 1; }
-    # 締めくくりのコミットを受けるのが pre-commit であることを見るための切り株。
-    # **印字ではなく印を置く**——コミットのたびに声を出すと、本当の NG が埋もれる
-    PRE_COMMIT_MARK="$tmp/pre-commit-was-called"
-    export PRE_COMMIT_MARK
-    printf '#!/bin/sh\ntouch "$PRE_COMMIT_MARK"\n' > "$hooks/pre-commit"
-    chmod +x "$hooks/pre-commit"
-
-    failures=0
-    ran=""
-
-    g() { git -c user.name=selftest -c user.email=selftest@example.com "$@"; }
-
-    ng() {  # ng <場合の名> <言い分> [出力]
-        echo "  NG $1: $2"
-        [ $# -lt 3 ] || echo "$3" | sed 's/^/     /'
-        failures=$((failures + 1))
-        return 0
-    }
-
-    # **理由と経路の両方を見る。** 経路だけ見ると、**別の理由で全段へ落ちていても緑になる**
-    # ——それが初版の壊れ方そのものである。
-    check() {  # check <出力> <理由の字> <経路の字> <場合の名>
-        for expected in "$2" "EXPLAIN: $3"; do
-            case "$1" in
-                *"$expected"*) ;;
-                *) ng "$4" "出力に「$expected」が無い" "$1" ;;
-            esac
-        done
-        return 0
-    }
-
-    make_repo() {  # make_repo <名>
-        d="$tmp/$1"
-        mkdir -p "$d"
-        cd "$d"
-        git init -q .
-        git config core.hooksPath "$hooks"
-        echo a > f
-        git add f
-        g commit -q -m a > /dev/null
-        main=$(git symbolic-ref --short HEAD)
-        return 0
-    }
-
-    branch_with() {  # branch_with <ブランチ> <足すファイル>
-        g checkout -q -b "$1"
-        echo x > "$2"
-        git add "$2"
-        g commit -q -m "$1" > /dev/null
-        g checkout -q "$main"
-        return 0
-    }
-
-    expect_merge() {  # expect_merge <理由の字> <経路の字> <場合の名> <git merge へ渡す引数...>
-        why=$1; want=$2; name=$3; shift 3
-        ran="$ran $name"
-        scrub_githead
-        before=$(git rev-parse HEAD)
-        [ -n "$before" ] || { ng "$name" "HEAD を引けない"; return 0; }
-        # 環境の SELFTEST を消して呼ぶ——消さないと子も自己検査に入り、無限に再帰する（2026-09-21 に実際に踏んだ）
-        out=$(PRE_MERGE_COMMIT_SELFTEST= PRE_MERGE_COMMIT_EXPLAIN=1 g merge --no-ff -m merge "$@" 2>&1) || true
-        last_out=$out
-        check "$out" "$why" "$want" "$name"
-        # **EXPLAIN は何も起こさない。** 軽い経路で 0 を返すと、**`migrate.ps1 -Verify` を飛ばしたまま
-        # マージが成立する**——印字だけのつもりで撃った人が、検査を 1 つ落とした main を作ってしまう
-        [ "$(git rev-parse HEAD)" = "$before" ] || ng "$name" "EXPLAIN なのにマージが成立した"
-        return 0
-    }
-
-    expect_direct() {  # expect_direct <理由の字> <場合の名> <前に置く環境変数の代入>
-        why=$1; name=$2; assign=$3
-        ran="$ran $name"
-        scrub_githead
-        out=$(env "$assign" PRE_MERGE_COMMIT_SELFTEST= PRE_MERGE_COMMIT_EXPLAIN=1 \
-                  sh "$hooks/pre-merge-commit" 2>&1) && rc=0 || rc=$?
-        check "$out" "$why" "全段" "$name"
-        [ "$rc" -eq 10 ] || ng "$name" "終了コードが 10 でない（$rc）" "$out"
-        return 0
-    }
-
-    # --- 本物の `git merge` に呼ばせる検体 ---
-
-    # **軽い経路に入る唯一の場合。** ここが緑にならない限り、ADR-0067 は絵に描いた餅である。
-    # **流す段の字**（$verify_stage）**も見る**——印字を消しても実行を消しても鳴るように
-    make_repo same
-    branch_with topic g
-    expect_merge "木がブランチ先端と同一" "軽い経路" "木が同一" topic
-    # **札まで含めて見る**——`飛ばした段:` の行にも同じ字が出るので、
-    # 字だけを探すと**「流す段」の行を消しても緑になる**（2026-09-22 のノックアウトで実際に緑になった）
-    case "$last_out" in
-        *"軽い経路で流す段: tools/clb/migrate.ps1 -Verify"*) ;;
-        *) ng "木が同一" "「軽い経路で流す段: tools/clb/migrate.ps1 -Verify」を印字していない" ;;
-    esac
-    { [ -n "$start_root" ] && [ -f "$start_root/$verify_script" ]; } \
-        || ng "木が同一" "流すと言っている $verify_script が実在しない（起点: ${start_root:-引けない}）"
-
-    # main が先へ進んでいた合流——**どの親の木でもない木**が入るので全段
-    make_repo ahead
-    branch_with topic g
-    echo c > h && git add h && g commit -q -m c > /dev/null
-    expect_merge "木がブランチ先端と異なる" "全段" "main が先へ進んでいた合流" topic
-
-    # オクトパス——取り込む先端が 2 つ
-    make_repo octopus
-    branch_with t1 g
-    branch_with t2 h
-    expect_merge "GITHEAD_* が 2 個" "全段" "オクトパス" t1 t2
-
-    # 衝突——**git はこのフックを呼ばずに止め、締めくくりの `git commit` を pre-commit が受ける。**
-    # 上の表の 4 行目で、**「MERGE_HEAD がある経路はすべて全段」という安全論の要**である
-    make_repo conflict
-    ran="$ran 衝突"
-    scrub_githead
-    g checkout -q -b topic && echo theirs > f && g commit -q -am topic > /dev/null && g checkout -q "$main"
-    echo ours > f && g commit -q -am ours > /dev/null
-    out=$(PRE_MERGE_COMMIT_SELFTEST= g merge --no-ff -m merge topic 2>&1) || true
-    case "$out" in
-        *"[pre-merge-commit]"*) ng "衝突" "衝突したマージで pre-merge-commit が呼ばれた" "$out" ;;
-    esac
-    echo resolved > f && git add f
-    rm -f "$PRE_COMMIT_MARK"
-    out=$(PRE_MERGE_COMMIT_SELFTEST= g commit -q -m resolved 2>&1) || true
-    [ -f "$PRE_COMMIT_MARK" ] || ng "衝突" "締めくくりの git commit を pre-commit が受けていない" "$out"
-
-    # --- git に作れない場合だけ、写しを直接呼ぶ ---
-
-    make_repo direct
-    # 手がかりが無い（マージの外から呼ばれた）。**渡す代入は「何も置かない」の印**
-    # （`env` に空の引数を渡せないので、使われない名前を 1 つ置いている）
-    expect_direct "GITHEAD_* が 0 個" "マージの外" "PRE_MERGE_COMMIT_UNUSED="
-    # 先端は 1 つに決まるが、その木を引けない
-    expect_direct "取り込む先端の木を引けない" "先端の木を引けない" \
-        "GITHEAD_0000000000000000000000000000000000000000=なにもない"
-
-    # --- 隔離 ---
-    # **外側のマージの `GITHEAD_*` が残っていると、この自己検査は全件赤になる。**
-    # 置いたうえで「木が同一」を撃ち、軽い経路に入ることを見る
-    make_repo isolated
-    branch_with topic g
-    GITHEAD_0000000000000000000000000000000000000000=outer
-    export GITHEAD_0000000000000000000000000000000000000000
-    expect_merge "木がブランチ先端と同一" "軽い経路" "隔離" topic
-
-    # --- 届かない 2 行を、字で見る ---
-    # **検体はすべて EXPLAIN で撃つので、この 2 行には到達できない。**
-    # 到達できないものを「見ている」とは言えないが、**消されたら黙る**のがいちばん悪いので、
-    # **字が在ることだけは見る**（形を変えて書き直したときは、ここも直すことになる）
-    ran="$ran 届かない 2 行"
-    grep -q '^pwsh -NoProfile -File \$verify_stage$' "$hooks/pre-merge-commit" \
-        || ng "届かない 2 行" "軽い経路が $verify_stage を実行する行が無い"
-    grep -q '^    exec "\$repo_root/tools/git-hooks/pre-commit"$' "$hooks/pre-merge-commit" \
-        || ng "届かない 2 行" "全段へ倒れたときに pre-commit へ委譲する行が無い"
-
-    # --- ハーネスの対照実験 ---
-    # **この道具が赤くなれることを、この道具自身が示す。**
-    # 表明の受け皿（check）が壊れると、検体を全部消しても「OK」と言う
-    ran="$ran ハーネスの対照実験"
-    before_failures=$failures
-    check "まったく関係のない出力" "出るはずのない理由の字" "出るはずのない経路" "ハーネスの対照実験" \
-        > "$tmp/control.log" 2>&1
-    if [ "$failures" -ne $((before_failures + 2)) ]; then
-        failures=$before_failures
-        ng "ハーネスの対照実験" "外れた出力を食わせても失敗が 2 件増えない（表明が素通りしている）"
-    else
-        failures=$before_failures
-    fi
-
-    # --- 撃った検体を名前で釘付けする（数で数えない。self-review スキル §9 の 6）---
-    expected_ran=" 木が同一 main が先へ進んでいた合流 オクトパス 衝突 マージの外 先端の木を引けない 隔離 届かない 2 行 ハーネスの対照実験"
-    [ "$ran" = "$expected_ran" ] || ng "母数" "撃った検体が違う（$ran）"
-
-    if [ "$failures" -ne 0 ]; then echo "pre-merge-commit -SelfTest: $failures 件失敗"; exit 1; fi
-    echo "pre-merge-commit -SelfTest: OK（撃った検体:$ran）"
-    exit 0
-fi
-
-# --- 本体 ------------------------------------------------------------------
 set -e
 
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
+
+# **軽い経路で流す段。** 印字と実行が同じ 1 つの字から出るようにしてある
+# ——**印字だけ直して実行を落とす**（またはその逆）ができないようにするため。
+verify_stage="tools/clb/migrate.ps1 -Verify"
 
 full() {
     if [ "${PRE_MERGE_COMMIT_EXPLAIN:-}" = "1" ]; then
@@ -288,7 +58,7 @@ if [ "$#" -ne 1 ]; then
     full
 fi
 
-index_tree=$(git write-tree) || { echo "[pre-merge-commit] これからコミットする木を書けない → 全段を流す"; full; }
+index_tree=$(git write-tree 2>/dev/null) || { echo "[pre-merge-commit] これからコミットする木を書けない → 全段を流す"; full; }
 branch_tree=$(git rev-parse "$1^{tree}" 2>/dev/null) || { echo "[pre-merge-commit] 取り込む先端の木を引けない（$1） → 全段を流す"; full; }
 
 if [ "$index_tree" != "$branch_tree" ]; then
