@@ -41,14 +41,19 @@ python tools/clb/check_frozen.py
 # 5 つめは sql.ps1 の DDL を拒む判定（ADR-0064）。**稼働 DB のスキーマを記録なしに動かせる経路を塞ぐ**判定で、
 # 語彙を狭めても誰も気づかないので、検体で縛る。
 # 6 つめは pre-merge-commit の「木が同じなら流さない」判定（ADR-0067）。**緩めると main に入る瞬間の検査が
-# 黙って消える**ので、一時リポジトリで 5 通り撃つ。
+# 黙って消える**ので、使い捨てのリポジトリで**本物の `git merge` に呼ばせる検体**を撃つ
+# （**手で状態を作って直接呼ぶ形では、壊れていても緑になった**——qa/03 の L-63。**撃つ検体はあちらのファイルが持つ**）。
+# **印字だけでなく、稼働 DB の同値検査と全段への委譲に切り株を置いて、流れたかどうかまで見る**
+# ——**字を残したまま到達不能にする書き換え**は、印字を見るだけでは素通りする。
+# **この段は全段へ倒れたマージからも流れる**（pre-merge-commit が `exec` する）ので、
+# **あちらは外側のマージの `GITHEAD_*` と git のローカル環境変数を落としてから撃つ**。
 stage "失うことを止める道具の自己検査"
 python tools/claude/guard_delete.py --selftest
 pwsh -NoProfile -File tools/claude/trash.ps1 -SelfTest
 pwsh -NoProfile -File tools/clb/db_snapshot.ps1 -SelfTest
 pwsh -NoProfile -File tools/clb/worktree_db.ps1 -SelfTest
 pwsh -NoProfile -File tools/clb/sql.ps1 -SelfTest
-PRE_MERGE_COMMIT_SELFTEST=1 sh tools/git-hooks/pre-merge-commit
+python tools/git-hooks/pre_merge_commit_selftest.py
 
 # 作業コピーの改行が LF であること。**リポジトリに入る中身は .gitattributes が正規化する**ので
 # 常に LF だが、**作業コピーだけがずれる**——Windows の Write ツールと python の write_text が
