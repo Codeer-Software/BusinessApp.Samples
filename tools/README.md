@@ -3,7 +3,7 @@ title: tools — 開発スクリプト
 status: current
 scope: 全体
 audience: [開発]
-updated: 2026-09-21
+updated: 2026-09-22
 supersedes: []
 related: [../docs/README.md]
 ---
@@ -127,7 +127,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 | 段 | 中身 |
 |---|---|
 | **凍結ファイルの検査** | `check_frozen.py --selftest` → `check_frozen.py`（**凍結されたファイルの変更・削除・改名**。適用済みマイグレーションと `baseline/`。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
-| **失うことを止める道具の自己検査** | 失うことを止める道具の自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`・`worktree_db.ps1 -SelfTest`・`sql.ps1 -SelfTest`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる。**最後の 1 つは `sql.ps1` の DDL を拒む判定**——[ADR-0064](../docs/decisions/0064-稼働DBのスキーマはmigrateだけで動かし適用の記録はコミットごとに突き合わせる.md)） |
+| **失うことを止める道具の自己検査** | 失うことを止める道具の自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`・`worktree_db.ps1 -SelfTest`・`sql.ps1 -SelfTest`・`PRE_MERGE_COMMIT_SELFTEST=1 sh tools/git-hooks/pre-merge-commit`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる。**`sql.ps1` は DDL を拒む判定**——[ADR-0064](../docs/decisions/0064-稼働DBのスキーマはmigrateだけで動かし適用の記録はコミットごとに突き合わせる.md)。**最後の 1 つはマージの「木が同じなら流さない」判定**——緩めると **`main` に入る瞬間の検査が黙って消える**（[ADR-0067](../docs/decisions/0067-マージコミットは木がブランチ先端と同じなら木から決まる段を流さない.md)）） |
 | **改行の検査** | `normalize_eol.py --selftest` → `normalize_eol.py --check`（**作業コピーの改行が LF か**。`git ls-files --eol` が判定の正典で、**何を LF にすべきかは `.gitattributes` が決める**——この道具は拡張子の一覧を持たない。1 秒で終わるので前に置く） |
 | **秘密の検査** | `lint_secrets.py`（秘密・絶対パスの混入） |
 | **ドキュメント規約の検査** | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
@@ -139,9 +139,20 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 
 **マージが自動でコミットするときは `pre-merge-commit` が呼ばれる**——git はマージで `pre-commit` を呼ばないので、置かないと **`main` に入る瞬間だけ誰も見ていない**。
 **これからコミットする木が、取り込むブランチ先端の木と同一なら、上の表の段のうち `migrate.ps1 -Verify` だけを流す**（稼働 DB は木の中に無いから）。
-**違うなら（`main` が先へ進んでいた合流・マージの中で編集した・取り込む親を 1 つに決められない）`pre-commit` へ委譲して全段を流す**
+**違うなら `pre-commit` へ委譲して全段を流す**——`main` が先へ進んでいた合流と、
+**判定できないとき**（取り込む先端を 1 つに決められない・これからコミットする木を書けない・先端の木を引けない）がそれに当たる
 （[ADR-0067](../docs/decisions/0067-マージコミットは木がブランチ先端と同じなら木から決まる段を流さない.md)。**ブランチの最終コミットが同じ木を全段で見ているから**。開発者の決定。2026-09-20）。
-判定だけ見たいときは `PRE_MERGE_COMMIT_EXPLAIN=1 sh tools/git-hooks/pre-merge-commit`（マージの途中で打つ。何も流さない）。
+**取り込む先端は `GITHEAD_<sha>` 環境変数から取る**——**`MERGE_HEAD` はこのフックからは見えない。**
+**git が書くのはマージが止まったあと**（衝突・`--no-commit`・フックが拒んだとき）で、
+**止まったマージを締めくくる `git commit` は `pre-commit` が受ける**（同 ADR の帰結）。
+判定だけ見たいときは次を打つ。**印字してマージを止める**ので、`git merge --abort` で戻す。
+
+```powershell
+$env:PRE_MERGE_COMMIT_EXPLAIN = 1; git merge --no-ff <ブランチ>; Remove-Item Env:\PRE_MERGE_COMMIT_EXPLAIN
+```
+
+**軽い経路でも 0 を返さない**のは、返すと `migrate.ps1 -Verify` を飛ばしたままマージが成立するからである。
+**スクリプト自身の終了コードは 全段=10／軽い経路=11 だが、`git merge` 経由で見えるのは git の 1** である。
 
 有効にするのは clone 後の 1 回だけ。
 
