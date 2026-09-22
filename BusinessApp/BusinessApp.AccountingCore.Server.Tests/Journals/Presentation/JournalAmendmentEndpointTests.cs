@@ -1,6 +1,10 @@
 namespace BusinessApp.AccountingCore.Server.Tests.Journals.Presentation;
 
+using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+using BusinessApp.TestSupport;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 using BusinessApp.AccountingCore.Shared;
@@ -21,6 +25,95 @@ using BusinessApp.AccountingCore.Server.Journals.Presentation;
 /// </remarks>
 public class JournalAmendmentEndpointTests
 {
+    /// <summary>
+    /// 実機の台本。<b>確認文の期待値をここから読む。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>パスを 1 つのリテラルで書く。</b> <c>Path.Combine</c> で分けて書くと、
+    /// <b>「文書を読む C#」を数えている自己検査</b>（<c>tools/git-hooks/docs_only.py</c> の <c>DOC_READERS</c>）
+    /// <b>から見えなくなる</b>——見えないと、<b>この文書だけを変えた回が「文書だけの回」と判定されて
+    /// ミューテーションの段が飛ぶ</b>（ADR-0068）。
+    /// </remarks>
+    private const string ScenarioPath = "docs/qa/04_実機操作テスト.md";
+
+    /// <summary>
+    /// 会計ドメインの設計文書。<b>取消の字の正典である。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>パスを 1 つのリテラルで書く</b>（<c>ScenarioPath</c> と同じ理由）。
+    /// <b>この文書は既に <c>DOCS_READ_BY_TESTS</c> に入っている</b>（不変条件のカタログとして）ので、
+    /// <b>ここで読んでも、文書だけの回の扱いは変わらない</b>（ADR-0068）。
+    /// </remarks>
+    private const string DomainDesignPath = "docs/10_会計ドメイン設計.md";
+
+    /// <summary>
+    /// 取引先の設計文書。<b>入場券等の回収特例の 1 文の正典である</b>（§1-4）。
+    /// </summary>
+    /// <remarks>
+    /// <b>この文書は <c>DOCS_READ_BY_TESTS</c> に足した</b>——足さないと、
+    /// <b>この文書だけを変えた回が「文書だけの回」と判定されてミューテーションの段が飛ぶ</b>（ADR-0068）。
+    /// </remarks>
+    private const string PartnerDesignPath = "docs/13_取引先設計.md";
+
+    /// <summary>台本と画面で、伝票ごとに変わる値を潰す印。</summary>
+    private const string Hole = "※";
+
+    /// <summary>
+    /// モジュールの定義から、<b>その欄が出す字</b>を取り出す（タグは落とす）。
+    /// </summary>
+    /// <remarks>
+    /// <b>JSON 全文をつないで母数にしない。</b> それだと<b>どの欄に入っているかを見ていない</b>ので、
+    /// <b>計上済みで隠れる欄へ移しても緑のまま</b>になる——この回でいちばん守りたいのは
+    /// 「<b>どの欄に</b>あるか」である（2026-09-23 の自己レビュー）。
+    /// </remarks>
+    private static string ShownText(string design, string fieldName)
+    {
+        using var document = JsonDocument.Parse(design);
+        var field = document.RootElement.GetProperty("Fields").EnumerateArray()
+            .Single(item => item.GetProperty("Name").GetString() == fieldName);
+        var raw = field.TryGetProperty("RawHtml", out var html)
+            ? html.GetString()
+            : field.GetProperty("Text").GetString();
+        return Regex.Replace(raw ?? string.Empty, @"<[^>]+>", string.Empty);
+    }
+
+    private static string ReadDesign()
+        => File.ReadAllText(Path.Combine(
+            TestDatabase.ModulesDirectory, "Accounting", "Journals", "JournalEntry.mod.json"));
+
+    private static string ReadScript()
+        => File.ReadAllText(Path.Combine(
+            TestDatabase.ModulesDirectory, "Accounting", "Journals", "JournalEntry.mod.cs"));
+
+    /// <summary>画面に出る字を、<b>欄ごとに</b>集めてつなぐ。</summary>
+    private static string ShownEverywhere()
+    {
+        var design = ReadDesign();
+        return string.Concat(
+            Regex.Replace(
+                string.Concat(Regex.Matches(ReadScript(), @"""([^""\\]*(?:\\.[^""\\]*)*)""")
+                    .Select(match => match.Groups[1].Value)),
+                @"\{\w+\}", Hole),
+            ShownText(design, "RequiredLegendLabel"),
+            ShownText(design, "InvoiceNoticeLabel"),
+            ShownText(design, "EntryNotesLabel"),
+            ShownText(design, "AmendGuideLabel"));
+    }
+
+    /// <summary>設計文書の節から、<c>&gt; </c> で始まる引用を<b>文ごとに</b>返す。</summary>
+    /// <remarks>
+    /// <b>行のまま突き合わせない。</b> 画面の側では 1 行の引用が複数のリテラルに割れていることがあり
+    /// （「この伝票を取り消します。」＋差し込み＋「よろしいですか？」）、
+    /// <b>たまたま隣り合っているから通っているだけ</b>になる（2026-09-23 の自己レビュー）。
+    /// </remarks>
+    private static List<string> QuotedSentences(string document, string from, string to)
+        => document.Split(from)[1].Split(to)[0].Split('\n')
+            .Where(line => line.StartsWith("> ", StringComparison.Ordinal))
+            .SelectMany(line => line[2..].Split('。', StringSplitOptions.RemoveEmptyEntries))
+            .Select(sentence => sentence.Trim())
+            .Where(sentence => sentence.Length > 0)
+            .ToList();
+
     /// <summary>取り消される側の仕訳（借方 現金 1000 / 貸方 未払金 1000）。</summary>
     private static JournalEntryId Original(AccountingServer server)
         => server.InsertPosted(
@@ -586,7 +679,8 @@ public class JournalAmendmentEndpointTests
         // 1 つ落ちても改名されてもコンパイルは通り、画面が黙って値を読めなくなる。
         Assert.Equal(
             ["status", "openEntryId", "reversalId", "message", "violations", "canReverse", "canCorrect",
-             "canDuplicate", "reversalEntryNo", "correctionEntryNo", "correctionResumes", "correctionDraftExists"],
+             "canDuplicate", "reversalEntryNo", "correctionEntryNo", "correctionResumes", "correctionDraftExists",
+             "targetsEarlierPeriod", "earlierBasisDate", "earlierFiscalYearLabel"],
             root.EnumerateObject().Select(property => property.Name));
         Assert.Equal(
             ["code", "message", "lineNo"],
@@ -630,6 +724,246 @@ public class JournalAmendmentEndpointTests
             new AmendmentAvailability(false, false, "理由", 12, null, true, CorrectionDraftExists: true))));
         Assert.False(drafted.RootElement.GetProperty("correctionResumes").GetBoolean());
         Assert.True(drafted.RootElement.GetProperty("correctionDraftExists").GetBoolean());
+
+        // **基準日も年度の名前も落とさずに写す**（docs/11 §5-2）。
+        // 落とすと、画面は空文字を読み、**前の年度の申告に触れる断りが黙って消える**。
+        Assert.Equal(string.Empty, available.RootElement.GetProperty("earlierBasisDate").GetString());
+        Assert.Equal(string.Empty, available.RootElement.GetProperty("earlierFiscalYearLabel").GetString());
+
+        // **2 つは別に運ぶ。** 年度を名乗れない環境（その年度をまだ作っていない）では
+        // **日付だけが入る**ので、片方に畳むと断りが出せなくなる。
+        using var earlier = JsonDocument.Parse(JsonSerializer.Serialize(AmendResult.Available(
+            new AmendmentAvailability(
+                true, true, string.Empty, null, null, true,
+                EarlierBasisDate: "2026/03/20", EarlierFiscalYearLabel: "第 17 期（2025 年度）"))));
+        Assert.Equal("2026/03/20", earlier.RootElement.GetProperty("earlierBasisDate").GetString());
+        Assert.Equal(
+            "第 17 期（2025 年度）",
+            earlier.RootElement.GetProperty("earlierFiscalYearLabel").GetString());
+
+        using var unnamed = JsonDocument.Parse(JsonSerializer.Serialize(AmendResult.Available(
+            new AmendmentAvailability(
+                true, true, string.Empty, null, null, true, EarlierBasisDate: "2024/05/20"))));
+        Assert.Equal("2024/05/20", unnamed.RootElement.GetProperty("earlierBasisDate").GetString());
+        Assert.Equal(
+            string.Empty, unnamed.RootElement.GetProperty("earlierFiscalYearLabel").GetString());
+    }
+
+    /// <summary>
+    /// <b>入口から通しても、前の年度の名前が JSON に出る。</b>
+    /// </summary>
+    /// <remarks>
+    /// 上は <c>AmendResult.Available</c> の写像だけを見ている。<b>調べる側からここまでの配線は別の話</b>で、
+    /// <c>AvailabilityAsync</c> が組み直すときに落としても上は緑のままである
+    /// （伝票番号について同じ警戒を書いた検体が既にある）。
+    /// </remarks>
+    [Fact]
+    public async Task 入口から通しても前の年度の名前が出る()
+    {
+        using var server = new AccountingServer();
+        server.InsertFiscalYear("FY17", "2025-04-01", "2026-03-31");
+        var original = server.InsertPosted(
+            904, "前の年度の伝票", "2025-05-20",
+            ("debit", "1100", 1000), ("credit", "2200", 1000));
+
+        var json = JsonSerializer.Serialize(
+            await server.Amendment.AvailabilityAsync(server.Text(original.Value)));
+
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal(
+            "2025/05/20", document.RootElement.GetProperty("earlierBasisDate").GetString());
+        Assert.Equal(
+            "FY17 期", document.RootElement.GetProperty("earlierFiscalYearLabel").GetString());
+    }
+
+    /// <summary>
+    /// <b>台本（qa/04）の期待値が、画面の出す字と 1 文字も違わない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>この回だけで 3 回ずれた</b>（文面を書き直すたびに台本が遅れ、2 回は自己レビューが見つけた。
+    /// 2026-09-22）。<b>実機を流す人は台本を正典として読む</b>ので、
+    /// <b>ずれたまま流すと「期待値と一致した」という報告そのものが嘘になる</b>。</para>
+    /// <para><b>画面の字は 2 か所にある。</b> 確認ダイアログは<b>スクリプトの文字列リテラル</b>、
+    /// <b>最下段の注意書きはモジュールの定義</b>（<c>LabelField</c> の <c>Text</c>。開発者の決定。2026-09-23）。
+    /// <b>どちらも本物を読む</b>（写しを置かない。docs/30 §8）。</para>
+    /// <para><b>長さで引用を拾わない。</b> 以前は「40 字以上の鉤括弧」で拾っていたが、
+    /// <b>確認文が短くなると拾えなくなり</b>（「この伝票を取り消します。よろしいですか？」は 20 字）、
+    /// <b>閾値を下げると画面の字でない引用</b>（法令・設計文書からの引用）<b>まで拾う</b>。
+    /// 台本の側に <c>- 期待値 n:</c> の行を置き、<b>そこだけを読む</b>。</para>
+    /// <para><b>見るのは「台本の期待値が、画面の字に実在するか」まで</b>である——
+    /// 組み立ての順（どの文がどこへ入るか）は人が読む。<b>それでも、書き換えた側だけが動いた回は必ず赤くなる。</b></para>
+    /// </remarks>
+    [Fact]
+    public void 台本の期待値は画面の組む文と一致する()
+    {
+        var design = ReadDesign();
+        var scenario = File.ReadAllText(
+            Path.Combine(TestDatabase.RepositoryDirectory, ScenarioPath));
+
+        // **差し込みの穴を潰してから突き合わせる。**
+        // 画面は `$"取引日（{earlierBasisDate}）は「{earlierFiscalYearLabel}」にあります。"` と組むので、
+        // **台本の側の具体値（基準日・会計年度の表示名）も同じ印に潰す**。
+        // **潰す語が増えたらこの検体が赤くなる**ので、そのとき足す（安全側に倒れている）。
+        var shown = ShownEverywhere();
+
+        var expected = scenario.Split('\n')
+            .Select(line => Regex.Match(line, @"^- 振替伝票の期待値 \d+: (.+?)\s*$"))
+            .Where(match => match.Success)
+            .Select(match => match.Groups[1].Value)
+            .ToList();
+
+        // **母数を「期待値が採れたこと」で釘付けする**（`self-review` スキル §9 の 6）。
+        // 見出しや前置きを書き換えて 1 本も採れなくなったら、この表明が先に落ちる。
+        Assert.Equal(12, expected.Count);
+
+        // **`／` は箇条書きの区切り**（台本の書き方。画面では別々の `<li>` になる）。
+        // **長さで捨てない。** 閾値を置いたら、見出し「取消と訂正」（5 字）が黙って落ちていた（2026-09-23）。
+        var missing = expected
+            .SelectMany(line => line.Split(['。', '／'], StringSplitOptions.RemoveEmptyEntries))
+            .Select(Normalize)
+            .Where(sentence => sentence.Length > 0)
+            .Distinct()
+            .Where(sentence => !shown.Contains(sentence, StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Empty(missing);
+
+        // **読み物は「どの欄にあるか」まで見る。** 見出しと、その欄でしか出ない 1 文で代表させる
+        // ——**入れ替えたり、計上済みで隠れる欄へ移したりしたら赤くなる。**
+        var guide = ShownText(design, "AmendGuideLabel");
+        var notes = ShownText(design, "EntryNotesLabel");
+        Assert.StartsWith("取消と訂正", guide, StringComparison.Ordinal);
+        Assert.StartsWith("入力の決まり", notes, StringComparison.Ordinal);
+        Assert.Contains("できた取消伝票は帳簿に残り、あとから消せません。", guide, StringComparison.Ordinal);
+        Assert.Contains("下書き保存のときにも必要です。", notes, StringComparison.Ordinal);
+
+        // 台本の具体値を、画面の差し込みの穴と同じ印に潰す。
+        // **受けの語（「その年度」「その日を含む年度」）は潰さない**——
+        // **画面でも変数ではなく、分岐ごとに書き下した字である。**
+        static string Normalize(string sentence)
+        {
+            var text = sentence.Trim();
+            text = Regex.Replace(text, @"\d{4}/\d{2}/\d{2}", Hole);   // 基準日
+            text = Regex.Replace(text, @"第 \d+ 期（\d+ 年度）", Hole); // 会計年度の表示名
+            return text;
+        }
+    }
+
+    /// <summary>
+    /// <b>取消と訂正の案内は、計上済みの画面でも出る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>この回でいちばん守りたい性質である。</b> 4 文を確認ダイアログから外した代わりに、
+    /// <b>画面が常に出している</b>ことが前提になった——
+    /// <b>「取り消す」「訂正する」が出るのは計上済みの画面だけ</b>なので、
+    /// <b>未計上に限ると押す人が 1 度も読めない</b>。</para>
+    /// <para><b>これはコード 1 行の有無でしか表せない。</b> <c>IsVisible</c> はモジュールの定義に無く
+    /// （ランタイムの既定が真）、<c>designcheck</c> も <c>lint_design.py</c> も見ていない。
+    /// qa/01 F-14 と同じ形なので、<b>字面で表明する</b>。</para>
+    /// </remarks>
+    [Fact]
+    public void 取消と訂正の案内は計上済みでも出す()
+    {
+        var script = ReadScript();
+
+        Assert.Contains("AmendGuideLabel.IsVisible = true;", script, StringComparison.Ordinal);
+        Assert.Contains("EntryNotesLabel.IsVisible = !posted;", script, StringComparison.Ordinal);
+        Assert.Contains("InvoiceNoticeLabel.IsVisible = !posted;", script, StringComparison.Ordinal);
+        Assert.Contains("RequiredLegendLabel.IsVisible = !posted;", script, StringComparison.Ordinal);
+
+        // **計上済みで消す側へ倒した書き換えを止める。**
+        Assert.DoesNotContain("AmendGuideLabel.IsVisible = !posted", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("AmendGuideLabel.IsVisible = false", script, StringComparison.Ordinal);
+
+        // **前の伝票の断りを持ち越さない**——`ShowAmendmentNotice` は分岐の中でしか `Text` に代入せず、
+        // 最後にその空かどうかで `IsVisible` を決める。**先頭で空へ戻していないと、前の断りが残って真になる。**
+        Assert.Contains("AmendmentNoticeLabel.Text = \"\";", script, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>設計文書（docs/10 §5）の引用が、画面の出す字と 1 文字も違わない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>ここが正典である</b>（開発者の承認。2026-09-20。ADR-0066 の決定 10・15）。
+    /// <b>画面は 2 か所に分かれた</b>——<b>どの伝票でも同じ 4 文はモジュールの定義</b>
+    /// （<c>AmendmentNotesLabel</c>。開発者の決定。2026-09-23）、<b>確認文はスクリプト</b>。
+    /// <b>正典が 1 つで写しが 2 つある形</b>なので、<b>どれか 1 つを直した回は必ず赤くなる</b>ようにする。</para>
+    /// <para><b>台本との突き合わせでは足りない。</b> あちらは<b>台本と画面</b>を見るので、
+    /// <b>両方を直して設計文書だけを置き去りにした回</b>は緑のまま通る——
+    /// <b>そのとき「字の正典は docs/10 §5」という注記が嘘になる</b>。</para>
+    /// <para><b>引用の数を表明する</b>（<c>self-review</c> スキル §9 の 6）。
+    /// 節を書き換えて引用が消えたら、この検体が先に落ちる。</para>
+    /// </remarks>
+    [Fact]
+    public void 取消の字は設計文書と画面で同じである()
+    {
+        var shown = ShownEverywhere();
+
+        // **§5 の引用だけを拾う。** 節の外には別の条文の引用がある（§4-2-1 の法税規則 55 ①）。
+        var reversal = QuotedSentences(
+            File.ReadAllText(Path.Combine(TestDatabase.RepositoryDirectory, DomainDesignPath)),
+            "## 5. 訂正モデル", "## 6.");
+
+        // **入場券等の 1 文の正典は docs/13 §1-4** である（画面では明細の直前に出る）。
+        var invoice = QuotedSentences(
+            File.ReadAllText(Path.Combine(TestDatabase.RepositoryDirectory, PartnerDesignPath)),
+            "### 1-4. 住所の写しは仕訳に作らない", "### 1-5.");
+
+        // **母数を数だけで釘付けしない**（`self-review` スキル §9 の 6）。
+        // **取消の 4 文・確認文の 2 文・入場券等の 1 文**が、それぞれ 1 本ずつ実っていることまで見る。
+        Assert.Equal(6, reversal.Count);
+        Assert.Single(invoice);
+        Assert.Contains("取消は、記した取引をはじめから無かったことにする操作です"
+            + "——記帳を誤ったときと、取引がはじめから無かったことになったときに使います", reversal);
+        Assert.Contains("この伝票を取り消します", reversal);
+        Assert.Contains("よろしいですか？", reversal);
+
+        Assert.Empty(reversal.Concat(invoice)
+            .Where(sentence => !shown.Contains(sentence, StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// <b>画面が読んでいるキーが、応答に実在する。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>ここが、この経路でいちばん静かに壊れるところである。</b>
+    /// スクリプトはキーを<b>文字列で</b>引く（qa/01 K-03）ので、サーバ側で改名しても
+    /// <b>コンパイルも <c>designcheck</c> も <c>lint_design.py</c> も緑のまま</b>通る。
+    /// <c>応答の項目名は画面との約束である</c> は<b>サーバ側の並びを固定するだけ</b>で、
+    /// <b>画面が何を読んでいるかは見ていない</b>——改名してその検体を直せば、両方緑のまま画面だけが読めなくなる。</para>
+    /// <para><b>しかも読めないことは黙っていない。</b> CLB は無いキーに <c>JsonObject</c> 自身の型名を返す
+    /// （qa/01 K-02）ので、<b>確認ダイアログの本文に型名が出る</b>。</para>
+    /// <para><b>本物のスクリプトを読む</b>（写しを置かない。docs/30 §8）。</para>
+    /// </remarks>
+    [Fact]
+    public void 画面が読むキーは応答に実在する()
+    {
+        var script = File.ReadAllText(Path.Combine(
+            TestDatabase.ModulesDirectory, "Accounting", "Journals", "JournalEntry.mod.cs"));
+
+        // `result.JsonObject.<名前>` を全部集める。**この経路の応答を読む唯一の形**である。
+        var read = Regex.Matches(script, @"result\.JsonObject\.(\w+)")
+            .Select(m => m.Groups[1].Value)
+            .Distinct()
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        // **母数を数で釘付けしない。** 読んでいる名前をそのまま並べる（`self-review` スキル §9 の 6）。
+        Assert.Equal(
+            [
+                "canCorrect", "canDuplicate", "canReverse", "correctionDraftExists", "correctionEntryNo",
+                "correctionResumes", "earlierBasisDate", "earlierFiscalYearLabel", "message", "openEntryId",
+                "reversalEntryNo", "status", "targetsEarlierPeriod",
+            ],
+            read);
+
+        // **宣言の側は属性から読む。** 名前を書き写すと、改名したときに両方が一緒に動いてしまう。
+        var declared = typeof(AmendResult).GetProperties()
+            .Select(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name)
+            .Where(name => name is not null)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Empty(read.Where(name => !declared.Contains(name)));
     }
 
     /// <summary>

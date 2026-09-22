@@ -311,6 +311,10 @@ REQUIRED_EXEMPTIONS = {
 # `IsRequired` を立てると CLB の入力検査が**下書き保存まで止める**ので立てられないが、
 # **印は最初から出す**（docs/10 §4-2-1・docs/21 §1）。
 # **理由を書かないと載せられない**（空の理由は `check_exemptions` が赤くする）。
+# `*` が何を意味するかを言う凡例に付けるクラス（app.css）。
+# **打ち消しの字がここにあるかを、下の `_check_marks_are_cancelled` が見る。**
+LEGEND_CLASS = "required-legend"
+
 MARK_WITHOUT_REQUIRED = {
     ("JournalEntry", "Description"):
         "摘要は計上でだけ必須。IsRequired を立てると下書き保存も止まる（docs/10 §4-2-1）",
@@ -432,6 +436,7 @@ def check_module(path, doc, findings):
     # そちらは文字列に「*」を入れてある（qa/01 D-16）。
     _check_required_marks(path, doc, findings)
     _check_marks_without_required(path, doc, findings)
+    _check_marks_are_cancelled(path, doc, findings)
 
     # D-30 画面に出す日時は書式を書く（docs/21 §2-5）。
     _check_datetime_formats(path, doc, findings)
@@ -760,6 +765,75 @@ def _check_marks_without_required(path, doc, findings):
     # **詳細だけでなく、一覧・検索も歩く。** 行ごと複製したときに印が付いて回る。
     for layouts in ("DetailLayouts", "ListLayouts", "SearchLayouts"):
         walk(doc.get(layouts, {}))
+
+
+def _check_marks_are_cancelled(path, doc, findings):
+    """**打ち消していない印を残さない**（docs/21 §1）。
+
+    `MARK_WITHOUT_REQUIRED` に載っているのは「印は出るが、常に必須ではない」欄である。
+    **載せた時点で `*` の意味は画面の中で 2 通りになる**ので、
+    `Designer/Project.md` の 2026-09-08 の行は**凡例でその欄を名指しする**ことまでを求めている。
+
+    **それを見ていたのは人だけだった**——許可表は「載っているか」しか見ず、
+    **凡例から打ち消しの字が消えても、lint も designcheck も緑のまま**である
+    （2026-09-23 に実際に踏んだ。振替伝票の凡例を 307 字から 11 字へ詰めたとき、
+    摘要と取引先の打ち消しごと画面の別の場所へ移した）。
+
+    **見るのは「そのモジュールのどこかの読み物に、その欄の表示名が鉤括弧で出ているか」まで**である。
+    文の意味は読まない——**字が 1 つも無い状態だけを止める。**
+    """
+    module = doc.get("Name", "")
+    owners = [owner for (target, owner) in MARK_WITHOUT_REQUIRED if target == module]
+    if not owners:
+        return
+
+    display_of = {f.get("Name", ""): (f.get("DisplayName") or "")
+                  for f in doc.get("Fields", [])}
+
+    # **母数は凡例だけ**（`ClassName` が `required-legend` の欄）。
+    # **モジュールの読み物すべてを母数にすると、この検査は用を成さない**——
+    # 画面の別の場所に同じ語があれば緑のままになり、
+    # **打ち消しを印から引き離した回**（それがまさに止めたい形である）**を素通りさせる。**
+    legends = set()
+
+    def collect(node):
+        if isinstance(node, dict):
+            name = node.get("FieldName", "")
+            if name and LEGEND_CLASS in (node.get("ClassName") or "").split():
+                legends.add(name)
+            for value in node.values():
+                collect(value)
+        elif isinstance(node, list):
+            for value in node:
+                collect(value)
+
+    collect(doc.get("DetailLayouts", {}))
+
+    if not legends:
+        findings.append((SEV_ERROR, "D-20", relative(path),
+                         f"{module}: 常に必須ではない印がある"
+                         f"（{'・'.join(sorted(owners))}）のに、"
+                         f'詳細レイアウトに凡例（"ClassName": "{LEGEND_CLASS}"）が無い（docs/21 §1）'))
+        return
+
+    prose = "".join(
+        (field.get("Text") or "") + (field.get("RawHtml") or "")
+        for field in doc.get("Fields", [])
+        if field.get("Name") in legends)
+
+    for owner in sorted(owners):
+        display = display_of.get(owner, "")
+        if not display:
+            findings.append((SEV_ERROR, "D-20", relative(path),
+                             f"{module}: {owner} は MARK_WITHOUT_REQUIRED に載っているが、"
+                             "DisplayName が無いので凡例で名指しようがない（docs/21 §1）"))
+            continue
+        if f"「{display}」" not in prose:
+            findings.append((SEV_ERROR, "D-20", relative(path),
+                             f"{module}: {owner}（「{display}」）は印が出るのに常に必須ではない。"
+                             "凡例で「" + display + "」を名指しして打ち消す"
+                             "（docs/21 §1「打ち消していない印を残さない」・Project.md 2026-09-08）。"
+                             "画面の別の場所に書いても、印の隣は嘘のままである"))
 
 
 def search_text_fields(doc, only=""):
@@ -2633,6 +2707,17 @@ SELFTEST_CASES = [
      (SEV_ERROR, "D-25"), "値を書くフィールドがどこにも無い"),
     ("必須の欄に印が無い",
      lambda: _required_module(class_name=""), (SEV_ERROR, "D-20"), "印が出ない"),
+    # **打ち消しの字が凡例から消えた**（2026-09-23 に実際に踏んだ。
+    # 画面の別の場所へ移したので、モジュール全体を母数にすると緑のまま通った）。
+    ("凡例が打ち消していない",
+     lambda: _cancelled_module(legend="「*」は必須項目です。"),
+     (SEV_ERROR, "D-20"), "印の隣は嘘のまま"),
+    # **片方だけを名指した凡例でも赤くする**——2 欄あるのに 1 欄で足りると読ませない。
+    ("凡例が片方しか打ち消していない",
+     lambda: _cancelled_module(legend="「*」は必須項目です。「摘要」は「計上する」ときに必要です。"),
+     (SEV_ERROR, "D-20"), "「取引先」を名指しして打ち消す"),
+    ("凡例そのものが無い",
+     lambda: _cancelled_module(with_legend=False), (SEV_ERROR, "D-20"), "凡例"),
     ("必須の欄にラベル要素が無い",
      lambda: _required_module(with_label=False), (SEV_ERROR, "D-20"), "ラベル要素"),
     # **両方を書くと `*` が 2 つ並ぶ**（2026-09-02 に AppUser で実際に出した）。
@@ -2690,6 +2775,11 @@ WIRED_CHECKS = [
 # 「NOT NULL の読み方」そのものが壊れたときに検体も一緒に壊れて気づけない。
 SELFTEST_TABLE = "departments"
 SELFTEST_REQUIRED_COLUMN = "code"
+
+
+# 打ち消しの検体で使う「正しい凡例」。**本番と同じ形にする**（qa/03 L-17）。
+LEGEND_FULL = ("「*」は必須項目です。ただし「摘要」は「計上する」ときに必要で、"
+               "伝票の「取引先」は明細の全行で選べば空のままでも計上できます。")
 
 
 def _module(**overrides):
@@ -3253,6 +3343,33 @@ def _required_module(class_name=REQUIRED_LABEL_CLASS, with_label=True, relative=
         DetailLayouts={"": {"Layout": {"Rows": [{"Columns": columns}]}}})
 
 
+def _cancelled_module(legend=LEGEND_FULL, with_legend=True):
+    """`MARK_WITHOUT_REQUIRED` に載っている欄を持つモジュール（打ち消しの検体）。
+
+    **本番の名前で作る**——許可表は `(モジュール名, 欄名)` で引くので、
+    架空の名前では検査そのものが走らない（走らないことを「鳴らない」と読むと、穴が開く）。
+    **`JournalEntry` は 2 欄とも載っている**ので、**片方だけを名指した凡例で赤くなること**も見られる。
+    """
+    columns = []
+    if with_legend:
+        columns.append({"Layout": {"FieldName": "LegendLabel", "ClassName": LEGEND_CLASS,
+                                   "TypeFullName": "X.FieldLayoutDesign"}})
+    return _module(
+        Name="JournalEntry",
+        Fields=[
+            {"Name": "Description", "DisplayName": "摘要",
+             "TypeFullName": "X.TextFieldDesign"},
+            {"Name": "Partner", "DisplayName": "取引先",
+             "TypeFullName": "X.LinkFieldDesign"},
+            {"Name": "LegendLabel", "Text": legend, "TypeFullName": "X.LabelFieldDesign"},
+            # **打ち消しの字が画面の別の場所にあっても緑にしない**——
+            # この欄があるのに赤くなることが、検査が凡例だけを見ている証拠である。
+            {"Name": "NotesLabel", "RawHtml": "「摘要」も「取引先」も、ここに書いてある。",
+             "TypeFullName": "X.MarkupStringFieldDesign"},
+        ],
+        DetailLayouts={"": {"Layout": {"Rows": [{"Columns": columns}]}}})
+
+
 def _role_condition(values, is_or=True, is_not=False, comparison="Equal"):
     return {
         "ModuleName": "AppUser",
@@ -3347,6 +3464,9 @@ def selftest():
          _module(Name=next(iter(READ_CONDITION_EXEMPTIONS)), DbTable="x",
                  UserWriteCondition={"ModuleName": "AppUser"})),
         ("印の付いた必須の欄", _required_module()),
+        # **正しい凡例では鳴らない。** 画面の別の場所にも同じ語があるが、それでは緑にならない
+        # （上の「凡例が打ち消していない」が、まさにその形で赤くなる）。
+        ("打ち消しのある凡例", _cancelled_module()),
         ("他のクラスと併記した印", _required_module(class_name="ms-2 required-label")),
         # **CLB が RelativeField で出す印だけでよい**（クラスは付けない）。
         ("CLB が出す印だけの必須の欄", _required_module(class_name="", relative=True)),

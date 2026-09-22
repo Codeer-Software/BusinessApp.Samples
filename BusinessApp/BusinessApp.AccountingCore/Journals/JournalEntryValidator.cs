@@ -122,8 +122,8 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.PartnerInactive,
-                $"取引先「{partner.Name}」は「有効」がオフです。{UsedIn(rows)}"
-                + "別の取引先を選ぶか、取引先マスタで有効に戻してください。",
+                $"取引先「{partner.Name}」は「有効」になっていません。{UsedIn(rows)}"
+                + "別の取引先を選ぶか、取引先マスタで「有効」に戻してください。",
                 lineNo,
                 severity));
         }
@@ -452,8 +452,8 @@ public static class JournalEntryValidator
             {
                 violations.Add(new Violation(
                     JournalViolationCodes.AccountInactive,
-                    $"勘定科目「{account.Name}」は「有効」がオフです。{UsedIn(inactiveRows)}"
-                    + "別の勘定科目を選ぶか、勘定科目マスタで有効に戻してください。",
+                    $"勘定科目「{account.Name}」は「有効」になっていません。{UsedIn(inactiveRows)}"
+                    + "別の勘定科目を選ぶか、勘定科目マスタで「有効」に戻してください。",
                     inactiveLine,
                     InactiveSeverity(entry)));
             }
@@ -502,8 +502,8 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.DepartmentInactive,
-                $"部門「{department.Name}」は「有効」がオフです。{UsedIn(rows)}"
-                + "別の部門を選ぶか、部門マスタで有効に戻してください。",
+                $"部門「{department.Name}」は「有効」になっていません。{UsedIn(rows)}"
+                + "別の部門を選ぶか、部門マスタで「有効」に戻してください。",
                 lineNo,
                 InactiveSeverity(entry)));
         }
@@ -629,8 +629,8 @@ public static class JournalEntryValidator
         {
             violations.Add(new Violation(
                 JournalViolationCodes.SubAccountInactive,
-                $"補助科目「{subAccount.Name}」は「有効」がオフです。{UsedIn(rows)}"
-                + "別の補助科目を選ぶか、補助科目マスタで有効に戻してください。",
+                $"補助科目「{subAccount.Name}」は「有効」になっていません。{UsedIn(rows)}"
+                + "別の補助科目を選ぶか、補助科目マスタで「有効」に戻してください。",
                 lineNo,
                 InactiveSeverity(entry)));
         }

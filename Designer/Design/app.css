@@ -32,11 +32,38 @@
     font-weight: 700;
 }
 
-/* 「*」が何を意味するかの凡例。フォームの先頭行に置く。
-   文言は LabelField が持つ（CSS に利用者向けの文言を書かない）。 */
-.required-legend {
+/* **補助的な字は 1 つの見え方に揃える。** 3 か所が同じ宣言を持っていたので束ねた（2026-09-23）——
+   分けておくと、次に色を変える回に探し漏らす。**用途ごとの違いだけを下に書く。**
+   - .required-legend 「*」が何を意味するかの凡例。フォームの先頭行に置く
+   - .form-notes      本文の末尾に置く注意書き（docs/21 §2-8）
+   - .column-notice   列の意味の注記（総勘定元帳の「期間内累計」など）
+   文言はどれもモジュールの定義が持つ（CSS に利用者向けの文言を書かない）。 */
+.required-legend,
+.form-notes,
+.column-notice {
     color: #6c757d;
     font-size: .875em;
+}
+
+/* 注意書きは箇条書きで示す（開発者の決定。2026-09-23——
+   「注意書きを書くなら、新規作成画面の最下段に箇条書きで示してください」）。
+   **冒頭に置くと本文が読まれる前に長文が立ちはだかる**（振替伝票の凡例が 307 字あった）。
+
+   **上の余白は行ではなく欄が持つ。** 行の Margin に持たせると、
+   **欄を隠したときに行と余白だけが残る**（qa/01 D-08）。
+   **ul の左の余白を詰める**のは、Bootstrap の reboot が `ol,ul{padding-left:2rem}` を当てていて
+   （BusinessApp.Client/wwwroot/css/bootstrap/bootstrap.min.css）、字下げが深すぎるからである。 */
+.form-notes {
+    margin-top: 1rem;
+}
+
+.form-notes ul {
+    margin: .25em 0 0;
+    padding-left: 1.25em;
+}
+
+.form-notes li {
+    margin-bottom: .125em;
 }
 
 /* **明細表の見出しには印を付けられない。** ListElement.ClassName は <td> にしか付かず、
@@ -46,11 +73,8 @@
    このため、フォームの「*」は赤・明細の「*」は黒になる。 */
 
 /* 列の意味の注記（総勘定元帳の「期間内累計」など）。
-   見出しだけでは決まらないことを、その場で読めるようにする（docs/21_画面の原則.md §1）。 */
-.column-notice {
-    color: #6c757d;
-    font-size: .875em;
-}
+   見出しだけでは決まらないことを、その場で読めるようにする（docs/21_画面の原則.md §1）。
+   **見え方は上の束ねた宣言が持つ。** */
 
 /* 詳細画面の中に置いた表が「何の一覧か」を示す見出し。
    ListField は行モジュールの ListLayouts.HeaderTitle を描かない（2026-08-31 実測 1.3.20）ので、

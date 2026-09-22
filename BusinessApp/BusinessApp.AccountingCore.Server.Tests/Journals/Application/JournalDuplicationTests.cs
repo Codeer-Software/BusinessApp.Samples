@@ -459,7 +459,7 @@ public class JournalDuplicationTests
                 "PostedAt", "PostedBy",
             ],
             decidedOutside: ["FiscalYearId", "PostingDate", "EnteredAt", "Lines"],
-            computed: ["DebitTotal", "CreditTotal", "IsBalanced"]);
+            computed: ["DebitTotal", "CreditTotal", "IsBalanced", "EarliestBasisDate"]);
 
     [Fact]
     public void 明細の欄はすべて写す側か写さない側に決めてある()

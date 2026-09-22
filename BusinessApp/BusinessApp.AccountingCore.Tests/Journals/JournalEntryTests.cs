@@ -90,4 +90,77 @@ public class JournalEntryTests
 
         Assert.Null(AccountingFixture.Entry(Ordinary, line).PartnerOf(line));
     }
+
+    // --- 基準日（docs/11 §5-2） ---
+
+    /// <summary>
+    /// <b>行の基準日は「課税仕入れの日、無ければ伝票の取引日」</b>である。
+    /// </summary>
+    /// <remarks>
+    /// <b>定義はここにしか置かない。</b> 計上時の登録番号の写しと、取消・訂正の確認文が
+    /// <b>同じ日を見る</b>——写した日と断りの日が違うと、帳簿と画面が別の課税期間の話をする。
+    /// </remarks>
+    [Fact]
+    public void 行の基準日は課税仕入れの日で取引日を上書きする()
+    {
+        var withTaxPoint = AccountingFixture
+            .Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000) with
+        { TaxPoint = new DateOnly(2026, 3, 20) };
+        var withoutTaxPoint = AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000);
+        var entry = AccountingFixture.Entry(Ordinary, withTaxPoint, withoutTaxPoint);
+
+        Assert.Equal(new DateOnly(2026, 3, 20), entry.BasisDateOf(withTaxPoint));
+        Assert.Equal(Ordinary, entry.BasisDateOf(withoutTaxPoint));
+    }
+
+    [Fact]
+    public void 行を渡さなければ基準日は決められない()
+        => Assert.Throws<ArgumentNullException>(
+            () => AccountingFixture.Entry(Ordinary).BasisDateOf(null!));
+
+    /// <summary>
+    /// <b>伝票の基準日は、いちばん古い行の基準日</b>である。
+    /// </summary>
+    /// <remarks>
+    /// <b>1 行でも前の課税期間に届けば届く。</b> 遅い行に合わせると、
+    /// 前の期の税額が動くのに黙ることになる。
+    /// <b>古い日を後ろの行に置く</b>ので、最初の行で止める実装はここで落ちる。
+    /// </remarks>
+    [Fact]
+    public void 伝票の基準日はいちばん古い行の日である()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000) with
+            { TaxPoint = new DateOnly(2026, 6, 10) },
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000) with
+            { TaxPoint = new DateOnly(2026, 3, 20) });
+
+        Assert.Equal(new DateOnly(2026, 3, 20), entry.EarliestBasisDate);
+    }
+
+    /// <summary>
+    /// <b>明細が無ければ伝票の取引日</b>。下書きは明細 0 行で作れる。
+    /// </summary>
+    [Fact]
+    public void 明細が無ければ伝票の基準日は取引日である()
+        => Assert.Equal(Ordinary, AccountingFixture.Entry(Ordinary).EarliestBasisDate);
+
+    /// <summary>
+    /// <b>課税仕入れの日が 1 行も入っていなければ、伝票の取引日</b>になる。
+    /// </summary>
+    /// <remarks>
+    /// <b>いまの製品で起きるのはこの形だけ</b>である（画面が <c>tax_point</c> を入力させない）。
+    /// <b>取引日を返す経路が「明細が無いとき」だけになっていないこと</b>を、ここで釘付けする。
+    /// </remarks>
+    [Fact]
+    public void 課税仕入れの日が無ければ伝票の基準日は取引日である()
+    {
+        var entry = AccountingFixture.Entry(
+            Ordinary,
+            AccountingFixture.Line(1, DebitCredit.Debit, AccountingFixture.Cash, 1_000),
+            AccountingFixture.Line(2, DebitCredit.Credit, AccountingFixture.OtherPayable, 1_000));
+
+        Assert.Equal(Ordinary, entry.EarliestBasisDate);
+    }
 }

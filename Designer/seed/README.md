@@ -3,7 +3,7 @@ title: seed — 初期データ
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-09-20
+updated: 2026-09-22
 supersedes: []
 related: [../ddl/README.md, ../../docs/02_ペルソナ.md, ../../docs/12_マスタ台帳.md]
 ---
@@ -56,7 +56,24 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
 **置き場所・扱い・理由は
 [ADR-0039](../../docs/decisions/0039-開発用アカウントの資格情報はGit追跡外に置く.md)。**
 
-## 開発機でデモ用の利用者を用意する（`dev/`）
+## 開発機だけに入れるもの（`dev/`）
+
+**`dev/` には 2 本ある。**
+
+| # | ファイル | 内容 |
+|---|---|---|
+| dev/001 | [`dev/001_demo_user_roles.sql`](dev/001_demo_user_roles.sql) | 経理担当・経理責任者・情報システム管理者に役割を付ける（下の手順） |
+| dev/002 | [`dev/002_prior_fiscal_year.sql`](dev/002_prior_fiscal_year.sql) | **前の年度（第 17 期）** ＋ 月次期間 12 本 ＋ 採番。**年度をまたぐ取消・訂正の断り**（[docs/11 §5-2](../../docs/11_消費税設計.md)）・**一覧を年度で絞れること**（[qa/04](../../docs/qa/04_実機操作テスト.md) の BOK-01）・**伝票番号が年度ごとの連番であること**（I-17）を実機で踏むために要る。**初期データに入れない理由はファイル冒頭** |
+
+**どちらも何度流してもよい。** dev/001 は `UPDATE` だけ、dev/002 は**既にあるものを作り直さず、足りないものだけを足す**。
+
+**dev/002 は、DDL と 001〜004 を流した後ならいつでも流せる**（dev/001（アカウントの役割付け）とは順序の前後を問わない）。
+
+```powershell
+pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/dev/002_prior_fiscal_year.sql
+```
+
+**利用者の側（dev/001）は、下の手順の最後の段である。**
 
 **`dev/001_demo_user_roles.sql` はアカウントを作らない。役割を付けるだけである。**
 `hash` / `salt` は CLB の `PasswordHashHelper` が作るもので、SQL では作れない

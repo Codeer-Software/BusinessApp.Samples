@@ -1,5 +1,6 @@
 namespace BusinessApp.AccountingCore.Server.Journals.Application;
 
+using System.Globalization;
 using BusinessApp.AccountingCore.Journals;
 using BusinessApp.AccountingCore.Periods;
 using BusinessApp.ServerSupport;
@@ -94,6 +95,46 @@ public sealed class JournalAmendmentService(
         // 属性は置かず、会計コアの名前の属性を読む（ADR-0049 の決定 6）。
         var canDuplicate = original.EntryType.IsAmendable();
 
+        // **原仕訳の取引が、今日の会計年度より前の年度のものか**（docs/11 §5-2。ADR-0066 の決定 10 の③・決定 16）。
+        // 取消・訂正は反対仕訳に原仕訳の基準日を写すので、**動くのは原仕訳の課税期間の税額**である。
+        // その課税期間の申告が済んでいれば、申告の後から数字が動く——**押す前に見せる**（docs/21 §1）。
+        // **判定はここに置く。** 画面は年度の前後を知らないし、知らせると規則が 2 か所に分かれる（ADR-0008）。
+        //
+        // **見るのは基準日であって、伝票の会計年度（＝計上日の年度）ではない。**
+        // docs/11 §5-2 の基準日は「課税仕入れの日（`tax_point`）、無ければ取引日」で、
+        // **定義は `JournalEntry.BasisDateOf` の 1 か所にある**（計上時の登録番号の写しも同じ日を見る）。
+        // **伝票の会計年度で代えると、期ずれの伝票で注意書きが黙って消える**——
+        // 取引日 2026-03-20・計上日 2026-04-10 の伝票は会計年度が当期になるが、
+        // **課税仕入れは過年度**である（`JournalEntryValidator` は「取引日が過年度であること」を正常としている）。
+        //
+        // **画面が「取引日」と書けるのは、`tax_point` がまだ画面から入力できないからである**
+        // （開発機の DB の 179 明細すべてが NULL。2026-09-22 実測）。
+        // **入力できるようにする回に、文面も「基準日」の言い方へ直す**（docs/11 の保留リスト）。
+        //
+        // **前後は年度の開始日で決まる**（`FiscalCalendar.IsBeforeFiscalYear` の注記）。
+        // **会計年度の表示名を返せるなら返す**——「前期以前」のような範囲の言い方では、
+        // 年度が 3 つ以上あるときにどの年度の話か読み手が決められない（2026-09-22 の自己レビュー）。
+        //
+        // **会計年度の表示名を返せなくても黙らない。** 取引日がどの会計期間にも属さないのは**例外ではない**——
+        // **会計年度を 1 期しか作っていない環境では、過年度の取引がすべてそれになる**
+        // （導入初年度がまさにそれで、いちばん普通の姿である）。**黙ると注意書きが 1 度も出ない。**
+        // しかも**古い取引ほど申告が済んでいる可能性が高い**ので、
+        // 表示名を返せない側を落とすと**危ない順と注意書きの出る順が逆になる**（同上）。
+        // **日付だけは必ず返し、会計年度の表示名は返せるときだけ返す。**
+        //
+        // **1 文を出すかどうかは真偽値で返す。** 文字列の空かどうかでは決めない——
+        // **CLB のスクリプトは、応答に無いキーを読むと `JsonObject` 自身の型名を受け取る**
+        // （qa/01 K-02）。**空にも null にもならない**ので、**古いサーバに新しいデザインを配った瞬間に
+        // 「この伝票の取引日（Codeer.LowCode.Blazor.Json.JsonObject）は…」が確認ダイアログに出る。**
+        // **真偽値なら、キーが無いときに false へ倒れる**（画面は `.ToLower() == "true"` で読む）。
+        var basisDate = original.EarliestBasisDate;
+        var targetsEarlierPeriod = context.Calendar.IsBeforeFiscalYear(basisDate, period.FiscalYearId);
+        var earlierBasisDate = targetsEarlierPeriod
+            ? basisDate.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture)
+            : string.Empty;
+        var earlierFiscalYearLabel =
+            context.Calendar.FindEarlierFiscalYear(basisDate, period.FiscalYearId)?.Label ?? string.Empty;
+
         // **取り消されていない伝票では、取り消せる伝票と訂正できる伝票は同じである**（訂正は「取消 ＋ 再計上」）。
         // **ここで返さないと、画面は押せるボタンを出して必ず断られる**（docs/21 §1。2026-09-09 の自己レビュー）。
         if (reversal is not PostedReversal posted)
@@ -103,7 +144,9 @@ public sealed class JournalAmendmentService(
 
             return new AmendmentAvailability(
                 reversible.Created, reversible.Created, Describe(reversible.Violations),
-                amendments.ReversalEntryNo, amendments.CorrectionEntryNo, canDuplicate);
+                amendments.ReversalEntryNo, amendments.CorrectionEntryNo, canDuplicate,
+                TargetsEarlierPeriod: targetsEarlierPeriod, EarlierBasisDate: earlierBasisDate,
+                EarlierFiscalYearLabel: earlierFiscalYearLabel);
         }
 
         // **取り消されている伝票では、取消はできず、訂正はやり直しになる**（ADR-0052）——
@@ -117,7 +160,9 @@ public sealed class JournalAmendmentService(
         return new AmendmentAvailability(
             false, resume.Resumed, Describe(resume.Violations),
             amendments.ReversalEntryNo, amendments.CorrectionEntryNo, canDuplicate,
-            CorrectionResumes: resume.Resumed, CorrectionDraftExists: hasCorrectionDraft);
+            CorrectionResumes: resume.Resumed, CorrectionDraftExists: hasCorrectionDraft,
+            TargetsEarlierPeriod: targetsEarlierPeriod, EarlierBasisDate: earlierBasisDate,
+            EarlierFiscalYearLabel: earlierFiscalYearLabel);
     }
 
     /// <summary>できない理由。<b>できるときは空</b>にして、画面が出し分けなくてよいようにする。</summary>
@@ -333,10 +378,27 @@ public sealed class JournalAmendmentService(
 /// 訂正の下書き（未計上の再計上）が残っているか。取消済みの伝票で「訂正する」が出ない理由になるので、
 /// 画面が「その下書きを開いて直す」と案内するために返す（ADR-0052）。
 /// </param>
+/// <param name="TargetsEarlierPeriod">
+/// 原仕訳の基準日が、今日の会計年度より前か。<b>1 文を出すかどうかはこれで決まる</b>
+/// （docs/11 §5-2。ADR-0066 の決定 10 の③・決定 16）。<b>会計年度の表示名を返せないときも真になる。</b>
+/// <b>文字列ではなく真偽値で持つ</b>——応答に無いキーを CLB のスクリプトが読むと
+/// <c>JsonObject</c> 自身の型名が返り（qa/01 K-02）、<b>空かどうかの判定は安全側に倒れない</b>。
+/// </param>
+/// <param name="EarlierBasisDate">
+/// 上が真なら、その基準日（<c>yyyy/MM/dd</c>）。そうでなければ空文字。<b>確認文が日付を名乗るために返す。</b>
+/// </param>
+/// <param name="EarlierFiscalYearLabel">
+/// 上の日が属する会計年度の表示名（「第 17 期（2025 年度）」）。<b>返せなければ空文字</b>。
+/// <b>その日を含む会計年度を作っていない環境では空になる</b>——
+/// 会計年度が 1 期しかない導入初年度がそれで、<b>珍しい形ではない</b>。
+/// <b>真偽値ではなく表示名を返すのは、確認文に会計年度の名前を入れるためである</b>——
+/// 「前期以前」では、年度が 3 つ以上あるときにどの年度の話か読み手が決められない。
+/// </param>
 public readonly record struct AmendmentAvailability(
     bool CanReverse, bool CanCorrect, string Reason,
     int? ReversalEntryNo = null, int? CorrectionEntryNo = null, bool CanDuplicate = false,
-    bool CorrectionResumes = false, bool CorrectionDraftExists = false)
+    bool CorrectionResumes = false, bool CorrectionDraftExists = false,
+    bool TargetsEarlierPeriod = false, string EarlierBasisDate = "", string EarlierFiscalYearLabel = "")
 {
     /// <summary>
     /// どちらもできない。<b>取消・訂正の番号と、下書きが残っていることは、分かっているなら落とさずに返す。</b>

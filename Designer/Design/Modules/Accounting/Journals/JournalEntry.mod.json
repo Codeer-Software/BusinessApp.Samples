@@ -767,10 +767,32 @@
       "Name": "InvoiceNoticeLabel",
       "IgnoreModification": false,
       "OnValidateInput": "",
-      "IsFocusSkip": false,
+      "IsFocusSkip": true,
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "ResourcePath": "",
+      "RawHtml": "<strong>入力の決まり</strong><ul><li>1 枚の伝票には 1 つの取引を記します。</li><li>「摘要」には取引の内容を書きます（帳簿の記載事項です）。下書き保存では空のままでも保存でき、「計上する」ときに必要です。</li><li>明細の「貸借」「勘定科目」「金額」「税区分」は、下書き保存のときにも必要です。</li><li>明細の「補助科目」は、勘定科目の「補助科目を使う」がオンのとき、計上のときに必要です。オフのときは空にします。</li><li>明細の「部門」は、勘定科目の「科目区分」が「収益」「費用」のとき、計上のときに必要です。</li><li>伝票の「取引先」は、勘定科目の「取引先を要する」がオンの明細があるとき、計上のときに必要です。明細の「取引先」が空のときは伝票の「取引先」が使われるので、行ごとに相手方が違うときだけ、その行の「取引先」を選んでください。</li></ul>",
+      "Name": "EntryNotesLabel",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": true,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.MarkupStringFieldDesign"
+    },
+    {
+      "ResourcePath": "",
+      "RawHtml": "<strong>取消と訂正</strong><ul><li>取消は、記した取引をはじめから無かったことにする操作です——記帳を誤ったときと、取引がはじめから無かったことになったときに使います。</li><li>正しい内容で記し直すなら、「訂正する」を押してください。</li><li>取引はあったうえで、あとから返品・値引き・割戻しがあったときは、元の伝票を取り消さずに、新しい伝票で記してください。</li><li>できた取消伝票は帳簿に残り、あとから消せません。</li></ul>",
+      "Name": "AmendGuideLabel",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": true,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.MarkupStringFieldDesign"
     },
     {
       "Text": "借方計 0 / 貸方計 0",
@@ -890,7 +912,7 @@
       "IsBlock": false
     },
     {
-      "Text": "1 枚の伝票には 1 つの取引を記します。「*」は必須項目です。「摘要」は下書き保存では空のままでも保存でき、「計上する」ときに必要です。明細の「補助科目」は、勘定科目の「補助科目を使う」がオンのとき計上のときに必要で、オフのときは空にします。明細の「部門」は、勘定科目の「科目区分」が「収益」「費用」のとき、計上のときに必要です。「取引先」は、勘定科目の「取引先を要する」がオンの明細があるとき、計上のときに必要です。明細の「取引先」が空のときは、伝票の「取引先」が使われます。行ごとに相手方が違うときは、その行の「取引先」を選んでください。すべての行で選んだときは、伝票の「取引先」は空のままでも計上できます。",
+      "Text": "「*」は必須項目です。ただし「摘要」は「計上する」ときに必要で、伝票の「取引先」は明細の全行で選べば空のままでも計上できます。",
       "Icon": "",
       "IsHtml": false,
       "Style": "Default",
@@ -2121,6 +2143,82 @@
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "HorizontalAlignment": "End"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None",
+                "Layout": {
+                  "FieldName": "EntryNotesLabel",
+                  "ContextMenu": "",
+                  "ClassName": "form-notes",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "HorizontalAlignment": "Start"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None",
+                "Layout": {
+                  "FieldName": "AmendGuideLabel",
+                  "ContextMenu": "",
+                  "ClassName": "form-notes",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "HorizontalAlignment": "Start"
               }
             ]
           },

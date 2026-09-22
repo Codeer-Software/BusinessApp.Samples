@@ -79,7 +79,7 @@ public sealed class LedgerSnapshotWriter(IDbAccessor dbAccessor, string dataSour
                 ? await CachedAsync(cache, partnerId)
                 : PartnerSnapshot.None;
 
-            var (registrationNo, violation) = RegistrationNoAt(snapshot, TaxPointOf(draft, line));
+            var (registrationNo, violation) = RegistrationNoAt(snapshot, draft.BasisDateOf(line));
             if (violation is not null)
             {
                 if (rejectedPartners.Add(partner!.Value.Value))
@@ -106,25 +106,6 @@ public sealed class LedgerSnapshotWriter(IDbAccessor dbAccessor, string dataSour
 
         return [];
     }
-
-    /// <summary>
-    /// この行の課税仕入れの時点。<b>入っていなければ伝票の取引日を使う</b>。
-    /// </summary>
-    /// <remarks>
-    /// <para><c>tax_point</c> は「課税仕入れを行った日」であり、
-    /// 引き渡しが取引日と違う取引のために<b>行ごとに上書きできる</b>ようにしてある。
-    /// 上書きされていなければ<b>取引日がその日</b>である——別の日を書いていないのだから、
-    /// 取引の日に行われたと読むのが素直である。</para>
-    /// <para><b>「入っていなければ写さない」にはしない。</b> いまの振替伝票の画面は
-    /// <c>tax_point</c> を入力させないので、写しが<b>永久に空</b>になる
-    /// （実機操作テストで発見。qa/03 L-12）。計上済みは不変（ADR-0004）なので、
-    /// あとから埋め直せない。</para>
-    /// <para><b>恒久の解は画面に <c>tax_point</c> を持たせること。</b>
-    /// 支払日で起票する未払金の決済や締め日基準の一括計上では、取引日と課税仕入れの日がずれる
-    /// （docs/11 §5）。[docs/14 の保留リスト](../../../docs/14_適格請求書発行事業者の登録.md)に積んである。</para>
-    /// </remarks>
-    private static DateOnly TaxPointOf(JournalEntry entry, JournalLine line)
-        => line.TaxPoint ?? entry.TransactionDate;
 
     /// <summary>その日の登録番号。無ければ <c>null</c>。決められなければ断りを返す。</summary>
     /// <remarks>
