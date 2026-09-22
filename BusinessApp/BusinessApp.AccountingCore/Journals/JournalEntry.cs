@@ -78,6 +78,35 @@ public sealed record JournalEntry
     public bool IsBalanced => DebitTotal == CreditTotal;
 
     /// <summary>
+    /// 渡した明細の<b>基準日</b>——課税仕入れの日（<c>tax_point</c>）、入っていなければ伝票の取引日（docs/11 §5-2）。
+    /// </summary>
+    /// <remarks>
+    /// <para><c>tax_point</c> は「課税仕入れを行った日」であり、
+    /// 引き渡しが取引日と違う取引のために<b>行ごとに上書きできる</b>ようにしてある。
+    /// 上書きされていなければ<b>取引日がその日</b>である——別の日を書いていないのだから、
+    /// 取引の日に行われたと読むのが素直である。</para>
+    /// <para><b>この定義は 1 か所にしか置かない。</b> 計上時の登録番号の写し
+    /// （<c>LedgerSnapshotWriter</c>）と、取消・訂正の確認文（<c>JournalAmendmentService</c>）が
+    /// 同じ日を見る——<b>写した日と、確認文が名指しする日が違うと、帳簿と画面が別の課税期間の話をする</b>
+    /// （2026-09-22 の自己レビュー。docs/20 §4 の重複定義）。</para>
+    /// </remarks>
+    public DateOnly BasisDateOf(JournalLine line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        return line.TaxPoint ?? TransactionDate;
+    }
+
+    /// <summary>
+    /// この伝票の明細が持つ基準日のうち、<b>いちばん古いもの</b>（docs/11 §5-2）。明細が無ければ取引日。
+    /// </summary>
+    /// <remarks>
+    /// <b>明細が 1 行でも過年度の課税期間に属していれば、伝票全体をそう扱う</b>ためである。
+    /// <b>いちばん新しい日を採ると</b>、過年度の税額が変わるのに何も出ない。
+    /// </remarks>
+    public DateOnly EarliestBasisDate
+        => Lines.Count == 0 ? TransactionDate : Lines.Min(BasisDateOf);
+
+    /// <summary>
     /// この明細の取引先。<b>明細が持っていなければ伝票のものを使う</b>（docs/10 §4-1）。
     /// </summary>
     /// <remarks>

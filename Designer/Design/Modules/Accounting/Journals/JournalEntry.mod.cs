@@ -16,6 +16,20 @@ var leavingByScript = false;
 // サーバが可否と一緒に返す（JournalAmendmentEndpoint の correctionResumes）。確認の文を出し分けるためだけに持つ。
 var correctionResumes = false;
 
+// この伝票の基準日が今日の会計年度より前か。**1 文を足すかどうかは、こちらで決まる。**
+// **真偽値で受けるのは、キーが無いときに安全側へ倒すためである**——
+// **応答に無いキーを読むと JsonObject 自身の型名が返る**（qa/01 K-02）ので、
+// **文字列の「空かどうか」では倒れない**（型名は空ではない）。
+var targetsEarlierPeriod = false;
+
+// 上が真なら、その基準日（yyyy/MM/dd）。確認文が日付を名乗るために使う。
+var earlierBasisDate = "";
+
+// 上の日が属する会計年度の表示名。**名乗れなければ空文字**（その年度をまだ作っていない環境）。
+// どちらもサーバが可否と一緒に返す（earlierBasisDate / earlierFiscalYearLabel）。
+// **年度の前後をここで数えない**——判断はサーバのもので、ここは文を組むだけである（ADR-0008）。
+var earlierFiscalYearLabel = "";
+
 void Detail_OnAfterInitialization()
 {
     // **初期値を先に入れる。** あとの ApplyPostedLock は状態を読んで表示を決めるので、
@@ -155,6 +169,14 @@ void ApplyAmendmentAvailability()
     var body = new JsonObject();
     body.OriginalEntryId = $"{Id.Value}";
 
+    // **前に開いた伝票の応答が残らないよう、毎回初期化する。**
+    // 同じモジュールの画面は別の伝票を開くときも使い回されるので、**呼び出しが失敗した回**に古い値が残ると、
+    // **別の伝票の事実を語る文が出る**（2026-09-22 の自己レビュー）。
+    correctionResumes = false;
+    targetsEarlierPeriod = false;
+    earlierBasisDate = "";
+    earlierFiscalYearLabel = "";
+
     var result = WebApiService.Post("/api/journals/availability", body);
     if (result.StatusCode != 200) return;   // 分からないときは出さない（安全側）
 
@@ -162,6 +184,9 @@ void ApplyAmendmentAvailability()
     ReverseButton.IsVisible = $"{result.JsonObject.canReverse}".ToLower() == "true";
     DuplicateButton.IsVisible = $"{result.JsonObject.canDuplicate}".ToLower() == "true";
     correctionResumes = $"{result.JsonObject.correctionResumes}".ToLower() == "true";
+    targetsEarlierPeriod = $"{result.JsonObject.targetsEarlierPeriod}".ToLower() == "true";
+    earlierBasisDate = $"{result.JsonObject.earlierBasisDate}";
+    earlierFiscalYearLabel = $"{result.JsonObject.earlierFiscalYearLabel}";
 
     var noticed = ShowAmendmentNotice(
         $"{result.JsonObject.reversalEntryNo}", $"{result.JsonObject.correctionEntryNo}",
@@ -419,25 +444,89 @@ void CorrectButton_OnClick()
     if (correctionResumes)
     {
         Amend("correct", "訂正",
-            "この伝票を訂正します。取消は既に計上されているので作らず、内容を写した訂正の下書きだけを開きます。よろしいですか？",
+            "この伝票を訂正します。取消は既に計上されているので作らず、内容を写した訂正の下書きだけを開きます。"
+                + PriorPeriodNotice(true) + "よろしいですか？",
             "いま開いているのは訂正の下書きです。取消は増えていません。内容を直して計上してください。");
         return;
     }
 
     Amend("correct", "訂正",
-        "この伝票を訂正します。取消を計上し、内容を写した訂正の下書きを開きます。よろしいですか？",
+        "この伝票を訂正します。取消を計上し、内容を写した訂正の下書きを開きます。"
+            + PriorPeriodNotice(false) + "よろしいですか？",
         "取消を計上しました。いま開いているのは訂正の下書きです。内容を直して計上してください。");
 }
 
 // 取り消す。サーバが反対仕訳を作って計上まで進める。
+//
+// **字の正典は docs/10 §5**（開発者の承認。2026-09-20。ADR-0066 の決定 10・15）。
+// 取消の範囲は「記帳の誤り」と「遡及効のある無効・取消し」の 2 つで、
+// **法令の語を 1 つも使わずに軸だけを言う**——遡及効・無効・取消し・法定解除・合意解除は画面に出さない。
+// 直すときは 10 §5 の引用と、qa/04 の AMD-14 の台本も一緒に見る。
 void ReverseButton_OnClick()
 {
     Amend("reverse", "取消",
-        "この伝票を取り消します。取消は、記帳の誤りを正すための操作です。"
+        "この伝票を取り消します。取消は、記した取引をはじめから無かったことにする操作です"
+            + "——記帳を誤ったときと、取引がはじめから無かったことになったときに使います。"
             + "正しい内容で記し直すなら、「訂正する」を押してください。"
-            + "返品・契約解除・値引があったときは、元の伝票を取り消さずに、新しい伝票で記してください。"
-            + "できた取消伝票は帳簿に残り、あとから消せません。よろしいですか？",
+            + "取引はあったうえで、あとから返品・値引き・割戻しがあったときは、"
+            + "元の伝票を取り消さずに、新しい伝票で記してください。"
+            + "できた取消伝票は帳簿に残り、あとから消せません。"
+            + PriorPeriodNotice(false) + "よろしいですか？",
         "取り消しました。いま開いているのは取消伝票です。");
+}
+
+// 過年度の伝票を取り消す・訂正するときに足す注意書き。**基準日が当期にある伝票では空文字**
+// （余計な 1 文を出さない）。**伝票の「会計年度」欄が当期でも、取引日が過年度なら出る**
+// ——会計年度は計上日から決まるので、期ずれの伝票では欄と食い違う（JournalAmendmentService の注記）。
+//
+// **取消も訂正も、反対仕訳に原仕訳の基準日を写す**ので、変わるのは原仕訳の課税期間の税額である
+// （docs/11 §5-2。ADR-0066 の決定 10 の③・決定 16）。**押す前に見せる**（docs/21 §1）。
+//
+// **税額が変わることは常に真なので言い切る**——決定 10 の③が求めているのは
+// 「**影響する旨を告げる**」ことである。**条件を付けるのは申告の側だけにする**:
+// 過年度の伝票に手を入れる最も普通の場面は決算作業中で、
+// **そのときその年度の申告はまだ済んでいない**（docs/06 の W-36）。
+// **次の一手も書く**（docs/21 §2-3）。
+//
+// **resumed は「取消が既に計上済みか」**（ADR-0052 のやり直しの訂正）。
+// **そのときは未来形にしない**——押して起きるのは下書きが 1 本できることだけで、
+// **税額を変えた取消はもう計上されている**。
+//
+// **会計年度の表示名はサーバが返す**（earlierFiscalYearLabel）。ここは文を組むだけである。
+// **返せないことがある**——その年度をまだ作っていない環境で、
+// **会計年度が 1 期しか無ければ過年度の取引はすべてこれになる**（導入初年度の普通の姿）。
+// **そのときも黙らない。** 日付だけで言う——**黙ると、いちばん注意書きが要る環境で 1 度も出ない。**
+//
+// **「取引日」と書けるのは、tax_point がまだ画面から入力できないからである**（サーバの注記）。
+// **入力できるようにする回に、この文面も直す。**
+string PriorPeriodNotice(bool resumed)
+{
+    if (!targetsEarlierPeriod) return "";
+
+    // **名前の無い年度を指示語で受けない。** 表示名を返せないのは、その年度をアプリに作っていないときで、
+    // 「その年度」と呼ぶと**利用者は一覧やマスタで探して見つけられない**。
+    // **そのときは「この日を含む年度」と、日付で受ける。**
+    //
+    // **三項演算子で補間の文字列を選ばない。** このデザインに前例が無い形で、
+    // **CLB のスクリプトは C# の式を全部は解釈できない**（qa/01 の B 節）
+    // ——**読み込み時か押した瞬間に落ち、「押しても何も起きない」としか見えない**（D-01・F-14）。
+    // **代入を 2 本に割る。**
+    var where = "この日を含む年度";
+    var head = $"この伝票の取引日（{earlierBasisDate}）は、いまの会計年度より前です。";
+    if (earlierFiscalYearLabel != "")
+    {
+        where = "その年度";
+        head = $"この伝票の取引日（{earlierBasisDate}）は「{earlierFiscalYearLabel}」にあります。";
+    }
+
+    if (resumed)
+    {
+        return head + $"この伝票の取消は既に計上されているため、{where}の消費税額は既に変わっています。"
+            + "申告が済んでいれば、申告を直す必要があるか確かめてください。";
+    }
+
+    return head + $"取消を計上すると、{where}の消費税額が変わります。"
+        + "申告が済んでいれば、申告を直す必要があるか確かめてください。";
 }
 
 // 複製する。サーバが同じ内容の下書きを作って返す（ADR-0048）。

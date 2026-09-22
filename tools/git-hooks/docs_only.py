@@ -56,14 +56,16 @@ INERT_SUFFIX = ".md"
 DOCS_READ_BY_TESTS = {
     "docs/10_会計ドメイン設計.md",        # 不変条件のカタログ
     "docs/40_優良な電子帳簿の対応表.md",  # 制度要件のカタログ
+    "docs/qa/04_実機操作テスト.md",       # 実機の台本（確認文の期待値を画面の組む文と突き合わせる）
 }
 
-# **上の一覧を書いてよい C# は、この 3 本だけである。**
+# **上の一覧を書いてよい C# は、この 4 本だけである。**
 # **増えたら自己検査が赤くなる**——一覧を手で守ると、次に文書を読むテストを書いた日に黙って穴が開く。
 DOC_READERS = {
     "BusinessApp.AccountingCore.Tests/Conventions/InvariantTraceabilityConvention.cs",
     "BusinessApp.AccountingCore.Tests/Conventions/RequirementTraceabilityConvention.cs",
     "BusinessApp.AccountingCore.Tests/Journals/JournalViolationCodesTests.cs",
+    "BusinessApp.AccountingCore.Server.Tests/Journals/Presentation/JournalAmendmentEndpointTests.cs",
 }
 
 # ブロブのモード。**シンボリックリンク（120000）と gitlink（160000）は不活性と言い切れない**

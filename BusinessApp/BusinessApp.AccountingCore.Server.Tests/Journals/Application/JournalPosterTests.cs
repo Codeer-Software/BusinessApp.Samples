@@ -39,7 +39,7 @@ public class JournalPosterTests
 
         Assert.Contains(thrown.Violations, v => v.Code == JournalViolationCodes.PartnerInactive);
         Assert.Contains(
-            "取引先「取引をやめた先」は「有効」がオフです。別の取引先を選ぶか、取引先マスタで有効に戻してください。",
+            "取引先「取引をやめた先」は「有効」になっていません。別の取引先を選ぶか、取引先マスタで「有効」に戻してください。",
             thrown.Message, StringComparison.Ordinal);
         Assert.Equal("draft", server.Scalar<string>($"select status from journal_entries where id = {id.Value}"));
     }
@@ -61,7 +61,7 @@ public class JournalPosterTests
 
         var violation = Assert.Single(thrown.Violations, v => v.Code == JournalViolationCodes.PartnerInactive);
         Assert.Equal(2, violation.LineNo);
-        Assert.Contains("行 2: 取引先「取引をやめた先」は「有効」がオフです。", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("行 2: 取引先「取引をやめた先」は「有効」になっていません。", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

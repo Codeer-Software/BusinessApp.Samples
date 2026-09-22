@@ -158,6 +158,17 @@ public record AmendRequest([property: JsonPropertyName("originalEntryId")] strin
 /// <param name="CorrectionEntryNo">既に訂正されているなら、その再計上の伝票番号。無ければ空文字。</param>
 /// <param name="CorrectionResumes">「訂正する」がやり直し（再計上の下書きだけを起こす）になるか（ADR-0052）。</param>
 /// <param name="CorrectionDraftExists">訂正の下書きが残っているか。取消済みの伝票の断りに足す（同上）。</param>
+/// <param name="TargetsEarlierPeriod">
+/// 原仕訳の基準日が、今日の会計年度より前か。<b>画面が 1 文を出すかどうかは、これで決まる</b>（docs/11 §5-2）。
+/// <b>真偽値なのは、キーが無いときに安全側へ倒すためである</b>（qa/01 K-02。<see cref="AmendmentAvailability"/> の注記）。
+/// </param>
+/// <param name="EarlierBasisDate">
+/// 上が真なら、その基準日（<c>yyyy/MM/dd</c>）。無ければ空文字。確認文が日付を名乗るために使う。
+/// </param>
+/// <param name="EarlierFiscalYearLabel">
+/// 上の日が属する会計年度の表示名。<b>名乗れなければ空文字</b>（その年度を作っていない環境）。
+/// 画面は名乗れるときだけ年度を出し、名乗れないときは日付だけで言う。
+/// </param>
 public record AmendResult(
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("openEntryId")] long OpenEntryId,
@@ -170,7 +181,10 @@ public record AmendResult(
     [property: JsonPropertyName("reversalEntryNo")] string ReversalEntryNo = "",
     [property: JsonPropertyName("correctionEntryNo")] string CorrectionEntryNo = "",
     [property: JsonPropertyName("correctionResumes")] bool CorrectionResumes = false,
-    [property: JsonPropertyName("correctionDraftExists")] bool CorrectionDraftExists = false)
+    [property: JsonPropertyName("correctionDraftExists")] bool CorrectionDraftExists = false,
+    [property: JsonPropertyName("targetsEarlierPeriod")] bool TargetsEarlierPeriod = false,
+    [property: JsonPropertyName("earlierBasisDate")] string EarlierBasisDate = "",
+    [property: JsonPropertyName("earlierFiscalYearLabel")] string EarlierFiscalYearLabel = "")
 {
     /// <summary>成功したときの文字列（画面はこれと一致するかで判定する）。</summary>
     public const string Succeeded = "ok";
@@ -209,7 +223,9 @@ public record AmendResult(
         => new(Succeeded, 0, 0, available.Reason, [],
                available.CanReverse, available.CanCorrect, available.CanDuplicate,
                EntryNoText(available.ReversalEntryNo), EntryNoText(available.CorrectionEntryNo),
-               available.CorrectionResumes, available.CorrectionDraftExists);
+               available.CorrectionResumes, available.CorrectionDraftExists,
+               available.TargetsEarlierPeriod, available.EarlierBasisDate,
+               available.EarlierFiscalYearLabel);
 
     /// <summary>伝票番号を画面へ渡す形にする。<b>無いことは空文字で表す</b>（上の注記）。</summary>
     private static string EntryNoText(int? entryNo)

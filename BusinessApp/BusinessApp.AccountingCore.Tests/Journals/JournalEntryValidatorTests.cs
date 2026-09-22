@@ -1210,7 +1210,7 @@ public class JournalEntryValidatorTests
         var violation = AssertViolation(JournalViolationCodes.PartnerInactive, violations);
         Assert.Null(violation.LineNo);
         Assert.Equal(
-            "取引先「取引をやめた先」は「有効」がオフです。別の取引先を選ぶか、取引先マスタで有効に戻してください。",
+            "取引先「取引をやめた先」は「有効」になっていません。別の取引先を選ぶか、取引先マスタで「有効」に戻してください。",
             violation.Message);
         Assert.Equal(ViolationSeverity.Error, violation.Severity);
         Assert.Single(violations, v => v.Code == JournalViolationCodes.PartnerInactive);
@@ -1287,8 +1287,8 @@ public class JournalEntryValidatorTests
         var violation = AssertViolation(JournalViolationCodes.AccountInactive, violations);
         Assert.Null(violation.LineNo);
         Assert.Equal(
-            "勘定科目「廃止した費用科目」は「有効」がオフです。行 1・行 2 で使っています。"
-            + "別の勘定科目を選ぶか、勘定科目マスタで有効に戻してください。",
+            "勘定科目「廃止した費用科目」は「有効」になっていません。行 1・行 2 で使っています。"
+            + "別の勘定科目を選ぶか、勘定科目マスタで「有効」に戻してください。",
             violation.Message);
         Assert.Equal(ViolationSeverity.Error, violation.Severity);
         Assert.True(violations.HasError());
@@ -1312,8 +1312,8 @@ public class JournalEntryValidatorTests
 
         Assert.Equal(1, violation.LineNo);
         Assert.Equal(
-            "勘定科目「廃止した費用科目」は「有効」がオフです。"
-            + "別の勘定科目を選ぶか、勘定科目マスタで有効に戻してください。",
+            "勘定科目「廃止した費用科目」は「有効」になっていません。"
+            + "別の勘定科目を選ぶか、勘定科目マスタで「有効」に戻してください。",
             violation.Message);
     }
 
@@ -2096,8 +2096,8 @@ public class JournalEntryValidatorTests
         var violation = AssertViolation(JournalViolationCodes.DepartmentInactive, violations);
         Assert.Null(violation.LineNo);
         Assert.Equal(
-            "部門「廃止した部門」は「有効」がオフです。行 1・行 2 で使っています。"
-            + "別の部門を選ぶか、部門マスタで有効に戻してください。",
+            "部門「廃止した部門」は「有効」になっていません。行 1・行 2 で使っています。"
+            + "別の部門を選ぶか、部門マスタで「有効」に戻してください。",
             violation.Message);
         Assert.Equal(ViolationSeverity.Error, violation.Severity);
         Assert.True(violations.HasError());
@@ -2118,8 +2118,8 @@ public class JournalEntryValidatorTests
 
         Assert.Equal(1, violation.LineNo);
         Assert.Equal(
-            "部門「廃止した部門」は「有効」がオフです。"
-            + "別の部門を選ぶか、部門マスタで有効に戻してください。",
+            "部門「廃止した部門」は「有効」になっていません。"
+            + "別の部門を選ぶか、部門マスタで「有効」に戻してください。",
             violation.Message);
     }
 
@@ -2239,8 +2239,8 @@ public class JournalEntryValidatorTests
         var violation = AssertViolation(JournalViolationCodes.SubAccountInactive, violations);
         Assert.Null(violation.LineNo);
         Assert.Equal(
-            "補助科目「解約した口座」は「有効」がオフです。行 1・行 2 で使っています。"
-            + "別の補助科目を選ぶか、補助科目マスタで有効に戻してください。",
+            "補助科目「解約した口座」は「有効」になっていません。行 1・行 2 で使っています。"
+            + "別の補助科目を選ぶか、補助科目マスタで「有効」に戻してください。",
             violation.Message);
         Assert.Equal(ViolationSeverity.Error, violation.Severity);
         Assert.True(violations.HasError());
@@ -2261,8 +2261,8 @@ public class JournalEntryValidatorTests
 
         Assert.Equal(1, violation.LineNo);
         Assert.Equal(
-            "補助科目「解約した口座」は「有効」がオフです。"
-            + "別の補助科目を選ぶか、補助科目マスタで有効に戻してください。",
+            "補助科目「解約した口座」は「有効」になっていません。"
+            + "別の補助科目を選ぶか、補助科目マスタで「有効」に戻してください。",
             violation.Message);
     }
 
@@ -2428,8 +2428,8 @@ public class JournalEntryValidatorTests
         var violation = AssertViolation(JournalViolationCodes.PartnerInactive, violations);
         Assert.Null(violation.LineNo);
         Assert.Equal(
-            "取引先「取引をやめた先」は「有効」がオフです。伝票・行 1・行 2 で使っています。"
-            + "別の取引先を選ぶか、取引先マスタで有効に戻してください。",
+            "取引先「取引をやめた先」は「有効」になっていません。伝票・行 1・行 2 で使っています。"
+            + "別の取引先を選ぶか、取引先マスタで「有効」に戻してください。",
             violation.Message);
         Assert.Equal(ViolationSeverity.Error, violation.Severity);
         Assert.True(violations.HasError());

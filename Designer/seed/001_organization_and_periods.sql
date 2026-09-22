@@ -19,19 +19,30 @@ INSERT INTO fiscal_years (code, label, start_date, end_date, status, premium_led
 VALUES ('FY18', '第 18 期（2026 年度）', '2026-04-01', '2027-03-31', 'open', '2026-04-01');
 
 -- 月次の会計期間 12 本。締めは月次 → 年度の順に行う。
-INSERT INTO accounting_periods (fiscal_year_id, start_date, end_date, status) VALUES
-    (1, '2026-04-01', '2026-04-30', 'open'),
-    (1, '2026-05-01', '2026-05-31', 'open'),
-    (1, '2026-06-01', '2026-06-30', 'open'),
-    (1, '2026-07-01', '2026-07-31', 'open'),
-    (1, '2026-08-01', '2026-08-31', 'open'),
-    (1, '2026-09-01', '2026-09-30', 'open'),
-    (1, '2026-10-01', '2026-10-31', 'open'),
-    (1, '2026-11-01', '2026-11-30', 'open'),
-    (1, '2026-12-01', '2026-12-31', 'open'),
-    (1, '2027-01-01', '2027-01-31', 'open'),
-    (1, '2027-02-01', '2027-02-28', 'open'),
-    (1, '2027-03-01', '2027-03-31', 'open');
+--
+-- **会計年度は `code` で引く。識別子を決め打ちしない。**
+-- **開発機は初期データの後に前の年度を足す**（`dev/002_prior_fiscal_year.sql`）ので、
+-- **流す順によっては `id = 1` が第 18 期ではなくなる**。決め打ちのままだと
+-- **当期に会計期間が 1 本も無い DB** が黙ってできる（2026-09-22 の自己レビューで実測）。
+INSERT INTO accounting_periods (fiscal_year_id, start_date, end_date, status)
+SELECT y.id, m.start_date, m.end_date, 'open'
+  FROM fiscal_years y
+  JOIN (
+            SELECT '2026-04-01' AS start_date, '2026-04-30' AS end_date
+  UNION ALL SELECT '2026-05-01', '2026-05-31'
+  UNION ALL SELECT '2026-06-01', '2026-06-30'
+  UNION ALL SELECT '2026-07-01', '2026-07-31'
+  UNION ALL SELECT '2026-08-01', '2026-08-31'
+  UNION ALL SELECT '2026-09-01', '2026-09-30'
+  UNION ALL SELECT '2026-10-01', '2026-10-31'
+  UNION ALL SELECT '2026-11-01', '2026-11-30'
+  UNION ALL SELECT '2026-12-01', '2026-12-31'
+  UNION ALL SELECT '2027-01-01', '2027-01-31'
+  UNION ALL SELECT '2027-02-01', '2027-02-28'
+  UNION ALL SELECT '2027-03-01', '2027-03-31'
+       ) m
+ WHERE y.code = 'FY18';
 
--- 伝票番号の採番。会計年度ごとに 1 行（I-17）。
-INSERT INTO journal_entry_sequences (fiscal_year_id, next_entry_no) VALUES (1, 1);
+-- 伝票番号の採番。会計年度ごとに 1 行（I-17）。**ここも `code` で引く**（上と同じ理由）。
+INSERT INTO journal_entry_sequences (fiscal_year_id, next_entry_no)
+SELECT y.id, 1 FROM fiscal_years y WHERE y.code = 'FY18';

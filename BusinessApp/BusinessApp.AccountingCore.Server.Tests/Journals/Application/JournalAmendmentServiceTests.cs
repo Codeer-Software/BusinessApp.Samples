@@ -2,6 +2,7 @@ namespace BusinessApp.AccountingCore.Server.Tests.Journals.Application;
 
 using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Journals;
+using BusinessApp.AccountingCore.Periods;
 using BusinessApp.AccountingCore.Server.Tests.Fixtures;
 using BusinessApp.AccountingCore.Shared;
 using Codeer.LowCode.Blazor.DataIO;
@@ -520,6 +521,210 @@ public class JournalAmendmentServiceTests
         Assert.Contains("会計期間がありません", available.Reason, StringComparison.Ordinal);
         Assert.True(available.CorrectionDraftExists);
         Assert.False(available.CorrectionResumes);
+    }
+
+    /// <summary>
+    /// <b>前の年度の取引なら、その年度を名乗る</b>（docs/11 §5-2。ADR-0066 の決定 10 の③・決定 16）。
+    /// </summary>
+    /// <remarks>
+    /// <para>取消・訂正は反対仕訳に原仕訳の基準日を写すので、動くのは<b>原仕訳の課税期間の税額</b>である。
+    /// その期の申告が済んでいれば、申告の後から数字が動く——画面は押す前に 1 文足す（docs/21 §1）。</para>
+    /// <para><b>足す年度は第 18 期の後に入れる</b>ので、<b>識別子は第 18 期より大きい</b>。
+    /// <b>開発機の第 17 期と同じ形</b>（<c>seed/dev/002_prior_fiscal_year.sql</c>）で、
+    /// <b>識別子の大小で比べる実装はここで落ちる</b>（qa/03 L-19 の型）。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 前の年度の取引なら年度を名乗る()
+    {
+        using var server = new AccountingServer();
+
+        // 同じ年度の今日から見れば、前の年度ではない。**当期の伝票に余計な 1 文を出さない。**
+        var current = await server.AmendmentService.DescribeAsync(Original(server));
+        Assert.Equal(string.Empty, current.EarlierBasisDate);
+        Assert.Equal(string.Empty, current.EarlierFiscalYearLabel);
+
+        // **第 18 期の後に第 17 期を足す**（識別子は大きく、期間は前）。
+        var earlier = server.InsertFiscalYear("FY17", "2025-04-01", "2026-03-31");
+        Assert.True(earlier.Value > AccountingServer.FiscalYear.Value);
+
+        var inEarlier = PostedInFiscalYear(server, earlier, "2025-05-20");
+        var available = await server.AmendmentService.DescribeAsync(inEarlier);
+
+        Assert.Equal("2025/05/20", available.EarlierBasisDate);
+        Assert.Equal("FY17 期", available.EarlierFiscalYearLabel);
+        Assert.True(available.CanReverse);
+    }
+
+    /// <summary>
+    /// <b>見るのは取引日であって、伝票の会計年度（＝計上日の年度）ではない</b>（docs/11 §5-2）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>期ずれの伝票</b>——取引日は前の年度、計上日は当期——が現実の形である
+    /// （<c>JournalEntryValidator</c> は「取引日が過年度であること」を正常としている）。
+    /// <b>伝票の会計年度で代えると、ここで断りが黙って消える</b>。</para>
+    /// <para><b>`tax_point` はいま画面から入らない</b>ので、基準日は取引日そのものである
+    /// （稼働 DB の全明細が NULL。2026-09-22 実測）。<b>入力できるようにする回に明細ごとの基準日へ移す</b>。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 取引日が前の年度なら計上日が当期でも年度を名乗る()
+    {
+        using var server = new AccountingServer();
+        var earlier = server.InsertFiscalYear("FY17", "2025-04-01", "2026-03-31");
+
+        // **取引日は第 17 期・計上日は第 18 期**。伝票の会計年度は第 18 期（計上日から決まる）。
+        var id = server.InsertPosted(
+            901, "期ずれの伝票", "2026-03-20",
+            ("debit", "1100", 1000), ("credit", "2200", 1000));
+        Assert.Equal(
+            AccountingServer.FiscalYear.Value,
+            server.Scalar<long>($"select fiscal_year_id from journal_entries where id = {id.Value}"));
+
+        var available = await server.AmendmentService.DescribeAsync(id);
+
+        Assert.Equal("2026/03/20", available.EarlierBasisDate);
+        Assert.Equal("FY17 期", available.EarlierFiscalYearLabel);
+        Assert.Equal(earlier.Value, server.Scalar<long>(
+            "select y.id from fiscal_years y where y.code = 'FY17'"));
+    }
+
+    /// <summary>
+    /// 取消済み（訂正がやり直しになる）の経路でも落とさない。
+    /// </summary>
+    /// <remarks>
+    /// <b>答えを組み立てる return は 2 つある。</b> 片方だけに書くと、
+    /// 取消済みの伝票を訂正するときに<b>断りが黙って消える</b>——そちらも前の年度の税額を動かす。
+    /// </remarks>
+    [Fact]
+    public async Task 取消済みの伝票でも前の年度を名乗る()
+    {
+        using var server = new AccountingServer();
+        server.InsertFiscalYear("FY17", "2025-04-01", "2026-03-31");
+        var original = server.InsertPosted(
+            902, "前の年度の伝票", "2025-05-20",
+            ("debit", "1100", 1000), ("credit", "2200", 1000));
+        await server.AmendAsync(s => s.ReverseAsync(original));
+
+        var available = await server.AmendmentService.DescribeAsync(original);
+
+        Assert.Equal("2025/05/20", available.EarlierBasisDate);
+        Assert.Equal("FY17 期", available.EarlierFiscalYearLabel);
+        Assert.True(available.CorrectionResumes);
+    }
+
+    /// <summary>
+    /// <b>後の年度の伝票では立たない。</b>「違う年度か」で数えると、ここが逆に倒れる。
+    /// </summary>
+    /// <remarks>
+    /// <para>画面が出す字は<b>「この伝票の取引日（…）は「第 17 期（2025 年度）」にあります」</b>なので、
+    /// 後の年度で立つと<b>利用者に別の年度を名乗る</b>。</para>
+    /// <para><b>この経路は画面からは出ない</b>——後の年度の原仕訳は計上日が今日より後で、
+    /// <c>AmendmentRules</c> が取消・訂正を断るからボタンが出ない（下でそれも表明する）。
+    /// <b>それでも数えるのは、文言の正しさを「その経路が出ないこと」に預けないため</b>である
+    /// （2026-09-22 の自己レビュー）。</para>
+    /// <para><b>識別子の大小では代えられない。</b> 第 19 期は第 18 期より後の期間だが、
+    /// <b>後から足した第 17 期のほうが識別子は大きい</b>——開発機がその形である
+    /// （<c>seed/dev/002_prior_fiscal_year.sql</c>）。
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task 後の年度の伝票では年度を名乗らない()
+    {
+        using var server = new AccountingServer();
+        var later = server.InsertFiscalYear("FY19", "2027-04-01", "2028-03-31");
+        var id = PostedInFiscalYear(server, later, "2027-06-01");
+
+        // 今日は第 18 期（AccountingServer.Now = 2026-08-24）。原仕訳は第 19 期＝**後の年度**である。
+        var available = await server.AmendmentService.DescribeAsync(id);
+
+        Assert.Equal(string.Empty, available.EarlierBasisDate);
+        Assert.Equal(string.Empty, available.EarlierFiscalYearLabel);
+
+        // **ボタンも出ない**——反対仕訳の計上日（今日）が原仕訳の計上日より前になるからである。
+        // **それでも上を表明する**——文言の正しさを「その経路が出ないこと」に預けない。
+        Assert.False(available.CanReverse);
+        Assert.False(available.CanCorrect);
+    }
+
+    /// <summary>
+    /// <b>年度を名乗れなくても黙らない。</b> 日付だけは返す。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>ここがこの機能でいちばん効く経路である。</b>
+    /// <b>会計年度を 1 期しか作っていない環境では、前の年度の取引がすべてこれになる</b>
+    /// ——導入初年度がまさにそれで、珍しい形ではない。
+    /// <b>名乗れないときに黙る作りだと、その環境では断りが 1 度も出ない。</b></para>
+    /// <para><b>しかも古い取引ほど申告が済んでいる可能性が高い</b>ので、
+    /// 名乗れない側を落とすと<b>危ない順と断りの出る順が逆になる</b>
+    /// （2026-09-22 の自己レビュー）。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 会計期間の無い取引日でも日付は返す()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertPosted(
+            903, "年度の無い取引日", "2020-01-15",
+            ("debit", "1100", 1000), ("credit", "2200", 1000));
+
+        var available = await server.AmendmentService.DescribeAsync(id);
+
+        Assert.Equal("2020/01/15", available.EarlierBasisDate);
+        Assert.Equal(string.Empty, available.EarlierFiscalYearLabel);
+    }
+
+    /// <summary>
+    /// <b>基準日は明細の <c>tax_point</c> を見る</b>（docs/11 §5-2）。取引日で代えない。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>いま画面は <c>tax_point</c> を入力させない</b>が、
+    /// <b>複製は写し、他部品からの投入も同じ経路を通る</b>ので、非 NULL は到達可能である。
+    /// <b>取引日だけを見ると、その日に嘘をつく。</b></para>
+    /// <para><b>いちばん古い日を採る</b>——1 行でも前の課税期間に届けば届く。
+    /// <b>行 2 にだけ入れる</b>ので、最初の行で止める実装もここで落ちる。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 基準日は明細の課税仕入れの日を見る()
+    {
+        using var server = new AccountingServer();
+        server.InsertFiscalYear("FY17", "2025-04-01", "2026-03-31");
+
+        // **取引日は当期**（第 18 期）。そのままなら断りは出ない。
+        var id = server.InsertDraft(transactionDate: "2026-05-20", postingDate: "2026-05-20");
+        server.InsertLine(id, 1, "debit", "1100", 1000);
+        server.InsertLine(id, 2, "credit", "2200", 1000);
+        Assert.Equal(
+            string.Empty, (await server.AmendmentService.DescribeAsync(id)).EarlierBasisDate);
+
+        // **行 2 だけに前の年度の課税仕入れの日を入れる。**
+        server.Execute(
+            "update journal_lines set tax_point = '2026-03-20'"
+            + $" where journal_entry_id = {id.Value} and line_no = 2");
+
+        var available = await server.AmendmentService.DescribeAsync(id);
+
+        Assert.Equal("2026/03/20", available.EarlierBasisDate);
+        Assert.Equal("FY17 期", available.EarlierFiscalYearLabel);
+    }
+
+    /// <summary>
+    /// 指定した会計年度に計上済みの伝票を 1 本作る。
+    /// </summary>
+    /// <remarks>
+    /// <c>InsertPosted</c> は既定の年度にしか入れないので、<b>下書きを書いてから状態を進める</b>
+    /// （DDL のトリガが唯一許す順序）。<b>採番の行は要らない</b>——番号を手で与えるからである。
+    /// </remarks>
+    private static JournalEntryId PostedInFiscalYear(
+        AccountingServer server, FiscalYearId fiscalYearId, string date)
+    {
+        var id = server.InsertDraft(
+            transactionDate: date, postingDate: date, fiscalYearId: fiscalYearId);
+        server.InsertLine(id, 1, "debit", "1100", 1000);
+        server.InsertLine(id, 2, "credit", "2200", 1000);
+        server.Execute($"""
+            update journal_entries
+               set status = 'posted', entry_no = 1, posted_at = '{date} 13:00:00'
+             where id = {id.Value}
+            """);
+        return id;
     }
 
     // --- 訂正する ---
