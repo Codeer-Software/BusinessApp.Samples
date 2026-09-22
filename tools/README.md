@@ -39,7 +39,10 @@ related: [../docs/README.md]
 | [`clb/scaffold_module.py`](clb/scaffold_module.py) | モジュール定義の足場作り。生成後は `Design/Modules/*.mod.json` が正典 |
 | [`git-hooks/pre-commit`](git-hooks/pre-commit) | コミット前の検証。`git config core.hooksPath tools/git-hooks` で有効にする |
 | [`git-hooks/pre-merge-commit`](git-hooks/pre-merge-commit) | **マージが自動でコミットするときに git が呼ぶフック**。木がブランチ先端と同じなら、稼働 DB の同値検査だけを流す（[ADR-0067](../docs/decisions/0067-マージコミットは木がブランチ先端と同じなら木から決まる段を流さない.md)。下の「マージが自動でコミットするとき」） |
-| [`git-hooks/pre_merge_commit_selftest.py`](git-hooks/pre_merge_commit_selftest.py) | **上の判定の検体**（コミット前フックが毎回流す）。**使い捨てのリポジトリで本物の `git merge` に呼ばせ**、稼働 DB の同値検査（`pwsh`）と全段への委譲（`pre-commit`）に切り株を置いて、**流れたかどうかまで見る**。`--hook <写し>` で壊した複製を撃てる（[31 §1](../docs/31_検証のルール.md)）。**フックを直接呼ぶ検体は、git に作れない場合だけ**（マージの外・先端の木を引けない・木を書けない） |
+| [`git-hooks/docs_only.py`](git-hooks/docs_only.py) | **このコミットがミューテーションの段の入力を 1 つも変えていないか**を判定する（[ADR-0068](../docs/decisions/0068-docsの文書だけを変えた回はミューテーションの段を流さない.md)）。0 を返した回は、コミット前フックが**その段だけ**を飛ばす。**判定は足し算**（変わったパスが全部**不活性**＝段の入力になりえないなら飛ばす）で、**判定できないときは流す**。**`docs/` の下でも、テストが読む 2 本は不活性ではない**——その一覧が腐らないよう、`--selftest` が **C# の側を走査して突き合わせる**。検体は**本物の `git add` で索引を作って**撃ち、**段の配線は `dotnet` を切り株に差し替えて実際に流して見る** |
+| [`git-hooks/mutation_stage.sh`](git-hooks/mutation_stage.sh) | **ミューテーションテストの段の中身**（5 プロジェクト）。**ファイルに切り出してあるのは、検体から流せるようにするため**である（同 ADR の帰結） |
+| [`git-hooks/_gitenv.py`](git-hooks/_gitenv.py) | **フックの中から別のリポジトリで git を撃つための環境**（`GIT_DIR`・`GIT_INDEX_FILE`・`GITHEAD_*` を落とす）。上の 2 つの検体が使う。**単体では動かない** |
+| [`git-hooks/pre_merge_commit_selftest.py`](git-hooks/pre_merge_commit_selftest.py) | **`pre-merge-commit` の判定の検体**（コミット前フックが毎回流す）。**使い捨てのリポジトリで本物の `git merge` に呼ばせ**、稼働 DB の同値検査（`pwsh`）と全段への委譲（`pre-commit`）に切り株を置いて、**流れたかどうかまで見る**。`--hook <写し>` で壊した複製を撃てる（[31 §1](../docs/31_検証のルール.md)）。**フックを直接呼ぶ検体は、git に作れない場合だけ**（マージの外・先端の木を引けない・木を書けない） |
 | [`docs/lint_docs.py`](docs/lint_docs.py) | **ドキュメント規約の検査**（[docs/00 §6](../docs/00_ドキュメント規約/README.md)）。フロントマター・リンク切れ・索引の突合・**current でない文書へのコード参照**・**`current` の本文から `superseded` へのリンク**・**節への参照の指し先に節が実在するか**・**リンクの札と行き先の文書番号が一致するか**・**`updated:` の鮮度**（作業ツリーと履歴の両方）・**条項を [80 §3](../docs/80_参照法令一覧.md) の記法で書いているか**・**日付で発効する条番号の切替が残っていないか**（30 日前までは件数を印字するだけ、30 日前から warn、発効日以後は error。[ADR-0043](../docs/decisions/0043-日付で発効する条番号の切替を機械の関門に置き除外は行の印で表す.md)）。`--selftest` で検査そのものを検査する。**検査項目の正典は [00 §6](../docs/00_ドキュメント規約/README.md) の表**で、ここは道具の一覧である |
 | [`docs/doclint/`](docs/doclint/__init__.py) | 上の中身。`model.py`（設定値・`Doc`・git・読み込み）／`checks.py`（検査の本数は数えない。**正典は `ALL_CHECKS`** で、`selftest.py` が突合する）／`selftest.py`（`lint_docs.py` 自身の検査）。**入口は `lint_docs.py` のまま** |
 | [`docs/lint_secrets.py`](docs/lint_secrets.py) | **公開リポジトリ向けの混入検査**。追跡ファイルに絶対パス・ユーザー名・接続文字列・API キー・秘密鍵が無いかを検査する |
@@ -129,7 +132,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 | 段 | 中身 |
 |---|---|
 | **凍結ファイルの検査** | `check_frozen.py --selftest` → `check_frozen.py`（**凍結されたファイルの変更・削除・改名**。適用済みマイグレーションと `baseline/`。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
-| **失うことを止める道具の自己検査** | 失うことを止める道具の自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`・`worktree_db.ps1 -SelfTest`・`sql.ps1 -SelfTest`・`pre_merge_commit_selftest.py`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる。**`sql.ps1` は DDL を拒む判定**——[ADR-0064](../docs/decisions/0064-稼働DBのスキーマはmigrateだけで動かし適用の記録はコミットごとに突き合わせる.md)。**最後の 1 つはマージの「木が同じなら流さない」判定**——緩めると **`main` に入る瞬間の検査が黙って消える**（[ADR-0067](../docs/decisions/0067-マージコミットは木がブランチ先端と同じなら木から決まる段を流さない.md)）） |
+| **失うことを止める道具の自己検査** | 失うことを止める道具の自己検査（`guard_delete.py --selftest`・`trash.ps1 -SelfTest`・`db_snapshot.ps1 -SelfTest`・`worktree_db.ps1 -SelfTest`・`sql.ps1 -SelfTest`・`pre_merge_commit_selftest.py`・`docs_only.py --selftest`。**前 2 つの正典は 1 つ**なので、両方がそれを読めているかもここで確かめる。**`sql.ps1` は DDL を拒む判定**——[ADR-0064](../docs/decisions/0064-稼働DBのスキーマはmigrateだけで動かし適用の記録はコミットごとに突き合わせる.md)。**最後の 1 つはマージの「木が同じなら流さない」判定**——緩めると **`main` に入る瞬間の検査が黙って消える**（[ADR-0067](../docs/decisions/0067-マージコミットは木がブランチ先端と同じなら木から決まる段を流さない.md)）） |
 | **改行の検査** | `normalize_eol.py --selftest` → `normalize_eol.py --check`（**作業コピーの改行が LF か**。`git ls-files --eol` が判定の正典で、**何を LF にすべきかは `.gitattributes` が決める**——この道具は拡張子の一覧を持たない。1 秒で終わるので前に置く） |
 | **秘密の検査** | `lint_secrets.py`（秘密・絶対パスの混入） |
 | **ドキュメント規約の検査** | `lint_docs.py --selftest` → `lint_docs.py`（ドキュメント規約） |
@@ -137,7 +140,7 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/ddl/005_journals.sql
 | **テスト・カバレッジ・スキーマ** | `dotnet test`（テスト・カバレッジ・スキーマ） |
 | **行セットの差分で殺す掃引** | `sql_sweep.ps1 -Mode Rows`（**クエリの SQL を 1 点ずつ壊し、行セットが変わらない点を報告する**。[ADR-0058](../docs/decisions/0058-行セットの差分で殺す掃引は入力コーパスを持たず行動テストが流した入力をその場で当てる.md) の決定 9。**開発者の決定。2026-09-20**。**直前の `dotnet test` の後に置くのは、ビルドを二度しないで済むからである**（掃引は自分でビルドするので、順を入れ替えても壊れない）。`-Mode Tests` は分かかるので載せない——流す契機は [31 §6](../docs/31_検証のルール.md)） |
 | **稼働 DB とスキーマ正典の同値検査** | `migrate.ps1 -Verify`（稼働 DB とスキーマ正典の同値。[ADR-0020](../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)） |
-| **ミューテーションテスト** | `dotnet stryker`（ミューテーション。**5 プロジェクト**——会計コアの純粋層とサーバ層、取引先部品の純粋層とサーバ層、共有インフラ。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)・[ADR-0025 §6](../docs/decisions/0025-取引先を部品として分ける.md)） |
+| **ミューテーションテスト** | `dotnet stryker`（ミューテーション。**`docs` の文書だけを変えた回は流さない**——判定は [`docs_only.py`](git-hooks/docs_only.py)、決定は [ADR-0068](../docs/decisions/0068-docsの文書だけを変えた回はミューテーションの段を流さない.md)。**飛ばすのはこの段だけで、ほかの段はすべて流れる**。**5 プロジェクト**——会計コアの純粋層とサーバ層、取引先部品の純粋層とサーバ層、共有インフラ。[ADR-0012 §8](../docs/decisions/0012-テスト方針とカバレッジのゲート.md)・[ADR-0025 §6](../docs/decisions/0025-取引先を部品として分ける.md)） |
 
 **マージが自動でコミットするときは `pre-merge-commit` が呼ばれる**——git はマージで `pre-commit` を呼ばないので、置かないと **`main` に入る瞬間だけ誰も見ていない**。
 **これからコミットする木が、取り込むブランチ先端の木と同一なら、上の表の段のうち `migrate.ps1 -Verify` だけを流す**（稼働 DB は木の中に無いから）。
