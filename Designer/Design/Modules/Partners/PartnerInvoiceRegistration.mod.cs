@@ -5,6 +5,9 @@
 
 void Detail_OnAfterInitialization()
 {
+    // 案内の箇条書きは、有効な登録がある取引先の新規のときだけ出す（ShowOpenRegistrationNotice）
+    NoticeGuideLabel.IsVisible = false;
+
     if (IsNewData)
     {
         var partnerId = QueryPartnerId();
@@ -24,7 +27,10 @@ void Detail_OnAfterInitialization()
 }
 
 // 再登録の規則（取消・失効の記録がない登録があるうちは次を始められない。docs/14 §5 R-I5）を
-// **入力の前に**知らせる（21 §1。全部入力させてから関門で捨てさせない）。関門の代わりではない。
+// **押す前に**知らせる（21 §1。全部入力させてから関門で捨てさせない）。関門の代わりではない。
+// **置き場は最下段・ボタンの行の直前**（21 §2-8）。もとはラベルの列（幅 140px）にあり、8 行に折り返していた。
+// **後入れ（それより前の登録）の案内も出す**——「再登録は先に閉じよ」だけを言うと、過去の登録を足したい人が
+// いま有効な登録を閉じてしまう（2026-09-24 の自己レビュー）。案内の文言は定義の NoticeGuideLabel が持つ（21 §2-8）。
 void ShowOpenRegistrationNotice()
 {
     var searcher = new ModuleSearcher<PartnerInvoiceRegistration>();
@@ -35,8 +41,8 @@ void ShowOpenRegistrationNotice()
     {
         var reg = (PartnerInvoiceRegistration)row;
         if (reg.EndedOn.Value != null) { continue; }
-        NoticeLabel.Text = $"この取引先には {reg.ValidFrom.Value:yyyy/MM/dd} から有効な登録があります。"
-            + "再登録は、先にその登録の取消・失効を記録してから入力してください。";
+        NoticeLabel.Text = $"この取引先には {reg.ValidFrom.Value:yyyy/MM/dd} から有効な登録があります。";
+        NoticeGuideLabel.IsVisible = true;
         return;
     }
 }

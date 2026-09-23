@@ -151,9 +151,8 @@ public class PartnerRegistrationSubmitGateTests
             () => Gate(server).SubmitAsync(
                 [Adding(Registration(no, partner, new DateOnly(2023, 10, 1)))], save.SaveAsync));
 
-        Assert.Contains("登録番号の形が違います", thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("14 桁", thrown.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("\n", thrown.Message, StringComparison.Ordinal);   // トーストは改行できない（qa/01 D-12）
+        // 全文で固める（qa/03 L-66）。改行が無いこと（トーストは改行できない。qa/01 D-12）も、全文一致が兼ねる
+        Assert.Equal("登録できません。「登録番号」の形が違います。登録番号は「T」で始まる 14 桁（T のあとに数字 13 桁）です。入力し直してください。", thrown.Message);
         Assert.False(save.Called);
     }
 
@@ -169,7 +168,7 @@ public class PartnerRegistrationSubmitGateTests
         var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
             () => Gate(server).SubmitAsync([Updating(Registration("T12"))], save.SaveAsync));
 
-        Assert.Contains("登録番号の形が違います", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("登録できません。「登録番号」の形が違います。登録番号は「T」で始まる 14 桁（T のあとに数字 13 桁）です。入力し直してください。", thrown.Message);
         Assert.False(save.Called);
     }
 
@@ -763,7 +762,7 @@ public class PartnerRegistrationSubmitGateTests
             () => Gate(server).SubmitAsync(
                 [Adding(Registration(no: ValidNo, partnerId: partner))], save.SaveAsync));
 
-        Assert.Contains("登録年月日を入力", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("登録できません。「登録年月日」を入力してください。", thrown.Message);
         Assert.False(save.Called);
     }
 
@@ -935,7 +934,9 @@ public class PartnerRegistrationSubmitGateTests
         Assert.False(save.Called);
     }
 
-    /// <summary>終わりのない登録があるうちは、次の登録を作れない（R-I5）。</summary>
+    /// <summary>
+    /// <b>保存済みの終わりのない登録のあとに足す新規を止め、前の登録を閉じるか、入力した登録年月日を確かめるかを言う</b>（R-I5。再登録の形。REG-23）。
+    /// </summary>
     [Fact]
     public async Task 終わりのない登録のあとの新規を止める()
     {
@@ -950,17 +951,19 @@ public class PartnerRegistrationSubmitGateTests
                     validFrom: new DateOnly(2024, 1, 1)))],
                 save.SaveAsync));
 
-        // **全文で固める。** 部分一致では「どの行を名指すか」が表明されない——名指す行が
-        // いま入力している行に替わっても緑のままだった（2026-09-24 の全件の REG-24。qa/03 L-66）。
+        // **全文で固める。** 部分一致では「どの行を名指すか」「どちらの直し方を選ぶか」が表明されない
+        // ——名指す行がいま入力している行に替わっても緑のままだった（2026-09-24 の全件の REG-24。qa/03 L-66）。
         Assert.Equal(
-            "登録できません。この取引先には、取消・失効の記録がない登録（2023/10/01 から）があります。"
-            + "先にその登録を一覧の「編集」から開き、取消・失効年月日と理由を記録してください。",
+            "登録できません。登録の期間が重なっています。"
+            + "この取引先には「取消・失効年月日」が空の登録（2023/10/01 から）があり、入力している登録（2024/01/01 から）はそのあとに始まります。"
+            + "前の登録が 2024/01/01 までに終わっているなら、先に取引先の詳細の「登録番号の履歴」でその行の「編集」を開き、"
+            + "「取消・失効年月日」を入れて「取消・失効の理由」を選んでください。そうでなければ、入力した「登録年月日」を確かめてください。",
             thrown.Message);
         Assert.False(save.Called);
     }
 
     /// <summary>
-    /// <b>既にある登録より古い日付で、終わりのない登録を足すと、いま入力している行を名指す</b>（R-I5）。
+    /// <b>既にある登録より古い日付で、終わりのない登録を足すと、いま入力している行を名指す</b>（R-I5。過去の登録の後入れの形）。
     /// </summary>
     /// <remarks>
     /// 名指す行は新しく足す行で、一覧に無い——「一覧の「編集」から開け」と言うと、
@@ -981,16 +984,57 @@ public class PartnerRegistrationSubmitGateTests
                 save.SaveAsync));
 
         Assert.Equal(
-            "登録できません。この登録（2025/01/01 から）には取消・失効の記録がありませんが、"
-            + "そのあとに 2026/09/01 から始まる登録があります。"
-            + "この登録の取消・失効年月日と理由を入力するか、登録年月日を確かめてください。",
+            "登録できません。登録の期間が重なっています。"
+            + "入力している登録（2025/01/01 から）は「取消・失効年月日」が空ですが、そのあとに 2026/09/01 からの登録があります。"
+            + "2026/09/01 までに終わった登録なら「取消・失効年月日」（2026/09/01 以前）を入れて「取消・失効の理由」を選び、"
+            + "そうでなければ「登録年月日」を確かめてください。",
             thrown.Message);
         Assert.False(save.Called);
     }
 
-    /// <summary>同じ保存の 2 行でも、早い行に終わりが無ければ、いま入力している行として名指す（R-I5）。</summary>
+    /// <summary>
+    /// <b>名指す「あとの登録」は、終わりのない行の直後の行である</b>（R-I5）。
+    /// </summary>
+    /// <remarks>
+    /// 終わりをその日までに入れれば通るのは直後の行だけで、もっと後の行を言うと、その日まで伸ばした終わりが
+    /// 直後の行と重なる。<b>あとの行が 1 本しか無い検体では、最後の行・いちばん新しい行を言う書き換えも緑になる</b>
+    /// ——だから 2 本置く（2026-09-24 の自己レビュー。qa/03 L-46 と同じ縮退の型）。
+    /// </remarks>
     [Fact]
-    public async Task 同じ保存の早い行に終わりが無ければ入力している行を名指す()
+    public async Task 名指すあとの登録は直後の行である()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2024-04-01", "2024-12-31");
+        InsertRegistration(server, partner, "T9999999999999", "2025-01-01");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Adding(Registration(no: "T5555555555555", partnerId: partner,
+                    validFrom: new DateOnly(2023, 1, 1)))],
+                save.SaveAsync));
+
+        Assert.Equal(
+            "登録できません。登録の期間が重なっています。"
+            + "入力している登録（2023/01/01 から）は「取消・失効年月日」が空ですが、そのあとに 2024/04/01 からの登録があります。"
+            + "2024/04/01 までに終わった登録なら「取消・失効年月日」（2024/04/01 以前）を入れて「取消・失効の理由」を選び、"
+            + "そうでなければ「登録年月日」を確かめてください。",
+            thrown.Message);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>同じ保存で足す 2 行のうち、早い行に終わりが無ければ、早い行を名指す</b>（R-I5）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>画面は 1 行ずつ保存する</b>（docs/14 §5）ので、2 行が一度に来るのは API と取込（フェーズ 6）だけである。
+    /// そこには「入力している行」が無い——<b>取込を作る回に、画面に依らない言い方（日付で指す）へ見直す</b>。</para>
+    /// <para>それでも残すのは、<b>両方が触った行のとき、早い側の由来で文を選ぶことを固めるのはこの検体だけ</b>だからである
+    /// （1 行の保存では、早い側が触った行なら遅い側は必ず保存済みで、書き換えを区別できない）。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 同じ保存で足す二行の早い行に終わりが無ければ早い行を名指す()
     {
         using var server = new PartnerServer();
         var partner = InsertPartner(server);
@@ -1004,22 +1048,23 @@ public class PartnerRegistrationSubmitGateTests
                 save.SaveAsync));
 
         Assert.Equal(
-            "登録できません。この登録（2023/10/01 から）には取消・失効の記録がありませんが、"
-            + "そのあとに 2024/01/01 から始まる登録があります。"
-            + "この登録の取消・失効年月日と理由を入力するか、登録年月日を確かめてください。",
+            "登録できません。登録の期間が重なっています。"
+            + "入力している登録（2023/10/01 から）は「取消・失効年月日」が空ですが、そのあとに 2024/01/01 からの登録があります。"
+            + "2024/01/01 までに終わった登録なら「取消・失効年月日」（2024/01/01 以前）を入れて「取消・失効の理由」を選び、"
+            + "そうでなければ「登録年月日」を確かめてください。",
             thrown.Message);
         Assert.False(save.Called);
     }
 
     /// <summary>
-    /// <b>既にある登録より古い日付でも、終わりを記録した登録は足せる</b>（上の 2 本の対照）。
+    /// <b>既にある登録より古い日付でも、あとの登録の始まりの日までに終わる登録は足せる</b>（R-I5 の断りに従った往復）。
     /// </summary>
     /// <remarks>
-    /// 名指しを分けた変更が、<b>正しい入力まで止めていない</b>ことを見る——断る側だけを見ていると、
-    /// 締めすぎても 1 本も赤くならない。
+    /// 断りが言う「（2026/09/01 以前）」の境界そのもの——<b>隣接は通す</b>（関門の R-I4 の注記）。
+    /// 1 日でも越えると、次の検体のとおり R-I4 で断る。
     /// </remarks>
     [Fact]
-    public async Task 既にある登録より古くても終わりを記録した新規は通す()
+    public async Task 断りに従ってあとの登録の始まりの日までに終われば足せる()
     {
         using var server = new PartnerServer();
         var partner = InsertPartner(server);
@@ -1028,13 +1073,37 @@ public class PartnerRegistrationSubmitGateTests
 
         await Gate(server).SubmitAsync(
             [Adding(Registration(no: "T9999999999999", partnerId: partner,
-                validFrom: new DateOnly(2025, 1, 1), endedOn: new DateOnly(2025, 12, 31), endReason: "revoked"))],
+                validFrom: new DateOnly(2025, 1, 1), endedOn: new DateOnly(2026, 9, 1), endReason: "revoked"))],
             save.SaveAsync);
 
         Assert.True(save.Called);
     }
 
-    /// <summary>同じ保存の中の 2 行どうしでも、期間の重なりを止める。</summary>
+    /// <summary>
+    /// <b>あとの登録の始まりの日を 1 日越えて終わる登録は、R-I4 で断る</b>（上の検体の境界の対）。
+    /// </summary>
+    [Fact]
+    public async Task あとの登録の始まりの日を越えて終わる古い登録は重なりで止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2026-09-01");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Adding(Registration(no: "T9999999999999", partnerId: partner,
+                    validFrom: new DateOnly(2025, 1, 1), endedOn: new DateOnly(2026, 9, 2), endReason: "revoked"))],
+                save.SaveAsync));
+
+        Assert.Equal(
+            "登録できません。登録の期間が重なっています。2025/01/01 からの登録は 2026/09/02 までですが、"
+            + "次の登録が 2026/09/01 から始まっています。「登録年月日」と「取消・失効年月日」を確かめてください。",
+            thrown.Message);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>同じ保存の 2 行どうしでも、期間の重なりを止める。</summary>
     [Fact]
     public async Task 同じ保存の二行の期間の重なりを止める()
     {
@@ -1054,7 +1123,13 @@ public class PartnerRegistrationSubmitGateTests
         Assert.False(save.Called);
     }
 
-    /// <summary>終わりの記録を消して、後続の登録と重ねる更新を止める（R-I5）。</summary>
+    /// <summary>
+    /// <b>終わりの記録を消して、後続の登録と重ねる更新を止め、元に戻すよう言う</b>（R-I5）。
+    /// </summary>
+    /// <remarks>
+    /// <b>消したこと自体が重なりを作った</b>ので、「登録年月日を確かめて」は触っていない欄を指す——
+    /// 元に戻すのが先で、あとの登録のほうが誤りならそちらを直す（2026-09-24 の自己レビュー）。
+    /// </remarks>
     [Fact]
     public async Task 終わりを消して後続と重ねる更新を止める()
     {
@@ -1069,12 +1144,73 @@ public class PartnerRegistrationSubmitGateTests
                 [Updating(Registration(id: first, clearEndedOn: true, clearEndReason: true))],
                 save.SaveAsync));
 
-        // **いま編集している行を名指す**——「一覧の「編集」から開け」と言うと、既に開いている行を開けと言う
-        // ことになる（2026-09-24 の全件の REG-24 と同じ形）。
         Assert.Equal(
-            "登録できません。この登録（2023/10/01 から）には取消・失効の記録がありませんが、"
-            + "そのあとに 2024/04/01 から始まる登録があります。"
-            + "この登録の取消・失効年月日と理由を入力するか、登録年月日を確かめてください。",
+            "登録できません。登録の期間が重なっています。"
+            + "「取消・失効年月日」を空にすると、2024/04/01 からの登録と期間が重なります。"
+            + "「取消・失効年月日」と「取消・失効の理由」を元に戻してください。"
+            + "2024/04/01 からの登録のほうが誤りなら、先に取引先の詳細の「登録番号の履歴」でその行の「編集」から直してください。",
+            thrown.Message);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>有効な登録の登録年月日を、終わった登録より前に動かす更新を止め、登録年月日の誤りを選べるよう言う</b>（R-I5）。
+    /// </summary>
+    /// <remarks>
+    /// <b>この形で「取消・失効年月日を入れて」だけを言うと、いま有効な登録に架空の終わりを付けて通してしまう</b>
+    /// ——隣接なので R-I4 も通り、取引先に有効な登録が 1 件も無い履歴になる（2026-09-24 の自己レビュー）。
+    /// 文は「あとの登録までに終わった登録なら…、そうでなければ登録年月日」と、選ぶ目安を言う。
+    /// </remarks>
+    [Fact]
+    public async Task 有効な登録の登録年月日を前へ動かす更新は目安つきで止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2023-10-01", "2024-03-31");
+        var current = InsertRegistration(server, partner, "T9999999999999", "2024-04-01");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Updating(Registration(id: current, validFrom: new DateOnly(2023, 4, 1)))],
+                save.SaveAsync));
+
+        Assert.Equal(
+            "登録できません。登録の期間が重なっています。"
+            + "入力している登録（2023/04/01 から）は「取消・失効年月日」が空ですが、そのあとに 2023/10/01 からの登録があります。"
+            + "2023/10/01 までに終わった登録なら「取消・失効年月日」（2023/10/01 以前）を入れて「取消・失効の理由」を選び、"
+            + "そうでなければ「登録年月日」を確かめてください。",
+            thrown.Message);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>終わった登録の日付を、有効な登録より後ろへ動かす更新を止め、入力した登録年月日を確かめる道も言う</b>（R-I5）。
+    /// </summary>
+    /// <remarks>
+    /// <b>名指すのは保存済みの有効な登録</b>だが、動かしたのはこちらの行である。
+    /// 「前の登録を閉じよ」だけを言うと、いま有効な登録を閉じてから直し直す道に誘う（2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 終わった登録を有効な登録より後ろへ動かす更新は登録年月日の道も言う()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2024-04-01");
+        var ended = InsertRegistration(server, partner, "T9999999999999", "2022-01-01", "2022-12-31");
+        var save = new SaveSpy();
+
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(
+                [Updating(Registration(id: ended,
+                    validFrom: new DateOnly(2025, 1, 1), endedOn: new DateOnly(2025, 12, 31)))],
+                save.SaveAsync));
+
+        Assert.Equal(
+            "登録できません。登録の期間が重なっています。"
+            + "この取引先には「取消・失効年月日」が空の登録（2024/04/01 から）があり、入力している登録（2025/01/01 から）はそのあとに始まります。"
+            + "前の登録が 2025/01/01 までに終わっているなら、先に取引先の詳細の「登録番号の履歴」でその行の「編集」を開き、"
+            + "「取消・失効年月日」を入れて「取消・失効の理由」を選んでください。そうでなければ、入力した「登録年月日」を確かめてください。",
             thrown.Message);
         Assert.False(save.Called);
     }
@@ -1162,7 +1298,12 @@ public class PartnerRegistrationSubmitGateTests
                     validFrom: new DateOnly(2024, 4, 1)))],
                 save.SaveAsync));
 
-        Assert.Contains("2023/10/01", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "登録できません。登録の期間が重なっています。"
+            + "この取引先には「取消・失効年月日」が空の登録（2023/10/01 から）があり、入力している登録（2024/04/01 から）はそのあとに始まります。"
+            + "前の登録が 2024/04/01 までに終わっているなら、先に取引先の詳細の「登録番号の履歴」でその行の「編集」を開き、"
+            + "「取消・失効年月日」を入れて「取消・失効の理由」を選んでください。そうでなければ、入力した「登録年月日」を確かめてください。",
+            thrown.Message);
         Assert.False(save.Called);
     }
 
@@ -1313,8 +1454,11 @@ public class PartnerRegistrationSubmitGateTests
                 }],
                 save.SaveAsync));
 
-        Assert.Contains("削除できません", thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("取消・失効年月日と理由を記録して", thrown.Message, StringComparison.Ordinal);
+        // **次の一手を画面の字で言う**——「一覧」は画面の見出しに無い字だった（2026-09-24 の自己レビュー）
+        Assert.Equal(
+            "登録できません。登録の行は削除できません。取消・失効は、取引先の詳細の「登録番号の履歴」でその行の「編集」を開き、"
+            + "「取消・失効年月日」を入れて「取消・失効の理由」を選んでください。",
+            thrown.Message);
         Assert.False(save.Called);
     }
 
