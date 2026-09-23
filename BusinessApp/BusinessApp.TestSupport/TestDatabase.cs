@@ -78,11 +78,13 @@ public static class TestDatabase
     /// <para><b>貼り直したトリガは、その表の中で最後に作られた状態になる。</b>
     /// 発火順は SQLite の仕様上 undefined で、実測では後に作ったものから鳴るので、
     /// <b>複数のトリガが同時に当たる検体では、鳴る順が本番と変わりうる。</b>
-    /// <b>外せるトリガは 3 本とも <c>journal_entries</c> の同じ <c>BEFORE UPDATE</c>（下書き → 計上）に張ってある</b>ので、
-    /// 片方を外して貼り直すと、その接続では<b>その 1 本が最後に作られたトリガになる</b>——
-    /// 複数に当たる検体（摘要が空で、かつ補助科目や取引先の規則も破っている伝票）を作ると、
-    /// <b>どの断りが返るかが本番と入れ替わりうる</b>。
-    /// いまの検体はどれか 1 つしか破っていないので、この差は出ていない。</para>
+    /// <b>許可表は 2026-09-23 に 5 本になり、表も契機もばらばらである</b>
+    /// （<c>journal_entries</c> の <c>BEFORE UPDATE</c> が 3 本と、制度ルールの 2 表の <c>BEFORE INSERT</c> が各 1 本）。
+    /// <b>制度ルールの表ではこの差が効きうる</b>——<c>Designer/ddl/015</c> は
+    /// <b>重なりのトリガに門を置いて発火順に寄りかからない形にしてある</b>が、
+    /// <b>門が効くのは開始日が読めない値のときだけ</b>で、
+    /// <b>それ以外で同時に鳴る条件に入る検体を書けば、貼り直した接続では順が変わりうる</b>。
+    /// <b>いまの検体はどれか 1 つしか破っていないので、この差は出ていない。</b></para>
     /// </remarks>
     public static void WithoutTrigger(SqliteConnection connection, string triggerName, string sql)
     {
@@ -160,6 +162,11 @@ public static class TestDatabase
         // **取込や直打ちで入りうる**ので、**読み出し側（EffectiveDatedRuleSet）も重なりを拒む**——
         // その守りを撃つ検体が要る（ADR-0069。守りは DB と読み出しの 2 枚である）。
         "trg_transition_purchase_rates_no_overlap_insert",
+
+        // **税率の表でも同じ**。加えて、**一意索引そのものを撃つにはこれを外すしかない**——
+        // 同じ区分で同じ日から始まれば必ず重なるので、**トリガが先に断って索引まで届かない**
+        // （TaxRateConstraintTests。014 の同名のテストと同じ形）。
+        "trg_tax_rates_no_overlap_insert",
     ];
 
     /// <summary>

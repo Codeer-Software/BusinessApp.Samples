@@ -45,5 +45,6 @@ public class GeneratedCopyConstructorTests
         var rate = new TransitionalDeductionRate(
             new EffectivePeriod(new DateOnly(2026, 10, 1), null), 0.5m, new RuleVersion("v1"));
         _ = rate with { };
+        _ = StatutoryData.TaxRates[0] with { };
     }
 }

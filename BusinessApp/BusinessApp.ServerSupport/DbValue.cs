@@ -121,8 +121,12 @@ public static class DbValue
     /// <b>数字の前で区切るのは規約である</b>——DDL の CHECK に <c>legacy_8</c> がある
     /// （<c>Designer/ddl/003_consumption_tax.sql</c>）。区切らないと <c>Legacy8</c> は
     /// <c>legacy8</c> になり、書いた瞬間に CHECK で弾かれる。
-    /// <b>いま数字を含む列挙子は 1 つも無いので、これは将来のための規則である</b>——
-    /// 逆に言えば、間違っていても今日は誰も気づけない（2026-08-27 の自己レビュー R16-03）。
+    /// <b>2026-09-23 に、この規則を実地で見張るものができた</b>——<c>EnumConsistencyTests</c> が
+    /// <c>TaxRateKind</c>（docs/11 §1-1）を DDL・CLB・C# の 3 者突合に載せ、
+    /// <c>Legacy8</c> をここへ通して DDL の <c>legacy_8</c> と突き合わせる。
+    /// <b>逆向き（<see cref="ToPascalCase"/>）は <c>TaxRateLoader</c> が <see cref="ToEnum{T}"/> で通る</b>
+    /// ——<b>こちらはこの関数を呼ばない</b>ので、見張っているのは突合の側だけである。
+    /// <b>それまでは、間違っていても誰も気づけない規則だった</b>（2026-08-27 の自己レビュー R16-03）。
     /// <see cref="ToPascalCase"/> がこの逆を行う。
     /// </remarks>
     public static string ToSnakeCase(string name)

@@ -35,8 +35,9 @@ internal static class Rejected
     private const int Unique = 2067;
 
     /// <summary><c>CHECK</c> で拒まれること。<paramref name="expression"/> は CHECK の式の一部。</summary>
-    public static void ByCheck(SqliteConnection db, string sql, string expression)
-        => Because(db, sql, Check, expression);
+    /// <param name="label">検体の呼び名（<see cref="ByTrigger"/> と同じ理由で置く）。</param>
+    public static void ByCheck(SqliteConnection db, string sql, string expression, string? label = null)
+        => Because(db, sql, Check, expression, label);
 
     /// <summary>
     /// <c>UNIQUE</c> で拒まれること。<paramref name="columns"/> は <c>表.列</c>（複合なら <c>, </c> 区切り）。

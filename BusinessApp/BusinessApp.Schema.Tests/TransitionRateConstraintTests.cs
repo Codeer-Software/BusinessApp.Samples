@@ -122,6 +122,78 @@ public class TransitionRateConstraintTests
     }
 
     /// <summary>
+    /// <b>控除割合は帯の両端まで通る。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>拒む側の 3 本だけだと、<c>BETWEEN 2 AND 99</c> に締めても 1 本も赤くならない</b>
+    /// （2026-09-23 の自己レビュー。015 へ写したときに同じ穴も一緒に写っていた）。
+    /// </remarks>
+    [Theory]
+    [InlineData("1")]
+    [InlineData("100")]
+    public void 控除割合は帯の両端まで通る(string percent)
+    {
+        using var db = Empty();
+
+        TestDatabase.Execute(db, Insert("2023-10-01", "2026-09-30", percent));
+
+        Assert.Equal([percent], TestDatabase.Query(db, "SELECT rate_percent FROM transition_purchase_rates"));
+    }
+
+    /// <summary>
+    /// <b><c>INSERT OR REPLACE</c> で、配った行を上書きできない</b>（<c>Designer/ddl/016</c>）。
+    /// </summary>
+    /// <remarks>
+    /// <b>2026-09-23 に実測した形である</b>——守りを入れる前は、<c>id</c> をぶつけた行が通り、
+    /// <b>控除割合 80% の行が音もなく消えて、別の期間の 99% の行に置き換わった</b>
+    /// （<b>同じ期間のまま差し替える文は重なりのトリガが断る</b>ので、期間ごと別物にした検体である）。
+    /// <b>REPLACE が消す行の DELETE トリガは、<c>PRAGMA recursive_triggers</c> が OFF のあいだ発火しない</b>
+    /// （既定は OFF。qa/03 の L-26）。<b>行が化けていないことまで読み戻す。</b>
+    /// </remarks>
+    [Fact]
+    public void REPLACEで配った行を上書きできない()
+    {
+        using var db = TestDatabase.CreateWithSeed();
+        var id = TestDatabase.ScalarOf<long>(
+            db, "SELECT id FROM transition_purchase_rates WHERE rate_percent = 80");
+
+        Rejected.ByTrigger(
+            db,
+            $"INSERT OR REPLACE INTO transition_purchase_rates (id, {Columns[1..^1]}) VALUES"
+            + $" ({id}, '2015-01-01', '2016-01-01', 99, 'transition_purchase_rate:2015-01-01',"
+            + " '検体', '検体', '2026-09-10');",
+            "経過措置の控除割合の行を、既にある行の識別子へ被せられない。");
+
+        Assert.Equal(
+            ["30", "50", "70", "80"],
+            TestDatabase.Query(db, "SELECT rate_percent FROM transition_purchase_rates ORDER BY rate_percent"));
+    }
+
+    /// <summary>
+    /// <b>識別子を別の行へ移す更新もできない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <c>id</c> は<b>どのトリガの <c>OF</c> にも入っていない</b>ので、
+    /// <c>UPDATE OR REPLACE … SET id = …</c> は<b>守りを 1 本も起こさずに 1 行消せた</b>。
+    /// </remarks>
+    [Fact]
+    public void 識別子を別の行へ移す更新はできない()
+    {
+        using var db = TestDatabase.CreateWithSeed();
+        var first = TestDatabase.ScalarOf<long>(
+            db, "SELECT id FROM transition_purchase_rates WHERE rate_percent = 80");
+        var second = TestDatabase.ScalarOf<long>(
+            db, "SELECT id FROM transition_purchase_rates WHERE rate_percent = 70");
+
+        Rejected.ByTrigger(
+            db,
+            $"UPDATE OR REPLACE transition_purchase_rates SET id = {first} WHERE id = {second};",
+            "経過措置の控除割合の行を、既にある行の識別子へ被せられない。");
+
+        Assert.Equal(4, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM transition_purchase_rates"));
+    }
+
+    /// <summary>
     /// <b>控除割合は 1 以上 100 以下の整数だけ。</b>
     /// </summary>
     /// <remarks>

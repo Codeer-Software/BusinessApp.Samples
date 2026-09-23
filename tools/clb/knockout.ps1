@@ -40,21 +40,27 @@ param(
     [string]$Kind,
     [switch]$List,
 
-    # **ラチェットの上限。値の正典はここである**（ADR-0012 §8 の Stryker が pre-commit に
-    # 値を持つのと同じ作法）。割れたら (a) テストを足して戻すか (b) 生き残りを読んで
+    # **ラチェットの上限。値の正典はここである**（ADR-0053 の決定 6。ADR-0012 §8 の Stryker が
+    # pre-commit に値を持つのと同じ作法）。割れたら (a) テストを足して戻すか (b) 生き残りを読んで
     # 理由とともに動かす。**黙って上げない。**
     #
     # **他の制約に包まれていて、どんなテストを書いても殺せないものの数である**
-    # （一覧と「なぜ包まれているか」の証明は qa/02 のラウンド 88）。
+    # （一覧と「なぜ包まれているか」の証明は qa/02 のラウンド 88・151・152）。
     # **下げるには DDL から冗長な制約を消すことになる**ので、次に触る回の判断に送ってある。
+    #
+    # **2026-09-23 に 7 から 10 へ動かした**（qa/02 のラウンド 152 に一覧と理由）——
+    # **税率の表の `version` の UNIQUE が 1 本増え**、
+    # **2026-09-13 の掃引の時点で数えていなかった 2 本**（`partner_invoice_registrations` と
+    # `transition_purchase_rates` の自然キーの UNIQUE）**が表に出たため**である。
     #
     # **-Only / -Kind で絞ったときは 0 に落とす**（下で上書きする）——
     # 絞った掃引は「足したテストがその点を殺せるか」を見る用途で、
     # **全点の上限をそのまま当てると、生き残っても成功で返ってしまう**。
-    [int]$MaxSurvivors = 7
+    [int]$MaxSurvivors = 10
 )
 
 $ErrorActionPreference = 'Stop'
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..' '..')
 $cli = Join-Path $repoRoot 'BusinessApp' 'BusinessApp.KnockoutCli'
 $tests = Join-Path $repoRoot 'BusinessApp' 'BusinessApp.Schema.Tests' 'BusinessApp.Schema.Tests.csproj'

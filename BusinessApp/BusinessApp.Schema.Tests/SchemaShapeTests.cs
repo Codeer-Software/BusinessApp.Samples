@@ -12,7 +12,7 @@ public class SchemaShapeTests
         "company_profile", "fiscal_years", "accounting_periods", "tax_categories",
         "accounts", "sub_accounts", "departments", "partners", "partner_invoice_registrations",
         "journal_entries", "journal_lines", "journal_entry_sequences",
-        "transition_purchase_rates",
+        "transition_purchase_rates", "tax_rates",
     ];
 
     /// <summary>
@@ -80,6 +80,12 @@ public class SchemaShapeTests
     [InlineData("partner_invoice_registrations", "ended_on", "DATE")]
     [InlineData("partner_invoice_registrations", "confirmed_on", "DATE")]
     [InlineData("partner_invoice_registrations", "nta_updated_on", "DATE")]
+    [InlineData("transition_purchase_rates", "valid_from", "DATE")]
+    [InlineData("transition_purchase_rates", "valid_to", "DATE")]
+    [InlineData("transition_purchase_rates", "confirmed_on", "DATE")]
+    [InlineData("tax_rates", "valid_from", "DATE")]
+    [InlineData("tax_rates", "valid_to", "DATE")]
+    [InlineData("tax_rates", "confirmed_on", "DATE")]
     public void 日付列はDATEまたはDATETIMEで宣言されている(string table, string column, string expected)
     {
         using var db = TestDatabase.Create();
@@ -205,6 +211,37 @@ public class SchemaShapeTests
         }
 
         Assert.Empty(crossing);
+    }
+
+    /// <summary>
+    /// <b>行までベンダーが配る表は、<c>REPLACE</c> の暗黙の DELETE を塞いでいる</b>（<c>Designer/ddl/016</c>）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>qa/03 の L-26 を、表を足すたびに自動で当てるための網である。</b>
+    /// L-26 は「不変を守るトリガを書いたら <c>OR REPLACE</c> を必ず 1 本試す」と書いてあったのに、
+    /// <b>制度ルールの表を 2 つ作るあいだ誰も試さず、2026-09-23 まで両方に穴が開いていた</b>
+    /// （<c>INSERT OR REPLACE</c> で配った行が音もなく別の行に置き換わった）。
+    /// <b>規約に書くだけでは守れなかったので、機械に数えさせる。</b></para>
+    /// <para><b>母数は <see cref="VendorRows.Tables"/> から採る</b>（<c>self-review</c> スキル §9 の 6）。
+    /// <b>両側から見る</b>——表を足してトリガを忘れても、トリガだけ足して表を忘れても赤くなる。</para>
+    /// <para><b>塞ぐのは識別子の衝突だけである。</b> 素の <c>UPDATE</c> と <c>DELETE</c> は通す
+    /// （理由は <c>Designer/ddl/016</c>）——そこを見るのは行の同値検査（<see cref="VendorRows"/>）である。</para>
+    /// </remarks>
+    [Fact]
+    public void ベンダーが配る行を持つ表はREPLACEの暗黙のDELETEを塞いでいる()
+    {
+        using var db = TestDatabase.Create();
+
+        var triggers = TestDatabase.Query(db, "SELECT name FROM sqlite_master WHERE type = 'trigger'");
+
+        Assert.Equal(
+            VendorRows.Tables
+                .SelectMany(table => new[] { $"trg_{table}_no_replace_insert", $"trg_{table}_no_replace_update" })
+                .OrderBy(name => name, StringComparer.Ordinal),
+            triggers
+                .Where(name => VendorRows.Tables.Any(
+                    table => name.StartsWith($"trg_{table}_no_replace_", StringComparison.Ordinal)))
+                .OrderBy(name => name, StringComparer.Ordinal));
     }
 
     [Fact]
