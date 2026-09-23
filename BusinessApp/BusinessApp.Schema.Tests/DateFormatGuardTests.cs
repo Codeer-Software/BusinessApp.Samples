@@ -31,6 +31,7 @@ public class DateFormatGuardTests
     public static TheoryData<string> Tables => new()
     {
         "fiscal_years", "accounting_periods", "journal_entries", "journal_lines", "partner_invoice_registrations",
+        "transition_purchase_rates",
     };
 
     // ------------------------------------------------------------------------------------------
@@ -41,7 +42,7 @@ public class DateFormatGuardTests
     // ------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// <b>CLB が日付欄へ書く形は、12 列とも通る。</b>
+    /// <b>CLB が日付欄へ書く形は、見張っている列すべてで通る。</b>
     /// </summary>
     /// <remarks>
     /// <para><b>CLB は <c>DateOnly</c> を <c>'2023-10-01 00:00:00'</c> と時刻付きで書く</b>
@@ -196,7 +197,7 @@ public class DateFormatGuardTests
     }
 
     /// <summary>
-    /// <b>9 つの列が 1 つ残らず見張られている。</b>
+    /// <b><c>DATE</c> で宣言した列が 1 つ残らず見張られている。</b>
     /// </summary>
     /// <remarks>
     /// <para><b>列を 1 つ書き落としても、他のテストは緑のままである</b>——
@@ -246,14 +247,14 @@ public class DateFormatGuardTests
     }
 
     /// <summary>
-    /// <b>24 か所の条件が、列名を伏せれば 1 字も違わず同じである。</b>
+    /// <b>どの条件も、列名を伏せれば 1 字も違わず同じである。</b>
     /// </summary>
     /// <remarks>
-    /// <para>12 列 × 追加/更新 で 24 か所。<b>1 か所で <c>IS NOT</c> を <c>&lt;&gt;</c> に書き間違えると、
+    /// <para>見張る列 × 追加/更新 の数だけ条件がある。<b>1 か所で <c>IS NOT</c> を <c>&lt;&gt;</c> に書き間違えると、
     /// その列だけが黙って通す</b>——<c>date()</c> が NULL を返す値では比較ごと NULL になり、
     /// <c>WHERE</c> が偽になるからである。<b>いちばん静かな壊れ方</b>で、
     /// 断りのテストを 1 列ぶん書き忘れていたら誰も気づけない。</para>
-    /// <para><b>期待する字を書き写さない。</b> 24 か所が互いに同じであることだけを言う——
+    /// <para><b>期待する字を書き写さない。</b> 互いに同じであることだけを言う——
     /// 正典（011）を直したときに、テストの中の写しだけが古くなることを避ける
     /// （<see cref="MasterCodeGuardTests.トリガ12本は同じ条件を持つ"/> と同じ作り）。</para>
     /// </remarks>
@@ -286,7 +287,7 @@ public class DateFormatGuardTests
     // ------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// <b>年月日として読めない値は、12 列とも断られる。</b>
+    /// <b>年月日として読めない値は、見張っている列すべてで断られる。</b>
     /// </summary>
     /// <remarks>
     /// <para><b>文言を全文で渡す。</b> <c>011</c> は 1 本のトリガの中に列ごとの <c>RAISE</c> を並べてあるので、
@@ -631,6 +632,10 @@ public class DateFormatGuardTests
         ("partner_invoice_registrations", "confirmed_on", "最終確認日", "2026-05-11"),
         ("partner_invoice_registrations", "nta_updated_on", "公表システムの更新年月日", "2026-06-22"),
         ("journal_lines", "tax_point", "課税仕入れの時点", "2026-05-20"),
+        // **種まきの 4 行と重ならない日を使う**（014 の重なりのトリガに当てない）。
+        ("transition_purchase_rates", "valid_from", "有効期間の開始日", "2035-01-01"),
+        ("transition_purchase_rates", "valid_to", "有効期間の終了日", "2035-12-31"),
+        ("transition_purchase_rates", "confirmed_on", "確認日", "2026-09-10"),
     ];
 
     /// <summary>断られるべき値（呼び名と、SQL に置く式）。</summary>
@@ -733,6 +738,12 @@ public class DateFormatGuardTests
                 + " INSERT INTO journal_lines"
                 + " (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id, tax_point)"
                 + $" SELECT MAX(id), 1, 'debit', 1, 100, 1, {values["tax_point"]} FROM journal_entries;",
+            // 制度ルールの行。**他の表を要らない**——外部キーが 1 本も無い。
+            "transition_purchase_rates" =>
+                "INSERT INTO transition_purchase_rates"
+                + " (valid_from, valid_to, rate_percent, version, legal_basis, source_url, confirmed_on)"
+                + $" VALUES ({values["valid_from"]}, {values["valid_to"]}, 80, 'transition_purchase_rate:2035-01-01', '附則 52 ①',"
+                + $" 'https://laws.e-gov.go.jp/law/363AC0000000108', {values["confirmed_on"]});",
             _ => throw new ArgumentOutOfRangeException(nameof(table), table, "日付の列を見張っていない表"),
         };
     }
@@ -754,6 +765,9 @@ public class DateFormatGuardTests
             + " WHERE registration_no = 'T1234567890123';",
         // 検体は ExistingRowFor が先に作る（下書き 1 本と、その 3 行目）。
         "journal_lines" => $"UPDATE journal_lines SET {column} = {value} WHERE line_no = 3;",
+        // 検体は ExistingRowFor が先に作る（1 行だけ）。
+        "transition_purchase_rates" =>
+            $"UPDATE transition_purchase_rates SET {column} = {value} WHERE version = 'transition_purchase_rate:2035-01-01';",
         _ => throw new ArgumentOutOfRangeException(nameof(table), table, "日付の列を見張っていない表"),
     };
 
@@ -778,6 +792,11 @@ public class DateFormatGuardTests
         "partner_invoice_registrations" =>
             "INSERT INTO partner_invoice_registrations (partner_id, registration_no, valid_from)"
             + " VALUES (1, 'T1234567890123', '2023-10-01');",
+        "transition_purchase_rates" =>
+            "INSERT INTO transition_purchase_rates"
+            + " (valid_from, valid_to, rate_percent, version, legal_basis, source_url, confirmed_on)"
+            + " VALUES ('2035-01-01', '2035-12-31', 80, 'transition_purchase_rate:2035-01-01', '附則 52 ①',"
+            + " 'https://laws.e-gov.go.jp/law/363AC0000000108', '2026-09-10');",
         _ => string.Empty,
     };
 

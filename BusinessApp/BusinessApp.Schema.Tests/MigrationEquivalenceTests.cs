@@ -73,6 +73,31 @@ public class MigrationEquivalenceTests
     }
 
     /// <summary>
+    /// <b>ベンダーが配る行（制度ルール）も、再生と正典で一致する。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>制度ルールは行が本体である。</b> 表の形が合っていても、
+    /// <b>配った控除割合が正典と違えば、仕訳の税額が静かに狂う</b>——
+    /// スキーマの同値検査は、そこを 1 つも見ていない。</para>
+    /// <para><b>正典は <c>ddl/ ＋ seed/</c>、再生は <c>baseline ＋ migrations</c> である。</b>
+    /// 新しく作った DB は seed から、既にある DB は配達から行を受け取るので、
+    /// <b>2 つの経路が同じ行に着くこと</b>がここで初めて固定される（ADR-0020 の帰結の宿題）。</para>
+    /// <para><b>空回りしないことも見る。</b> 一覧が空でも、表に 1 行も無くても差は 0 件になる——
+    /// <b>「問題なし」と「見ていない」が同じ顔をする</b>（<c>self-review</c> スキル §9 の 1）。</para>
+    /// </remarks>
+    [Fact]
+    public void ベンダーが配る行も再生と正典で一致する()
+    {
+        using var expected = TestDatabase.CreateWithSeed();
+        using var actual = ReplayBaselinePlusMigrations();
+
+        var canonical = VendorRows.Dump(expected);
+
+        Assert.Empty(VendorRows.Vacuous(canonical));
+        Assert.Empty(VendorRows.Diff(canonical, VendorRows.Dump(actual), "正典(ddl+seed)", "baseline+migrations"));
+    }
+
+    /// <summary>
     /// 作り直しマイグレーション（0004）を<b>データありで</b>再生する。
     /// スキーマの同値テストは空の DB を再生するので、書き戻しの INSERT ... SELECT の列の取り違えや
     /// 採番（sqlite_sequence）の復元漏れを検出できない（2026-08-25 の自己レビューで、

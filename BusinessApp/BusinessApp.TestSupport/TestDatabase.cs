@@ -155,6 +155,11 @@ public static class TestDatabase
         // **規則より前に計上された行が稼働 DB に実在し**（件数と数え方は qa/04）、
         // **それらを取り消せることが免除の根拠**なので、検体が要る（docs/15 §1-2）。
         "trg_journal_entries_partner_presence_when_posted",
+
+        // 期間の重なる制度ルールの行も、正規の経路では作れない。
+        // **取込や直打ちで入りうる**ので、**読み出し側（EffectiveDatedRuleSet）も重なりを拒む**——
+        // その守りを撃つ検体が要る（ADR-0069。守りは DB と読み出しの 2 枚である）。
+        "trg_transition_purchase_rates_no_overlap_insert",
     ];
 
     /// <summary>

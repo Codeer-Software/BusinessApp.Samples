@@ -16,6 +16,7 @@
       -Status  適用済み・未適用・チェックサムの一覧。
       -Verify  稼働 DB の sqlite_master と、正典（ddl/）をインメモリに再生した正解を突き合わせる。
                比較は BusinessApp.SchemaVerifyCli（同値テストと同じ物差し）。
+               **ベンダーが配る行（制度ルール）の中身も突き合わせる**（VendorRows。ADR-0069）。
 
     適用済みマイグレーションの編集はチェックサム（SHA-256。改行は LF に正規化）で機械的に拒む。
     巻き戻し（Down）は作らない。開発中の DB は捨てて作り直す（ADR-0020 §6）。
@@ -116,25 +117,24 @@ function Assert-NotTooOld {
     }
 }
 
-# 稼働 DB のスキーマを正典（ddl/）と突き合わせる。比較は BusinessApp.SchemaVerifyCli
-# （同値テストと同じ物差し）。出力をそのまま流し、終了コード（0 = 一致）を返す。
-function Invoke-SchemaVerify {
+# 検証 CLI（BusinessApp.SchemaVerifyCli）の場所。ビルドしてから返す。
+function Get-VerifyCliDll {
     $cliProject = Join-Path $repoRoot 'BusinessApp/BusinessApp.SchemaVerifyCli/BusinessApp.SchemaVerifyCli.csproj'
     & dotnet build $cliProject --nologo -v q | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'BusinessApp.SchemaVerifyCli のビルドに失敗した。' }
     $cliDll = Join-Path $repoRoot 'BusinessApp/BusinessApp.SchemaVerifyCli/bin/Debug/net8.0/BusinessApp.SchemaVerifyCli.dll'
     if (-not (Test-Path $cliDll)) { throw "ビルドしたのに見つからない: $cliDll" }
+    return $cliDll
+}
 
-    # schema_migrations の除外はテーブルに限る（SchemaSnapshot.FromRows と同じ理由。
-    # 名前だけで除くと同名トリガ等が検査の死角になる）。
-    # rowid 順で取り出す——表ごとのトリガの作られた順（発火順）も CLI が突き合わせる。
-    $live = Invoke-SqlQuery "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND NOT (type = 'table' AND name = 'schema_migrations') ORDER BY rowid;"
-    $rows = if ($live.results[0].rowCount -eq 0) { @() } else { @($live.results[0].rows) }
-    $json = ConvertTo-Json -InputObject $rows -Depth 3
+# 検証 CLI を呼ぶ。標準入力に $Json を流し、出力をそのまま見せ、終了コードを返す。
+function Invoke-VerifyCli {
+    param([string]$CliDll, [string]$Json, [string[]]$CliArgs = @())
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = 'dotnet'
-    $psi.ArgumentList.Add($cliDll)
+    $psi.ArgumentList.Add($CliDll)
+    foreach ($a in $CliArgs) { $psi.ArgumentList.Add($a) }
     $psi.RedirectStandardInput = $true
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
@@ -144,7 +144,7 @@ function Invoke-SchemaVerify {
     $psi.StandardErrorEncoding = [System.Text.UTF8Encoding]::new($false)
 
     $proc = [System.Diagnostics.Process]::Start($psi)
-    $proc.StandardInput.Write($json)
+    $proc.StandardInput.Write($Json)
     $proc.StandardInput.Close()
     $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
     $stderrTask = $proc.StandardError.ReadToEndAsync()
@@ -153,6 +153,62 @@ function Invoke-SchemaVerify {
     if ($stderrTask.Result) { $Host.UI.WriteErrorLine($stderrTask.Result.TrimEnd()) }
     Write-Host $stdoutTask.Result.TrimEnd()
     return $proc.ExitCode
+}
+
+# 稼働 DB のスキーマを正典（ddl/）と突き合わせる。比較は BusinessApp.SchemaVerifyCli
+# （同値テストと同じ物差し）。出力をそのまま流し、終了コード（0 = 一致）を返す。
+function Invoke-SchemaVerify {
+    $cliDll = Get-VerifyCliDll
+
+    # schema_migrations の除外はテーブルに限る（SchemaSnapshot.FromRows と同じ理由。
+    # 名前だけで除くと同名トリガ等が検査の死角になる）。
+    # rowid 順で取り出す——表ごとのトリガの作られた順（発火順）も CLI が突き合わせる。
+    $live = Invoke-SqlQuery "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND NOT (type = 'table' AND name = 'schema_migrations') ORDER BY rowid;"
+    $rows = if ($live.results[0].rowCount -eq 0) { @() } else { @($live.results[0].rows) }
+    $json = ConvertTo-Json -InputObject $rows -Depth 3
+
+    return Invoke-VerifyCli -CliDll $cliDll -Json $json
+}
+
+# **ベンダーが配る行（制度ルール）を正典と突き合わせる**（ADR-0020 の宿題・ADR-0069）。
+#
+# **スキーマの網では足りない。** 制度ルールは行が本体で、**表の形が合っていても
+# 稼働 DB の控除割合が正典と違えば、仕訳の税額が静かに狂う**。
+#
+# **流す SQL は CLI が組む**（--row-sql）——列の並びをここに書き写すと、
+# 列を足した回に写しだけが古くなる。**稼働 DB へ流せるのは sql CLI だけ**なので、
+# 組むのは C#、流すのは PowerShell、突き合わせるのは再び C# になる。
+function Invoke-RowVerify {
+    $cliDll = Get-VerifyCliDll
+
+    # **UTF-8 で読む。** 既定のリダイレクトは OEM コードページ（日本語 Windows では CP932）で読むので、
+    # 表名や列名に CP932 に無い字が入った日に SQL が壊れる。
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = 'dotnet'
+    $psi.ArgumentList.Add($cliDll)
+    $psi.ArgumentList.Add('--row-sql')
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+    $psi.StandardOutputEncoding = [System.Text.UTF8Encoding]::new($false)
+    $psi.StandardErrorEncoding = [System.Text.UTF8Encoding]::new($false)
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $sqlTask = $proc.StandardOutput.ReadToEndAsync()
+    $errTask = $proc.StandardError.ReadToEndAsync()
+    $proc.WaitForExit()
+    if ($proc.ExitCode -ne 0) { throw "--row-sql が失敗した: $($errTask.Result.Trim())" }
+    $sql = $sqlTask.Result.Trim()
+    if (-not $sql) { throw '--row-sql が空を返した。ベンダーが配る行を持つ表が登録されていない可能性がある。' }
+
+    $live = Invoke-SqlQuery $sql
+    $rows = if ($live.results[0].rowCount -eq 0) { @() } else { @($live.results[0].rows) }
+
+    # **0 行でも空文字を流さない。** ConvertTo-Json は空の配列に空文字を返すことがあり、
+    # CLI はそれを「入力不正」として終了コード 2 で返す——**「行が 1 つも無い」は入力不正ではなく
+    # 正典とのずれ**（配り忘れ）なので、そう見えなければならない。
+    $json = if ($rows.Count -eq 0) { '[]' } else { ConvertTo-Json -InputObject $rows -Depth 3 }
+
+    return Invoke-VerifyCli -CliDll $cliDll -Json $json -CliArgs @('--rows')
 }
 
 # 適用済みとして記録された版と、いま手元にあるファイルのずれを報告する。
@@ -320,6 +376,23 @@ switch ($true) {
     $Verify {
         $exitCode = Invoke-SchemaVerify
 
+        # **行も見る。** スキーマが合っていても、配った制度ルールの中身が違えば税額が狂う。
+        # **スキーマのずれがあっても行の検査は流す**——両方まとめて見せたほうが直しが 1 往復で済む。
+        #
+        # **投げさせない。** ここで throw すると、**下の「未適用のマイグレーション」と
+        # 「適用済みのチェックサム」の検査に到達しない**——このブランチを取り込んだ直後の DB
+        # （表がまだ無い）では、出るべき「未適用が N 本ある」の代わりに生の SQL エラーが出る。
+        # **「行の検査を流せなかった」も NG の理由の 1 つ**として数え、残りは必ず出し切る。
+        $rowExitCode = 0
+        try {
+            $rowExitCode = Invoke-RowVerify
+        } catch {
+            Write-Host "行の検査を流せなかった: $($_.Exception.Message)"
+            $rowExitCode = 2
+        }
+        # **2（見られなかった）は 1（ずれていた）より強い。** 同じ顔にしない。
+        if ($rowExitCode -gt $exitCode) { $exitCode = $rowExitCode }
+
         # スキーマ比較は「適用忘れの DML マイグレーション」を検出できない（sqlite_master に痕跡が
         # 無いため）。採用済みなら未適用が残っていないことも検査に含める。
         if (Test-Adopted) {
@@ -351,7 +424,7 @@ switch ($true) {
             Write-Host '（この DB はまだ採用されていない。適用状況の検査はしていない）'
         }
 
-        if ($exitCode -ne 0) { Write-Host 'migrate.ps1 -Verify: NG（上の行が理由。同値・未適用・適用済みのチェックサムの 3 つを見ている）' }
+        if ($exitCode -ne 0) { Write-Host 'migrate.ps1 -Verify: NG（上の行が理由。同値・ベンダーが配る行・未適用・適用済みのチェックサムの 4 つを見ている）' }
         exit $exitCode
     }
 }

@@ -1,5 +1,7 @@
 namespace BusinessApp.AccountingCore.Tests.ConsumptionTax;
 
+using System.Globalization;
+
 using BusinessApp.AccountingCore.ConsumptionTax;
 using BusinessApp.AccountingCore.Shared;
 using BusinessApp.AccountingCore.Tests.Fixtures;
@@ -29,7 +31,6 @@ public class TransitionalDeductionRateTests
     [InlineData("2030-09-30", 0.50)]
     [InlineData("2030-10-01", 0.30)]
     [InlineData("2031-09-30", 0.30)]
-    [InlineData("2031-10-01", 0.00)]
     public void 控除割合は課税仕入れを行った日で決まる(string taxPoint, double expected)
     {
         var rate = Rules.ResolveAt(DateOnly.Parse(taxPoint));
@@ -38,10 +39,24 @@ public class TransitionalDeductionRateTests
         Assert.Equal((decimal)expected, rate.Ratio);
     }
 
-    [Fact]
-    public void 経過措置の開始前は割合が引けない()
+    /// <summary>
+    /// <b>経過措置の外では割合が引けない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>始まる前と終わった後を、同じ形で表す</b>（ddl/014・docs/11 §5-1）。
+    /// <b>2026-09-23 まで、終わった後だけ 0% の行を置いていた</b>——
+    /// 同じ「経過措置は適用されない」を 2 通りで表しており、
+    /// <b>0% の行は「経過措置を 0% で適用する」と読める</b>（帳簿に旨が立ち、上限の累計にも入る）。</para>
+    /// <para><b>引けなかったことを「経過措置なし＝全額控除」と読まない。</b>
+    /// 未登録の相手からの課税仕入れは、経過措置が無ければ控除できない——
+    /// <b>計上の関門が止める</b>（docs/11 §5-3）。</para>
+    /// </remarks>
+    [Theory]
+    [InlineData("2023-09-30")]  // 五年施行日の前日
+    [InlineData("2031-10-01")]  // 経過措置の最終日の翌日
+    public void 経過措置の外では割合が引けない(string taxPoint)
     {
-        Assert.Null(Rules.ResolveAt(new DateOnly(2023, 9, 30)));
+        Assert.Null(Rules.ResolveAt(DateOnly.Parse(taxPoint, CultureInfo.InvariantCulture)));
     }
 
     /// <summary>
@@ -82,15 +97,6 @@ public class TransitionalDeductionRateTests
         Assert.Equal(Yen.From(expected), rate.Apply(Yen.From(7_777), mode));
     }
 
-    [Fact]
-    public void 経過措置の終了後は控除額が零になる()
-    {
-        var rate = Rules.ResolveAt(new DateOnly(2031, 10, 1));
-
-        Assert.NotNull(rate);
-        Assert.Equal(Yen.Zero, rate.Apply(Yen.From(7_777), RoundingMode.Truncate));
-    }
-
     /// <summary>
     /// I-16。令和 8 年度改正で 2026-10-01 以後の割合は 50%→70% に変わったが、
     /// <b>版で引けば改正前の割合が再現できる</b>。過去の仕訳を再計算しないための土台。
@@ -105,16 +111,28 @@ public class TransitionalDeductionRateTests
         Assert.Equal(0.70m, Rules.ResolveAt(new DateOnly(2026, 10, 1))!.Ratio);
     }
 
+    /// <summary>
+    /// <b>経過措置の窓が、両端とも閉じていて 1 日も欠けていない。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>配った行そのものを見ている</b>（<see cref="StatutoryData"/> は seed を読む）。
+    /// <b>1 行足りなければここが赤くなる</b>——稼働 DB から行が消える事故は
+    /// <c>migrate.ps1 -Verify</c> が捕まえるが、<b>seed と配達が最初から 1 行足りない</b>場合は
+    /// 同値検査では捕まらない（どちらも同じだけ足りないので）。</para>
+    /// <para><b>窓の両端を字で書く。</b> 連続だけを見ると、窓ごと別の年へずらしても緑のまま通る。</para>
+    /// </remarks>
     [Fact]
-    public void 制度ルールは有効期間の隙間なく定義されている()
+    public void 経過措置の窓は両端が閉じていて隙間が無い()
     {
-        // 2023-10-01 から終期なしまで、1 日も欠けずに割合が引けること。
         var rules = Rules.Rules;
+
+        Assert.Equal(new DateOnly(2023, 10, 1), rules[0].Period.From);
+        Assert.Equal(new DateOnly(2031, 9, 30), rules[^1].Period.To);
+        Assert.All(rules, rule => Assert.NotNull(rule.Period.To));
+
         foreach (var (earlier, later) in rules.Zip(rules.Skip(1)))
         {
             Assert.Equal(earlier.Period.To!.Value.AddDays(1), later.Period.From);
         }
-
-        Assert.Null(rules[^1].Period.To);
     }
 }

@@ -12,16 +12,39 @@ public class SchemaShapeTests
         "company_profile", "fiscal_years", "accounting_periods", "tax_categories",
         "accounts", "sub_accounts", "departments", "partners", "partner_invoice_registrations",
         "journal_entries", "journal_lines", "journal_entry_sequences",
+        "transition_purchase_rates",
     ];
 
+    /// <summary>
+    /// 正典の DDL にあるが、<b>この検査の管轄外</b>の表。
+    /// </summary>
+    /// <remarks>
+    /// <c>app_users</c> は<b>認証部品のもの</b>で、本体は CLB が作る——役割の列だけを間借りしている
+    /// （<see href="../../../docs/decisions/0032-認証部品のapp_usersを正典に迎え入れる.md">ADR-0032</see>）。
+    /// <b>下の検査（主キーの形・監査列・論理削除列）を当てる相手ではない。</b>
+    /// </remarks>
+    private static readonly string[] ForeignComponentTables = ["app_users"];
+
+    /// <summary>
+    /// <b>DDL 一式が適用でき、この一覧が正典の表とちょうど同じである。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>片側だけを見ない。</b> 「一覧に書いた表が実在するか」しか見ていなかったので、
+    /// <b>表を足しても一覧に足し忘れれば赤くならず</b>、その表は下の検査
+    /// （主キーの形・論理削除列の不在・<b>他部品のテーブルを参照しないこと</b>・日付列の宣言型）
+    /// から丸ごと外れていた（2026-09-23 の自己レビューで、<c>transition_purchase_rates</c> が実際にそうなっていた）。
+    /// </remarks>
     [Fact]
-    public void DDL一式が適用できる()
+    public void DDL一式が適用でき一覧は正典の表と同じである()
     {
         using var db = TestDatabase.Create();
 
-        var tables = TestDatabase.Query(db, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'");
+        var tables = TestDatabase.Query(
+            db, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'");
 
-        Assert.All(BusinessTables, table => Assert.Contains(table, tables));
+        Assert.Equal(
+            BusinessTables.Concat(ForeignComponentTables).OrderBy(name => name, StringComparer.Ordinal),
+            tables.OrderBy(name => name, StringComparer.Ordinal));
     }
 
     [Fact]

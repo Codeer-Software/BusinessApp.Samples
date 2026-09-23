@@ -3,7 +3,7 @@ title: ddl — スキーマ定義
 status: current
 scope: 会計コア
 audience: [開発]
-updated: 2026-09-21
+updated: 2026-09-23
 supersedes: []
 related: [../Project.md, ../../docs/10_会計ドメイン設計.md, ../../docs/12_マスタ台帳.md, ../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md]
 ---
@@ -61,9 +61,10 @@ dotnet test BusinessApp.slnx
 | 008 | [`008_master_code_format.sql`](008_master_code_format.sql) | **マスタのコードの書式**（6 つの表に同じ規則。docs/12 §2-1・[ADR-0047](../../docs/decisions/0047-マスタのコードは空白を落とす以外書き換えず字種で断る.md)）。**1 ファイルにまとめてあるのはトリガの作られる順のため**——表の定義の隣に置くと、既存 DB へ配る側で 005 のトリガより後になり、正典と順が食い違う |
 | 009 | [`009_partner_meaning.sql`](009_partner_meaning.sql) | **使用中の取引先はコードを変えられない**（会計コアの 4 マスタと揃える。[ADR-0047](../../docs/decisions/0047-マスタのコードは空白を落とす以外書き換えず字種で断る.md) の決定 9）。**取引先だけは伝票（`journal_entries.partner_id`）も見る**——明細が空なら伝票の値が実効値になるから |
 | 010 | [`010_natural_key_text.sql`](010_natural_key_text.sql) | **自然キーになる列に BLOB を入れさせない**（`partners.corporate_number`・`app_users.user_name`）。**BLOB は TEXT の列にそのまま残り、`'admin'` とぶつからない**——008 でコードの 6 表を塞いだのと同じ穴 |
-| 011 | [`011_date_format.sql`](011_date_format.sql) | **日付の列は年月日として読める値だけを受け取る**（5 表 12 列）。**1 ファイルにまとめてあるのは 008 と同じくトリガの作られる順のため**——`fiscal_years` は 008 にトリガを持つので 002 の末尾には置けない |
+| 011 | [`011_date_format.sql`](011_date_format.sql) | **日付の列は年月日として読める値だけを受け取る**（`DATE` で宣言した列すべて。**011 の時点であった 5 表**。後から生まれた表はその表のファイルが持つ）。**1 ファイルにまとめてあるのは 008 と同じくトリガの作られる順のため**——`fiscal_years` は 008 にトリガを持つので 002 の末尾には置けない |
 | 012 | [`012_text_length.sql`](012_text_length.sql) | **マスタと取引先の文字の欄に上限を置く**（5 表 8 列。docs/12 §2-2）。**1 ファイルにまとめてあるのは 008・011 と同じくトリガの作られる順のため**。**数えられない値（BLOB・NUL を含む TEXT・壊れた UTF-8）は長さより先に断る** |
 | 013 | [`013_journal_text_length.sql`](013_journal_text_length.sql) | **伝票の摘要と明細の内容に上限を置く**（2 表 2 列。docs/10 §4-2-1）。**012 と条件の骨格はまったく同じ**で、`FieldLengthConsistencyTests` が 20 本を突き合わせる。**別のファイルにしてあるのは決めた文書が違うから**である |
+| 014 | [`014_transition_rates.sql`](014_transition_rates.sql) | **経過措置の控除割合**（制度ルール。行までベンダーが配る——[ADR-0069](../../docs/decisions/0069-制度ルールは値の種類ごとに表を分け有効期間と法源を行が持つ.md)） |
 
 各テーブルの扱い（所有・誰が編集するか・版と削除）は [docs/12_マスタ台帳](../../docs/12_マスタ台帳.md) が持つ。
 
@@ -122,7 +123,7 @@ dotnet test BusinessApp.slnx
 | 使用中の科目で「取引先を要する」をオフにできない（[15 §1-2](../../docs/15_記帳の枠組み.md)。**一方通行**。オンはいつでも通る。**使用中になるまでは働かない**——残余は 15 §1-2） | `BEFORE UPDATE OF requires_partner` のトリガ（`OLD = 1 AND NEW = 0` のときだけ鳴る） | `MasterMeaningGate` の一方通行の列 |
 | マスタのコードの書式（[docs/12 §2-1](../../docs/12_マスタ台帳.md)・[ADR-0047](../../docs/decisions/0047-マスタのコードは空白を落とす以外書き換えず字種で断る.md)） | 6 表の `BEFORE INSERT` / `BEFORE UPDATE OF code` トリガ（**`CHECK` ではない**——後から足すには表の作り直しが要る）。**大小を無視した重複は `UNIQUE ... COLLATE NOCASE` の索引** | `MasterCode`（**前後の空白を落とすのはこちらだけ**。トリガは落とした後の姿を見る） |
 | 単一法人（[ADR-0005](../../docs/decisions/0005-単一法人に徹する.md)） | `CHECK (id = 1)` | — |
-| **日付の列は年月日として読める値だけを受け取る**（5 表 12 列。[011](011_date_format.sql)） | `BEFORE INSERT` / `BEFORE UPDATE OF <列>` のトリガ（**`CHECK` ではない**——後から足すには表の作り直しが要る）。**NULL は通す** | `DbValue.ParseDateTime`（**読み出しの側**。5 書式の `TryParseExact`）。**受理する集合は両側で同じでなければならない**——DB が広いと、読んだ瞬間に落ちる行が作れる（`DateFormatGuardTests` が毎回突き合わせる） |
+| **日付の列は年月日として読める値だけを受け取る**（`DATE` で宣言した列すべて。[011](011_date_format.sql) ＋後から生まれた表のファイル） | `BEFORE INSERT` / `BEFORE UPDATE OF <列>` のトリガ（**`CHECK` ではない**——後から足すには表の作り直しが要る）。**NULL は通す** | `DbValue.ParseDateTime`（**読み出しの側**。5 書式の `TryParseExact`）。**受理する集合は両側で同じでなければならない**——DB が広いと、読んだ瞬間に落ちる行が作れる（`DateFormatGuardTests` が毎回突き合わせる） |
 | **文字の欄の上限**（7 表 10 列。[012](012_text_length.sql)・[013](013_journal_text_length.sql)。[docs/12 §2-2](../../docs/12_マスタ台帳.md)・[docs/10 §4-2-1](../../docs/10_会計ドメイン設計.md)） | `BEFORE INSERT` / `BEFORE UPDATE OF <列>` のトリガ。**`LENGTH()` は符号点で数える**ので、**数えられない値は別の文言で断る**——BLOB（`typeof`）・**NUL を含む TEXT（`instr(CAST(x AS BLOB), x'00')`）**・壊れた UTF-8（`バイト数 > 4 × 符号点`）。**NUL をバイト数の比で探そうとして穴が開いた**（[qa/03 の L-48](../../docs/qa/03_テストで漏らした実例.md)）。**NULL は通す** | `MasterTextLength`（マスタと取引先）と `JournalLineRules`（伝票）——**関門が本体**。`string.Length` ではなく符号点で数えて DB と揃え、**U+0000 も同じように断る**。**定数を 2 つに分けてあるのは、決めた文書も動く理由も違うから**である。**上限の数は C#・DDL・デザインの 3 か所にあり、`FieldLengthConsistencyTests` が毎回突き合わせる** |
 | **名寄せの親は自分自身でない**（[ADR-0028](../../docs/decisions/0028-名寄せの親は同一人格の表明であり深さ1に固定する.md)） | `CHECK (parent_partner_id IS NULL OR parent_partner_id <> id)`。**断りが日本語でない**——`CHECK constraint failed: …` がそのまま出る（画面からは先に保存の関門が断るので、ここまで届かない。2026-09-20 に実測）。**実測したのはこの 1 件で、他の `CHECK` も同じはずだが確かめていない** | `PartnerSubmitGate` |
 | **名寄せの親は親を持たない（深さ 1 の森）**（同上） | `partners` の `BEFORE INSERT` / `BEFORE UPDATE OF parent_partner_id` トリガ 2 本（子を持つ行に親を付けることも拒む） | `PartnerSubmitGate` |

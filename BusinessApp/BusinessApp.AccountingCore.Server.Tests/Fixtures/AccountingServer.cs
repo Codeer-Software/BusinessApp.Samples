@@ -648,6 +648,10 @@ internal sealed class AccountingServer : IDisposable
 
     public void Execute(string sql) => TestDatabase.Execute(connection, sql);
 
+    /// <summary>許可表に載っているトリガを外して <paramref name="sql"/> を流し、必ず貼り直す。</summary>
+    public void WithoutTrigger(string triggerName, string sql)
+        => TestDatabase.WithoutTrigger(connection, triggerName, sql);
+
     public T Scalar<T>(string sql) => TestDatabase.ScalarOf<T>(connection, sql);
 
     public string Text(long value) => value.ToString(CultureInfo.InvariantCulture);
