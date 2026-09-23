@@ -19,10 +19,73 @@ using BusinessApp.TestSupport;
 
 Console.OutputEncoding = Encoding.UTF8;
 
+// **掃引の環境変数が立ったまま本番の検証に使わない。** TestDatabase.Create() はそれを見て
+// **制約を 1 つ外した DB を作る**ので、立っていると「正典」がその欠けた姿になる（qa/03 の型）。
+if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SCHEMA_KNOCKOUT")))
+{
+    Console.Error.WriteLine(
+        "SCHEMA_KNOCKOUT が立っている。制約を外した DB を正典として比べることになるので止める。");
+    return 2;
+}
+
+// **知らない引数を黙って無視しない。** 無視すると、`--rows` の綴り違いが
+// **スキーマ比較の入力として読まれ**、`--row-sql` の綴り違いは**標準入力を待って止まる**。
+var known = new[] { "--row-sql", "--rows" };
+var unknown = args.Where(arg => !known.Contains(arg, StringComparer.Ordinal)).ToList();
+if (unknown.Count > 0)
+{
+    Console.Error.WriteLine($"知らない引数: {string.Join(" ", unknown)}");
+    Console.Error.WriteLine("使い方: （引数なし）スキーマ比較 / --row-sql 行を取り出す SQL / --rows 行の比較");
+    return 2;
+}
+
+// **行の同値検査**（ADR-0020 の宿題・ADR-0069）。スキーマとは別の口にする——
+// **稼働 DB へ SQL を流せるのは PowerShell（sql CLI）だけ**なので、
+// C# 側は「流す SQL を組む」と「返ってきた行を突き合わせる」の 2 つだけを持つ。
+if (args.Contains("--row-sql", StringComparer.Ordinal))
+{
+    using var schema = TestDatabase.Create();
+    Console.WriteLine(VendorRows.DumpSql(schema));
+    return 0;
+}
+
 string input;
 using (var reader = new StreamReader(Console.OpenStandardInput(), Encoding.UTF8))
 {
     input = reader.ReadToEnd();
+}
+
+if (args.Contains("--rows", StringComparer.Ordinal))
+{
+    List<LiveVendorRow>? live;
+    try
+    {
+        live = JsonSerializer.Deserialize<List<LiveVendorRow>>(
+            input, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+    }
+    catch (JsonException e)
+    {
+        Console.Error.WriteLine($"標準入力を行の JSON 配列として読めない: {e.Message}");
+        return 2;
+    }
+
+    if (live is null)
+    {
+        Console.Error.WriteLine("標準入力が空である。行の JSON 配列を流し込むこと。");
+        return 2;
+    }
+
+    using var canonicalWithSeed = TestDatabase.CreateWithSeed();
+
+    // **判定も報告も VendorRows が持つ**（検体が字ごと固定している）。ここは印字するだけである。
+    var (exitCode, lines) = VendorRows.Report(
+        VendorRows.Dump(canonicalWithSeed), live.Select(row => row.Row));
+    foreach (var line in lines)
+    {
+        Console.WriteLine(line);
+    }
+
+    return exitCode;
 }
 
 List<LiveRow>? rows;
@@ -93,3 +156,6 @@ internal sealed record LiveRow(
     string Name,
     [property: JsonPropertyName("tbl_name")] string TblName,
     string? Sql);
+
+/// <summary>稼働 DB から取り出したベンダー行（1 行 1 テキスト）。</summary>
+internal sealed record LiveVendorRow(string Row);

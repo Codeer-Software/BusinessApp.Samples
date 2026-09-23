@@ -25,6 +25,28 @@ public class SeedDataTests
         Assert.Equal(6L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM departments"));
         Assert.Equal(10L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM tax_categories"));
         Assert.Equal(105L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounts"));
+        Assert.Equal(4L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM transition_purchase_rates"));
+    }
+
+    /// <summary>
+    /// <b>005 だけは二度流せる</b>（各 INSERT が <c>NOT EXISTS</c> で包んである）。
+    /// </summary>
+    /// <remarks>
+    /// <b>他の 4 本は二度流せない</b>（下の「初期データは二度流せない」）。
+    /// 005 は<b>ベンダーが配る行</b>なので、<b>配達（migrations）と同じ字で二度当たっても増えてはならない</b>。
+    /// </remarks>
+    [Fact]
+    public void 制度ルールの初期データは二度流しても増えない()
+    {
+        using var db = TestDatabase.CreateWithSeed();
+        var before = VendorRows.Dump(db);
+
+        TestDatabase.Execute(
+            db,
+            File.ReadAllText(TestDatabase.SeedFiles()
+                .Single(file => Path.GetFileName(file).StartsWith("005_", StringComparison.Ordinal))));
+
+        Assert.Equal(before, VendorRows.Dump(db));
     }
 
     /// <summary>
