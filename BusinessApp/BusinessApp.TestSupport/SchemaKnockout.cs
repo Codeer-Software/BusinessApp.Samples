@@ -88,7 +88,7 @@ public static class SchemaKnockout
             ["SchemaKnockoutTests"] =
                 "計器そのもののテスト。外した点を自分で組み立てて確かめるので、見張りの証拠にならない",
             ["SchemaShapeTests"] =
-                "sqlite_master と pragma_* でスキーマの形を読む。トリガ 26 本の名前の実在を表明しており、"
+                "sqlite_master と pragma_* でスキーマの形を読む。計上済みを守るトリガの名前の実在を表明しており、"
                 + "どれを外しても振る舞いと無関係に赤くなる",
             ["TextLengthGuardTests.トリガは母数のぶんだけある"] =
                 "文字の欄のトリガの名前と本数を sqlite_master から数える（数はここに書かない）。"
@@ -103,10 +103,12 @@ public static class SchemaKnockout
             ["JournalDescriptionGuardTests.トリガが空とみなす字は_char_IsWhiteSpace_と過不足なく一致する"] =
                 "トリガの定義文を読む",
             ["DateFormatGuardTests.日付の列を持つ表すべてに追加と更新のトリガがある"] =
-                "date_format のトリガ 10 本の名前の実在を表明する",
+                "date_format のトリガの名前と本数を sqlite_master から数える（数はここに書かない）",
             ["DateFormatGuardTests.DATEで宣言した列は1つ残らず見張られている"] =
                 "トリガの定義文から date(NEW.…) の列名を拾う",
             ["DateFormatGuardTests.条件はどこも同じ字である"] = "トリガの定義文を読む",
+            ["TaxRateConstraintTests.税率区分の値は税区分マスタと同じ3つである"] =
+                "2 つの表の rate_kind の CHECK を定義文から読んで突き合わせる。どちらを外しても読めなくなる",
         };
 
     /// <summary>

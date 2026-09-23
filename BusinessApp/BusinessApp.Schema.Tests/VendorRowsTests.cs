@@ -153,7 +153,7 @@ public class VendorRowsTests
         Assert.Empty(rows);
         Assert.Empty(VendorRows.Diff(rows, VendorRows.Dump(empty), "正典", "稼働 DB"));
         Assert.Equal(
-            ["行が 1 つも取れていない表がある: transition_purchase_rates"],
+            ["行が 1 つも取れていない表がある: transition_purchase_rates tax_rates"],
             VendorRows.Vacuous(rows));
     }
 
@@ -170,7 +170,6 @@ public class VendorRowsTests
     /// <b>監査列を NULL にしても、行は取れたままである。</b>
     /// </summary>
     /// <remarks>
-    /// 比べる列はすべて NOT NULL なので、NULL を作れるのは監査列だけである。
     /// <b>監査列は比べないので、NULL にしても取り出しは 1 行も減ってはならない</b>——
     /// 減るということは、比べる列の選び方が間違っているということである。
     /// </remarks>
@@ -190,25 +189,19 @@ public class VendorRowsTests
     /// </summary>
     /// <remarks>
     /// <c>COALESCE</c> を書き落とすと、<b>NULL を含む行は連結ごと NULL になって行そのものが取れなくなる</b>
-    /// ——差ではなく「行が消えた」に化ける。<b>いまの表は比べる列が全部 NOT NULL なので、
-    /// 本番の表では一度も通らない枝である</b>——だから <b>NULL 可の列を持つ表を検体側で作って撃つ</b>。
+    /// ——差ではなく「行が消えた」に化ける。
+    /// <b>2026-09-23 まで、この枝は本番の表では一度も通らなかった</b>（比べる列が全部 NOT NULL だった）が、
+    /// <b>税率の表の <c>valid_to</c> が NULL 可になり、配る 3 行すべてが NULL になった</b>
+    /// ——いまは本物の表で毎回通る。
     /// </remarks>
     [Fact]
     public void NULLは印を付けて残す()
     {
-        using var db = TestDatabase.Create();
+        using var db = TestDatabase.CreateWithSeed();
 
-        TestDatabase.Execute(
-            db,
-            "CREATE TABLE probe_rules (id INTEGER PRIMARY KEY AUTOINCREMENT, note TEXT);"
-            + " INSERT INTO probe_rules (note) VALUES (NULL);");
-
-        Assert.Equal(
-            ["probe_rules | note=(null)"],
-            TestDatabase.Query(
-                db,
-                "SELECT 'probe_rules | note=' || COALESCE(CAST(note AS TEXT), '(null)') AS row"
-                + " FROM probe_rules ORDER BY 1;"));
+        Assert.All(
+            VendorRows.Dump(db).Where(row => row.StartsWith("tax_rates |", StringComparison.Ordinal)),
+            row => Assert.Contains("valid_to=(null)", row, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -229,7 +222,7 @@ public class VendorRowsTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal(
-            ["一致: ベンダーが配る行は正典と同値である（transition_purchase_rates。4 行）。"],
+            ["一致: ベンダーが配る行は正典と同値である（transition_purchase_rates・tax_rates。7 行）。"],
             lines);
     }
 
@@ -268,7 +261,7 @@ public class VendorRowsTests
         var (exitCode, lines) = VendorRows.Report(rows, rows);
 
         Assert.Equal(1, exitCode);
-        Assert.Equal(["行が 1 つも取れていない表がある: transition_purchase_rates"], lines);
+        Assert.Equal(["行が 1 つも取れていない表がある: transition_purchase_rates tax_rates"], lines);
     }
 
     /// <summary>期待する行の字。</summary>

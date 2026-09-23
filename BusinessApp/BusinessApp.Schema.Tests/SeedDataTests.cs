@@ -1,5 +1,7 @@
 namespace BusinessApp.Schema.Tests;
 
+using System.Text.RegularExpressions;
+
 using BusinessApp.Partners;
 using BusinessApp.TestSupport;
 
@@ -26,27 +28,64 @@ public class SeedDataTests
         Assert.Equal(10L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM tax_categories"));
         Assert.Equal(105L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounts"));
         Assert.Equal(4L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM transition_purchase_rates"));
+        Assert.Equal(3L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM tax_rates"));
+    }
+
+    /// <summary>ベンダーが配る表。<b>母数は <see cref="VendorRows.Tables"/> が持つ。</b></summary>
+    public static TheoryData<string> VendorTables()
+    {
+        var data = new TheoryData<string>();
+        foreach (var table in VendorRows.Tables)
+        {
+            data.Add(table);
+        }
+
+        return data;
     }
 
     /// <summary>
-    /// <b>005 だけは二度流せる</b>（各 INSERT が <c>NOT EXISTS</c> で包んである）。
+    /// <b>ベンダーが配る行は、二度流しても増えない</b>（各 INSERT が <c>NOT EXISTS</c> で包んである）。
     /// </summary>
     /// <remarks>
-    /// <b>他の 4 本は二度流せない</b>（下の「初期データは二度流せない」）。
-    /// 005 は<b>ベンダーが配る行</b>なので、<b>配達（migrations）と同じ字で二度当たっても増えてはならない</b>。
+    /// <b>他の初期データは二度流せない</b>（下の「初期データは二度流せない」）。
+    /// これらは<b>ベンダーが配る行</b>なので、<b>配達（migrations）と同じ字で二度当たっても増えてはならない</b>。
+    /// <b>母数は <see cref="VendorRows.Tables"/> から採り、ファイルの番号を手で並べない</b>——
+    /// 並べると、<b>表を足した回に足し忘れても赤くならず、その表の冪等は誰も流さないまま残る</b>
+    /// （2026-09-23 の自己レビュー。一度その形で書いた）。
+    /// <b>その表へ INSERT している seed ファイルが無ければ、<see cref="SeedFileFor"/> が投げる。</b>
     /// </remarks>
-    [Fact]
-    public void 制度ルールの初期データは二度流しても増えない()
+    [Theory]
+    [MemberData(nameof(VendorTables))]
+    public void ベンダーが配る行は二度流しても増えない(string table)
     {
         using var db = TestDatabase.CreateWithSeed();
         var before = VendorRows.Dump(db);
 
-        TestDatabase.Execute(
-            db,
-            File.ReadAllText(TestDatabase.SeedFiles()
-                .Single(file => Path.GetFileName(file).StartsWith("005_", StringComparison.Ordinal))));
+        TestDatabase.Execute(db, File.ReadAllText(SeedFileFor(table)));
 
         Assert.Equal(before, VendorRows.Dump(db));
+    }
+
+    /// <summary>その表へ INSERT している seed ファイル。<b>無ければ投げる。</b></summary>
+    /// <remarks>
+    /// <b>表の名前は正規表現で採る</b>——<c>"INSERT INTO "</c> の残りをそのまま表名にすると、
+    /// <c>INSERT INTO tax_rates (rate_kind, …)</c> と 1 行に書いた日に
+    /// <c>"tax_rates (rate_kind,"</c> が表名になる（<see cref="VendorRowsTests"/> と同じ採り方に揃えた）。
+    /// </remarks>
+    private static string SeedFileFor(string table)
+    {
+        var pattern = new Regex(@"INSERT\s+INTO\s+(\w+)", RegexOptions.CultureInvariant);
+        var files = TestDatabase.SeedFiles()
+            .Where(file => pattern.Matches(File.ReadAllText(file))
+                .Any(match => string.Equals(match.Groups[1].Value, table, StringComparison.Ordinal)))
+            .ToList();
+
+        Assert.True(
+            files.Count == 1,
+            $"{table} へ INSERT している初期データのファイルが 1 本でない（{files.Count} 本）。"
+            + "ベンダーが配る表には、冪等な初期データを 1 本置くこと。");
+
+        return files[0];
     }
 
     /// <summary>

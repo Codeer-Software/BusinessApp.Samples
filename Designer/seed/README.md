@@ -31,20 +31,21 @@ pwsh -NoProfile -File tools/clb/sql.ps1 -File Designer/seed/001_organization_and
 | 003 | [`003_tax_categories.sql`](003_tax_categories.sql) | 税区分 10 件 |
 | 004 | [`004_accounts.sql`](004_accounts.sql) | 勘定科目 105 件・既定税区分 |
 | 005 | [`005_transition_rates.sql`](005_transition_rates.sql) | **経過措置の控除割合 4 行**（制度ルール。**性質が違う**——下の節） |
+| 006 | [`006_tax_rates.sql`](006_tax_rates.sql) | **税率 3 行**（制度ルール。005 と同じ性質——下の節） |
 
 各マスタの扱い（所有・誰が編集するか・版と削除）は [docs/12_マスタ台帳](../../docs/12_マスタ台帳.md) が持つ。
 
-### 005 だけは「利用者が直さない行」である
+### 005・006 は「利用者が直さない行」である
 
 **001〜004 は「利用者が後から直すマスタの初期値」**で、
 **流したあとに利用者が足しても消しても、それが正しい状態**である。
-**005 の 4 行はベンダーが配り、利用者は 1 文字も直さない**（[ADR-0020](../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)・[ADR-0069](../../docs/decisions/0069-制度ルールは値の種類ごとに表を分け有効期間と法源を行が持つ.md)）。
-**だから 005 の行だけは、機械が中身まで見ている**——`VendorRows`（`MigrationEquivalenceTests` と `migrate.ps1 -Verify`）。
+**005 の 4 行と 006 の 3 行はベンダーが配り、利用者は 1 文字も直さない**（[ADR-0020](../../docs/decisions/0020-スキーマは現在形の正典で持ち変更は差分で配る.md)・[ADR-0069](../../docs/decisions/0069-制度ルールは値の種類ごとに表を分け有効期間と法源を行が持つ.md)）。
+**だから 005・006 の行だけは、機械が中身まで見ている**——`VendorRows`（`MigrationEquivalenceTests` と `migrate.ps1 -Verify`）。
 **見る表の一覧は `BusinessApp.TestSupport/VendorRows.cs` が持つ**（ここに写さない）。
 
-**005 だけは冪等である**（各 INSERT が `NOT EXISTS` で包んである）——**他の 4 本は二度流せない**（`SeedDataTests` の「初期データは二度流せない」）。
+**005・006 だけは冪等である**（各 INSERT が `NOT EXISTS` で包んである）——**他の 4 本は二度流せない**（`SeedDataTests` の「初期データは二度流せない」）。
 
-**既にある DB へは seed ではなくマイグレーションで届く**（`migrations/0040`〜）。
+**既にある DB へは seed ではなくマイグレーションで届く**（`migrations/0040`・`0043`）。
 **2 つの経路が同じ行に着くこと**を、上の網が固定している。
 
 税区分（003）を勘定科目（004）より先に流す。勘定科目が既定税区分を参照するためである。

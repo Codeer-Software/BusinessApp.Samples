@@ -32,7 +32,7 @@ public static class VendorRows
     /// 迷ったら載せない——<b>載せ忘れは「見ていない」だが、載せ過ぎは「正常な運用で赤くなる」</b>で、
     /// 後者は網そのものを無視させる。
     /// </remarks>
-    public static IReadOnlyList<string> Tables { get; } = ["transition_purchase_rates"];
+    public static IReadOnlyList<string> Tables { get; } = ["transition_purchase_rates", "tax_rates"];
 
     /// <summary>比べない列（代理キーと監査列）。</summary>
     public static IReadOnlyCollection<string> IgnoredColumns { get; } =

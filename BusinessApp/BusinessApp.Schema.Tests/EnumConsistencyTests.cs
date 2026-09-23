@@ -28,7 +28,12 @@ public class EnumConsistencyTests
         // 表示名                      DDL の 列                              CLB の enum          C# の型
         { "科目区分",                  "accounts.category",                   "AccountCategories", "BusinessApp.AccountingCore.Accounts.AccountCategory" },
         { "課税区分",                  "tax_categories.taxation_type",        "TaxationTypes",     null },
-        { "税率区分",                  "tax_categories.rate_kind",            "RateKinds",         null },
+        { "税率区分",                  "tax_categories.rate_kind",            "RateKinds",         "BusinessApp.AccountingCore.ConsumptionTax.TaxRateKind" },
+        // **同じ語彙を 2 つの表が別々に宣言している。** 税区分マスタが「この行はどの区分か」を、
+        // 税率の表が「その区分は何 % か」を持つ（docs/11 §1-1）。
+        // **2 つの CHECK が同じ字であることは TaxRateConstraintTests が別に見る**——
+        // ここが見るのは「DDL と CLB と C# の 3 者が同じ値を持つ」ことである。
+        { "税率区分（税率の表）",       "tax_rates.rate_kind",                 "RateKinds",         "BusinessApp.AccountingCore.ConsumptionTax.TaxRateKind" },
         { "用途区分（税区分の初期値）", "tax_categories.default_tax_treatment", "TaxTreatments",     "BusinessApp.AccountingCore.ConsumptionTax.TaxTreatment" },
         { "用途区分（仕訳明細）",       "journal_lines.tax_treatment",         "TaxTreatments",     "BusinessApp.AccountingCore.ConsumptionTax.TaxTreatment" },
         { "締めの状態（会計年度）",     "fiscal_years.status",                 "PeriodStatuses",    "BusinessApp.AccountingCore.Periods.PeriodStatus" },

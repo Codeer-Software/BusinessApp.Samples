@@ -43,8 +43,17 @@ public static class StatutoryData
         Rate("2026-10-01", "2029-09-30", 0.50m),
     ];
 
+    /// <summary>税率（<c>ddl/015</c> ＋ <c>seed/006</c>）。<b>配っている行そのものを読む。</b></summary>
+    /// <remarks>
+    /// <b>国税は万分率の整数、地方は分数のまま持つ</b>（docs/11 §1-1）。
+    /// <b>ここで小数へ直さない</b>——78 分の 22 は小数で終わらず、直した時点で丸めが入る。
+    /// </remarks>
+    public static IReadOnlyList<TaxRate> TaxRates { get; } = DeliveredTaxRates();
+
     public static EffectiveDatedRuleSet<TransitionalDeductionRate> TransitionalDeductionRuleSet()
         => new(TransitionalDeductionRates);
+
+    public static TaxRateBook TaxRateBook() => new(TaxRates);
 
     public static EffectiveDatedRuleSet<TransitionalDeductionRate> TransitionalDeductionRuleSetBeforeAmendment()
         => new(TransitionalDeductionRatesBeforeAmendment);
@@ -73,6 +82,62 @@ public static class StatutoryData
                 new RuleVersion(fields[3])))
             .ToList();
     }
+
+    /// <summary>配っている税率の行を読んで、ドメインの型へ移す。</summary>
+    /// <remarks>
+    /// <para><b>読み出しの本体は <c>TaxRateLoader</c>（サーバ側）である</b>
+    /// （<see cref="Delivered"/> と同じ事情——ドメインのテストはサーバ側の部品を参照しない）。
+    /// <b>だから「移し方が食い違えば、あちらのテストが赤くなる」とは言えない。</b>
+    /// 両者を突き合わせているのは、<b>2 つのテストが同じ数字を別々に書いた表明</b>である
+    /// （<c>TaxRateTests</c> と <c>TaxRateLoaderTests</c>）。</para>
+    /// <para><b>だから、DDL が通す形はこちらも読めなければならない。</b>
+    /// 日付は先頭 10 文字を <c>ParseExact</c> で読む——<b>CLB は日付の列へ
+    /// <c>"2019-10-01 00:00:00"</c> と時刻付きで書き、DDL はその形を通す</b>ので、
+    /// 素の <c>DateOnly.Parse</c> だと本番が通す行で落ちる。</para>
+    /// <para><b>終期なしの印は <c>(null)</c> にそろえる</b>（<see cref="VendorRows"/> と同じ字）。
+    /// 空文字にすると、<b>「終期なし」と「空文字が入った行」が同じ字になる</b>——
+    /// 空文字はいま日付のトリガが断るが、<b>トリガを 1 本外した回（制約ノックアウト）には入る</b>。</para>
+    /// </remarks>
+    private static IReadOnlyList<TaxRate> DeliveredTaxRates()
+    {
+        using var db = TestDatabase.CreateWithSeed();
+
+        return TestDatabase
+            .Query(
+                db,
+                "SELECT rate_kind || '	' || valid_from || '	' || COALESCE(valid_to, '(null)')"
+                + " || '	' || national_rate_per_10000 || '	' || local_numerator"
+                + " || '	' || local_denominator || '	' || version"
+                + " FROM tax_rates ORDER BY rate_kind, valid_from")
+            .Select(row => row.Split('	'))
+            .Select(fields => new TaxRate(
+                KindOf(fields[0]),
+                new EffectivePeriod(DayOf(fields[1])!.Value, DayOf(fields[2])),
+                int.Parse(fields[3], CultureInfo.InvariantCulture),
+                int.Parse(fields[4], CultureInfo.InvariantCulture),
+                int.Parse(fields[5], CultureInfo.InvariantCulture),
+                new RuleVersion(fields[6])))
+            .ToList();
+    }
+
+    /// <summary>区分値の字を列挙子に直す。<b>知らない字は投げる。</b></summary>
+    /// <remarks>
+    /// <b>ここに書いた対応が正しいことは <c>EnumConsistencyTests</c> が別に見ている</b>
+    /// ——DDL の CHECK・CLB の enum・C# の列挙子の 3 者を突き合わせるので、
+    /// <b>区分を 1 つ足してここを直し忘れれば、この <c>switch</c> が投げる</b>。
+    /// </remarks>
+    private static TaxRateKind KindOf(string value) => value switch
+    {
+        "standard" => TaxRateKind.Standard,
+        "reduced" => TaxRateKind.Reduced,
+        "legacy_8" => TaxRateKind.Legacy8,
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "知らない税率区分"),
+    };
+
+    /// <summary>日付の字を読む。<c>(null)</c> は「終期なし」。</summary>
+    private static DateOnly? DayOf(string value) => value == "(null)"
+        ? null
+        : DateOnly.ParseExact(value[..10], "yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private static TransitionalDeductionRate Rate(string from, string to, decimal ratio)
     {

@@ -11,7 +11,7 @@ using Microsoft.Data.Sqlite;
 /// 日付の列は年月日として読める値だけを受け取る（<c>Designer/ddl/011_date_format.sql</c>）。
 /// </summary>
 /// <remarks>
-/// <para><b>1 つの規則が 5 表 12 列に当たる。</b> <see cref="MasterCodeGuardTests"/> と同じ形なので、
+/// <para><b>1 つの規則が複数の表と列に当たる</b>（<b>数はここに書かない</b>——<see cref="Columns"/> が母数であり、書き写すと静かに古くなる）。 <see cref="MasterCodeGuardTests"/> と同じ形なので、
 /// 既存のクラスに混ぜず 1 本にまとめる——<b>「トリガが全部同じ字であること」を 1 か所で見張れる</b>。</para>
 /// <para><b>SQLite の日付は文字列である。</b> 列を <c>DATE</c> と宣言しても affinity は NUMERIC でしかなく、
 /// <c>'20260401'</c> も <c>'2026-6-1'</c> も <c>'now'</c> もそのまま入る。入った瞬間に
@@ -31,7 +31,7 @@ public class DateFormatGuardTests
     public static TheoryData<string> Tables => new()
     {
         "fiscal_years", "accounting_periods", "journal_entries", "journal_lines", "partner_invoice_registrations",
-        "transition_purchase_rates",
+        "transition_purchase_rates", "tax_rates",
     };
 
     // ------------------------------------------------------------------------------------------
@@ -324,7 +324,7 @@ public class DateFormatGuardTests
     }
 
     /// <summary>
-    /// <b>更新でも 12 列とも断られる。</b>
+    /// <b>更新でも、見張っている列はすべて断られる。</b>
     /// </summary>
     /// <remarks>
     /// <para><b><c>BEFORE UPDATE OF &lt;列&gt;</c> を別建てで測る。</b> 追加だけ直して更新を書き落とす形は
@@ -632,10 +632,15 @@ public class DateFormatGuardTests
         ("partner_invoice_registrations", "confirmed_on", "最終確認日", "2026-05-11"),
         ("partner_invoice_registrations", "nta_updated_on", "公表システムの更新年月日", "2026-06-22"),
         ("journal_lines", "tax_point", "課税仕入れの時点", "2026-05-20"),
-        // **種まきの 4 行と重ならない日を使う**（014 の重なりのトリガに当てない）。
+        // **この表はどれも SchemaSeed（DDL ＋ マスタだけ）で空である**ので、
+        // **重なりのトリガには当たらない。** 配った行との重なりを避けて日を選んだわけではない
+        // ——2026-09-23 の自己レビューで、そう読める注記が嘘だったことが分かった。
         ("transition_purchase_rates", "valid_from", "有効期間の開始日", "2035-01-01"),
         ("transition_purchase_rates", "valid_to", "有効期間の終了日", "2035-12-31"),
         ("transition_purchase_rates", "confirmed_on", "確認日", "2026-09-10"),
+        ("tax_rates", "valid_from", "有効期間の開始日", "2015-04-01"),
+        ("tax_rates", "valid_to", "有効期間の終了日", "2019-09-30"),
+        ("tax_rates", "confirmed_on", "確認日", "2026-09-23"),
     ];
 
     /// <summary>断られるべき値（呼び名と、SQL に置く式）。</summary>
@@ -744,6 +749,15 @@ public class DateFormatGuardTests
                 + " (valid_from, valid_to, rate_percent, version, legal_basis, source_url, confirmed_on)"
                 + $" VALUES ({values["valid_from"]}, {values["valid_to"]}, 80, 'transition_purchase_rate:2035-01-01', '附則 52 ①',"
                 + $" 'https://laws.e-gov.go.jp/law/363AC0000000108', {values["confirmed_on"]});",
+            // 税率の行。**他の表を要らない**——外部キーが 1 本も無い。
+            // **版の字は開始日の基準値から導いて固定で書く**。開始日を撃つ回は、
+            // **BEFORE トリガが CHECK より先に走る**ので、版の CHECK までは届かない（ddl/015）。
+            "tax_rates" =>
+                "INSERT INTO tax_rates"
+                + " (rate_kind, valid_from, valid_to, national_rate_per_10000, local_numerator,"
+                + " local_denominator, version, legal_basis, source_url, confirmed_on)"
+                + $" VALUES ('standard', {values["valid_from"]}, {values["valid_to"]}, 780, 22, 78,"
+                + $" 'tax_rate:standard:2015-04-01', '検体', '検体', {values["confirmed_on"]});",
             _ => throw new ArgumentOutOfRangeException(nameof(table), table, "日付の列を見張っていない表"),
         };
     }
@@ -768,6 +782,10 @@ public class DateFormatGuardTests
         // 検体は ExistingRowFor が先に作る（1 行だけ）。
         "transition_purchase_rates" =>
             $"UPDATE transition_purchase_rates SET {column} = {value} WHERE version = 'transition_purchase_rate:2035-01-01';",
+        // 検体は ExistingRowFor が先に作る（1 行だけ）。**1 行しか無ければ重なりの守りは鳴らない**
+        // （trg_tax_rates_no_overlap_update は o.id <> NEW.id で自分を除く）。
+        "tax_rates" =>
+            $"UPDATE tax_rates SET {column} = {value} WHERE version = 'tax_rate:standard:2015-04-01';",
         _ => throw new ArgumentOutOfRangeException(nameof(table), table, "日付の列を見張っていない表"),
     };
 
@@ -797,6 +815,13 @@ public class DateFormatGuardTests
             + " (valid_from, valid_to, rate_percent, version, legal_basis, source_url, confirmed_on)"
             + " VALUES ('2035-01-01', '2035-12-31', 80, 'transition_purchase_rate:2035-01-01', '附則 52 ①',"
             + " 'https://laws.e-gov.go.jp/law/363AC0000000108', '2026-09-10');",
+        "tax_rates" =>
+            "INSERT INTO tax_rates"
+            + " (rate_kind, valid_from, valid_to, national_rate_per_10000, local_numerator,"
+            + " local_denominator, version, legal_basis, source_url, confirmed_on)"
+            + " VALUES ('standard', '2015-04-01', '2019-09-30', 630, 17, 63,"
+            + " 'tax_rate:standard:2015-04-01', '消税法 29', 'https://laws.e-gov.go.jp/law/363AC0000000108',"
+            + " '2026-09-23');",
         _ => string.Empty,
     };
 
