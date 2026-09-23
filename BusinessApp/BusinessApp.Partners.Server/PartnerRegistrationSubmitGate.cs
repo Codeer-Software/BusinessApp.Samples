@@ -488,9 +488,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
 
             if (a.EndedOn is not DateOnly aEnd)
             {
-                throw new PartnerRegistrationRejectedException(
-                    $"この取引先には、取消・失効の記録がない登録（{a.From:yyyy/MM/dd} から）があります。"
-                    + "先にその登録を一覧の「編集」から開き、取消・失効年月日と理由を記録してください。");
+                throw new PartnerRegistrationRejectedException(OpenRowBefore(a.From, a.Touched, b.From));
             }
 
             if (b.From < aEnd)
@@ -502,6 +500,23 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
             }
         }
     }
+
+    /// <summary>終わりのない行のあとに行がある（R-I5）ときの断り。<b>名指す行が、いま入力している行かで文を分ける。</b></summary>
+    /// <remarks>
+    /// <para><b>終わりのない行がこの保存で触った行なら、いまの入力を直す文にする</b>——
+    /// 既にある登録より古い日付で、終わりのない登録を足したときと、
+    /// 既にある登録の終わりを消したときである。どちらも名指す行は<b>いま画面で開いている行</b>で、
+    /// 「一覧の「編集」から開け」と言うと、新しく足す行は一覧に無く、終わりを消す行は既に開いている
+    /// ——<b>文言どおりの次の一手が取れない</b>（2026-09-24 の全件の REG-24）。</para>
+    /// <para><b>保存済みの行なら、その行を一覧から開いて終わりを記録させる</b>（再登録の正常な手順。REG-23）。</para>
+    /// </remarks>
+    private static string OpenRowBefore(DateOnly openFrom, bool openRowTouched, DateOnly laterFrom)
+        => openRowTouched
+            ? $"この登録（{openFrom:yyyy/MM/dd} から）には取消・失効の記録がありませんが、"
+              + $"そのあとに {laterFrom:yyyy/MM/dd} から始まる登録があります。"
+              + "この登録の取消・失効年月日と理由を入力するか、登録年月日を確かめてください。"
+            : $"この取引先には、取消・失効の記録がない登録（{openFrom:yyyy/MM/dd} から）があります。"
+              + "先にその登録を一覧の「編集」から開き、取消・失効年月日と理由を記録してください。";
 
     /// <summary>登録年月日順の列から、(早い行, 遅い行) の全ペア。</summary>
     private static IEnumerable<((DateOnly From, DateOnly? EndedOn, bool Touched) A,
