@@ -99,7 +99,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
             {
                 throw new PartnerRegistrationRejectedException(
                     $"この取引先には {validFrom:yyyy/MM/dd} から始まる登録を 2 件入力しています。"
-                    + "どちらかの登録年月日を直してください。");
+                    + "どちらかの「登録年月日」を直してください。");
             }
         }
     }
@@ -208,8 +208,8 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
         if (transactionData.SelectMany(d => d.Delete).Any(d => d.ModuleName == ModuleName))
         {
             throw new PartnerRegistrationRejectedException(
-                "登録の行は削除できません。取消・失効は、一覧の「編集」からその行を開き、"
-                + "取消・失効年月日と理由を記録してください。");
+                "登録の行は削除できません。取消・失効は、取引先の詳細の「登録番号の履歴」でその行の「編集」を開き、"
+                + "「取消・失効年月日」を入れて「取消・失効の理由」を選んでください。");
         }
     }
 
@@ -222,7 +222,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
             if (!InvoiceRegistrationNumber.IsWellFormed(field.Value))
             {
                 throw new PartnerRegistrationRejectedException(
-                    $"登録番号の形が違います。{InvoiceRegistrationNumber.FormatDescription}"
+                    $"「登録番号」の形が違います。{InvoiceRegistrationNumber.FormatDescription}"
                     + "入力し直してください。");
             }
 
@@ -298,7 +298,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
         {
             throw new PartnerRegistrationRejectedException(
                 $"この取引先には {validFrom:yyyy/MM/dd} から始まる登録が既にあります。"
-                + "登録年月日を直すか、先にある登録を直してください。");
+                + "「登録年月日」を直すか、先にある登録を直してください。");
         }
     }
 
@@ -389,7 +389,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
 
         var rows = stored.ToDictionary(
             r => r.Id,
-            r => new PeriodRow(r.ValidFrom, r.EndedOn, r.EndReason is not null, Touched: false));
+            r => new PeriodRow(r.ValidFrom, r.EndedOn, r.EndReason is not null, RowOrigin.Stored));
         var added = new List<PeriodRow>();
 
         foreach (var (data, isAdd) in batch)
@@ -400,7 +400,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
                     MergedDate(data, "ValidFrom", null),
                     MergedDate(data, "EndedOn", null),
                     MergedReason(data, false),
-                    Touched: true));
+                    RowOrigin.Added));
                 continue;
             }
 
@@ -411,11 +411,14 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
                 continue;
             }
 
+            var endedOn = MergedDate(data, "EndedOn", current.EndedOn);
             rows[rid] = new PeriodRow(
                 MergedDate(data, "ValidFrom", current.ValidFrom),
-                MergedDate(data, "EndedOn", current.EndedOn),
+                endedOn,
                 MergedReason(data, current.HasReason),
-                Touched: true);
+                // **終わりを消したかは、保存済みの値と差分を重ねた値で決める**——差分に欄が載っていても、
+                // 保存済みが既に空なら「消した」ではない（R-I5 の文を選ぶためだけに使う。OpenRowBefore）。
+                current.EndedOn is not null && endedOn is null ? RowOrigin.EndCleared : RowOrigin.Updated);
         }
 
         return [.. rows.Values, .. added];
@@ -441,19 +444,19 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
         {
             if (row.ValidFrom is not DateOnly validFrom)
             {
-                throw new PartnerRegistrationRejectedException("登録年月日を入力してください。");
+                throw new PartnerRegistrationRejectedException("「登録年月日」を入力してください。");
             }
 
             if (row.EndedOn is null != !row.HasReason)
             {
                 throw new PartnerRegistrationRejectedException(
-                    "取消・失効年月日と取消・失効の理由は、両方入力するか、両方空にしてください。");
+                    "「取消・失効年月日」と「取消・失効の理由」は、両方入力するか、両方空にしてください。");
             }
 
             if (row.EndedOn is DateOnly ended && ended < validFrom)
             {
                 throw new PartnerRegistrationRejectedException(
-                    $"取消・失効年月日（{ended:yyyy/MM/dd}）が登録年月日（{validFrom:yyyy/MM/dd}）より"
+                    $"「取消・失効年月日」（{ended:yyyy/MM/dd}）が「登録年月日」（{validFrom:yyyy/MM/dd}）より"
                     + "前になっています。日付を確かめてください。");
             }
         }
@@ -476,37 +479,82 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
         var ordered = resulting
             .Where(r => r.ValidFrom is not null)
             .OrderBy(r => r.ValidFrom)
-            .Select(r => (From: r.ValidFrom!.Value, r.EndedOn, r.Touched))
+            .Select(r => (From: r.ValidFrom!.Value, r.EndedOn, r.Origin))
             .ToList();
 
         foreach (var (a, b) in Pairs(ordered))
         {
-            if (!(a.Touched || b.Touched))
+            if (a.Origin == RowOrigin.Stored && b.Origin == RowOrigin.Stored)
             {
                 continue;
             }
 
             if (a.EndedOn is not DateOnly aEnd)
             {
-                throw new PartnerRegistrationRejectedException(
-                    $"この取引先には、取消・失効の記録がない登録（{a.From:yyyy/MM/dd} から）があります。"
-                    + "先にその登録を一覧の「編集」から開き、取消・失効年月日と理由を記録してください。");
+                throw new PartnerRegistrationRejectedException(OpenRowBefore(a.From, a.Origin, b.From));
             }
 
             if (b.From < aEnd)
             {
                 throw new PartnerRegistrationRejectedException(
-                    $"登録の期間が重なっています。{a.From:yyyy/MM/dd} からの登録は"
-                    + $" {aEnd:yyyy/MM/dd} までですが、次の登録が {b.From:yyyy/MM/dd} から"
-                    + "始まっています。日付を確かめてください。");
+                    $"登録の期間が重なっています。{a.From:yyyy/MM/dd} からの登録の「取消・失効年月日」（{aEnd:yyyy/MM/dd}）が、"
+                    + $"次の登録の「登録年月日」（{b.From:yyyy/MM/dd}）より後になっています。"
+                    + "「登録年月日」と「取消・失効年月日」を確かめてください。");
             }
         }
     }
 
+    /// <summary>終わりのない行のあとに行がある（R-I5）ときの断り。<b>終わりのない行の由来で文を選ぶ。</b></summary>
+    /// <remarks>
+    /// <para><b>名指す「あとの登録」は、終わりのない行の直後の行である</b>（<see cref="Pairs"/> が遅い行を昇順に回す）。
+    /// 終わりをその日までに入れれば、この組は隣接か重なりなしになる——だから日付を 1 つだけ言えばよい。</para>
+    /// <para><b>終わりのない行がこの保存で触った行なら、いまの入力を直す文にする。</b>
+    /// 「一覧の「編集」から開け」と言うと、新しく足す行は一覧に無く、編集中の行は既に開いている
+    /// ——<b>文言どおりの次の一手が取れない</b>（2026-09-24 の全件の REG-24。qa/03 L-66）。</para>
+    /// <para><b>直し方を 2 つ並べるときは、選ぶ目安を利用者の知っている事実で言う。</b>
+    /// 目安を言わずに「終わりを入れるか、登録年月日を確かめるか」と並べると、
+    /// 登録年月日の打ち間違いなのに<b>いま使っている登録に誤った取消・失効年月日を入れて通してしまう</b>——
+    /// 計上済みの写しは直せないので、取り返しがつかない（2026-09-24 の自己レビュー。3 人が独立に挙げた）。</para>
+    /// <para><b>目安は、国税庁の公表サイトに載る取消年月日・失効年月日そのもので言い、どこで見るかも言う。</b>
+    /// 「… までに終わった登録なら」と言うと、最後に有効だった日と読まれて 1 日ずれた日を誘う
+    /// ——この欄は効力がなくなる最初の日である（docs/14 §6）。<b>入れる値も代名詞で指さない</b>——
+    /// 「以前なら、その日を入れて」は直前の日付（あとの登録の始まりの日）を指して読め、それを入れると隣接で通ってしまう。
+    /// 「その取消年月日か失効年月日をそのまま」と言う（2026-09-24 の自己レビュー）。</para>
+    /// <list type="bullet">
+    /// <item><b>終わりを消した更新</b>——消したこと自体が重なりを作った。<b>元に戻す</b>のが先で、あとの登録のほうが誤りならそちらを直す</item>
+    /// <item><b>新規・その他の更新</b>——入力している登録の取消年月日か失効年月日があとの登録の始まり以前ならその日を入れ、そうでなければ登録年月日の誤り</item>
+    /// <item><b>保存済みの行</b>（あとの行を入力した）——保存済みの登録の取消年月日か失効年月日があとの登録の始まり以前なら先にそちらを閉じ、そうでなければ入力した登録年月日の誤り（REG-23 の再登録の形）</item>
+    /// </list>
+    /// </remarks>
+    private static string OpenRowBefore(DateOnly openFrom, RowOrigin openRow, DateOnly laterFrom)
+        => openRow switch
+        {
+            RowOrigin.EndCleared =>
+                "登録の期間が重なっています。"
+                + $"「取消・失効年月日」を空にすると、{laterFrom:yyyy/MM/dd} からの登録と期間が重なります。"
+                + "「取消・失効年月日」と「取消・失効の理由」を元に戻してください。"
+                + $"{laterFrom:yyyy/MM/dd} からの登録のほうが誤りなら、先に取引先の詳細の「登録番号の履歴」でその行の「編集」から直してください。",
+            RowOrigin.Stored =>
+                "登録の期間が重なっています。"
+                + $"この取引先には「取消・失効年月日」が空の登録（{openFrom:yyyy/MM/dd} から）があり、"
+                + $"入力している登録（{laterFrom:yyyy/MM/dd} から）はそのあとに始まります。"
+                + $"国税庁の公表サイトで、{openFrom:yyyy/MM/dd} からの登録の取消年月日か失効年月日が {laterFrom:yyyy/MM/dd} 以前なら、"
+                + "先に取引先の詳細の「登録番号の履歴」でその行の「編集」を開き、"
+                + "その取消年月日か失効年月日をそのまま「取消・失効年月日」に入れて「取消・失効の理由」を選んでください。"
+                + "そうでなければ、入力している登録の「登録年月日」を確かめてください。",
+            _ =>
+                "登録の期間が重なっています。"
+                + $"入力している登録（{openFrom:yyyy/MM/dd} から）は「取消・失効年月日」が空ですが、"
+                + $"そのあとに {laterFrom:yyyy/MM/dd} からの登録があります。"
+                + $"国税庁の公表サイトで、入力している登録の取消年月日か失効年月日が {laterFrom:yyyy/MM/dd} 以前なら、"
+                + "その取消年月日か失効年月日をそのまま「取消・失効年月日」に入れて「取消・失効の理由」を選んでください。"
+                + "そうでなければ、入力している登録の「登録年月日」を確かめてください。",
+        };
+
     /// <summary>登録年月日順の列から、(早い行, 遅い行) の全ペア。</summary>
-    private static IEnumerable<((DateOnly From, DateOnly? EndedOn, bool Touched) A,
-                                (DateOnly From, DateOnly? EndedOn, bool Touched) B)> Pairs(
-        List<(DateOnly From, DateOnly? EndedOn, bool Touched)> ordered)
+    private static IEnumerable<((DateOnly From, DateOnly? EndedOn, RowOrigin Origin) A,
+                                (DateOnly From, DateOnly? EndedOn, RowOrigin Origin) B)> Pairs(
+        List<(DateOnly From, DateOnly? EndedOn, RowOrigin Origin)> ordered)
     {
         for (var i = 0; i < ordered.Count; i++)
         {
@@ -517,9 +565,29 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
         }
     }
 
-    /// <summary>保存後の履歴の 1 行。<c>Touched</c> はこの保存が触った行か。</summary>
+    /// <summary>保存後の履歴の 1 行。<c>Origin</c> はこの保存がその行に何をしたか。</summary>
     private readonly record struct PeriodRow(
-        DateOnly? ValidFrom, DateOnly? EndedOn, bool HasReason, bool Touched);
+        DateOnly? ValidFrom, DateOnly? EndedOn, bool HasReason, RowOrigin Origin)
+    {
+        /// <summary>この保存が触った行か（保存済みのまま触っていない行でない）。</summary>
+        public bool Touched => Origin != RowOrigin.Stored;
+    }
+
+    /// <summary>保存後の履歴の 1 行が、この保存でどうなったか。断りの文を選ぶためにだけ使う。</summary>
+    private enum RowOrigin
+    {
+        /// <summary>保存済みで、この保存は触っていない。</summary>
+        Stored,
+
+        /// <summary>この保存で足す行。</summary>
+        Added,
+
+        /// <summary>保存済みの行の「取消・失効年月日」を、この保存で空にした。</summary>
+        EndCleared,
+
+        /// <summary>保存済みの行を、この保存で直した（終わりを消した以外）。</summary>
+        Updated,
+    }
 
     /// <summary>保存しようとしている登録の識別子。<b>新規なら仮の値が入る</b>ので、数値でなければ null。</summary>
     private static long? Id(ModuleData data)
