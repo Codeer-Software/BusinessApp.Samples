@@ -16,7 +16,7 @@ using Codeer.LowCode.Blazor.DataIO.Db;
 /// <remarks>
 /// <para>ここが <b>long ↔ 型付き識別子の変換を閉じ込める境界</b>である（ADR-0014）。
 /// ドメインの内側に生の <c>long</c> を持ち込まない。</para>
-/// <para>会計マスタは全件を先に読む。科目 100 件・部門数件・税区分 10 件の規模なので、
+/// <para>会計マスタは全件を先に読む。科目 100 件・部門数件・税区分 8 件の規模なので、
 /// 明細ごとに引き直すより 1 回読む方が速く、検証が純粋関数のままでいられる。</para>
 /// </remarks>
 public sealed class AccountingMasterLoader(IDbAccessor dbAccessor, string dataSourceName)

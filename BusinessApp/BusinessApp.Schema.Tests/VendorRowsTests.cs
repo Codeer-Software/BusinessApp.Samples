@@ -191,7 +191,7 @@ public class VendorRowsTests
     /// <c>COALESCE</c> を書き落とすと、<b>NULL を含む行は連結ごと NULL になって行そのものが取れなくなる</b>
     /// ——差ではなく「行が消えた」に化ける。
     /// <b>2026-09-23 まで、この枝は本番の表では一度も通らなかった</b>（比べる列が全部 NOT NULL だった）が、
-    /// <b>税率の表の <c>valid_to</c> が NULL 可になり、配る 3 行すべてが NULL になった</b>
+    /// <b>税率の表の <c>valid_to</c> が NULL 可になり、配る行（いまは 2 行）がすべて NULL になった</b>
     /// ——いまは本物の表で毎回通る。
     /// </remarks>
     [Fact]
@@ -222,7 +222,7 @@ public class VendorRowsTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal(
-            ["一致: ベンダーが配る行は正典と同値である（transition_purchase_rates・tax_rates。7 行）。"],
+            ["一致: ベンダーが配る行は正典と同値である（transition_purchase_rates・tax_rates。6 行）。"],
             lines);
     }
 

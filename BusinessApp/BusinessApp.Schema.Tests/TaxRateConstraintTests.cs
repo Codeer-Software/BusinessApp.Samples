@@ -16,7 +16,7 @@ using Microsoft.Data.Sqlite;
 /// <para><b>014 と同じ検体を並べるだけでは足りない。</b> この表は
 /// <b>①区分が鍵に入る ②終期が NULL を許す ③値が 2 つあって形が違う</b>の 3 点で違い、
 /// <b>どれも「守りが弱すぎる／強すぎる」の新しい形を持ち込む</b>——
-/// 区分を忘れれば 3 区分が同じ日から始められず、NULL を素直に比べれば重なりを 1 本も見つけず、
+/// 区分を忘れれば 2 区分が同じ日から始められず、NULL を素直に比べれば重なりを 1 本も見つけず、
 /// 分数を取り違えた行は他の守りを全部通る。</para>
 /// </remarks>
 public class TaxRateConstraintTests
@@ -46,8 +46,9 @@ public class TaxRateConstraintTests
             + $" ('{kind}', '{from}', {(to is null ? "NULL" : $"'{to}'")}, {national}, {numerator}, {denominator},"
             + $" {version ?? $"'tax_rate:{kind}:{from}'"}, {basis}, '検体', '2026-09-23');";
 
-    /// <summary>旧税率の組（6.3% ＋ 63 分の 17）。<b>こちらは 630 で割り切れる。</b></summary>
-    private static string InsertLegacy(string kind, string from, string? to = null)
+    /// <summary>改正前の税率の組（旧税率。6.3% ＋ 63 分の 17）。<b>こちらは 630 で割り切れる。</b>
+    /// 区分は引数で渡す。<b>日付はテストの字で、制度の日付ではない</b>（いつから 6.3% かは確かめていない——税率リサーチ §3）。</summary>
+    private static string InsertOldRate(string kind, string from, string? to = null)
         => Insert(kind, from, to, national: "630", numerator: "17", denominator: "63");
 
     private static SqliteConnection Empty() => TestDatabase.Create();
@@ -56,15 +57,15 @@ public class TaxRateConstraintTests
     // 通るべき行が通ること
     //
     // **断りより先に置く。** 締めすぎた守りは、拒む側のテストでは 1 本も赤くならない——
-    // 配った 3 行が入らなくなるほうの壊れ方は、ここでしか見えない。
+    // 配った 2 行が入らなくなるほうの壊れ方は、ここでしか見えない。
     // ------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// <b>3 つの区分が、同じ日から同時に始められる。書いた値がそのまま読み戻せる。</b>
+    /// <b>2 つの区分が、同じ日から同時に始められる。書いた値がそのまま読み戻せる。</b>
     /// </summary>
     /// <remarks>
     /// <b>014 には無い形である。</b> 重なりの守りと一意索引から<b>区分を落とすと、ここだけが赤くなる</b>
-    /// ——配っている 3 行は、どれも 2019-10-01 から始まる。
+    /// ——配っている 2 行は、どちらも 2019-10-01 から始まる。
     /// <b>意味を持つ列は全部読み戻す</b>（qa/03 の L-04）。
     /// </remarks>
     [Fact]
@@ -74,11 +75,9 @@ public class TaxRateConstraintTests
 
         TestDatabase.Execute(db, Insert("standard", "2019-10-01"));
         TestDatabase.Execute(db, Insert("reduced", "2019-10-01", national: "624"));
-        TestDatabase.Execute(db, InsertLegacy("legacy_8", "2019-10-01"));
 
         Assert.Equal(
             [
-                "legacy_8|2019-10-01|(null)|630|17|63|tax_rate:legacy_8:2019-10-01|検体|検体|2026-09-23",
                 "reduced|2019-10-01|(null)|624|22|78|tax_rate:reduced:2019-10-01|検体|検体|2026-09-23",
                 "standard|2019-10-01|(null)|780|22|78|tax_rate:standard:2019-10-01|検体|検体|2026-09-23",
             ],
@@ -94,7 +93,7 @@ public class TaxRateConstraintTests
     /// <b>終期なし（NULL）の行が入る。</b> 014 との最大の違いである。
     /// </summary>
     /// <remarks>
-    /// 消税法 29 も地方税法 72 の 83 も期限を書いていないので、<b>配る 3 行はすべて終期が無い</b>。
+    /// 消税法 29 も地方税法 72 の 83 も期限を書いていないので、<b>配る 2 行はどちらも終期が無い</b>。
     /// <c>valid_to</c> に NOT NULL を付け直したら、ここが赤くなる。
     /// </remarks>
     [Fact]
@@ -113,7 +112,7 @@ public class TaxRateConstraintTests
     {
         using var db = Empty();
 
-        TestDatabase.Execute(db, InsertLegacy("standard", "2014-04-01", "2019-09-30"));
+        TestDatabase.Execute(db, InsertOldRate("standard", "2014-04-01", "2019-09-30"));
         TestDatabase.Execute(db, Insert("standard", "2019-10-01"));
 
         Assert.Equal(
@@ -129,21 +128,21 @@ public class TaxRateConstraintTests
     /// <remarks>
     /// <b>更新側の重なりから区分を落とすと、ここだけが赤くなる</b>（2026-09-23 の自己レビュー）。
     /// 落とすと<b>厳しくなる方向に壊れる</b>——稼働 DB で標準税率の版を切ろうとしたとき、
-    /// <b>終期なしの軽減税率や旧税率と「重なる」と言われて、改定の版切りが一切できなくなる</b>。
+    /// <b>終期なしの軽減税率と「重なる」と言われて、改定の版切りが一切できなくなる</b>。
     /// </remarks>
     [Fact]
     public void 区分が違えば期間が重なる更新も通る()
     {
         using var db = Empty();
         TestDatabase.Execute(db, Insert("standard", "2019-10-01"));
-        TestDatabase.Execute(db, InsertLegacy("legacy_8", "2015-04-01", "2016-03-31"));
+        TestDatabase.Execute(db, Insert("reduced", "2015-04-01", "2016-03-31", national: "624"));
 
         TestDatabase.Execute(
             db,
-            "UPDATE tax_rates SET valid_to = NULL WHERE rate_kind = 'legacy_8';");
+            "UPDATE tax_rates SET valid_to = NULL WHERE rate_kind = 'reduced';");
 
         Assert.Equal(
-            ["legacy_8|(null)", "standard|(null)"],
+            ["reduced|(null)", "standard|(null)"],
             TestDatabase.Query(
                 db,
                 "SELECT rate_kind || '|' || COALESCE(valid_to, '(null)') FROM tax_rates ORDER BY rate_kind"));
@@ -202,7 +201,7 @@ public class TaxRateConstraintTests
     /// <remarks>
     /// <b>ここが NULL の本番である。</b> 重なりの条件から <c>o.valid_to IS NULL</c> の枝を落とすと、
     /// <c>date(NULL)</c> の比較で条件全体が NULL になり、<b>重なりを 1 本も見つけずに通す</b>——
-    /// 配っている 3 行はすべて終期が無いので、<b>実際に配った行の上に二重の税率が積める</b>。
+    /// 配っている 2 行はどちらも終期が無いので、<b>実際に配った行の上に二重の税率が積める</b>。
     /// <b>入れる側が終期なしのときも同じ</b>ので、両向きを撃つ。
     /// </remarks>
     [Theory]
@@ -222,7 +221,7 @@ public class TaxRateConstraintTests
     public void 期間が重なる版へは更新できない()
     {
         using var db = Empty();
-        TestDatabase.Execute(db, InsertLegacy("standard", "2014-04-01", "2019-09-30"));
+        TestDatabase.Execute(db, InsertOldRate("standard", "2014-04-01", "2019-09-30"));
         TestDatabase.Execute(db, Insert("standard", "2019-10-01"));
 
         // **版の字も一緒に動かす。** 動かさないと版の CHECK が断って、重なりのトリガを測れない。
@@ -268,7 +267,7 @@ public class TaxRateConstraintTests
     {
         using var db = Empty();
 
-        Rejected.ByCheck(db, Insert("legacy_5", "2019-10-01"), "rate_kind IN ('standard', 'reduced', 'legacy_8')");
+        Rejected.ByCheck(db, Insert("legacy_8", "2019-10-01"), "rate_kind IN ('standard', 'reduced')");
     }
 
     /// <summary>
@@ -423,8 +422,8 @@ public class TaxRateConstraintTests
     /// <remarks>
     /// 形を決めただけでは、<b>版が指す日と、その版が実際に効いた期間が食い違ったまま仕訳に焼ける</b>
     /// （版は <c>journal_lines.applied_rule_version</c> に写す。I-16）。
-    /// <b>区分の食い違いは 014 には無い形である</b>——3 区分が同じ日から始まるので、
-    /// <b>区分を落とした版の字は 3 行で同じになる</b>。
+    /// <b>区分の食い違いは 014 には無い形である</b>——2 区分が同じ日から始まるので、
+    /// <b>区分を落とした版の字は 2 行で同じになる</b>。
     /// </remarks>
     [Theory]
     [InlineData("'tax_rate:standard:2020-01-01'", "日がずれている")]
@@ -507,7 +506,7 @@ public class TaxRateConstraintTests
             "税率の行を、既にある行の識別子へ被せられない。");
 
         Assert.Equal(
-            ["legacy_8", "reduced", "standard"],
+            ["reduced", "standard"],
             TestDatabase.Query(db, "SELECT rate_kind FROM tax_rates ORDER BY rate_kind"));
     }
 
@@ -531,7 +530,7 @@ public class TaxRateConstraintTests
             $"UPDATE OR REPLACE tax_rates SET id = {standard} WHERE id = {reduced};",
             "税率の行を、既にある行の識別子へ被せられない。");
 
-        Assert.Equal(3, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM tax_rates"));
+        Assert.Equal(2, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM tax_rates"));
     }
 
     // ------------------------------------------------------------------------------------------
@@ -542,19 +541,19 @@ public class TaxRateConstraintTests
     /// <b>税率区分の語彙は、003 と 015 で同じである。</b>
     /// </summary>
     /// <remarks>
-    /// <b>2 つの表が同じ 3 つの値を別々に宣言している。</b> 税区分マスタ（003）が「この行はどの区分か」を持ち、
+    /// <b>2 つの表が同じ 2 つの値を別々に宣言している。</b> 税区分マスタ（003）が「この行はどの区分か」を持ち、
     /// 税率の表（015）が「その区分は何 % か」を持つ——<b>片方にだけ区分を足すと、
     /// 選べるのに税率が引けない区分</b>（003 だけに足した場合）か、
     /// <b>誰も選べない税率の行</b>（015 だけに足した場合）ができる。どちらも実行時まで黙っている。
     /// </remarks>
     [Fact]
-    public void 税率区分の値は税区分マスタと同じ3つである()
+    public void 税率区分の値は税区分マスタと同じ2つである()
     {
         using var db = Empty();
 
         // **字の錨を置く。** 両辺とも DDL から採るので、**2 つの CHECK から同じ区分を同時に消すと
         // 相等だけでは緑のまま通る**（self-review スキル §9 の 4）。
-        string[] expected = ["legacy_8", "reduced", "standard"];
+        string[] expected = ["reduced", "standard"];
 
         Assert.Equal(expected, Vocabulary(db, "tax_categories"));
         Assert.Equal(expected, Vocabulary(db, "tax_rates"));
@@ -610,7 +609,7 @@ public class TaxRateConstraintTests
             + " 'tax_rate:reduced:2015-01-01', '検体', '検体', '2026-09-23');",
             "税率の行を、既にある行の識別子へ被せられない。");
 
-        Assert.Equal(3, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM tax_rates"));
+        Assert.Equal(2, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM tax_rates"));
     }
 
     /// <summary><c>rate_kind IN (...)</c> が許す値の並びを、表の定義から採る。</summary>

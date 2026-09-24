@@ -25,10 +25,12 @@ public class SeedDataTests
         Assert.Equal(1L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM fiscal_years"));
         Assert.Equal(12L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounting_periods"));
         Assert.Equal(6L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM departments"));
-        Assert.Equal(10L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM tax_categories"));
+        Assert.Equal(
+            ["EXP", "NTP", "NTS", "OUT", "TP", "TPR", "TS", "TSR"],
+            TestDatabase.Query(db, "SELECT code FROM tax_categories ORDER BY code"));
         Assert.Equal(105L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM accounts"));
         Assert.Equal(4L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM transition_purchase_rates"));
-        Assert.Equal(3L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM tax_rates"));
+        Assert.Equal(2L, TestDatabase.ScalarOf<long>(db, "SELECT COUNT(*) FROM tax_rates"));
     }
 
     /// <summary>ベンダーが配る表。<b>母数は <see cref="VendorRows.Tables"/> が持つ。</b></summary>
@@ -307,10 +309,14 @@ public class SeedDataTests
     {
         using var db = TestDatabase.CreateWithSeed();
 
-        Assert.Equal(6L, TestDatabase.ScalarOf<long>(db,
-            "SELECT COUNT(*) FROM tax_categories WHERE taxation_type IN ('taxable_sales', 'taxable_purchase')"));
-        Assert.Equal(6L, TestDatabase.ScalarOf<long>(db,
-            "SELECT COUNT(*) FROM tax_categories WHERE rate_kind IS NOT NULL"));
+        // **数ではなく組を字で書く**——2 区分になったいま、いちばんありそうな壊れ方は「1 区分への潰れ」で、
+        // 件数（課税 4 件・税率区分あり 4 件）は TSR を standard にしても変わらない（2026-09-24 の自己レビュー。self-review スキル §9 の 6）。
+        Assert.Equal(
+            ["TP|taxable_purchase|standard", "TPR|taxable_purchase|reduced", "TS|taxable_sales|standard", "TSR|taxable_sales|reduced"],
+            TestDatabase.Query(db,
+                "SELECT code || '|' || taxation_type || '|' || rate_kind FROM tax_categories WHERE rate_kind IS NOT NULL ORDER BY code"));
+        Assert.Equal(0L, TestDatabase.ScalarOf<long>(db,
+            "SELECT COUNT(*) FROM tax_categories WHERE taxation_type IN ('taxable_sales', 'taxable_purchase') AND rate_kind IS NULL"));
     }
 
     /// <summary>

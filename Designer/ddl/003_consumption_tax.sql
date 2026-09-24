@@ -1,7 +1,7 @@
 -- 003 税区分（docs/12_マスタ台帳）
 --
 -- 1 つの「税区分」に複数の軸を押し込まない（docs/11 §1）。ここが持つのは課税区分だけで、
---   税率        → 制度ルール（有効期間つき）。フェーズ 3 で別テーブルにする
+--   税率        → 制度ルール（有効期間つき）。015 の tax_rates
 --   用途区分    → 仕訳明細（journal_lines.tax_treatment）。同じ科目でも取引ごとに変わる
 --   登録状況    → 取引先（有効期間つき）。フェーズ 3
 -- をここに混ぜない。
@@ -37,9 +37,9 @@ CREATE TABLE tax_categories (
     -- 名前に "10%" と書いてしまうと、税率が変わった日にマスタ名が嘘になる。
     --   standard  標準税率
     --   reduced   軽減税率
-    --   legacy_8  旧税率 8%（経過措置等）
     --   NULL      税率の概念がない区分（非課税・免税・対象外）
-    rate_kind                   TEXT CHECK (rate_kind IN ('standard', 'reduced', 'legacy_8')),
+    -- **旧税率 8% はスコープの外である**（docs/11 §1-1-1）。
+    rate_kind                   TEXT CHECK (rate_kind IN ('standard', 'reduced')),
 
     -- 入力時の初期値としての用途区分。明細の値が正であり、
     -- 「値が入っていない行の穴埋め」には使わない（docs/11 §1）。

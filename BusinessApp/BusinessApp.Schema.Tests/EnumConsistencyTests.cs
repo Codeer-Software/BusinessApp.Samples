@@ -15,7 +15,7 @@ using System.Text.RegularExpressions;
 /// どれか 1 つを直し忘れると、コンパイルも designcheck も通ったまま
 /// 「画面で選べるのに保存できない」「保存できるのに集計から漏れる」という壊れ方をする。</para>
 /// <para>DB の値は snake_case、C# の列挙子は PascalCase という規約をこのテストが定義している。
-/// <c>Legacy8</c> ↔ <c>legacy_8</c> のように、数字の前でも区切る。</para>
+/// 数字の前でも区切る（<c>Legacy8</c> ↔ <c>legacy_8</c>。いま数字を含む値は無い——<c>DbValueTests</c> が規約のテストを持つ）。</para>
 /// </remarks>
 public class EnumConsistencyTests
 {
@@ -409,7 +409,7 @@ public class EnumConsistencyTests
     /// <remarks>
     /// <b>本番が書き込みに使う実装（<see cref="DbValue.ToSnakeCase(string)"/>）をそのまま呼ぶ。</b>
     /// ここに写しを持つと、<b>写しだけが規約どおりで本番が違う</b>状態を検出できない——
-    /// 実際、写しは数字の前で区切るのに本番は区切らず、DDL には <c>legacy_8</c> があった。
+    /// 実際、写しは数字の前で区切るのに本番は区切らず、DDL には <c>legacy_8</c> があった（2026-08-27 当時。2026-09-24 に外した）。
     /// 数字を含む列挙子を C# に足した日に、本番は <c>legacy8</c> を書いて CHECK に弾かれるのに、
     /// この検査は「3 者一致」と言うところだった（2026-08-27 の自己レビュー R16-03）。
     /// </remarks>

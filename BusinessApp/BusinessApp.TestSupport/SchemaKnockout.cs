@@ -107,7 +107,7 @@ public static class SchemaKnockout
             ["DateFormatGuardTests.DATEで宣言した列は1つ残らず見張られている"] =
                 "トリガの定義文から date(NEW.…) の列名を拾う",
             ["DateFormatGuardTests.条件はどこも同じ字である"] = "トリガの定義文を読む",
-            ["TaxRateConstraintTests.税率区分の値は税区分マスタと同じ3つである"] =
+            ["TaxRateConstraintTests.税率区分の値は税区分マスタと同じ2つである"] =
                 "2 つの表の rate_kind の CHECK を定義文から読んで突き合わせる。どちらを外しても読めなくなる",
         };
 

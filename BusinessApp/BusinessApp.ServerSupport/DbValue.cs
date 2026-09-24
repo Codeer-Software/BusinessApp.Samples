@@ -118,15 +118,13 @@ public static class DbValue
     /// PascalCase の名前を DB の値（snake_case）に直す。<b>数字の前でも区切る。</b>
     /// </summary>
     /// <remarks>
-    /// <b>数字の前で区切るのは規約である</b>——DDL の CHECK に <c>legacy_8</c> がある
-    /// （<c>Designer/ddl/003_consumption_tax.sql</c>）。区切らないと <c>Legacy8</c> は
-    /// <c>legacy8</c> になり、書いた瞬間に CHECK で弾かれる。
-    /// <b>2026-09-23 に、この規則を実地で見張るものができた</b>——<c>EnumConsistencyTests</c> が
-    /// <c>TaxRateKind</c>（docs/11 §1-1）を DDL・CLB・C# の 3 者突合に載せ、
-    /// <c>Legacy8</c> をここへ通して DDL の <c>legacy_8</c> と突き合わせる。
-    /// <b>逆向き（<see cref="ToPascalCase"/>）は <c>TaxRateLoader</c> が <see cref="ToEnum{T}"/> で通る</b>
-    /// ——<b>こちらはこの関数を呼ばない</b>ので、見張っているのは突合の側だけである。
-    /// <b>それまでは、間違っていても誰も気づけない規則だった</b>（2026-08-27 の自己レビュー R16-03）。
+    /// <b>数字の前で区切るのは規約である</b>——区切らないと <c>Legacy8</c> は <c>legacy8</c> になり、
+    /// DDL の CHECK が <c>legacy_8</c> と書いていれば、書いた瞬間に弾かれる。
+    /// <b>いま DDL にも C# にも、数字を含む値は無い</b>（税率区分の <c>legacy_8</c> があった間は、<c>EnumConsistencyTests</c> がそれをここへ通して突き合わせていた。
+    /// 旧税率はスコープの外になった——docs/11 §1-1-1）。
+    /// <b>規約として残す</b>——数字を含む値を足した日に、区切り方で迷わないため。
+    /// <b>いま数字を含む区切りを見張っているのは <c>DbValueTests</c> のテストだけである</b>（突合の側にはもう数字を含む値が無い）。
+    /// <b>2026-08-27 までは、間違っていても誰も気づけない規則だった</b>（自己レビュー R16-03）。
     /// <see cref="ToPascalCase"/> がこの逆を行う。
     /// </remarks>
     public static string ToSnakeCase(string name)

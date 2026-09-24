@@ -169,6 +169,118 @@ public class MigrationEquivalenceTests
     }
 
     /// <summary>
+    /// 旧税率を外す作り直し（0045）を<b>データありで</b>再生する——<b>消すべき行だけが消え、残る行・子の参照・採番は失われない</b>。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>同値テストの再生は seed を入れないので、税区分の表は 0 行である</b>——書き戻しの列の取り違え・
+    /// 採番の復元漏れ・外部キーの子の取りこぼしは、行が無いと見えない（0004 のテストと同じ理由。2026-09-24 の自己レビュー）。</para>
+    /// <para><b>税率の表は、消す行（id 3）が最大の id である</b>（0043 が standard → reduced → legacy_8 の順に配った）——
+    /// 採番を戻し忘れると、次に足す行が 3 を再利用する（qa/03 L-09 の形）。</para>
+    /// <para>0045 が掃除（ADR-0020 §4）で baseline に畳まれたら、このテストも一緒に消す。</para>
+    /// </remarks>
+    [Fact]
+    public void 旧税率を外す作り直しはデータと採番と子の参照を失わない()
+    {
+        var rebuild = TestDatabase.MigrationFiles().Single(f => Path.GetFileName(f).StartsWith("0045_", StringComparison.Ordinal));
+        var before = TestDatabase.BaselineFiles()
+            .Concat(TestDatabase.MigrationFiles().Where(f => string.CompareOrdinal(Path.GetFileName(f), "0045_") < 0));
+
+        using var db = TestDatabase.CreateFromFiles(before);
+
+        // 旧い seed と同じ字の TS8・TP8 を挟み、末尾の行を消して採番を最大 id より先へ進める。列ごとに相異なる値（qa/03 L-02）。
+        TestDatabase.Execute(db, """
+            INSERT INTO tax_categories (code, name, taxation_type, rate_kind, default_tax_treatment, is_active, display_order) VALUES
+                ('OUT', '対象外', 'out_of_scope', NULL, NULL, 1, 10),
+                ('TS', '課税売上（標準税率）', 'taxable_sales', 'standard', 'for_taxable_sales', 1, 20),
+                ('TS8', '課税売上（旧税率8%）', 'taxable_sales', 'legacy_8', NULL, 1, 40),
+                ('TP', '課税仕入（標準税率）', 'taxable_purchase', 'standard', 'common', 0, 50),
+                ('TP8', '課税仕入（旧税率8%）', 'taxable_purchase', 'legacy_8', NULL, 1, 70),
+                ('ZZZ', '消される区分', 'out_of_scope', NULL, NULL, 1, 99);
+            DELETE FROM tax_categories WHERE code = 'ZZZ';
+            INSERT INTO accounts (code, name, category, default_tax_category_id)
+                VALUES ('1100', '現金', 'asset', (SELECT id FROM tax_categories WHERE code = 'TP'));
+            """);
+
+        const string categoriesDump = """
+            SELECT group_concat(id || '/' || code || '/' || name || '/' || taxation_type || '/' || coalesce(rate_kind, '-') || '/'
+                || coalesce(default_tax_treatment, '-') || '/' || is_active || '/' || coalesce(display_order, '-'), ';')
+            FROM (SELECT * FROM tax_categories ORDER BY id)
+            """;
+        const string ratesDump = """
+            SELECT group_concat(id || '/' || rate_kind || '/' || valid_from || '/' || coalesce(valid_to, '-') || '/'
+                || national_rate_per_10000 || '/' || local_numerator || '/' || local_denominator || '/' || version, ';')
+            FROM (SELECT * FROM tax_rates ORDER BY id)
+            """;
+        Assert.Equal(
+            "1/OUT/対象外/out_of_scope/-/-/1/10;2/TS/課税売上（標準税率）/taxable_sales/standard/for_taxable_sales/1/20;"
+            + "3/TS8/課税売上（旧税率8%）/taxable_sales/legacy_8/-/1/40;4/TP/課税仕入（標準税率）/taxable_purchase/standard/common/0/50;"
+            + "5/TP8/課税仕入（旧税率8%）/taxable_purchase/legacy_8/-/1/70",
+            TestDatabase.ScalarOf<string>(db, categoriesDump));
+
+        // ランナーと同じ包み方で適用する。
+        TestDatabase.Execute(db, $"BEGIN;\n{File.ReadAllText(rebuild)}\nCOMMIT;");
+
+        Assert.Equal(
+            "1/OUT/対象外/out_of_scope/-/-/1/10;2/TS/課税売上（標準税率）/taxable_sales/standard/for_taxable_sales/1/20;"
+            + "4/TP/課税仕入（標準税率）/taxable_purchase/standard/common/0/50",
+            TestDatabase.ScalarOf<string>(db, categoriesDump));
+        Assert.Equal(
+            "1/standard/2019-10-01/-/780/22/78/tax_rate:standard:2019-10-01;2/reduced/2019-10-01/-/624/22/78/tax_rate:reduced:2019-10-01",
+            TestDatabase.ScalarOf<string>(db, ratesDump));
+
+        // 子の参照（勘定科目の既定）は同じ行を指したまま、外部キーの違反も残らない。
+        Assert.Equal(4L, TestDatabase.ScalarOf<long>(db, "SELECT default_tax_category_id FROM accounts WHERE code = '1100'"));
+        Assert.Empty(TestDatabase.Query(db, "SELECT \"table\" || '/' || rowid FROM pragma_foreign_key_check"));
+
+        // 消した id を再利用しない（sqlite_sequence の復元）。税区分は消した ZZZ の 6 の次、税率は消した legacy_8 の 3 の次。
+        TestDatabase.Execute(db, "INSERT INTO tax_categories (code, name, taxation_type) VALUES ('NEW', '作り直し後の区分', 'out_of_scope');");
+        Assert.Equal(7L, TestDatabase.ScalarOf<long>(db, "SELECT id FROM tax_categories WHERE code = 'NEW'"));
+        TestDatabase.Execute(db, """
+            INSERT INTO tax_rates (rate_kind, valid_from, valid_to, national_rate_per_10000, local_numerator, local_denominator,
+                                   version, legal_basis, source_url, confirmed_on)
+            VALUES ('standard', '2014-04-01', '2019-09-30', 630, 17, 63, 'tax_rate:standard:2014-04-01', '検体', '検体', '2026-09-24');
+            """);
+        Assert.Equal(4L, TestDatabase.ScalarOf<long>(db, "SELECT id FROM tax_rates WHERE version = 'tax_rate:standard:2014-04-01'"));
+
+        // 旧税率の区分はもう入らない（CHECK が作り直しで入れ替わった）。
+        Rejected.ByCheck(db,
+            "INSERT INTO tax_categories (code, name, taxation_type, rate_kind) VALUES ('X8', '検体', 'taxable_sales', 'legacy_8');",
+            "rate_kind IN ('standard', 'reduced')");
+    }
+
+    /// <summary>
+    /// <b>消す税区分を使う行があれば、0045 は当たらずに丸ごと巻き戻る</b>——ヘッダの適用前の確認の 1・2 つ目（外部キーの子）が 1 件以上でも、適用が落ちることの裏づけ
+    /// （3 つ目の適用版の文字列は外部キーが無いので落ちない——数えるのは適用する人である）。
+    /// </summary>
+    /// <remarks>
+    /// 勘定科目の既定を TS8 にしておくと、DELETE が遅延外部キーの違反を残し、COMMIT で落ちる。
+    /// <b>ランナーと同じく、落ちたら ROLLBACK する</b>（SQLite は COMMIT が遅延外部キーで落ちてもトランザクションを開いたまま残す）。
+    /// <b>TS8 も CHECK も元のまま残る</b>ことまで読み戻す——例外が飛んだだけでは足りない。
+    /// </remarks>
+    [Fact]
+    public void 旧税率の税区分を使う行があれば0045は当たらない()
+    {
+        var rebuild = TestDatabase.MigrationFiles().Single(f => Path.GetFileName(f).StartsWith("0045_", StringComparison.Ordinal));
+        var before = TestDatabase.BaselineFiles()
+            .Concat(TestDatabase.MigrationFiles().Where(f => string.CompareOrdinal(Path.GetFileName(f), "0045_") < 0));
+
+        using var db = TestDatabase.CreateFromFiles(before);
+        TestDatabase.Execute(db, """
+            INSERT INTO tax_categories (code, name, taxation_type, rate_kind) VALUES
+                ('TS8', '課税売上（旧税率8%）', 'taxable_sales', 'legacy_8');
+            INSERT INTO accounts (code, name, category, default_tax_category_id)
+                VALUES ('4100', '売上高', 'revenue', (SELECT id FROM tax_categories WHERE code = 'TS8'));
+            """);
+
+        Assert.ThrowsAny<Exception>(() => TestDatabase.Execute(db, $"BEGIN;\n{File.ReadAllText(rebuild)}\nCOMMIT;"));
+        TestDatabase.Execute(db, "ROLLBACK;");
+
+        Assert.Equal(["TS8|legacy_8"], TestDatabase.Query(db, "SELECT code || '|' || rate_kind FROM tax_categories"));
+        Assert.Equal(1L, TestDatabase.ScalarOf<long>(db, "SELECT default_tax_category_id FROM accounts WHERE code = '4100'"));
+        Assert.Contains("'legacy_8'", TestDatabase.ScalarOf<string>(db, "SELECT sql FROM sqlite_master WHERE name = 'tax_categories'"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 行を全部消した表（採番だけが進んでいる）を作り直しても、採番は巻き戻らない。
     /// 書き戻しが 0 行だと sqlite_sequence に行が無く、UPDATE だけの復元は空振りする
     /// （レシピ⑧の INSERT 分岐が正にこの縁のためにある。qa/03 L-09 で実際に書き落とした）。

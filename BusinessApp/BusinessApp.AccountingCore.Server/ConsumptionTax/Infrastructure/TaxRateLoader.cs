@@ -35,11 +35,23 @@ public sealed class TaxRateLoader(IDbAccessor dbAccessor, string dataSourceName)
             []);
 
         return new TaxRateBook(rows.Select(row => new TaxRate(
-            DbValue.ToEnum<TaxRateKind>(row["rate_kind"]),
+            KindOf(row["rate_kind"]),
             new EffectivePeriod(DbValue.ToDate(row["valid_from"]), DbValue.ToNullableDate(row["valid_to"])),
             DbValue.ToInt(row["national_rate_per_10000"]),
             DbValue.ToInt(row["local_numerator"]),
             DbValue.ToInt(row["local_denominator"]),
             new RuleVersion(DbValue.ToText(row["version"])))));
     }
+
+    /// <summary>
+    /// 税率区分の字を列挙子に直す。<b>宣言されている名前だけを受け、知らない字は表と列を名乗って落ちる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="DbValue.ToEnum{T}"/> を使わない</b>——数字の字（<c>'2'</c>）を定義の外の値のまま通し、
+    /// どの区分で引いても当たらない行が黙って残る（2026-09-24 の自己レビュー。旧税率の <c>legacy_8</c> を外した回に見つけた）。
+    /// 数字の字が届くのは、CHECK を迂回した行だけである（0045 を当てていない DB の <c>'legacy_8'</c> は <c>ToEnum</c> でも落ちたが、どの表のどの列かを名乗らなかった）。
+    /// </remarks>
+    private static TaxRateKind KindOf(object? value)
+        => DbValue.ToDefinedEnum<TaxRateKind>(value)
+            ?? throw new InvalidOperationException($"tax_rates の rate_kind に知らない値がある: {DbValue.ToText(value)}");
 }
