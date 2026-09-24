@@ -34,6 +34,7 @@ import argparse
 import os
 import subprocess
 import sys
+import tempfile
 from typing import Callable, Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 sys.stdout.reconfigure(encoding="utf-8")  # Windows の既定は CP932 で、理由文が化ける
@@ -158,13 +159,38 @@ def decide(changed: Sequence[str], known: Optional[Set[str]] = None) -> List[Fin
 Runner = Callable[[List[str]], Optional[str]]
 
 
-def _git(args: List[str]) -> Optional[str]:
-    try:
-        out = subprocess.run(["git", "-c", "core.quotepath=false"] + args, cwd=REPO_ROOT,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-    except (OSError, subprocess.CalledProcessError):
-        return None
-    return out.stdout.decode("utf-8", errors="replace")
+def git_runner(cwd: str, env: Optional[Dict[str, str]] = None, quotepath_off: bool = True) -> Runner:
+    """git を撃つ runner を作る。**本番は `_git`**（このリポジトリを、渡された環境のまま撃つ）。
+
+    **検体は使い捨てのリポジトリと `clean_env()` を渡す**——フックの中から撃つと、git が渡す
+    `GIT_INDEX_FILE` などが本番の索引に向く（`tools/git-hooks/_gitenv.py`）。
+    **`quotepath_off=False` は対照実験のためだけにある**（`-c core.quotepath=false` を外すと赤くなることを見る）。
+    """
+    head = ["git", "-c", "core.quotepath=false"] if quotepath_off else ["git"]
+
+    def run(args: List[str]) -> Optional[str]:
+        try:
+            out = subprocess.run(head + args, cwd=cwd, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE, check=True, env=env)
+        except (OSError, subprocess.CalledProcessError):
+            return None
+        return out.stdout.decode("utf-8", errors="replace")
+
+    return run
+
+
+_git = git_runner(REPO_ROOT)
+
+
+def _changed_calls(base: str) -> List[List[str]]:
+    """差分を取る 4 系統。**`--no-renames` は改名の両側を数えるため**——付けないと git は改名を
+    新しい名前の 1 行でしか返さず、**DDL の外へ動かしたファイルも、改名で消えた旧パスも見えない**
+    （2026-09-25 の自己レビュー。`tools/git-hooks/docs_only.py` も同じ理由で付けている）。
+    """
+    return [["diff", "--name-only", "--no-renames", base + "...HEAD"],
+            ["diff", "--name-only", "--no-renames"],
+            ["diff", "--name-only", "--no-renames", "--cached"],
+            ["ls-files", "--others", "--exclude-standard"]]
 
 
 def changed_files(base: str, runner: Runner = _git) -> Optional[List[str]]:
@@ -176,11 +202,25 @@ def changed_files(base: str, runner: Runner = _git) -> Optional[List[str]]:
 
     **削除も拾う。** 消した回こそ掃引したい回であり、
     **`-Only` に載せない**判断は `decide` が実在の集合と突き合わせて行う。
+    **改名は旧と新の 2 行で返る**（`_changed_calls` の `--no-renames`）。
     """
-    calls = [["diff", "--name-only", base + "...HEAD"],
-             ["diff", "--name-only"],
-             ["diff", "--name-only", "--cached"],
-             ["ls-files", "--others", "--exclude-standard"]]
+    return _union(_changed_calls(base), runner)
+
+
+def deleted_files(base: str, runner: Runner = _git) -> Optional[List[str]]:
+    """`base` から消えたファイル（改名で消えた旧パスを含む）。取れなければ None。
+
+    **系統は `_changed_calls` の `diff` から導く**（`--diff-filter=D` を足すだけ。未追跡のファイルは
+    消えようがないので `ls-files` は無い）。**別に書き並べると、片方に系統を足したときに食い違う**
+    ——2026-09-24 に、削除の側がコミット済みの系統しか見ておらず、段階済みで消したファイルを
+    「実在しないパスが返った」と取り違えて、コミット前フックがこの道具の自己検査に止められた。
+    """
+    return _union([call[:3] + ["--diff-filter=D"] + call[3:]
+                   for call in _changed_calls(base) if call[0] == "diff"], runner)
+
+
+def _union(calls: List[List[str]], runner: Runner) -> Optional[List[str]]:
+    """git の呼び出しを全部打って、返ったパスを足し合わせる。**1 つでも読めなければ None。**"""
     rels = set()
     for call in calls:
         out = runner(call)
@@ -190,6 +230,34 @@ def changed_files(base: str, runner: Runner = _git) -> Optional[List[str]]:
             if line.strip():
                 rels.add(line.strip())
     return sorted(rels)
+
+
+def unexplained_paths(base: str, runner: Runner, root: str) -> Optional[List[str]]:
+    """差分に返ったのに、実在もせず、消えたとも数えていないパス。取れなければ None。
+
+    **空でなければ、差分の読み方が壊れている**——パスが壊れて返った（quotepath）か、
+    消えたファイルの数え方に漏れがある（系統・改名）。**自己検査が使い捨てのリポジトリで撃つ。**
+    **`lexists` にしてある**——壊れたシンボリックリンクへ変えたファイルも「在る」と数える（`exists` はリンク先を見る）。
+    """
+    changed = changed_files(base, runner)
+    gone = deleted_files(base, runner)
+    if changed is None or gone is None:
+        return None
+    known_gone = set(gone)
+    return [r for r in changed
+            if r not in known_gone and not os.path.lexists(os.path.join(root, *r.split("/")))]
+
+
+def unexplained_message(paths: Sequence[str]) -> str:
+    """`unexplained_paths` の報告。**原因を取り違えさせない**——エスケープの印（引用符か逆斜線）があれば
+    quotepath、無ければ削除の数え漏れ（2026-09-24 に挙がったのは ASCII 名の `Rounding.cs` で、
+    quotepath が関わりようのない名前だったのに「quotepath が効いていない？」と言っていた）。
+    """
+    escaped = [p for p in paths if p.startswith('"') or "\\" in p]
+    if escaped:
+        return "差分のパスがエスケープされて返った（`core.quotepath` が効いていない）: " + _listed(escaped)
+    return ("差分に返ったのに実在せず、消えたとも数えていないパスがある"
+            "（`deleted_files` の数え漏れ——削除・改名の系統を見直す）: " + _listed(paths))
 
 
 def report(base: str, changed: Optional[Sequence[str]],
@@ -326,53 +394,168 @@ def _selftest() -> int:
         ng.append("report: 理由か「ほか」の行が落ちている")
     counted["印字の検体"] = 4
 
-    # --- ③ 差分の取り方（`changed_files`）。**4 系統を 1 つずつ**守る -------
-    def fake(mapping: Dict[str, str]) -> Runner:
-        return lambda args: mapping.get(" ".join(args), "")
+    # --- ③ 差分の取り方（`changed_files`・`deleted_files`）。**系統を 1 つずつ**守る -----
+    def strict(expected: Sequence[str], filled: Dict[str, str]) -> Runner:
+        """**想定の外の呼び出しには None を返す**——実装が系統を足しても、黙って "" で通さない。"""
+        def run(args: List[str]) -> Optional[str]:
+            key = " ".join(args)
+            if key in filled:
+                return filled[key]
+            return "" if key in expected else None
+        return run
 
     QSQL = "Designer/Design/Modules/A/GeneralLedger.Query.sql"
     systems = {
-        "コミット済み": "diff --name-only main...HEAD",
-        "作業ツリー": "diff --name-only",
-        "段階済み": "diff --name-only --cached",
+        "コミット済み": "diff --name-only --no-renames main...HEAD",
+        "作業ツリー": "diff --name-only --no-renames",
+        "段階済み": "diff --name-only --no-renames --cached",
         "未追跡": "ls-files --others --exclude-standard",
     }
+    passed = []
     for label, key in systems.items():
-        got = changed_files("main", fake({key: QSQL + "\n"}))
+        got = changed_files("main", strict(list(systems.values()), {key: QSQL + "\n"}))
         if got != [QSQL]:
             ng.append("changed_files: {} だけに載せたのに拾えない（{}）".format(label, got))
         elif not decide(got, KNOWN)[1].run:
             ng.append("changed_files: {} で拾ったのに sql_sweep が流す側にならない".format(label))
+        else:
+            passed.append(label)
     if changed_files("main", lambda a: None) is not None:
         ng.append("changed_files: 読めないときに None を返していない")
     for key in systems.values():
         runner = (lambda k: (lambda a: None if " ".join(a) == k else ""))(key)
         if changed_files("main", runner) is not None:
             ng.append("changed_files: {} が読めないのに None を返さない".format(key))
-    counted["差分の系統"] = len(systems)
+    # **字は通った表明から作り、字で書いた一覧と比べる**（self-review スキル §9 の 6）
+    if "・".join(passed) != "コミット済み・作業ツリー・段階済み・未追跡":
+        ng.append("changed_files: 拾えた系統が {} だけ".format(passed))
+    counted["差分の系統"] = "・".join(passed)
 
-    # --- ④ 実データ。**実物の git を 1 回通し、表を両側から突き合わせる** ---
+    GONE = "BusinessApp/BusinessApp.AccountingCore/Shared/Gone.cs"
+    deletions = {
+        "コミット済み": "diff --name-only --no-renames --diff-filter=D main...HEAD",
+        "作業ツリー": "diff --name-only --no-renames --diff-filter=D",
+        "段階済み": "diff --name-only --no-renames --diff-filter=D --cached",
+    }
+    passed = []
+    for label, key in deletions.items():
+        got = deleted_files("main", strict(list(deletions.values()), {key: GONE + "\n"}))
+        if got != [GONE]:
+            ng.append("deleted_files: {} だけで消したのに拾えない（{}）".format(label, got))
+        else:
+            passed.append(label)
+    # **消えていないものを混ぜない**——どれかの系統から `--diff-filter=D` を落とすか、絞らない呼び出しを
+    # 足すと、変えただけのファイルも「消えた」になり、④ の「実在しないパス」を何でも説明してしまう。
+    # **どの呼び出しにも、絞っていなければ変えたファイルを返す**
+    if deleted_files("main", lambda a: "" if "--diff-filter=D" in a else GONE + "\n") != []:
+        ng.append("deleted_files: 削除でない差分まで「消えた」に数えている")
+    for key in deletions.values():
+        runner = (lambda k: (lambda a: None if " ".join(a) == k else ""))(key)
+        if deleted_files("main", runner) is not None:
+            ng.append("deleted_files: {} が読めないのに None を返さない".format(key))
+    if "・".join(passed) != "コミット済み・作業ツリー・段階済み":
+        ng.append("deleted_files: 拾えた系統が {} だけ".format(passed))
+    counted["削除の系統"] = "・".join(passed)
+
+    # **報告は原因を取り違えさせない**（`unexplained_message` の 2 つの形を字で固定する）
+    # **逆斜線は `chr(92)` で組む**——字面に書くと `lint_secrets.py` の SEC-003（UNC パス）に見える
+    quoted = unexplained_message(['"docs/' + chr(92) + '346' + chr(92) + '227.md"'])
+    if "quotepath" not in quoted:
+        ng.append("unexplained_message: エスケープされたパスで quotepath と言わない: " + quoted)
+    missed = unexplained_message(["a/Rounding.cs", "b/1.cs", "b/2.cs", "b/3.cs", "b/4.cs"])
+    if "quotepath" in missed or "数え漏れ" not in missed or "ほか 2 件" not in missed:
+        ng.append("unexplained_message: ASCII 名のパスで原因を取り違えるか、省いた件数を言わない: " + missed)
+
+    # --- ④ 使い捨てのリポジトリで本物の git を撃つ。**対照実験つき** -------------
+    # **本番のリポジトリで確かめない理由**——①結果がそのときコミットしようとしている状態に引きずられ、
+    # ふつうの状態では削除が 0 件で、直したい経路を 1 度も通らない ②この機は `core.quotepath=false` を
+    # **グローバル設定**が持つので、`-c core.quotepath=false` を外しても赤くならない（2026-09-25 の自己レビュー）
+    sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "git-hooks"))
+    from _gitenv import clean_env  # noqa: E402
+    env = clean_env()
+    fixture_git = ["-c", "user.name=selftest", "-c", "user.email=selftest@example.com",
+                   "-c", "core.hooksPath=", "-c", "init.templateDir="]
+
+    def fx(cwd: str, *args: str) -> None:
+        subprocess.run(["git", *fixture_git, *args], cwd=cwd, check=True, capture_output=True, env=env)
+
+    def put(repo: str, rel: str, body: str) -> None:
+        target = os.path.join(repo, *rel.split("/"))
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w", encoding="utf-8", newline="\n") as f:
+            f.write(body)
+
+    WANT_GONE = ["Designer/ddl/x.sql", "added.txt", "committed.txt", "moved.txt", "staged.txt", "worktree.txt"]
+    try:
+        with tempfile.TemporaryDirectory(prefix="which-gates-selftest-") as tmp:
+            repo = os.path.join(tmp, "r")
+            fx(tmp, "init", "-q", repo)
+            fx(repo, "config", "core.quotepath", "true")  # **グローバルの false に隠されないよう、ローカルで既定へ戻す**
+            for rel in ("committed.txt", "staged.txt", "worktree.txt", "moved.txt",
+                        "docs/日本語.md", "Designer/ddl/x.sql"):
+                put(repo, rel, "最初\n")
+            fx(repo, "add", "-A")
+            fx(repo, "commit", "-q", "-m", "一つ目")
+            fx(repo, "rm", "-q", "committed.txt")                  # コミット済みの削除
+            put(repo, "moved.txt", "前のコミットで触った\n")
+            fx(repo, "commit", "-q", "-a", "-m", "二つ目")
+            fx(repo, "rm", "-q", "staged.txt")                     # 段階済みの削除
+            os.remove(os.path.join(repo, "worktree.txt"))          # 作業ツリーの削除
+            put(repo, "added.txt", "足した\n")
+            fx(repo, "add", "added.txt")
+            os.remove(os.path.join(repo, "added.txt"))             # 足してから作業ツリーで消した
+            os.makedirs(os.path.join(repo, "sub"))                 # `git mv` は行き先のフォルダを作らない
+            fx(repo, "mv", "moved.txt", "sub/moved.txt")           # 前のコミットで触ったファイルの改名
+            fx(repo, "mv", "Designer/ddl/x.sql", "docs/x.sql")     # DDL の外へ動かした
+            put(repo, "docs/日本語.md", "変えた\n")                # 日本語名の変更
+
+            good = git_runner(repo, env)
+            got_changed = changed_files("HEAD~1", good) or []
+            got_gone = deleted_files("HEAD~1", good)
+            if got_gone != WANT_GONE:
+                ng.append("deleted_files: 使い捨てのリポジトリで消えたものが {} のはずが {}".format(WANT_GONE, got_gone))
+            for rel in ("docs/日本語.md", "sub/moved.txt", "docs/x.sql", "moved.txt", "Designer/ddl/x.sql"):
+                if rel not in got_changed:
+                    ng.append("changed_files: 使い捨てのリポジトリで {} を拾わない: {}".format(rel, got_changed))
+            if not decide(got_changed, set())[0].run:
+                ng.append("decide: DDL の外へ動かした回にノックアウトを流す側にならない（改名の旧パスが見えていない）")
+            left = unexplained_paths("HEAD~1", good, repo)
+            if left != []:
+                ng.append("unexplained_paths: 壊していない git で空にならない: {}".format(left))
+
+            # **対照実験 1**: quotepath を外すと赤くなり、報告が quotepath と言う
+            bad = unexplained_paths("HEAD~1", git_runner(repo, env, quotepath_off=False), repo)
+            if not bad or "quotepath" not in unexplained_message(bad):
+                ng.append("対照実験: quotepath を外しても赤くならない（または原因を言わない）: {}".format(bad))
+            # **対照実験 2**: 削除をコミット済みの系統しか見ない形（2026-09-24 の穴）を戻すと赤くなり、数え漏れと言う
+            def committed_only(args: List[str]) -> Optional[str]:
+                if "--diff-filter=D" in args and not any(a.endswith("...HEAD") for a in args):
+                    return ""
+                return good(args)
+            old = unexplained_paths("HEAD~1", committed_only, repo)
+            if not old or "数え漏れ" not in unexplained_message(old):
+                ng.append("対照実験: 削除の系統を落としても赤くならない（または原因を言わない）: {}".format(old))
+            counted["使い捨ての状態"] = len(WANT_GONE)
+    except (OSError, subprocess.CalledProcessError) as e:
+        ng.append("使い捨てのリポジトリを作れない（**判定していない**）: {}".format(e))
+
+    # --- ⑤ 本番のリポジトリ。**状態に依らない検査だけ**を置く ------------------
     real = changed_files("HEAD~1", _git)
     if real is None:
         ng.append("changed_files: 実物の git で差分を取れない（**None は 0 件ではない**）")
     elif not real:
         ng.append("changed_files: 実物の git で 0 件（`HEAD~1` との差分が無いのは考えにくい）")
     else:
-        # **返った行が実在する**ことまで見る（quotepath が既定に戻ると壊れた名前が返る）
-        missing = [r for r in real if not os.path.exists(os.path.join(REPO_ROOT, *r.split("/")))]
-        deleted = _git(["diff", "--name-only", "--diff-filter=D", "HEAD~1...HEAD"]) or ""
-        gone = set(deleted.split())
-        unexplained = [r for r in missing if r not in gone]
-        if unexplained:
-            ng.append("changed_files: 実在しないパスが返った（quotepath が効いていない？）: {}"
-                      .format(unexplained[:3]))
+        escaped = [r for r in real if r.startswith('"') or "\\" in r]
+        if escaped:
+            ng.append(unexplained_message(escaped))
     counted["実物の差分"] = len(real or [])
 
     # **日本語の名前が壊れずに返ることを見る。** `core.quotepath` が既定へ戻ると
     # `"docs/\346\227\245..."` の形になり、**件数も接頭辞一致も静かにずれる**。
     # **限界: この機では `-c core.quotepath=false` を外しても赤くならない**
-    # ——リポジトリのローカル設定が既に `false` を持っているため。
-    # **この検査が効くのは、その設定を持たない機で clone したとき**である（そこが本来の危険）
+    # ——**グローバル設定**（`~/.gitconfig`）が既に `false` を持っているため。
+    # **この検査が効くのは、グローバル設定にそれを持たない機**である（そこが本来の危険）。**効くかどうかの対照は ④ が持つ**
     tracked = _git(["ls-files"]) or ""
     japanese = [r for r in tracked.splitlines() if any(ord(c) > 0x7F for c in r)]
     if not japanese:
@@ -405,7 +588,7 @@ def _selftest() -> int:
     for m in ng:
         print("NG  " + m)
     print("which_gates: " + ("すべて期待どおり（" if not ng else "{} 件が期待と違う（".format(len(ng)))
-          + "・".join("{} {}".format(k, v) for k, v in counted.items()) + "）")
+          + "／".join("{} {}".format(k, v) for k, v in counted.items()) + "）")
     return 1 if ng else 0
 
 
