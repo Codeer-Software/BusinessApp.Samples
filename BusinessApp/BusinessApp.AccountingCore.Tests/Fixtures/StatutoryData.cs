@@ -130,7 +130,6 @@ public static class StatutoryData
     {
         "standard" => TaxRateKind.Standard,
         "reduced" => TaxRateKind.Reduced,
-        "legacy_8" => TaxRateKind.Legacy8,
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, "知らない税率区分"),
     };
 

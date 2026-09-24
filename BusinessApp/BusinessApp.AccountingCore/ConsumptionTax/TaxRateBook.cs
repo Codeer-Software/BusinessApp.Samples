@@ -7,8 +7,8 @@ using BusinessApp.AccountingCore.Shared;
 /// </summary>
 /// <remarks>
 /// <para><b><see cref="EffectiveDatedRuleSet{TRule}"/> を区分ごとに 1 つ作る。</b>
-/// 3 区分をまとめて 1 つの集合にすると、<b>区分が違うだけで期間が重なる行が「重複」として弾かれる</b>
-/// ——標準・軽減・旧税率は同じ日から同時に有効である。</para>
+/// 区分をまたいで 1 つの集合にすると、<b>区分が違うだけで期間が重なる行が「重複」として弾かれる</b>
+/// ——標準と軽減は同じ日から同時に有効である。</para>
 /// <para><b>重なりの検査は区分の中では効いている。</b> DB のトリガも同じ単位で見ているので、
 /// <b>同じことを 2 か所が独立に見ている</b>（<c>Designer/ddl/015_tax_rates.sql</c>）。</para>
 /// </remarks>

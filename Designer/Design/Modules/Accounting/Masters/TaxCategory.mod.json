@@ -440,6 +440,17 @@
       "NextFocusField": "",
       "OnFocusMoving": "",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "ResourcePath": "",
+      "RawHtml": "<strong>入力の決まり</strong><ul><li>「税率区分」に旧税率 8%（2019/09/30 までの標準税率）はありません。このアプリでは、旧税率の取引を税区分で分けて記帳できません。</li><li>旧税率の取引のために、「税率区分」を「軽減税率」にした税区分を作ったり、税区分の名前を変えたりしないでください。合計は同じ 8% でも、消費税（国税）と地方消費税の割合が違い、軽減税率の取引として扱われます。</li></ul>",
+      "Name": "RateKindNotesLabel",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": true,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.MarkupStringFieldDesign"
     }
   ],
   "UserWriteCondition": {
@@ -973,6 +984,44 @@
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
                 "HorizontalAlignment": "End"
+              }
+            ]
+          },
+          {
+            "IsWrap": false,
+            "IsAutoFillWrap": false,
+            "Margin": {},
+            "GridRowType": "Normal",
+            "CanResize": false,
+            "BackgroundColor": "",
+            "KeepInFillAvailableGrid": false,
+            "IsProportionalScale": false,
+            "IsRowMarginRemoved": false,
+            "Columns": [
+              {
+                "IgnoreContentWidth": false,
+                "Padding": {},
+                "BackgroundColor": "",
+                "BorderStyle": {
+                  "LeftColor": "",
+                  "TopColor": "",
+                  "RightColor": "",
+                  "BottomColor": ""
+                },
+                "CanResize": false,
+                "AllowOverflow": false,
+                "Border": "None",
+                "Layout": {
+                  "FieldName": "RateKindNotesLabel",
+                  "ContextMenu": "",
+                  "ClassName": "form-notes",
+                  "FontFamily": "",
+                  "Color": "",
+                  "Name": "",
+                  "BackgroundColor": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "HorizontalAlignment": "Start"
               }
             ]
           }

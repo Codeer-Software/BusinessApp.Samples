@@ -19,8 +19,8 @@ public class DbValueTests
     /// 検査用の列挙子。1 語・複数語・<b>数字を含むもの</b>を持つ（snake_case の往復を見るため）。
     /// </summary>
     /// <remarks>
-    /// <c>Legacy8</c> は DDL の <c>rate_kind</c> にある <c>legacy_8</c> を写したものである
-    /// （<c>Designer/ddl/003_consumption_tax.sql</c>）。**まだ C# の列挙型にしていない**ので、
+    /// <c>Legacy8</c> は、DDL の <c>rate_kind</c> にあった <c>legacy_8</c> を写したものである
+    /// （旧税率はスコープの外になった——docs/11 §1-1-1）。**いま DDL にも C# にも数字を含む値は無い**ので、
     /// ここが数字の前で区切ることを表明する唯一の場所になる。
     /// </remarks>
     public enum SampleStatus
@@ -94,10 +94,10 @@ public class DbValueTests
     }
 
     /// <summary>
-    /// <b>数字の前でも区切る。</b> DDL の CHECK に <c>legacy_8</c> がある。
+    /// <b>数字の前でも区切る。</b>（規約。いま DDL に数字を含む値は無い——上の <see cref="SampleStatus"/> の注記）
     /// </summary>
     /// <remarks>
-    /// 区切らないと <c>Legacy8</c> は <c>legacy8</c> になり、書いた瞬間に CHECK で弾かれる。
+    /// 区切らないと <c>Legacy8</c> は <c>legacy8</c> になり、DDL が <c>legacy_8</c> と書いていれば CHECK で弾かれる。
     /// **いま数字を含む列挙子は C# に 1 つも無い**ので、ここが唯一の網である
     /// （2026-08-27 の自己レビュー R16-03。写しの片方だけが規約どおりだった）。
     /// 連続する数字は 1 語として扱う（<c>Legacy80</c> → <c>legacy_80</c>）。

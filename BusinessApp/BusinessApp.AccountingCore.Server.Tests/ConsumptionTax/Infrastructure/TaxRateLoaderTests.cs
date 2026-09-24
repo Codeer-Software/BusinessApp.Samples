@@ -26,11 +26,11 @@ public class TaxRateLoaderTests
         => new(server.Accessor, SqliteDbAccessor.DataSourceName);
 
     /// <summary>
-    /// <b>初期データの 3 本が、条文どおりの区分・期間・率で読める。</b>
+    /// <b>初期データの 2 本が、条文どおりの区分・期間・率で読める。</b>
     /// </summary>
     /// <remarks>
     /// <b>数ではなく「どの区分がいつから何か」の組を並べる</b>（<c>self-review</c> スキル §9 の 6）。
-    /// <b>終期は 3 本とも無い</b>——消税法 29 も地方税法 72 の 83 も期限を書いていない。
+    /// <b>終期は 2 本とも無い</b>——消税法 29 も地方税法 72 の 83 も期限を書いていない。
     /// </remarks>
     [Fact]
     public async Task 初期データの税率は条文どおりに読める()
@@ -43,7 +43,6 @@ public class TaxRateLoaderTests
             [
                 (TaxRateKind.Standard, "2019/10/01", (DateOnly?)null, 780, 22, 78, "tax_rate:standard:2019-10-01"),
                 (TaxRateKind.Reduced, "2019/10/01", null, 624, 22, 78, "tax_rate:reduced:2019-10-01"),
-                (TaxRateKind.Legacy8, "2019/10/01", null, 630, 17, 63, "tax_rate:legacy_8:2019-10-01"),
             ],
             book.Rules.Select(rate => (
                 rate.Kind,
@@ -59,7 +58,7 @@ public class TaxRateLoaderTests
     /// <b>同じ区分に 2 つの期間がある行を読んで、日付でどちらが当たるかを決める。</b>
     /// </summary>
     /// <remarks>
-    /// <para><b>配った 3 行だけでは、この経路を 1 度も通らない</b>——3 行とも期間が同じなので、
+    /// <para><b>配った 2 行だけでは、この経路を 1 度も通らない</b>——2 行とも期間が同じなので、
     /// <c>DbValue.ToNullableDate</c> の<b>非 NULL の枝</b>も、
     /// <c>EffectiveDatedRuleSet.ResolveAt</c> の<b>複数から選ぶ側</b>も動かない。</para>
     /// <para><b>守りを外さずに入れられる。</b> 2019-09-30 で閉じた期間は、
@@ -172,5 +171,32 @@ public class TaxRateLoaderTests
         var exception = await Assert.ThrowsAsync<ArgumentException>(() => LoaderOf(server).LoadAsync());
 
         Assert.Contains("制度ルールの有効期間が重複している", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>知らない税率区分の行は、読み出しで表と列を名乗って落ちる</b>——黙って定義の外の値にしない。
+    /// </summary>
+    /// <remarks>
+    /// <b>CHECK を一時的に効かなくして入れる</b>（取込・直打ち、0045 を当てていない DB の形）。<c>'legacy_8'</c> は 2026-09-24 にスコープの外にした区分、
+    /// <c>'2'</c> は外した列挙子の番号——<b>数字の字を名前として受ける読み方だと、<c>(TaxRateKind)2</c> が黙って通る</b>。
+    /// </remarks>
+    [Theory]
+    [InlineData("legacy_8")]
+    [InlineData("2")]
+    public async Task 知らない税率区分の行は読み出しで落ちる(string kind)
+    {
+        using var server = new AccountingServer();
+        server.Execute(
+            "PRAGMA ignore_check_constraints = ON;"
+            + " INSERT INTO tax_rates"
+            + " (rate_kind, valid_from, valid_to, national_rate_per_10000, local_numerator,"
+            + " local_denominator, version, legal_basis, source_url, confirmed_on)"
+            + $" VALUES ('{kind}', '2019-10-01', NULL, 630, 17, 63,"
+            + $" 'tax_rate:{kind}:2019-10-01', '検体', '検体', '2026-09-25');"
+            + " PRAGMA ignore_check_constraints = OFF;");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => LoaderOf(server).LoadAsync());
+
+        Assert.Equal($"tax_rates の rate_kind に知らない値がある: {kind}", exception.Message);
     }
 }

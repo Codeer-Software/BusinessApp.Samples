@@ -110,7 +110,7 @@ public sealed record TaxRate : IEffectiveDatedRule
     /// 税込 → 課税標準額は <c>10000 ÷ (10000 ＋ 合計税率)</c>（＝ 100/110）、
     /// 税込 → 税額は <c>合計税率 ÷ (10000 ＋ 合計税率)</c>（＝ 10/110）で、
     /// どちらも<b>小数に直さずに整数の対で書ける</b>
-    /// （消費税リサーチ §5-4 の換算率。<c>TaxRateTests</c> が 3 区分とも組み立てて確かめる）。</para>
+    /// （消費税リサーチ §5-4 の換算率。<c>TaxRateTests</c> が配っている区分をどれも組み立てて確かめる）。</para>
     /// </remarks>
     public int CombinedRatePer10000 =>
         (int)((long)NationalRatePer10000 * (LocalDenominator + LocalNumerator) / LocalDenominator);

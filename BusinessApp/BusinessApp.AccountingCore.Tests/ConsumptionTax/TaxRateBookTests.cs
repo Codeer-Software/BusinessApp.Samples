@@ -11,7 +11,7 @@ using BusinessApp.AccountingCore.Tests.Fixtures;
 /// </summary>
 /// <remarks>
 /// <para><b>1 行の意味は <see cref="TaxRateTests"/></b> が見る。ここは<b>選び方</b>だけを見る。</para>
-/// <para><b>配っている 3 行は区分だけが違い、期間は全部同じ</b>（2019-10-01 から終期なし）なので、
+/// <para><b>配っている 2 行は区分だけが違い、期間は全部同じ</b>（2019-10-01 から終期なし）なので、
 /// <b>「同じ区分に 2 つの期間がある本」を配った行だけでは作れない</b>。
 /// <b>その形は自分で組み立てて撃つ</b>——次の税率改正の日に初めて火が入る経路である。</para>
 /// </remarks>
@@ -20,21 +20,21 @@ public class TaxRateBookTests
     private static readonly TaxRateBook Delivered = StatutoryData.TaxRateBook();
 
     /// <summary>
-    /// <b>3 区分が同じ日に同時に引ける。</b>
+    /// <b>2 区分が同じ日に同時に引ける。</b>
     /// </summary>
     /// <remarks>
     /// <b>区分ごとに期間の集合を分ける根拠がここである</b>（<see cref="TaxRateBook"/>）。
-    /// 3 区分を 1 つの <see cref="EffectiveDatedRuleSet{TRule}"/> にまとめると、
-    /// <b>重なりとして構築時に投げる</b>——配っている 3 行はすべて 2019-10-01 から始まる。
+    /// 区分をまたいで 1 つの <see cref="EffectiveDatedRuleSet{TRule}"/> にまとめると、
+    /// <b>重なりとして構築時に投げる</b>——配っている 2 行はどちらも 2019-10-01 から始まる。
     /// </remarks>
     [Fact]
-    public void 同じ日に3区分とも引ける()
+    public void 同じ日に2区分とも引ける()
     {
         var date = new DateOnly(2026, 4, 1);
 
         Assert.Equal(
-            [780, 624, 630],
-            new[] { TaxRateKind.Standard, TaxRateKind.Reduced, TaxRateKind.Legacy8 }
+            [780, 624],
+            new[] { TaxRateKind.Standard, TaxRateKind.Reduced }
                 .Select(kind => Delivered.ResolveAt(kind, date)!.NationalRatePer10000));
     }
 
@@ -42,7 +42,7 @@ public class TaxRateBookTests
     /// <b>同じ区分に 2 つの期間があるとき、日付でどちらの行が当たるかが決まる。</b>
     /// </summary>
     /// <remarks>
-    /// <b>配った行だけでは一度も通らない経路である</b>——3 行とも期間が同じなので、
+    /// <b>配った行だけでは一度も通らない経路である</b>——2 行とも期間が同じなので、
     /// <c>EffectiveDatedRuleSet.ResolveAt</c> の「複数から選ぶ」側に入らない。
     /// <b>税率が改正された日に初めて火が入る</b>ので、いま組み立てて撃っておく。
     /// <b>切り替わりの両側を撃つ</b>——片側だけだと、期間を 1 日ずらしても緑のまま通る（qa/03 L-61）。
@@ -66,12 +66,13 @@ public class TaxRateBookTests
     /// <remarks>
     /// <b>期間で並べていないと、上の引き分けが「先に入った行」に依存する</b>
     /// （<see cref="EffectiveDatedRuleSet{TRule}"/> は自分でも並べ替えるが、全件を返す
-    /// <see cref="TaxRateBook.Rules"/> は本が持つ）。<b>入れる順を逆にして撃つ。</b>
+    /// <see cref="TaxRateBook.Rules"/> は本が持つ）。<b>入れる順を区分でも期間でも逆にして確かめる</b>
+    /// （軽減を先に入れる——区分で並べ替えていなければ、期間だけの安定な並べ替えでは軽減が先頭に残る。2026-09-24 の自己レビュー）。
     /// </remarks>
     [Fact]
     public void 全件は区分順と期間順に並ぶ()
     {
-        var book = new TaxRateBook([Current, Past, Reduced]);
+        var book = new TaxRateBook([Reduced, Current, Past]);
 
         Assert.Equal(
             [
@@ -107,7 +108,6 @@ public class TaxRateBookTests
     /// 消税法 29 も地方税法 72 の 83 も期限を書いていない（税率リサーチ §1）ので、
     /// <b>標準税率と軽減税率の行には終期を置いていない</b>
     /// ——経過措置の控除割合（<see cref="TransitionalDeductionRateTests"/>）とはここが逆である。
-    /// <b><c>legacy_8</c> の終期なしは Claude の当てはめで、開発者は未承認である</b>（docs/05 の Q-54）。
     /// </remarks>
     [Fact]
     public void 終期が無いので未来の日でも引ける()
@@ -124,11 +124,11 @@ public class TaxRateBookTests
     [Fact]
     public void 版で引ける()
     {
-        var rate = Delivered.ResolveByVersion(new RuleVersion("tax_rate:legacy_8:2019-10-01"));
+        var rate = Delivered.ResolveByVersion(new RuleVersion("tax_rate:reduced:2019-10-01"));
 
         Assert.NotNull(rate);
-        Assert.Equal(TaxRateKind.Legacy8, rate.Kind);
-        Assert.Equal(630, rate.NationalRatePer10000);
+        Assert.Equal(TaxRateKind.Reduced, rate.Kind);
+        Assert.Equal(624, rate.NationalRatePer10000);
     }
 
     /// <summary>知らない版では引けない。</summary>
@@ -144,7 +144,7 @@ public class TaxRateBookTests
     /// <remarks>
     /// <b>「その区分の行が無い」と「その日の行が無い」は別である</b>が、
     /// <b>呼ぶ側にとっては同じ——どちらも計算できない</b>ので、同じ null を返す。
-    /// <b>区分を足して行を配り忘れると、ここを通る</b>（docs/05 の Q-54）。
+    /// <b>区分を足して行を配り忘れると、ここを通る</b>（docs/11 §1-1-1）。
     /// </remarks>
     [Fact]
     public void 行が1本も無い区分は引けない()
@@ -178,7 +178,7 @@ public class TaxRateBookTests
     /// </summary>
     /// <remarks>
     /// 上の検査を「全件で重なりを見る」に書き換えると、ここだけが赤くなる——
-    /// <b>配っている 3 行はすべて 2019-10-01 から始まる</b>。
+    /// <b>配っている 2 行はどちらも 2019-10-01 から始まる</b>。
     /// </remarks>
     [Fact]
     public void 区分が違えば期間が重なってもよい()
@@ -187,14 +187,13 @@ public class TaxRateBookTests
             [
                 (TaxRateKind.Standard, new DateOnly(2019, 10, 1), (DateOnly?)null),
                 (TaxRateKind.Reduced, new DateOnly(2019, 10, 1), null),
-                (TaxRateKind.Legacy8, new DateOnly(2019, 10, 1), null),
             ],
             Delivered.Rules.Select(rate => (rate.Kind, rate.Period.From, rate.Period.To)));
     }
 
     // **検体の行。** **`Current` と `Reduced` は配っている行と同じ値である**——
-    // 「配っている 3 行と同じ引き方になる」ことを見るためで、**そこは同じでよい**。
-    // **`Past` だけは違う値にする**（6.3% ＋ 63 分の 17。「2019-09-30 まで施行されていた版」の数）——
+    // 「配っている行と同じ引き方になる」ことを見るためで、**そこは同じでよい**。
+    // **`Past` だけは違う値にする**（6.3% ＋ 63 分の 17。改正前の税率の形で、**日付はテストの字で制度の日付ではない**——いつから 6.3% かは確かめていない。税率リサーチ §3）——
     // **どちらが当たるかを見る検体で 2 つが同じ値だと、取り違えても緑のまま通る**（qa/03 の縮退の型）。
     private static TaxRate Past => RateOf(TaxRateKind.Standard, "2014-04-01", "2019-09-30", 630, 17, 63);
 
