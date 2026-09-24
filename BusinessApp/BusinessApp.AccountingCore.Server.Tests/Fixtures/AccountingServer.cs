@@ -507,7 +507,7 @@ internal sealed class AccountingServer : IDisposable
     /// </remarks>
     public JournalEntryId InsertPostedWithSubAccountOnUnusedAccount(int entryNo, string transactionDate)
     {
-        // 1100（現金）は「補助科目を使う」がオフのまま。そこに補助科目を作る（マスタ側の関門はまだ無い）。
+        // 1100（現金）は「補助科目を使う」がオフのまま。そこに補助科目を作る（関門を通さず直に INSERT する——いまの製品では作れない形）。
         Execute("""
             insert into sub_accounts (account_id, code, name)
             values ((select id from accounts where code = '1100'), 'X001', '規則より前の補助科目')
@@ -634,6 +634,39 @@ internal sealed class AccountingServer : IDisposable
             values ((select id from accounts where code = '{accountCode}'), '{code}', '{name}')
             """);
         return Scalar<long>("select last_insert_rowid()");
+    }
+
+    /// <summary>
+    /// <b>補助科目を付けた計上済みの伝票</b>を 1 件作る（借方にその補助科目の科目、貸方に 1100 現金）。
+    /// 「補助科目を使う」がオンの科目を<b>使用中</b>にするのに使う。
+    /// </summary>
+    /// <remarks>
+    /// <see cref="InsertPosted(int, string?, string, (string, string, long)[])"/> は補助科目を付けない——計上のトリガが、
+    /// 「補助科目を使う」がオンの科目の明細に補助科目を要求するので、そちらでは作れない。
+    /// </remarks>
+    public JournalEntryId InsertPostedWithSubAccount(int entryNo, long subAccountId)
+    {
+        var id = InsertDraft(transactionDate: "2026-08-24", postingDate: "2026-08-24", description: "補助科目つきの入金");
+        Execute($"""
+            insert into journal_lines
+                (journal_entry_id, line_no, debit_credit, account_id, sub_account_id, amount, tax_category_id)
+            values ({id.Value}, 1, 'debit',
+                    (select account_id from sub_accounts where id = {subAccountId}),
+                    {subAccountId}, 1000,
+                    (select id from tax_categories where code = 'OUT'))
+            """);
+        InsertLine(id, 2, "credit", "1100", 1000);
+        Execute($"""
+            update journal_entries
+               set status = 'posted', entry_no = {entryNo}, posted_at = '2026-08-24 13:00:00'
+             where id = {id.Value}
+            """);
+        Execute($"""
+            update journal_entry_sequences set next_entry_no = {entryNo + 1}
+             where fiscal_year_id = {FiscalYear.Value} and next_entry_no <= {entryNo}
+            """);
+
+        return id;
     }
 
     /// <summary>コードから識別子を引く（初期データの id をテストに書き写さない）。</summary>

@@ -611,7 +611,7 @@ public class MasterSubmitGateTests
     // --- 補助科目の 2 値（qa/03 L-27。マスタの側） -------------------------------------------
 
     /// <summary>
-    /// 補助科目を使わない勘定科目の下には作れない（ADR-0038 §3）。
+    /// 補助科目を使わない勘定科目の下には作れない（docs/12 §2 のマスタの側の 2 値）。
     /// </summary>
     /// <remarks>
     /// <b>2026-09-08 の回では明細の側しか塞いでいなかった</b>——マスタの画面からは足せた。
@@ -755,6 +755,7 @@ public class MasterSubmitGateTests
     }
 
     [Theory]
+    [InlineData("Account", "UsesSubAccount", "BooleanFieldDesign")]
     [InlineData("Department", "IsCompanyWide", "BooleanFieldDesign")]
     [InlineData("TaxCategory", "TaxationType", "SelectFieldDesign")]
     [InlineData("TaxCategory", "RateKind", "SelectFieldDesign")]
@@ -907,7 +908,7 @@ public class MasterSubmitGateTests
     /// <remarks>
     /// 親はまだ DB に無い（仮の識別子）ので、<b>同じ保存の中から探す</b>。
     /// <b>この規則には DB 側の受け皿が無い</b>（<c>uses_sub_account</c> を見るトリガは明細の側だけ）ので、
-    /// ここを素通しにすると ADR-0038 §3 の 2 値が取込・API では丸ごと消える
+    /// ここを素通しにするとマスタの側の 2 値が取込・API では丸ごと消える
     /// （2026-09-09 の自己レビュー）。
     /// </remarks>
     [Fact]
@@ -1175,7 +1176,7 @@ public class MasterSubmitGateTests
     /// <b>コードの無い追加は断る。</b>
     /// </summary>
     /// <remarks>
-    /// <b>画面は必ずコードを送るが、取込は列ごと落とせる</b>（`code` の無い CSV）——
+    /// <b>画面は必ずコードを送るが、API と取込（フェーズ 6。未設計）は列ごと落としうる</b>（`code` の無い CSV など）——
     /// <b>取込こそこの関門が守る経路である</b>。素通しにすると DB の <c>NOT NULL</c> に当たり、
     /// 利用者には定型文が出る（qa/03 L-28 に戻る）。
     /// <b>この形を「通る」と表明する検体が置かれていた</b>（2026-09-09 の自己レビュー）。
@@ -1195,18 +1196,29 @@ public class MasterSubmitGateTests
         Assert.Equal("登録できません。" + $"「{label}」を入れてください。", thrown.Message);
     }
 
-    /// <summary>親を触らない更新でも、補助科目の 2 値を見る（同じ穴の裏側）。</summary>
+    /// <summary>
+    /// <b>規則より前に作られた行</b>（オフの科目の下の補助科目）<b>は、移さない更新なら通す</b>——移す更新は断る。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>2026-09-24 まで、移さない更新でも断っていた</b>（「同じ穴の裏側」として 2026-09-09 に置いた検体）。
+    /// その行が使用中なら「勘定科目」は凍結されていて移せないので、<b>名前も「有効」も直せない行き止まり</b>になっていた。
+    /// 移さない更新は規則の破れを増やさない——いまは勘定科目の側が、補助科目を持つ科目をオフにする保存を断る。</para>
+    /// </remarks>
     [Fact]
-    public async Task 親を触らない補助科目の更新でも2値を見る()
+    public async Task 規則より前の行は移さない更新なら通す()
     {
         using var server = new AccountingServer();
         // 規則より前に作られた行を模す（画面からは作れない）。
         var target = server.InsertSubAccount("1100", "S1", "規則より前の補助科目");
 
-        var thrown = await Rejected(
-            server, Updating("SubAccount", Row("SubAccount", target, Text("Name", "改名"))));
+        Assert.True(await Submit(server, Updating("SubAccount", Row("SubAccount", target, Text("Name", "改名")))));
+        Assert.True(await Submit(server, Updating("SubAccount", Row("SubAccount", target, Account(server, "1100")))));
 
-        Assert.Contains("「勘定科目」の「1100 現金」は「補助科目を使う」がオフです。", thrown.Message, StringComparison.Ordinal);
+        var thrown = await Rejected(server, Updating("SubAccount", Row("SubAccount", target, Account(server, "2100"))));
+
+        Assert.Equal(
+            "登録できません。「勘定科目」の「2100 買掛金」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。",
+            thrown.Message);
     }
 
     /// <summary>
@@ -1439,6 +1451,457 @@ public class MasterSubmitGateTests
             server, Updating("SubAccount", Row("SubAccount", sub, Text("Name", "本店（改）")))));
     }
 
+    // --- 補助科目の 2 値の、勘定科目の側（docs/12 §2 のマスタの読み。2026-09-24） ---------------------
+
+    private static (string Field, FieldDataBase Value) Uses(bool value)
+        => ("UsesSubAccount", new BooleanFieldData { Value = value });
+
+    /// <summary>勘定科目の行を、コードから引いた識別子で組む（更新の差分の形）。</summary>
+    private static ModuleData AccountRow(AccountingServer server, string code, params (string Field, FieldDataBase Value)[] fields)
+        => Row("Account", server.AccountOf(code).Value, fields);
+
+    private const string LeftUnderOne =
+        "この勘定科目の下には補助科目が 1 件あります（「有効」がオフのものも数えています）。「補助科目を使う」はオンのままにしてください。"
+        + "オフにするなら、先に補助科目マスタで、それらの補助科目の「勘定科目」を「補助科目を使う」がオンの別の勘定科目に変えてください。"
+        + "要らない補助科目も、先に移してから、その補助科目の「有効」をオフにしてください。";
+
+    /// <summary>
+    /// <b>補助科目を持つ未使用の科目の「補助科目を使う」は、オフにできない</b>——<b>無効の補助科目も数える</b>。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>2026-09-24 まで通っていた</b>——この規則は補助科目の側からしか見ておらず、マスタの側の 2 値（docs/12 §2）が崩れた
+    /// （保存の関門の断りを束ねた回の自己レビューで見つけた。帳簿は計上の関門が守っていた）。</para>
+    /// <para><b>2 件のうち 1 件を無効にしてある</b>——有効な行だけを数える誤実装だと「1 件」になる。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 補助科目を持つ未使用の科目の補助科目を使うはオフにできない()
+    {
+        using var server = new AccountingServer();
+        server.InsertSubAccount("1200", "S901", "検体の本店");
+        var inactive = server.InsertSubAccount("1200", "S902", "検体の支店");
+        server.Execute($"update sub_accounts set is_active = 0 where id = {inactive}");
+
+        var thrown = await Rejected(server, Updating("Account", AccountRow(server, "1200", Uses(false))));
+
+        Assert.Equal(
+            "登録できません。この勘定科目の下には補助科目が 2 件あります（「有効」がオフのものも数えています）。「補助科目を使う」はオンのままにしてください。"
+            + "オフにするなら、先に補助科目マスタで、それらの補助科目の「勘定科目」を「補助科目を使う」がオンの別の勘定科目に変えてください。"
+            + "要らない補助科目も、先に移してから、その補助科目の「有効」をオフにしてください。",
+            thrown.Message);
+    }
+
+    /// <summary><b>補助科目の数は 3 桁で区切る</b>（docs/21 §2-6 の「文の中の使用件数」と同じ読み方）。</summary>
+    [Fact]
+    public async Task 補助科目の数は3桁で区切る()
+    {
+        using var server = new AccountingServer();
+        server.Execute($"""
+            with recursive n(i) as (select 1 union all select i + 1 from n where i < 1000)
+            insert into sub_accounts (account_id, code, name)
+            select {server.AccountOf("1200").Value}, printf('S%04d', i), '検体' from n
+            """);
+
+        var thrown = await Rejected(server, Updating("Account", AccountRow(server, "1200", Uses(false))));
+
+        Assert.Contains("補助科目が 1,000 件あります（", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary><b>補助科目の無い科目は、オフにできる。</b></summary>
+    [Fact]
+    public async Task 補助科目の無い科目はオフにできる()
+    {
+        using var server = new AccountingServer();
+        server.InsertSubAccount("1200", "S901", "検体の本店");
+
+        Assert.True(await Submit(server, Updating("Account", AccountRow(server, "1210", Uses(false)))));
+    }
+
+    /// <summary>
+    /// <b>既にオフの科目は、補助科目があっても数えない</b>——オンからオフにする保存だけを断る。
+    /// </summary>
+    /// <remarks>
+    /// <b>規則より前に作られた行</b>（オフの 1100 現金の下の使用中の補助科目。開発機に実在する）を持つ科目に、同じ値（オフ）が名前の変更と一緒に届く形（API は行全体を送りうる。取込は未設計）。
+    /// 数えると「オンのままにしてください」（事実に反する）と「先に移して」（凍結されて移せない）を言う行き止まりになる（2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 既にオフの科目は補助科目があっても数えない()
+    {
+        using var server = new AccountingServer();
+        server.InsertPostedWithSubAccountOnUnusedAccount(1, "2026-08-24");
+
+        Assert.True(await Submit(server, Updating("Account", AccountRow(server, "1100", Uses(false), Text("Name", "現金（改）")))));
+    }
+
+    /// <summary>
+    /// <b>実在しない科目の更新では数えない</b>——止めるのは DB（更新は 0 行になる）で、ここは 2 値の規則だけを見る。
+    /// </summary>
+    /// <remarks>
+    /// <b>撃つのは、保存されている科目が引けないときに落ちないこと</b>だけである（外部キーがあるので、実在しない科目の下に補助科目はありえず、数えても 0 件になる）。
+    /// </remarks>
+    [Fact]
+    public async Task 実在しない科目の更新では数えない()
+    {
+        using var server = new AccountingServer();
+
+        Assert.True(await Submit(server, Updating("Account", Row("Account", 99999, Uses(false)))));
+    }
+
+    /// <summary>
+    /// <b>同じ保存で作る科目に「補助科目を使う」が載っていなければ、DB の既定と同じオフとみなす</b>——その下に補助科目は足せない。
+    /// </summary>
+    /// <remarks>
+    /// その科目はオフで作られる（CLB が欄を書かなくても DB の既定で、初期値の false を書いても同じ。送信の中身は未実測）。見送っていた版では、オフの科目の下に補助科目ができた（2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ保存で作る科目に補助科目を使うが無ければオフとみなす()
+    {
+        using var server = new AccountingServer();
+        var account = New("Account", Text("Code", "1290"), Text("Name", "検体の預金"));
+        var sub = New("SubAccount", Text("Code", "S901"), Text("Name", "検体の本店"), ("Account", new LinkFieldData { Value = "@temporary:1" }));
+        sub.Fields["Id"] = new IdFieldData { Value = "@temporary:2" };
+        const string expected =
+            "登録できません。「勘定科目」の「1290 検体の預金」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。";
+
+        Assert.Equal(expected, (await Rejected(server, Adding("Account", account), Adding("SubAccount", sub))).Message);
+        Assert.Equal(expected, (await Rejected(server, Adding("SubAccount", sub), Adding("Account", account))).Message);
+    }
+
+    /// <summary><b>オフからオンにする保存では数えない。</b></summary>
+    [Fact]
+    public async Task オフからオンにする保存では数えない()
+    {
+        using var server = new AccountingServer();
+        server.InsertSubAccount("1100", "S1", "規則より前の補助科目");
+
+        Assert.True(await Submit(server, Updating("Account", AccountRow(server, "1100", Uses(true)))));
+    }
+
+    /// <summary>
+    /// <b>オンのまま送り直す保存では数えない</b>——行全体を送る形（API。取込は未設計）なら、補助科目を持つオンの科目にもオンが届く。
+    /// </summary>
+    /// <remarks>
+    /// 「届いた値がオフのときだけ」を「欄があれば」と取り違えると、行全体を送る形のふつうの更新を断る（2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task オンのまま送り直す保存では数えない()
+    {
+        using var server = new AccountingServer();
+        server.InsertSubAccount("1200", "S901", "検体の本店");
+
+        Assert.True(await Submit(server, Updating("Account", AccountRow(server, "1200", Uses(true), Text("Name", "普通預金（改）")))));
+    }
+
+    /// <summary><b>「補助科目を使う」に触らない保存では数えない。</b></summary>
+    [Fact]
+    public async Task 補助科目を使うに触らない保存では数えない()
+    {
+        using var server = new AccountingServer();
+        server.InsertSubAccount("1200", "S901", "検体の本店");
+
+        Assert.True(await Submit(server, Updating("Account", AccountRow(server, "1200", Text("Name", "普通預金（改）")))));
+    }
+
+    /// <summary>
+    /// <b>並びは画面の並び</b>——勘定科目の画面では「補助科目を使う」は科目名より下にあるので、名前の長さの断りのあとに言う。
+    /// </summary>
+    [Fact]
+    public async Task 補助科目の断りは科目名の断りのあとに言う()
+    {
+        using var server = new AccountingServer();
+        server.InsertSubAccount("1200", "S901", "検体の本店");
+
+        var thrown = await Rejected(
+            server, Updating("Account", AccountRow(server, "1200", Text("Name", new string('あ', 31)), Uses(false))));
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①「科目名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。"
+            + "②" + LeftUnderOne,
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>使用中の科目をオフにする保存は、凍結だけを言う</b>——補助科目の数は言わない（docs/21 §2-6「前提の崩れた検査は飛ばす」）。
+    /// </summary>
+    /// <remarks>
+    /// 「補助科目を使う」そのものが変えられないので、「先に補助科目を移して」は従っても通らない一手になる。
+    /// </remarks>
+    [Fact]
+    public async Task 使用中の科目をオフにすると凍結だけを言う()
+    {
+        using var server = new AccountingServer();
+        server.InsertPostedWithSubAccount(1, server.InsertSubAccount("1200", "S901", "検体の本店"));
+
+        var thrown = await Rejected(server, Updating("Account", AccountRow(server, "1200", Uses(false))));
+
+        Assert.Equal(
+            "登録できません。この勘定科目は計上済みの仕訳明細 1 行で使われています。「補助科目を使う」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい勘定科目を作って、以後の振替伝票ではそちらを選んでください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>同じ保存で未使用の科目をオンにし、その下に補助科目を足すと通る</b>（取込・API）——変えたあとの値で判定する。
+    /// <b>行の並びにも、入れ物の分け方にも依らない</b>（qa/01 F-11——1 つの入れ物に混ざって届く）。
+    /// </summary>
+    /// <remarks>
+    /// <b>2026-09-24 まで、変える前の値（オフ）で判定して断っていた。</b>
+    /// </remarks>
+    [Fact]
+    public async Task 同じ保存でオンにした未使用の科目には補助科目を足せる()
+    {
+        using var server = new AccountingServer();
+        var account = AccountRow(server, "1100", Uses(true));
+        var sub = New("SubAccount", Text("Code", "S901"), Text("Name", "検体の本店"), Account(server, "1100"));
+
+        Assert.True(await Submit(server, Updating("Account", account), Adding("SubAccount", sub)));
+        Assert.True(await Submit(server, Adding("SubAccount", sub), Updating("Account", account)));
+        Assert.True(await Submit(server, new ModuleSubmitData { ModuleName = "Account", Add = [sub], Update = [account] }));
+    }
+
+    /// <summary>
+    /// <b>同じ保存でオンにした未使用の科目へは、規則より前の行を移せる</b>——科目の行を外すと、変える前の値（オフ）で断る。
+    /// </summary>
+    /// <remarks>
+    /// <b>移ってくる行に、同じ保存の科目の変更を当てる</b>検体（<c>ChangedInSubmit</c>）。足す行の検体だけでは、この経路を踏まない（2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ保存でオンにした未使用の科目へは規則より前の行を移せる()
+    {
+        using var server = new AccountingServer();
+        var target = server.InsertSubAccount("1100", "S1", "規則より前の補助科目");
+        var moving = Row("SubAccount", target, Account(server, "2200"));
+
+        Assert.True(await Submit(server, Updating("Account", AccountRow(server, "2200", Uses(true))), Updating("SubAccount", moving)));
+
+        var thrown = await Rejected(server, Updating("SubAccount", moving));
+
+        Assert.Equal(
+            "登録できません。「勘定科目」の「2200 未払金」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>同じ保存で作る科目（仮の識別子）へ移す更新は、移し先の値で判定する</b>——オフ（欄が無い）の新しい科目へは移せない。
+    /// 移し先がオンなら、規則より前の行も移せる（移す前の「1100 現金」を名指さない）。
+    /// </summary>
+    /// <remarks>
+    /// <b>移す前の親で判定していた版では、オフの新しい科目へ移せた</b>——親を重複の検査用の作法（数値で読めない更新は保存されている親へ落とす）で解いていた（2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ保存で作る科目へ移す更新は移し先で判定する()
+    {
+        using var server = new AccountingServer();
+        var fromOn = server.InsertSubAccount("1200", "S901", "検体の本店");
+        var legacy = server.InsertSubAccount("1100", "S1", "規則より前の補助科目");
+        var account = New("Account", Text("Code", "1290"), Text("Name", "検体の預金"));
+        account.Fields["Id"] = new IdFieldData { Value = "@temporary:7" };
+        var toNew = ("Account", (FieldDataBase)new LinkFieldData { Value = "@temporary:7" });
+
+        var thrown = await Rejected(
+            server, Adding("Account", account), Updating("SubAccount", Row("SubAccount", fromOn, toNew)));
+
+        Assert.Equal(
+            "登録できません。「勘定科目」の「1290 検体の預金」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。",
+            thrown.Message);
+
+        account.Fields["UsesSubAccount"] = new BooleanFieldData { Value = true };
+        Assert.True(await Submit(server, Adding("Account", account), Updating("SubAccount", Row("SubAccount", legacy, toNew))));
+    }
+
+    /// <summary>
+    /// <b>更新の側に混ざった新しい行（仮の識別子）も、新しい行として判定する</b>——オフの科目の下には足せない。
+    /// </summary>
+    /// <remarks>
+    /// <c>MasterMeaningGate</c> と同じ扱い。<b>移すかどうかだけで判定していた版では素通りした</b>（新しい行には保存されている親が無い。2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 更新に混ざった新しい行もオフの科目の下には足せない()
+    {
+        using var server = new AccountingServer();
+
+        var thrown = await Rejected(
+            server,
+            Updating("SubAccount", New("SubAccount", Text("Code", "S901"), Text("Name", "検体の本店"), Account(server, "1100"))));
+
+        Assert.Equal(
+            "登録できません。「勘定科目」の「1100 現金」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>「勘定科目」の欄を、同じ親のまま送り直す更新・空の字で送る更新は、移っていない</b>——規則より前の行でも通す。
+    /// </summary>
+    /// <remarks>
+    /// <b>同じ親は数で比べる</b>（「0」を前に付けた字でも同じ親）。<b>空の字は、移っていない側に倒す</b>——CLB が候補に無い親を空で送る形は実測していない
+    /// （規則より前の行の親は、補助科目の画面の候補の絞り——「有効」かつ「補助科目を使う」——に入らない）。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ親を送り直す更新と空の親の更新は移っていない()
+    {
+        using var server = new AccountingServer();
+        var legacy = server.InsertSubAccount("1100", "S1", "規則より前の補助科目");
+        var padded = "0" + server.AccountOf("1100").Value.ToString(CultureInfo.InvariantCulture);
+
+        Assert.True(await Submit(server, Updating("SubAccount", Row("SubAccount", legacy, ("Account", new LinkFieldData { Value = padded }), Text("Name", "改名")))));
+        Assert.True(await Submit(server, Updating("SubAccount", Row("SubAccount", legacy, ("Account", new LinkFieldData { Value = string.Empty }), Text("Name", "改名")))));
+    }
+
+    /// <summary>
+    /// <b>同じ保存で科目をオフにし、その下に補助科目を足すと、補助科目の側で 1 度だけ断る</b>——科目の側は DB の行しか数えない。
+    /// </summary>
+    /// <remarks>
+    /// <b>2026-09-24 まで、両方とも通っていた</b>（変える前の値——オン——で判定していた）。
+    /// <b>科目の側でも同じ保存の行を数えると、同じ食い違いを 2 度言う</b>——それを撃つので全文で見る。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ保存でオフにした科目には補助科目を足せない()
+    {
+        using var server = new AccountingServer();
+
+        var thrown = await Rejected(
+            server,
+            Updating("Account", AccountRow(server, "1200", Uses(false))),
+            Adding("SubAccount", New("SubAccount", Text("Code", "S901"), Text("Name", "検体の本店"), Account(server, "1200"))));
+
+        Assert.Equal(
+            "登録できません。「勘定科目」の「1200 普通預金」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>同じ保存で科目をオフにし、その下に残る行を同じ科目のまま送り直すと、科目の側で 1 度だけ断る。</b>
+    /// </summary>
+    /// <remarks>
+    /// 行全体を送る形（API。取込は未設計）なら、移さない行にも「勘定科目」の欄が載る。<b>補助科目の側でも見ると同じ食い違いを 2 度言い</b>、
+    /// そちらの一手（オンの科目を選ぶ）に従っても、科目の側は DB の行を数えたままなので通らない（2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ保存でオフにした科目の下に残る行は科目の側で1度だけ言う()
+    {
+        using var server = new AccountingServer();
+        var target = server.InsertSubAccount("1200", "S901", "検体の本店");
+
+        var thrown = await Rejected(
+            server,
+            Updating("Account", AccountRow(server, "1200", Uses(false))),
+            Updating("SubAccount", Row("SubAccount", target, Account(server, "1200"), Text("Name", "検体の本店（改）"))));
+
+        Assert.Equal("登録できません。" + LeftUnderOne, thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>同じ保存で補助科目を別の科目へ移しても、科目の側は DB の行を数えたまま断る</b>——一手は「先に移す」（別の保存）。
+    /// </summary>
+    [Fact]
+    public async Task 同じ保存で移しても科目の側は数えたまま断る()
+    {
+        using var server = new AccountingServer();
+        var target = server.InsertSubAccount("1200", "S901", "検体の本店");
+
+        var thrown = await Rejected(
+            server,
+            Updating("Account", AccountRow(server, "1200", Uses(false))),
+            Updating("SubAccount", Row("SubAccount", target, Account(server, "1210"))));
+
+        Assert.Equal("登録できません。" + LeftUnderOne, thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>補助科目の側が親を「05」のように書いても、同じ保存の科目の変更を数で突き合わせる。</b>
+    /// </summary>
+    /// <remarks>
+    /// 字面で比べていた版では、変えたあとの値が見えず、オフにする科目の下に補助科目を足す保存が通った（2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 親の識別子は数で突き合わせる()
+    {
+        using var server = new AccountingServer();
+        var padded = "0" + server.AccountOf("1200").Value.ToString(CultureInfo.InvariantCulture);
+
+        var thrown = await Rejected(
+            server,
+            Updating("Account", AccountRow(server, "1200", Uses(false))),
+            Adding("SubAccount", New(
+                "SubAccount", Text("Code", "S901"), Text("Name", "検体の本店"), ("Account", new LinkFieldData { Value = padded }))));
+
+        Assert.Equal(
+            "登録できません。「勘定科目」の「1200 普通預金」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>同じ保存で科目の「補助科目を使う」に触らなければ、保存されている値で判定する。</b>
+    /// </summary>
+    [Fact]
+    public async Task 同じ保存で科目の名前だけを直しても補助科目は足せる()
+    {
+        using var server = new AccountingServer();
+
+        Assert.True(await Submit(
+            server,
+            Updating("Account", AccountRow(server, "1200", Text("Name", "普通預金（改）"))),
+            Adding("SubAccount", New("SubAccount", Text("Code", "S901"), Text("Name", "検体の本店"), Account(server, "1200")))));
+    }
+
+    /// <summary><b>「補助科目を使う」が真偽で届かなければ止める</b>——型が変わった日に、科目の側の検査だけが黙って消えないように。</summary>
+    [Fact]
+    public async Task 補助科目を使うの欄が真偽でなければ止める()
+    {
+        using var server = new AccountingServer();
+
+        await AssertUnreadable(
+            server, Updating("Account", AccountRow(server, "1200", Text("UsesSubAccount", "0"))), "UsesSubAccount", "TextFieldData");
+    }
+
+    /// <summary>
+    /// <b>補助科目を持つ科目をオフにし、同じ保存でその下に補助科目も足すと、2 つの側がそれぞれ言う</b>——残る行と足す行は別の食い違いで、直し方も別。
+    /// </summary>
+    /// <remarks>
+    /// 並びは差分の行の順（科目の行が先なら科目の側が先）。<b>同じ文にはならない</b>ので、束ねる側が畳む話ではない（docs/21 §2-6）。
+    /// </remarks>
+    [Fact]
+    public async Task 残る行と足す行は2つの側がそれぞれ言う()
+    {
+        using var server = new AccountingServer();
+        server.InsertSubAccount("1200", "S901", "検体の本店");
+
+        var thrown = await Rejected(
+            server,
+            Updating("Account", AccountRow(server, "1200", Uses(false))),
+            Adding("SubAccount", New("SubAccount", Text("Code", "S902"), Text("Name", "検体の支店"), Account(server, "1200"))));
+
+        Assert.Equal(
+            "登録できません（2 件）。①" + LeftUnderOne
+            + "②「勘定科目」の「1200 普通預金」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>使用中の科目をオンにする保存では、足す補助科目を変える前の値（オフ）で断る</b>——凍結で変えられないので、オフのまま残る。
+    /// </summary>
+    /// <remarks>
+    /// 変えたあとの値（オン）で判定すると、1 回目は凍結だけが出て、断りに従って元に戻した 2 回目に初めて「オフです」が出る。
+    /// </remarks>
+    [Fact]
+    public async Task 使用中の科目をオンにしても同じ保存の補助科目は変える前の値で断る()
+    {
+        using var server = new AccountingServer();
+        server.InsertPosted(1, "支払", "2026-08-24", ("debit", "2200", 1000), ("credit", "1100", 1000));
+
+        var thrown = await Rejected(
+            server,
+            Updating("Account", AccountRow(server, "1100", Uses(true))),
+            Adding("SubAccount", New("SubAccount", Text("Code", "S901"), Text("Name", "検体の本店"), Account(server, "1100"))));
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①この勘定科目は計上済みの仕訳明細 1 行で使われています。「補助科目を使う」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい勘定科目を作って、以後の振替伝票ではそちらを選んでください。"
+            + "②「勘定科目」の「1100 現金」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。",
+            thrown.Message);
+    }
+
     // --- 束ねる（docs/21 §2-6 の (b)） ---------------------------------------------------
 
     /// <summary>
@@ -1468,7 +1931,7 @@ public class MasterSubmitGateTests
     /// <b>コードの欄ごと落とした追加でも、2 値の断りが先</b>——「補助科目コード」の欄は「勘定科目」の下にある。
     /// </summary>
     /// <remarks>
-    /// コードの欄を落とせるのは取込と API だけだが、断りの並びは画面の並びで揃える（2026-09-24 の自己レビュー。
+    /// コードの欄を落としうるのは API と取込（未設計）だけだが、断りの並びは画面の並びで揃える（2026-09-24 の自己レビュー。
     /// それまでは「「補助科目コード」を入れてください。」が 2 値の断りより先に並んでいた）。
     /// </remarks>
     [Fact]
