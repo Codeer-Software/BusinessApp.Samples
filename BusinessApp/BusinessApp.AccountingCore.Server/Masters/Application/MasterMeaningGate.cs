@@ -58,20 +58,33 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
             [new("Code", "code", "取引先コード")],
             EntryColumn: "partner_id",
             UsageUnit: "振替伝票",
-            UsageCounter: "枚"),
+            UsageCounter: "枚",
+            NewRowCaution: "ただし、新しい取引先にすると、同じ相手の残高と登録番号の履歴が 2 つに分かれます"),
     ];
 
     /// <summary>部品の組み立て。</summary>
     public static MasterMeaningGate Create(IDbAccessor dbAccessor, string dataSourceName)
         => new(new MasterUsageStore(dbAccessor, dataSourceName));
 
-    /// <summary>保存を包む。<paramref name="save"/> は CLB 本来の保存処理。</summary>
-    public async Task<List<ModuleSubmitResult>> SubmitAsync(
-        IReadOnlyList<ModuleSubmitData> transactionData,
-        Func<Task<List<ModuleSubmitResult>>> save)
+    /// <summary>
+    /// この保存で断る理由を<b>全部</b>集め、<b>変えられないと断った欄</b>を行ごとに添える（docs/21 §2-6 の (b)）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>利用者が直せる違反は投げない。</b> 断るのは <see cref="MasterSubmitGate"/> で、値の断りと束ねて 1 回で返す——
+    /// ここで投げると、意味の凍結を直して保存し直した利用者が、次に値の断りを受ける。</para>
+    /// <para><b>並びは意味の凍結が先</b>——こちらは変えた内容のままでは通す手が無い（元に戻すか、新しい行を作るしかない）が、
+    /// 値の断りは値を直せば通るので、重いほうを先に読ませる。</para>
+    /// <para><b>断った欄を返すのは、<see cref="MasterSubmitGate"/> の値の検査がその欄を見ないため</b>（docs/21 §2-6 の「前提の崩れた検査は飛ばす」）——
+    /// 使用中の税区分の「課税区分」を変えた保存に「「税率区分」を選んでください」まで言うと、
+    /// <b>従っても通らない一手</b>を並べることになる（「課税区分」そのものが変えられない）。</para>
+    /// <para><b>壊れた要求（識別子が読めない更新）はその場で止める。</b> 利用者が直せる違反ではないので束ねない——
+    /// 値の検査まで進めると、同じ識別子を読み損ねて別の例外になる。</para>
+    /// </remarks>
+    public async Task<MeaningFindings> FindAsync(IReadOnlyList<ModuleSubmitData> transactionData)
     {
         ArgumentNullException.ThrowIfNull(transactionData);
-        ArgumentNullException.ThrowIfNull(save);
+
+        var findings = new MeaningFindings();
 
         // **入れ物の名前ではなく、中身の名前で担当を決める**（qa/02 R16-16 の型。
         // 親子の保存は 1 つの ModuleSubmitData に混ざって届く——qa/01 F-11）。
@@ -80,14 +93,14 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
         {
             if (Guarded.FirstOrDefault(g => g.ModuleName == data.Name) is GuardedMaster master)
             {
-                await RejectChangedMeaningAsync(master, data);
+                await FindInAsync(master, data, findings);
             }
         }
 
-        return await save();
+        return findings;
     }
 
-    private async Task RejectChangedMeaningAsync(GuardedMaster master, ModuleData data)
+    private async Task FindInAsync(GuardedMaster master, ModuleData data, MeaningFindings findings)
     {
         var touched = master.Columns.Concat(master.OneWay.Select(o => o.Column))
             .Where(c => data.Fields.ContainsKey(c.FieldName)).ToList();
@@ -133,55 +146,89 @@ public sealed class MasterMeaningGate(MasterUsageStore store)
             return;
         }
 
-        // **一方通行の列は、緩める向きだけを拒む**（docs/15 §1-2）。
-        // **意味を決める列の断りを先に返す**（docs/21 §2-6 の (a)——マスタの関門は理由を 1 つだけ返す）。
-        // あちらは<b>直す手立てが無い</b>（新しい行を作るしかない）が、こちらは
-        // **オンに戻せば通る**ので、先に重いほうを見せる。両方を触った保存は 1 度で全部は言えない。
         var frozen = changed.Where(c => !master.OneWay.Any(o => o.Column == c)).ToList();
-        if (frozen.Count == 0)
-        {
-            // **ここに来る `changed` は一方通行の列だけである**（意味を決める列は上で抜いた）。
-            // **「1」以外はすべて緩めたと見なす**（fail-closed）。読めない型・空の真偽で
-            // 素通りすると、フィールドの型が変わった日にこの規則だけが静かに消える
-            // （Submitted の注記と同じ理由。qa/02 R26-03）。
-            // **変わった列を 1 つずつ見る**——1 度の保存で片方をオン・片方をオフにされても取りこぼさない。
-            if (changed.FirstOrDefault(c => Submitted(data.Fields[c.FieldName]) != "1") is GuardedColumn loosened)
-            {
-                throw new MasterRejectedException(
-                    Loosening(master, master.OneWay.Single(o => o.Column == loosened), used));
-            }
 
+        // **一方通行の列は、緩める向きだけを拒む**（docs/15 §1-2）。
+        // **「1」以外はすべて緩めたと見なす**（fail-closed）。読めない型・空の真偽で
+        // 素通りすると、フィールドの型が変わった日にこの規則だけが静かに消える
+        // （Submitted の注記と同じ理由。qa/02 R26-03）。
+        // **変わった列を 1 つずつ見る**——1 度の保存で片方をオン・片方をオフにされても取りこぼさない。
+        var loosened = changed
+            .Where(c => master.OneWay.Any(o => o.Column == c) && Submitted(data.Fields[c.FieldName]) != "1")
+            .Select(c => master.OneWay.Single(o => o.Column == c))
+            .ToList();
+
+        if (frozen.Count == 0 && loosened.Count == 0)
+        {
             return;
         }
 
-        changed = frozen;
-
-        // 文言の形は ADR-0038 §4——**何件あるか**と**次に何をすればよいか**を入れる。
-        // 理由と結果は「〜ので」で 1 文にする（取引先・仕訳の関門と同じ形）。
-        // 数える単位は「仕訳明細」（伝票ではない。ADR-0017）。**「仕訳」を単独で画面に出さない**（同 ADR）ので、
-        // 締めは「以後の振替伝票ではそちらを選ぶ」と言う——部門・税区分は「記帳する先」ではなく明細で選ぶものなので、
-        // 4 マスタで成り立つ動詞にする。
-        throw new MasterRejectedException(
-            $"この{master.Label}は計上済みの{master.UsageUnit} {used.ToString("N0", CultureInfo.InvariantCulture)} {master.UsageCounter}で使われているので、"
-            + $"{string.Join("・", changed.Select(c => $"「{c.Label}」"))}は変えられません。"
-            + $"新しい{master.Label}を作って、以後の振替伝票ではそちらを選んでください。");
+        findings.Add(
+            data,
+            frozen.Select(c => c.FieldName).Concat(loosened.Select(o => o.Column.FieldName)),
+            InUse(master, used, frozen, loosened));
     }
 
     /// <summary>
-    /// 一方通行の列を緩めようとしたときの断り。
+    /// 使用中の行の意味を変えようとしたときの断り。<b>1 つの行には 1 つの文で言う。</b>
     /// </summary>
     /// <remarks>
-    /// <para><b>「変えられません」とは言わない。</b> 厳しくする向き（オフ → オン）はいつでも通るので、
-    /// 両方できないと読まれると、規則を採り入れようとする利用者まで止めてしまう（docs/21 §2-3）。</para>
-    /// <para><b>「オンにするのはいつでもできる」はここに書かない。</b> それを知りたいのは
-    /// <b>これからオンにする人</b>で、この断りに出会うのはオフを押した人である——
-    /// 置き場所は画面の注記のほう（勘定科目の詳細）。</para>
+    /// <para>文言の形は ADR-0038 §4——<b>何件あるか</b>と<b>次に何をすればよいか</b>を入れる。
+    /// 数える単位は「仕訳明細」（伝票ではない。ADR-0017）。**「仕訳」を単独で画面に出さない**（同 ADR）ので、
+    /// 締めは「以後の振替伝票ではそちらを選ぶ」と言う——部門・税区分は「記帳する先」ではなく明細で選ぶものなので、
+    /// 4 マスタで成り立つ動詞にする。</para>
+    /// <para><b>まず「この保存を通す一手」を言う</b>（元に戻す・オンのままにする）。束ねた断りの中では、
+    /// 別の欄を直して保存し直した利用者が、この断りにもう一度当たる——<b>別の道（新しい行を作る）だけを言うと、
+    /// この保存を通す手が読めない</b>（2026-09-24 の自己レビュー）。</para>
+    /// <para><b>意味を決める列と一方通行の列を同じ行で触ったら、1 つの文で言う。</b> 2 つに分けると同じ書き出し
+    /// （「この勘定科目は計上済みの…で使われている」）が 2 回並び、しかも「新しい勘定科目を使え」と
+    /// 「この勘定科目を使う明細には…」が食い違って読める。<b>一方通行の列の締め（その列が要る理由）は、
+    /// 意味を決める列を触っていないときだけ言う</b>——触っていれば、締めは新しい行を作る道になる。</para>
+    /// <para><b>一方通行の列に「変えられません」とは言わない。</b> 厳しくする向き（オフ → オン）はいつでも通るので、
+    /// 両方できないと読まれると、規則を採り入れようとする利用者まで止めてしまう（docs/21 §2-3）。
+    /// <b>「オンにするのはいつでもできる」もここに書かない。</b> それを知りたいのは<b>これからオンにする人</b>で、
+    /// この断りに出会うのはオフを押した人である——置き場所は画面の注記のほう（勘定科目の詳細）。</para>
     /// </remarks>
-    private static string Loosening(GuardedMaster master, OneWayColumn column, long used)
-        => $"この{master.Label}は計上済みの{master.UsageUnit} {used.ToString("N0", CultureInfo.InvariantCulture)} {master.UsageCounter}で使われているので、"
-           + $"「{column.Column.Label}」をオフにできません。"
-           + $"{column.Harm}。"
-           + $"{column.Instead}。";
+    private static string InUse(
+        GuardedMaster master, long used, IReadOnlyList<GuardedColumn> frozen, IReadOnlyList<OneWayColumn> loosened)
+    {
+        var text = new System.Text.StringBuilder(
+            $"この{master.Label}は計上済みの{master.UsageUnit} {used.ToString("N0", CultureInfo.InvariantCulture)} {master.UsageCounter}で使われています。");
+
+        if (frozen.Count > 0)
+        {
+            text.Append($"{string.Join("・", frozen.Select(c => $"「{c.Label}」"))}は変えられないので、元に戻してください。");
+        }
+
+        foreach (var column in loosened)
+        {
+            text.Append($"「{column.Column.Label}」はオフにできないので、オンのままにしてください。{column.Harm}。");
+        }
+
+        if (frozen.Count == 0)
+        {
+            text.Append(string.Concat(loosened.Select(column => $"{column.Instead}。")));
+            return text.ToString();
+        }
+
+        text.Append($"変えた内容で使うなら、新しい{master.Label}を作って、以後の振替伝票ではそちらを選んでください。");
+
+        // **一方通行の列も緩めていたら、新しい行でもそれはオンにすると言う**——「変えた内容」にオフが含まれ、
+        // 新しい行をオフで作ると、上で述べた害がそのまま起きる（2026-09-24 の自己レビュー）。
+        if (loosened.Count > 0)
+        {
+            text.Append(
+                $"新しい{master.Label}でも{string.Join("・", loosened.Select(c => $"「{c.Column.Label}」"))}はオンにしてください。");
+        }
+
+        if (master.NewRowCaution is string caution)
+        {
+            text.Append($"{caution}。");
+        }
+
+        return text.ToString();
+    }
+
 
     /// <summary>
     /// 差分に載った値を、保存されている値と比べられる字面にする。

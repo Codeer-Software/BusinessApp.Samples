@@ -12,10 +12,11 @@ using BusinessApp.ServerSupport;
 /// （ADR-0023）、<b>文言の形も揃っているほうが読み手に一貫する</b>。</para>
 /// <para><b>見出しは押したボタンで決まる</b>（qa/02 R24-23）。取引先の詳細のボタンは「登録」なので
 /// 「登録できません」と断る。関門がどこで捕まえたかではなく、利用者がした操作の言葉で言う。</para>
-/// <para><b>文言に改行を入れない。</b> トースト内の文字列は改行できない（CLB の仕様。qa/01 D-12）。</para>
+/// <para><b>理由は束ねて運ぶ</b>（docs/21 §2-6 の (b)）——関門は違反を全部集めてから 1 回で投げる。
+/// 形（「見出し（N 件）。①…②…」・改行を入れない）は <see cref="RejectionMessage"/> が持つ。</para>
 /// </remarks>
-public sealed class PartnerRejectedException(string reason)
-    : RejectedException($"{Headline}。{reason}")
+public sealed class PartnerRejectedException(IReadOnlyList<string> reasons)
+    : RejectedException(RejectionMessage.Compose(Headline, reasons))
 {
     /// <summary>取引先の登録を止めたときの見出し。</summary>
     public const string Headline = "登録できません";

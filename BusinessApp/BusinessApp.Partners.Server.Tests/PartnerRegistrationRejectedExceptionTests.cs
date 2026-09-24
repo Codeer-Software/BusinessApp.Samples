@@ -10,5 +10,5 @@ public class PartnerRegistrationRejectedExceptionTests
     [Fact]
     public void 文言は見出しから始まる()
         => Assert.Equal("登録できません。登録年月日を入力してください。",
-            new PartnerRegistrationRejectedException("登録年月日を入力してください。").Message);
+            new PartnerRegistrationRejectedException(["登録年月日を入力してください。"]).Message);
 }

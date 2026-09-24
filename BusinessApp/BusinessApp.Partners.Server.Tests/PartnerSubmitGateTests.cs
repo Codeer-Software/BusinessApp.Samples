@@ -418,6 +418,208 @@ public class PartnerSubmitGateTests
         Assert.True(save.Called);
     }
 
+    // --- 束ねる（docs/21 §2-6 の (b)） ---------------------------------------------
+
+    /// <summary>
+    /// <b>違反を全部 1 度で言い、画面の並びで並べる</b>（取引先コード → 取引先名 → 種別・法人番号 → 所在地）。
+    /// </summary>
+    /// <remarks>
+    /// <b>差分には画面と逆の順で載せる</b>——届いた順に並べる誤実装だと、ここが赤になる。
+    /// <b>2026-09-24 までは最初の 1 つで止めていた</b>（(a)）。
+    /// </remarks>
+    [Fact]
+    public async Task 違反を全部一度で言い画面の並びで並べる()
+    {
+        using var server = new PartnerServer();
+        var data = new ModuleData { Name = PartnerSubmitGate.ModuleName };
+        data.Fields["Address"] = new TextFieldData { Value = new string('あ', 201) };
+        data.Fields["CorporateNumber"] = new TextFieldData { Value = ValidNumber };
+        data.Fields["EntityType"] = new SelectFieldData { Value = "sole_proprietor" };
+        data.Fields["Name"] = new TextFieldData { Value = new string('あ', 101) };
+        data.Fields["Code"] = new TextFieldData { Value = "P--1" };
+
+        var rejected = await RejectedAsync(server, Adding(data), new SaveSpy());
+
+        Assert.Equal(
+            "登録できません（4 件）。"
+            + "①「取引先コード」の「-」「_」は続けて使えません。"
+            + "②「取引先名」は 100 文字以内です。いまは 101 文字あります。短くして入力し直してください。"
+            + "③個人事業者に法人番号は指定されません。取引先が個人事業者でないなら「種別」を直し、個人事業者なら「法人番号」を空欄にしてください。"
+            + "④「所在地」は 200 文字以内です。いまは 201 文字あります。短くして入力し直してください。",
+            rejected.Message);
+    }
+
+    /// <summary>
+    /// <b>自分自身を親にした保存では、親の深さを言わない</b>——その親は付けられないので、従いようがない。
+    /// </summary>
+    /// <remarks>
+    /// 自分（X）は既に親（R）を持つ。X に X 自身を親として選ぶと、深さの検査だけなら
+    /// 「さらに親を持つ取引先を選べません」も当たる（選んだ親＝X が R を親に持つ）。
+    /// </remarks>
+    [Fact]
+    public async Task 自分自身を親にした保存では親の深さを言わない()
+    {
+        using var server = new PartnerServer();
+        var root = InsertPartner(server, code: "P801");
+        var self = InsertPartner(server, code: "P802", parentId: root);
+
+        var rejected = await RejectedAsync(
+            server,
+            Updating(Partner(id: self, parentId: self.ToString(CultureInfo.InvariantCulture))),
+            new SaveSpy());
+
+        Assert.Equal(
+            "登録できません。この取引先自身は「名寄せの親」に選べません。同じ事業者の別の取引先があるならそれを選び、無いなら空欄にしてください。",
+            rejected.Message);
+    }
+
+    /// <summary>
+    /// <b>子を持つ取引先に自分自身を選んだら、「別の取引先を選ぶ」と言わない</b>——子を持つ取引先には、別の取引先も選べない。
+    /// </summary>
+    /// <remarks>
+    /// 「別の取引先を選ぶか、空欄に」と言うと、前半に従った 2 回目で「さらに親を持つ」側でなく「親になっている」側で断られる
+    /// （2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 子を持つ取引先に自分自身を選んだら空欄にさせる()
+    {
+        using var server = new PartnerServer();
+        var self = InsertPartner(server, code: "P831");
+        InsertPartner(server, code: "P832", parentId: self);
+
+        var rejected = await RejectedAsync(
+            server,
+            Updating(Partner(id: self, parentId: self.ToString(CultureInfo.InvariantCulture))),
+            new SaveSpy());
+
+        Assert.Equal(
+            "登録できません。この取引先自身は「名寄せの親」に選べません。"
+            + "この取引先は他の取引先の名寄せの親になっているので、「名寄せの親」は空欄にしてください。",
+            rejected.Message);
+    }
+
+    /// <summary>
+    /// <b>個人事業者に法人番号を入れたら、番号の書式は言わない</b>——「13 桁で入れ直せ」と「空にせよ」を 1 通で並べない。
+    /// </summary>
+    /// <remarks>
+    /// 個人事業者の取引先に 12 桁の番号（書式の崩れた番号）。書式の検査だけなら「13 桁です」も当たる。
+    /// </remarks>
+    [Fact]
+    public async Task 個人事業者に法人番号を入れたら番号の書式は言わない()
+    {
+        using var server = new PartnerServer();
+
+        var rejected = await RejectedAsync(
+            server,
+            Adding(Partner(corporateNumber: "123456789012", entityType: "sole_proprietor")),
+            new SaveSpy());
+
+        Assert.Equal(
+            "登録できません。個人事業者に法人番号は指定されません。取引先が個人事業者でないなら「種別」を直し、個人事業者なら「法人番号」を空欄にしてください。",
+            rejected.Message);
+    }
+
+    /// <summary>
+    /// <b>選んだ親がさらに親を持つなら、その親との種別の食い違いは言わない</b>——その親は選べないので、種別を合わせても通らない。
+    /// </summary>
+    /// <remarks>
+    /// 法人 A に、個人事業者 B（B の親 R は法人）を選ぶ。種別の検査だけなら「どちらかの「種別」が誤っています」も当たるが、
+    /// それに従って A を個人事業者にし、深さの断りに従って R を選ぶと、今度は A と R が食い違う（2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 選んだ親がさらに親を持つならその親との種別は言わない()
+    {
+        using var server = new PartnerServer();
+        var a = InsertPartner(server, code: "P841", entityType: "corporation");
+        var root = InsertPartner(server, code: "P842", entityType: "corporation");
+        var b = InsertPartner(server, code: "P843", entityType: "sole_proprietor", parentId: root);
+
+        var rejected = await RejectedAsync(
+            server,
+            Updating(Partner(id: a, parentId: b.ToString(CultureInfo.InvariantCulture))),
+            new SaveSpy());
+
+        Assert.Equal(
+            "登録できません。「名寄せの親」には、さらに親を持つ取引先を選べません。同じ事業者なら、その取引先の親を選んでください。",
+            rejected.Message);
+    }
+
+    /// <summary>
+    /// <b>自分自身を親にした保存では、自分との種別の食い違いを言わない</b>——自分は親に選べない。
+    /// </summary>
+    /// <remarks>保存済みが個人事業者の X に、種別を法人にして X 自身を親に選ぶ。種別の検査だけなら「X と X」の食い違いが当たる。</remarks>
+    [Fact]
+    public async Task 自分自身を親にした保存では自分との種別を言わない()
+    {
+        using var server = new PartnerServer();
+        var self = InsertPartner(server, code: "P851", entityType: "sole_proprietor");
+
+        var rejected = await RejectedAsync(
+            server,
+            Updating(Partner(id: self, entityType: "corporation", parentId: self.ToString(CultureInfo.InvariantCulture))),
+            new SaveSpy());
+
+        Assert.Equal(
+            "登録できません。この取引先自身は「名寄せの親」に選べません。同じ事業者の別の取引先があるならそれを選び、無いなら空欄にしてください。",
+            rejected.Message);
+    }
+
+    /// <summary>
+    /// <b>深さの 2 つの規則に両方当たれば、両方を言う</b>——どちらを直しても、もう片方が残る。
+    /// </summary>
+    /// <remarks>
+    /// A は子（C）を持ち、選んだ親（B）は親（R）を持つ。<b>2026-09-24 までは前者だけを言っていた。</b>
+    /// </remarks>
+    [Fact]
+    public async Task 深さの二つの規則に両方当たれば両方を言う()
+    {
+        using var server = new PartnerServer();
+        var a = InsertPartner(server, code: "P811");
+        InsertPartner(server, code: "P812", parentId: a);
+        var root = InsertPartner(server, code: "P813");
+        var b = InsertPartner(server, code: "P814", parentId: root);
+
+        var rejected = await RejectedAsync(
+            server,
+            Updating(Partner(id: a, parentId: b.ToString(CultureInfo.InvariantCulture))),
+            new SaveSpy());
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①「名寄せの親」には、さらに親を持つ取引先を選べません。同じ事業者なら、その取引先の親を選んでください。"
+            + "②この取引先は他の取引先の名寄せの親になっているので、「名寄せの親」は空欄にしてください。"
+            + "親を付けるなら、先に、子になっている取引先の「名寄せの親」を付け替えてください。",
+            rejected.Message);
+    }
+
+    /// <summary>
+    /// <b>種別の食い違いが親の側と子の側の両方に当たっても、同じ文は 1 つにまとめる。</b>
+    /// </summary>
+    /// <remarks>
+    /// A（子 C は個人事業者）を法人にし、同じ保存で個人事業者の P を親に付ける。
+    /// 親から見ても子から見ても同じ文言で断る（<c>MismatchedParent</c>）ので、並べると同じ文が 2 つ出る。
+    /// </remarks>
+    [Fact]
+    public async Task 種別の食い違いは親と子の両方に当たっても一度だけ言う()
+    {
+        using var server = new PartnerServer();
+        var a = InsertPartner(server, code: "P821");
+        InsertPartner(server, code: "P822", entityType: "sole_proprietor", parentId: a);
+        var parent = InsertPartner(server, code: "P823", entityType: "sole_proprietor");
+
+        var rejected = await RejectedAsync(
+            server,
+            Updating(Partner(id: a, entityType: "corporation", parentId: parent.ToString(CultureInfo.InvariantCulture))),
+            new SaveSpy());
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①個人事業者と法人・人格のない社団等は、互いに名寄せの親にできません。同じ事業者なら、どちらかの「種別」が誤っています。"
+            + "②この取引先は他の取引先の名寄せの親になっているので、「名寄せの親」は空欄にしてください。"
+            + "親を付けるなら、先に、子になっている取引先の「名寄せの親」を付け替えてください。",
+            rejected.Message);
+    }
+
     [Fact]
     public async Task 自分自身を名寄せの親にできない()
     {
@@ -547,12 +749,12 @@ public class PartnerSubmitGateTests
             Adding(Partner(entityType: childType, parentId: parent.ToString(CultureInfo.InvariantCulture))),
             new SaveSpy());
 
-        // **文言まで固定する。** 「同じ事業者なら、どちらかの種別が誤っています」は
+        // **文言まで固定する。** 「同じ事業者なら、どちらかの「種別」が誤っています」は
         // 関門が「束ねるな」ではなく「先に種別を直せ」と言っている、という設計そのものである。
         Assert.Equal(
             $"{PartnerRejectedException.Headline}。"
             + "個人事業者と法人・人格のない社団等は、互いに名寄せの親にできません。"
-            + "同じ事業者なら、どちらかの種別が誤っています。",
+            + "同じ事業者なら、どちらかの「種別」が誤っています。",
             rejected.Message);
     }
 
@@ -676,7 +878,7 @@ public class PartnerSubmitGateTests
 
         Assert.Equal(
             $"{PartnerRejectedException.Headline}。"
-            + "名寄せの親には、さらに親を持つ取引先を選べません。"
+            + "「名寄せの親」には、さらに親を持つ取引先を選べません。"
             + "同じ事業者なら、その取引先の親を選んでください。",
             rejected.Message);
     }
@@ -747,8 +949,8 @@ public class PartnerSubmitGateTests
 
         Assert.Equal(
             $"{PartnerRejectedException.Headline}。"
-            + "この取引先は他の取引先の名寄せの親になっているので、親を付けられません。"
-            + "先に、子になっている取引先の親を付け替えてください。",
+            + "この取引先は他の取引先の名寄せの親になっているので、「名寄せの親」は空欄にしてください。"
+            + "親を付けるなら、先に、子になっている取引先の「名寄せの親」を付け替えてください。",
             rejected.Message);
     }
 
@@ -907,6 +1109,7 @@ public class PartnerSubmitGateTests
 
         // ①親を持つ取引先を、さらに誰かの親にする（INSERT のトリガ）。
         var adding = Assert.Throws<SqliteException>(() => InsertPartner(server, "P802", parentId: middle));
+        // **DB のトリガの字である**（関門の字とは別。関門は欄名を括る——docs/21 §2-6。トリガの字は sqlite_master にあり、直すにはマイグレーションが要る）。
         Assert.Contains("名寄せの親には、さらに親を持つ取引先を選べません。", adding.Message, StringComparison.Ordinal);
 
         // ②誰かの親になっている取引先に、親を付ける（UPDATE のトリガ）。
@@ -1001,7 +1204,7 @@ public class PartnerSubmitGateTests
 
         var rejected = await RejectedAsync(server, Adding(Partner(code: null)), save);
 
-        Assert.EndsWith("「取引先コード」を入れてください。", rejected.Message, StringComparison.Ordinal);
+        Assert.Equal("登録できません。「取引先コード」を入れてください。", rejected.Message);
     }
 
     /// <summary>コードを触らない更新は通る（更新は差分しか届かない。qa/01 F-12）。</summary>
@@ -1170,11 +1373,10 @@ public class PartnerSubmitGateTests
         var rejected = await RejectedAsync(
             server, Adding(PartnerWith(field, new string('あ', max + 1))), save);
 
-        // **接頭の「登録できません。」はこの規則の持ち物ではない**ので、末尾だけを見る。
-        Assert.EndsWith(
-            $"「{label}」は {max} 文字以内です。いまは {max + 1} 文字あります。短くして入力し直してください。",
-            rejected.Message,
-            StringComparison.Ordinal);
+        // **全文で見る**——末尾だけを見ると、前に 2 つ目の違反を抱えた検体でも緑になる（関門は断りを束ねる。qa/03 L-67）。
+        Assert.Equal(
+            $"登録できません。「{label}」は {max} 文字以内です。いまは {max + 1} 文字あります。短くして入力し直してください。",
+            rejected.Message);
     }
 
     /// <summary>上限ちょうどは通り、<b>DB も受け取る</b>。</summary>
@@ -1258,10 +1460,9 @@ public class PartnerSubmitGateTests
         var rejected = await RejectedAsync(
             server, Updating(PartnerWith("Address", new string('あ', 201), id: id, code: null)), save);
 
-        Assert.EndsWith(
-            "「所在地」は 200 文字以内です。いまは 201 文字あります。短くして入力し直してください。",
-            rejected.Message,
-            StringComparison.Ordinal);
+        Assert.Equal(
+            "登録できません。「所在地」は 200 文字以内です。いまは 201 文字あります。短くして入力し直してください。",
+            rejected.Message);
     }
 
     /// <summary>
@@ -1316,39 +1517,36 @@ public class PartnerSubmitGateTests
 
         var rejected = await RejectedAsync(server, Adding(PartnerWith("Address", "東京\0都")), save);
 
-        Assert.EndsWith(
-            "「所在地」の 3 文字目に、目に見えない文字が入っています。入力し直してください。",
-            rejected.Message,
-            StringComparison.Ordinal);
+        Assert.Equal(
+            "登録できません。「所在地」の 3 文字目に、目に見えない文字が入っています。入力し直してください。",
+            rejected.Message);
     }
 
     /// <summary>
-    /// <b>断る順が画面の並びと同じである。</b>
+    /// <b>断りの並びが画面の並びと同じである。</b>
     /// </summary>
     /// <remarks>
-    /// <para>画面は <b>取引先コード → 取引先名 → カナ → 種別 → 法人番号 → 所在地</b> の順に並ぶ。
-    /// (a) 型の関門は<b>理由を 1 つだけ返す</b>（docs/12 §2-1「即エラー。次へ進まない」）ので、
-    /// <b>順が画面と食い違うと、利用者は上と下を往復させられる</b>。</para>
-    /// <para><b>名前と法人番号を同時に壊して、先に名前が出ることを見る</b>——
-    /// 逆にすると、上にある欄が後から出る。</para>
+    /// <para>画面は <b>取引先コード → 取引先名 → カナ → 種別 → 法人番号 → 名寄せの親 → 所在地</b> の順に並ぶ。
+    /// 関門は断りを束ねて返す（docs/21 §2-6 の (b)）ので、<b>並びが画面と食い違うと、
+    /// 利用者は「①…②…」を読みながら上と下を往復させられる</b>。</para>
+    /// <para><b>名前・法人番号・所在地を同時に壊して、この順に出ることを見る</b>——
+    /// 所在地は法人番号より下にある。2026-09-24 までは (a)（最初の 1 つだけ）で、2 つずつ壊して先に出るほうを見ていた。</para>
     /// </remarks>
     [Fact]
-    public async Task 断る順は画面の並びと同じである()
+    public async Task 断りの並びは画面の並びと同じである()
     {
         using var server = new PartnerServer();
 
-        var name = PartnerWith("Name", new string('あ', 101));
-        name.Fields["CorporateNumber"] = new TextFieldData { Value = WrongCheckDigit };
-        Assert.Contains(
-            "「取引先名」", (await RejectedAsync(server, Adding(name), new SaveSpy())).Message,
-            StringComparison.Ordinal);
+        var data = PartnerWith("Address", new string('あ', 201));
+        data.Fields["CorporateNumber"] = new TextFieldData { Value = WrongCheckDigit };
+        data.Fields["Name"] = new TextFieldData { Value = new string('あ', 101) };
+        var message = (await RejectedAsync(server, Adding(data), new SaveSpy())).Message;
 
-        // **所在地は法人番号より下にある**ので、法人番号が先に出る。
-        var address = PartnerWith("Address", new string('あ', 201));
-        address.Fields["CorporateNumber"] = new TextFieldData { Value = WrongCheckDigit };
-        Assert.Contains(
-            "法人番号", (await RejectedAsync(server, Adding(address), new SaveSpy())).Message,
-            StringComparison.Ordinal);
+        var name = message.IndexOf("「取引先名」", StringComparison.Ordinal);
+        var number = message.IndexOf("法人番号公表サイト", StringComparison.Ordinal);
+        var address = message.IndexOf("「所在地」", StringComparison.Ordinal);
+        Assert.StartsWith("登録できません（3 件）。", message, StringComparison.Ordinal);
+        Assert.True(0 < name && name < number && number < address, message);
     }
 
     /// <summary>

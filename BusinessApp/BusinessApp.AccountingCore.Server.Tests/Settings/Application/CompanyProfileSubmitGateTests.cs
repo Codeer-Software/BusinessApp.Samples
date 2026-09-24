@@ -261,6 +261,93 @@ public class CompanyProfileSubmitGateTests
         Assert.Equal("save", missingSave.ParamName);
     }
 
+    // --- 束ねる（docs/21 §2-6 の (b)） ---------------------------------------------
+
+    /// <summary>
+    /// <b>違反を全部 1 度で言い、画面の並びで並べる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>差分には画面と逆の順で載せる</b>——届いた順に並べる誤実装だと、ここが赤になる。
+    /// <b>2026-09-24 までは最初の 1 つで止めていた</b>（(a)）。
+    /// </remarks>
+    [Fact]
+    public async Task 違反を全部一度で言い画面の並びで並べる()
+    {
+        var save = new SaveSpy();
+        var data = new ModuleData { Name = CompanyProfileSubmitGate.ModuleName };
+        data.Fields["FiscalYearEndMonth"] = new NumberFieldData { Value = 13 };
+        data.Fields["PhoneNumber"] = new TextFieldData { Value = new string('0', 21) };
+        data.Fields["RepresentativeName"] = new TextFieldData { Value = new string('あ', 31) };
+        data.Fields["Name"] = new TextFieldData { Value = new string('あ', 101) };
+
+        var thrown = await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => new CompanyProfileSubmitGate().SubmitAsync([Updating(data)], save.SaveAsync));
+
+        Assert.Equal(
+            "保存できません（4 件）。"
+            + "①「会社名」は 100 文字以内です。いまは 101 文字あります。短くして入力し直してください。"
+            + "②「代表者名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。"
+            + "③「電話番号」は 20 文字以内です。いまは 21 文字あります。短くして入力し直してください。"
+            + "④「決算月」は 1 から 12 までの整数で入れてください。",
+            thrown.Message);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>画面から作れる組で、1 通に束ねる</b>——実機操作テストの MST-38 と同じ入力（決算月は画面では 1〜12 しか選べない）。
+    /// </summary>
+    [Fact]
+    public async Task 画面から作れる自社情報の違反を一度で言う()
+    {
+        var save = new SaveSpy();
+        var data = new ModuleData { Name = CompanyProfileSubmitGate.ModuleName };
+        data.Fields["PhoneNumber"] = new TextFieldData { Value = new string('0', 21) };
+        data.Fields["RepresentativeName"] = new TextFieldData { Value = new string('あ', 31) };
+        data.Fields["Name"] = new TextFieldData { Value = new string('あ', 101) };
+
+        var thrown = await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => new CompanyProfileSubmitGate().SubmitAsync([Updating(data)], save.SaveAsync));
+
+        Assert.Equal(
+            "保存できません（3 件）。"
+            + "①「会社名」は 100 文字以内です。いまは 101 文字あります。短くして入力し直してください。"
+            + "②「代表者名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。"
+            + "③「電話番号」は 20 文字以内です。いまは 21 文字あります。短くして入力し直してください。",
+            thrown.Message);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>8 つの欄を全部壊して、画面の並びで出ることを見る</b>——法人番号と郵便番号を、長さの欄の間の位置に挟む。
+    /// </summary>
+    /// <remarks>
+    /// <b>文字の欄を 3 つに割った理由がこれである</b>（<c>CompanyProfileSubmitGate.BeforeCorporateNumber</c> ほか）。
+    /// 長さの 3 群を 1 本にまとめ、法人番号と郵便番号を後ろへ回す誤実装は、長さの欄だけの検体では緑のまま（2026-09-24 の自己レビュー）。
+    /// 画面の並びは 会社名 → カナ → 法人番号 → 代表者名 → 郵便番号 → 住所 → 電話番号 → 決算月。
+    /// </remarks>
+    [Fact]
+    public async Task 八つの欄の断りは画面の並びで出る()
+    {
+        var data = new ModuleData { Name = CompanyProfileSubmitGate.ModuleName };
+        data.Fields["FiscalYearEndMonth"] = new NumberFieldData { Value = 13 };
+        data.Fields["PhoneNumber"] = new TextFieldData { Value = new string('0', 21) };
+        data.Fields["Address"] = new TextFieldData { Value = new string('あ', 201) };
+        data.Fields["PostalCode"] = new TextFieldData { Value = "12345" };
+        data.Fields["RepresentativeName"] = new TextFieldData { Value = new string('あ', 31) };
+        data.Fields["CorporateNumber"] = new TextFieldData { Value = "1700110005901" };
+        data.Fields["NameKana"] = new TextFieldData { Value = new string('ア', 201) };
+        data.Fields["Name"] = new TextFieldData { Value = new string('あ', 101) };
+
+        var message = (await Assert.ThrowsAsync<CompanyProfileRejectedException>(
+            () => new CompanyProfileSubmitGate().SubmitAsync([Updating(data)], new SaveSpy().SaveAsync))).Message;
+
+        Assert.StartsWith("保存できません（8 件）。", message, StringComparison.Ordinal);
+        var positions = new[] { "「会社名」", "「カナ」", "「法人番号」", "「代表者名」", "「郵便番号」", "「住所」", "「電話番号」", "「決算月」" }
+            .Select(label => message.IndexOf(label, StringComparison.Ordinal))
+            .ToList();
+        Assert.True(positions[0] > 0 && positions.Zip(positions.Skip(1)).All(pair => pair.First < pair.Second), message);
+    }
+
     // --- 決算月（qa/03 L-28 の 3 例目） -------------------------------------------
 
     /// <summary>
@@ -366,12 +453,8 @@ public class CompanyProfileSubmitGateTests
             () => new CompanyProfileSubmitGate().SubmitAsync(
                 [Updating(Field(field, new string('あ', max + 1)))], save.SaveAsync));
 
-        // **接頭の「保存できません。」はこの規則の持ち物ではない**ので、末尾だけを見る
-        // （`MasterSubmitGateTests` と同じ作法）。
-        Assert.EndsWith(
-            $"「{label}」は {max} 文字以内です。いまは {max + 1} 文字あります。短くして入力し直してください。",
-            thrown.Message,
-            StringComparison.Ordinal);
+        // **全文で見る**——末尾だけを見ると、前に 2 つ目の違反を抱えた検体でも緑になる（関門は断りを束ねる。qa/03 L-67）。
+        Assert.Equal("保存できません。" + $"「{label}」は {max} 文字以内です。いまは {max + 1} 文字あります。短くして入力し直してください。", thrown.Message);
         Assert.False(save.Called);
     }
 
@@ -490,7 +573,7 @@ public class CompanyProfileSubmitGateTests
             () => new CompanyProfileSubmitGate().SubmitAsync(
                 [Updating(Field("PostalCode", value))], save.SaveAsync));
 
-        Assert.EndsWith(PostalCode.DescribeProblem(value)!, thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("保存できません。" + PostalCode.DescribeProblem(value)!, thrown.Message);
         Assert.False(save.Called);
     }
 

@@ -14,5 +14,5 @@ public class PartnerRejectedExceptionTests
     [Fact]
     public void 文言は見出しから始まる()
         => Assert.Equal("登録できません。取引先コードを入力してください。",
-            new PartnerRejectedException("取引先コードを入力してください。").Message);
+            new PartnerRejectedException(["取引先コードを入力してください。"]).Message);
 }

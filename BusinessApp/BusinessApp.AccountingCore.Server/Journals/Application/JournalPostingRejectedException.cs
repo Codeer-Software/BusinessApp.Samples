@@ -48,9 +48,6 @@ public sealed class JournalPostingRejectedException(
     /// <summary>「複製」を止めたときの見出し。<see cref="ReversalHeadline"/> と同じ理由。</summary>
     public const string DuplicationHeadline = "複製できません";
 
-    /// <summary>並べられる番号（それを超えたら番号なしで続ける）。</summary>
-    private static readonly string[] Numbers = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
-
     /// <summary>計上を止める。<b>既定の見出しはこちら</b>で、呼び出しの大半がこの形である。</summary>
     public JournalPostingRejectedException(IReadOnlyList<Violation> violations)
         : this(violations, PostingHeadline)
@@ -59,22 +56,14 @@ public sealed class JournalPostingRejectedException(
 
     public IReadOnlyList<Violation> Violations { get; } = violations;
 
+    /// <summary>
+    /// 誤りだけを「見出し。①…②…」に組む。<b>形は <see cref="RejectionMessage"/> が持つ</b>——
+    /// マスタ・取引先の関門と同じ 1 か所で組む（docs/21 §2-6）。
+    /// </summary>
     private static string BuildMessage(IReadOnlyList<Violation> violations, string headline)
-    {
-        var errors = violations.Where(v => v.Severity == ViolationSeverity.Error).ToList();
-
-        // 1 件のときは件数も番号も付けない（開発者の決定。2026-09-10。「どちらでも許容範囲。ベターは A。実装が難しくなければ A に」。
-        // 理由は Claude の qa/02 R69-31——②の無い①は「まだ続きがある」と読める。「（1 件）」を出さないのは以前からの Claude の判断）。
-        var numbered = errors.Count > 1
-            ? errors.Select((violation, index) => $"{Number(index)}{Describe(violation)}")
-            : errors.Select(Describe);
-        var count = errors.Count > 1 ? $"（{errors.Count} 件）" : string.Empty;
-        return $"{headline}{count}。{string.Join(string.Empty, numbered)}";
-    }
-
-    /// <summary>番号。10 件を超えたら付けない（区切りは句点が担う）。</summary>
-    private static string Number(int index)
-        => index < Numbers.Length ? Numbers[index] : string.Empty;
+        => RejectionMessage.Compose(
+            headline,
+            violations.Where(v => v.Severity == ViolationSeverity.Error).Select(Describe));
 
     /// <summary>
     /// 行を指す言い方は<b>「行 3:」</b>——画面の「行」列の値で指す。

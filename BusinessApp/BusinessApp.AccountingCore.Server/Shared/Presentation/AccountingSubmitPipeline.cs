@@ -29,18 +29,15 @@ using BusinessApp.AccountingCore.Server.Settings.Application;
 /// <para><b>取引先の関門は 1 つずつ数えず、部品の入口（<see cref="PartnerSubmitPipeline"/>）を
 /// 1 本呼ぶ。</b> ここで数えると、取引先部品に関門が増えたときに会計側を直さないと
 /// 1 つ足りないまま通る——しかもテストは緑のままである（ADR-0025 §6 の「持ち出し忘れ」の型）。</para>
-/// <para><b>マスタの関門（<see cref="MasterMeaningGate"/>。ADR-0038）も保存の前に検査するだけ</b>なので内側でよい。
-/// 2026-09-07 に足した。</para>
-/// <para><b>値の関門（<see cref="MasterSubmitGate"/>。docs/12 §2-1・ADR-0047・qa/03 L-28）は、意味の凍結の内側に置く。</b>
-/// <b>先に返すべきは意味の凍結のほう</b>——あちらは直す手立てが無い（新しい行を作るしかない）が、
-/// こちらは値を直せば通るからである（<c>MasterMeaningGate</c> が同じ理由で
-/// 意味を決める列の断りを一方通行の列より先に返している）。2026-09-09 に足した。</para>
+/// <para><b>マスタの関門（<see cref="MasterSubmitGate"/>）も保存の前に検査するだけ</b>なので内側でよい。
+/// <b>意味の凍結（<see cref="MasterMeaningGate"/>。ADR-0038）と値の検査（docs/12 §2-1・ADR-0047・qa/03 L-28）の 2 つの規則を、
+/// あの関門が束ねて 1 回で断る</b>（docs/21 §2-6 の (b)）——ここで 2 段に繋ぐと、
+/// 意味の凍結を直して保存し直した利用者が、次に値の断りを受ける。</para>
 /// </remarks>
 public sealed class AccountingSubmitPipeline(
     JournalSubmitGate journals,
     CompanyProfileSubmitGate companyProfile,
-    MasterMeaningGate masters,
-    MasterSubmitGate masterValues,
+    MasterSubmitGate masters,
     PartnerSubmitPipeline partners,
     Action<string>? onSaveFailure = null)
 {
@@ -55,7 +52,6 @@ public sealed class AccountingSubmitPipeline(
         IAuthenticationContext authenticationContext, Action<string>? onSaveFailure = null)
         => new(JournalSubmitGate.Create(dbAccessor, dataSourceName, timeProvider, authenticationContext),
                new CompanyProfileSubmitGate(),
-               MasterMeaningGate.Create(dbAccessor, dataSourceName),
                MasterSubmitGate.Create(dbAccessor, dataSourceName),
                PartnerSubmitPipeline.Create(dbAccessor, dataSourceName),
                onSaveFailure);
@@ -95,9 +91,7 @@ public sealed class AccountingSubmitPipeline(
                     transactionData,
                     () => masters.SubmitAsync(
                         transactionData,
-                        () => masterValues.SubmitAsync(
-                            transactionData,
-                            () => partners.SubmitAsync(transactionData, save)))));
+                        () => partners.SubmitAsync(transactionData, save))));
         }
         catch (RejectedException)
         {

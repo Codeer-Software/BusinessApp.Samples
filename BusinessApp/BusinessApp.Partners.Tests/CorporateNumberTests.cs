@@ -151,13 +151,19 @@ public class CorporateNumberTests
     /// </summary>
     /// <remarks>
     /// 桁の説明を返してしまうと、利用者は「13 桁あるのに 13 桁だと言われる」ことになる。
+    /// <para><b>期待の字は検体に直に書く</b>——定数を自分自身と比べると、定数を壊したときに期待も一緒に壊れて釣り合う
+    /// （self-review スキル §9 の 4。2026-09-24 に文言を 2 つの部分に分けたとき、生き残りが増えてミューテーションの下限を割った）。
+    /// <b>確かめる先を公表サイトだけにしない</b>ことも、この字で見る（人格のない社団等は、代表者が同意したときだけ公表される）。</para>
     /// </remarks>
     [Fact]
     public void 検査用数字だけが違えば打ち間違いとして知らせる()
     {
         var wrong = (NtaExample[0] == '1' ? '2' : '1') + NtaExample[1..];
 
-        Assert.Equal(CorporateNumber.CheckDigitDescription, CorporateNumber.DescribeProblem(wrong));
+        Assert.Equal(
+            "「法人番号」が正しくありません。打ち間違いの可能性があります。"
+            + "国税庁の法人番号公表サイトか、番号の書いてある書類で確かめて入力し直してください。",
+            CorporateNumber.DescribeProblem(wrong));
     }
 
     /// <summary>文言に改行を入れない（トーストは改行できない。qa/01 D-12）。</summary>

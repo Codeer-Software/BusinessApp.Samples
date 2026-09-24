@@ -34,9 +34,8 @@ public sealed class CompanyProfileSubmitGate
     /// <para><b>欄の呼び名と列は画面の写しである</b>
     /// （docs/20 §4 の「已むを得ない重複」。ずれていないことは
     /// <c>CompanyProfileSubmitGateTests.写した呼び名と列はデザインと一致する</c> が見る）。</para>
-    /// <para><b>3 つに割ってあるのは、断る順を画面の並びに合わせるためである</b>
-    /// （<c>PartnerSubmitGate</c> と同じ理由——型は 1 つずつしか返さないので、
-    /// 順が画面と食い違うと利用者は上と下を往復させられる）。
+    /// <para><b>3 つに割ってあるのは、断りの並びを画面の並びに合わせるためである</b>
+    /// （<c>PartnerSubmitGate</c> と同じ理由——並びが画面と食い違うと、利用者は「①…②…」を読みながら上と下を往復させられる）。
     /// 画面の並びは 会社名 → カナ → 法人番号 → 代表者名 → 郵便番号 → 住所 → 電話番号 → 決算月 である。</para>
     /// <para><b>郵便番号はここに載せない</b>——長さではなく<b>書式</b>の規則だからである（<see cref="PostalCode"/>）。
     /// <b>電話番号は逆に長さだけ</b>で、書式は置かない（内線・国番号・区切り記号の形が割れる）。</para>
@@ -88,9 +87,10 @@ public sealed class CompanyProfileSubmitGate
         ArgumentNullException.ThrowIfNull(transactionData);
         ArgumentNullException.ThrowIfNull(save);
 
-        foreach (var data in ProfilesIn(transactionData))
+        var reasons = ProfilesIn(transactionData).SelectMany(Reasons).ToList();
+        if (reasons.Count > 0)
         {
-            Reject(data);
+            throw new CompanyProfileRejectedException(reasons);
         }
 
         return await save();
@@ -111,21 +111,23 @@ public sealed class CompanyProfileSubmitGate
             .Where(d => d.Name == ModuleName);
 
     /// <summary>
-    /// <b>断る順は画面の並びに合わせる</b>（<c>PartnerSubmitGate</c> と同じ理由）。
+    /// 断る理由を<b>全部</b>集める。<b>並びは画面の並びに合わせる</b>（<c>PartnerSubmitGate</c> と同じ理由）。
     /// </summary>
     /// <remarks>
-    /// 型は 1 つずつしか返さない（開発者の指示。2026-09-08。逐語「即エラー。次へ進まない」）ので、
-    /// <b>順が画面と食い違うと、利用者は上と下を往復させられる</b>。
+    /// <para><b>欄をまたいで束ねる</b>（docs/21 §2-6 の (b)。開発者の決定。2026-09-20。寄せたのは 2026-09-24）。
+    /// <b>欄どうしに依存は無い</b>ので、全部を見る。</para>
+    /// <para><b>1 つの欄については、最初に当たった 1 つだけを言う</b>（開発者の指示。2026-09-08。逐語「即エラー。次へ進まない」。
+    /// 欄ごとと読むのは ADR-0047 の 10——Claude の決め）。束ねるのは欄をまたぐ断りだけで、ここは変わらない。</para>
     /// </remarks>
-    private static void Reject(ModuleData data)
-    {
-        RejectLongText(data, BeforeCorporateNumber);
-        RejectBadCorporateNumber(data);
-        RejectLongText(data, BetweenCorporateNumberAndPostalCode);
-        RejectBadPostalCode(data);
-        RejectLongText(data, AfterPostalCode);
-        RejectBadFiscalYearEndMonth(data);
-    }
+    private static IEnumerable<string> Reasons(ModuleData data)
+        => [
+            .. LongTextProblems(data, BeforeCorporateNumber),
+            .. CorporateNumberProblems(data),
+            .. LongTextProblems(data, BetweenCorporateNumberAndPostalCode),
+            .. PostalCodeProblems(data),
+            .. LongTextProblems(data, AfterPostalCode),
+            .. FiscalYearEndMonthProblems(data),
+        ];
 
     /// <summary>
     /// 文字の欄の上限（docs/12 §2-2）。
@@ -135,7 +137,7 @@ public sealed class CompanyProfileSubmitGate
     /// <para><b>前後の空白を落とし、落とした姿を差分に書き戻す</b>（取引先の関門と同じ）。
     /// <b>比べるときだけ落とすと、関門が数えた長さと DDL が数える長さが食い違う</b>（qa/03 の L-14）。</para>
     /// </remarks>
-    private static void RejectLongText(ModuleData data, (string Field, string Column, string Label, int Max)[] fields)
+    private static IEnumerable<string> LongTextProblems(ModuleData data, (string Field, string Column, string Label, int Max)[] fields)
     {
         foreach (var (field, _, label, max) in fields)
         {
@@ -162,7 +164,7 @@ public sealed class CompanyProfileSubmitGate
 
             if (MasterTextLength.DescribeProblem(label, text.Value, max) is string problem)
             {
-                throw new CompanyProfileRejectedException(problem);
+                yield return problem;
             }
         }
     }
@@ -175,11 +177,11 @@ public sealed class CompanyProfileSubmitGate
     /// <b>書式が合わない値は断る。</b> 書き換えて直すことはしない
     /// （「1234567」に「-」を足さない。ADR-0047 の線）。
     /// </remarks>
-    private static void RejectBadPostalCode(ModuleData data)
+    private static IEnumerable<string> PostalCodeProblems(ModuleData data)
     {
         if (!data.Fields.TryGetValue("PostalCode", out var found))
         {
-            return;
+            return [];
         }
 
         // **読めない型は断る**（上の文字の欄と同じ）。
@@ -192,15 +194,12 @@ public sealed class CompanyProfileSubmitGate
         if (value.Length == 0)
         {
             text.Value = null;
-            return;
+            return [];
         }
 
         text.Value = value;
 
-        if (PostalCode.DescribeProblem(value) is string problem)
-        {
-            throw new CompanyProfileRejectedException(problem);
-        }
+        return PostalCode.DescribeProblem(value) is string problem ? [problem] : [];
     }
 
     /// <summary>
@@ -215,11 +214,11 @@ public sealed class CompanyProfileSubmitGate
     /// <para><b>空も断る。</b> DB の <c>NOT NULL</c> に投げると定型文になり、
     /// 「13 は利用者の語で断るのに、空は枠組みの言葉」という食い違いが同じ欄で起きる。</para>
     /// </remarks>
-    private static void RejectBadFiscalYearEndMonth(ModuleData data)
+    private static IEnumerable<string> FiscalYearEndMonthProblems(ModuleData data)
     {
         if (!data.Fields.TryGetValue("FiscalYearEndMonth", out var field))
         {
-            return;
+            return [];
         }
 
         // **空にした保存も断る**（2026-09-09 の自己レビュー）。DB の NOT NULL に投げると定型文になり、
@@ -227,23 +226,21 @@ public sealed class CompanyProfileSubmitGate
         // **読めない型も断る**——検査できない値を通すのは fail-open である。
         if (field is not NumberFieldData month || month.Value is not decimal value)
         {
-            throw new CompanyProfileRejectedException("「決算月」を入れてください。");
+            return ["「決算月」を入れてください。"];
         }
 
-        if (value != decimal.Truncate(value) || value < FirstMonth || value > LastMonth)
-        {
-            throw new CompanyProfileRejectedException(
-                $"「決算月」は {FirstMonth} から {LastMonth} までの整数で入れてください。");
-        }
+        return value != decimal.Truncate(value) || value < FirstMonth || value > LastMonth
+            ? [$"「決算月」は {FirstMonth} から {LastMonth} までの整数で入れてください。"]
+            : [];
     }
 
-    private static void RejectBadCorporateNumber(ModuleData data)
+    private static IEnumerable<string> CorporateNumberProblems(ModuleData data)
     {
         // CLB は変更されたフィールドしか送ってこない（qa/01 F-11）。
         // 送られていない項目は「変えていない」なので、検査しない。
         if (!data.Fields.TryGetValue("CorporateNumber", out var field))
         {
-            return;
+            return [];
         }
 
         // **読めない型は断る**（2026-09-16 に揃えた。それまでここだけ素通しだった）。
@@ -263,16 +260,13 @@ public sealed class CompanyProfileSubmitGate
         if (value.Length == 0)
         {
             number.Value = null;
-            return;
+            return [];
         }
 
         // **貼り付けで紛れ込んだ空白を落として保存する。** 落とさずに通すと、
         // 同じ番号が 2 通りの文字列で保存される。
         number.Value = value;
 
-        if (CorporateNumber.DescribeProblem(value) is string problem)
-        {
-            throw new CompanyProfileRejectedException(problem);
-        }
+        return CorporateNumber.DescribeProblem(value) is string problem ? [problem] : [];
     }
 }
