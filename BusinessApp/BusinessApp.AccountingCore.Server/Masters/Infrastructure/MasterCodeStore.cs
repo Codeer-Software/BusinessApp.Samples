@@ -100,8 +100,7 @@ public sealed class MasterCodeStore(IDbAccessor accessor, string dataSourceName)
     /// <summary>その勘定科目が補助科目を使うかと、断りで名指すためのコード・名前。科目が無ければ <c>null</c>。</summary>
     /// <remarks>
     /// <b>使わない科目の下に補助科目を作れてしまう穴</b>を塞ぐための問い合わせである
-    /// （[ADR-0038 §3](../../../docs/decisions/0038-使用中のマスタは意味を変えられない.md) の 2 値は、
-    /// 2026-09-08 の回では明細の側しか塞いでおらず、2026-09-09 に塞いだ。qa/03 L-27）。
+    /// （マスタの側の 2 値——docs/12 §2。2026-09-08 の回では明細の側しか塞いでおらず、2026-09-09 に塞いだ。qa/03 L-27）。
     /// </remarks>
     public async Task<(bool UsesSubAccount, string? Code, string? Name)?> SubAccountHostAsync(long accountId)
     {
@@ -115,6 +114,19 @@ public sealed class MasterCodeStore(IDbAccessor accessor, string dataSourceName)
             : (Convert.ToInt64(rows[0]["uses_sub_account"], CultureInfo.InvariantCulture) == 1,
                Convert.ToString(rows[0]["code"], CultureInfo.InvariantCulture),
                Convert.ToString(rows[0]["name"], CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// 勘定科目の下にある補助科目の数。<b>無効の補助科目も数える</b>（docs/12 §2。どちらも docs/05 の Q-67 で諮っている）。
+    /// </summary>
+    public async Task<long> CountSubAccountsUnderAsync(long accountId)
+    {
+        var rows = await accessor.QueryAsync(
+            dataSourceName,
+            "select count(*) as n from sub_accounts where account_id = @p1",
+            new() { { "@p1", Param(accountId) } });
+
+        return Convert.ToInt64(rows[0]["n"], CultureInfo.InvariantCulture);
     }
 
     /// <summary>引き渡す値の包み（<c>QueryAsync</c> と <c>ExecuteAsync</c> で辞書の型が違う。qa/01 C-12）。</summary>

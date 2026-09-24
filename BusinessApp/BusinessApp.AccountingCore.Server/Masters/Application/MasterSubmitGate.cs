@@ -28,7 +28,8 @@ using BusinessApp.AccountingCore.Server.Masters.Infrastructure;
 /// （qa/01 F-12）、2 つの欄をまたぐ規則は保存されている側と組んで判定する。</para>
 /// <para><b>理由は全部集めてから 1 回で返す</b>（docs/21 §2-6 の (b)。開発者の決定。2026-09-20）。
 /// <b>ただし 1 つの欄については最初に当たった 1 つだけを言う</b>（ADR-0047 の決定 10）——コードが空・書式違いなら、重複は数えない（<see cref="CodeProblemsAsync"/>）。
-/// <b>前提の崩れた検査も飛ばす</b>（Claude の判断。docs/21 §2-6）——意味の凍結で断った欄は見ない（<see cref="MeaningFindings"/>）。</para>
+/// <b>前提の崩れた検査も飛ばす</b>（Claude の判断。docs/21 §2-6）——意味の凍結で断った欄は見ない（<see cref="MeaningFindings"/>）。
+/// <b>同じ保存の別の行が凍結で断られたときは、その行の保存されている値で判定する</b>（<see cref="ChangedInSubmit"/>）。</para>
 /// </remarks>
 public sealed class MasterSubmitGate(MasterCodeStore store, MasterMeaningGate meaning)
 {
@@ -89,7 +90,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store, MasterMeaningGate me
         {
             if (Coded.FirstOrDefault(m => m.ModuleName == data.Name) is CodedMaster master)
             {
-                reasons.AddRange(await ReasonsForAsync(master, data, adding, findings.FrozenFieldsOf(data), transactionData));
+                reasons.AddRange(await ReasonsForAsync(master, data, adding, findings, transactionData));
             }
         }
 
@@ -101,25 +102,28 @@ public sealed class MasterSubmitGate(MasterCodeStore store, MasterMeaningGate me
         return await save();
     }
 
-    /// <param name="frozen">
-    /// 意味の凍結が「変えられない」と断った欄。<b>その欄を入力に持つ検査は飛ばす</b>——
+    /// <param name="findings">
+    /// 意味の凍結が見つけたもの。<b>凍結で断った欄を入力に持つ検査は飛ばす</b>——
     /// 変えられない値を検査して「こう直せ」と言うと、従っても通らない一手になる（<see cref="MeaningFindings"/>）。
+    /// <b>行ごとに持つ</b>ので、補助科目の行を見るときに、同じ保存の勘定科目の行が凍結されたかも引ける。
     /// </param>
     private async Task<IReadOnlyList<string>> ReasonsForAsync(
-        CodedMaster master, ModuleData data, bool adding, IReadOnlySet<string> frozen,
+        CodedMaster master, ModuleData data, bool adding, MeaningFindings findings,
         IReadOnlyList<ModuleSubmitData> transactionData)
     {
         var id = Id(data);
         var reasons = new List<string>();
+        var frozen = findings.FrozenFieldsOf(data);
         var parentFrozen = master.Parent is CodedParent parent && frozen.Contains(parent.FieldName);
 
         // **補助科目の画面は「勘定科目」が最上段**なので、2 値の断りを先に言う（docs/21 §2-6「並びは画面の並び」）。
+        // **同じ保存で勘定科目の値を変えていれば、変えたあとの値で判定する。ただし凍結で断った変更は数えない**（<see cref="ChangedInSubmit"/>）。
         if (!parentFrozen)
         {
-            reasons.AddRange(await SubAccountUnderPlainAccountAsync(master, data, transactionData));
+            reasons.AddRange(await SubAccountUnderPlainAccountAsync(master, data, adding, findings, transactionData));
         }
 
-        // **追加はコードを必ず伴う。** 画面は必ず送ってくるが、**取込は列ごと落とせる**
+        // **追加はコードを必ず伴う。** 画面は必ず送ってくるが、**API と取込（フェーズ 6。未設計）は列ごと落としうる**
         // （`code` の無い CSV）——**取込こそこの関門が守る経路である**（2026-09-09 の自己レビュー）。
         // 更新は差分しか届かない（qa/01 F-12）ので、載っていないことが正常である。
         if (adding && !data.Fields.ContainsKey("Code"))
@@ -134,6 +138,12 @@ public sealed class MasterSubmitGate(MasterCodeStore store, MasterMeaningGate me
         }
 
         reasons.AddRange(LongTextProblems(master, data));
+
+        // **勘定科目の画面では「補助科目を使う」は名前より下**にある。
+        if (!frozen.Contains("UsesSubAccount"))
+        {
+            reasons.AddRange(await SubAccountsLeftUnderAsync(master, data, id));
+        }
 
         if (!frozen.Contains("IsCompanyWide"))
         {
@@ -338,26 +348,47 @@ public sealed class MasterSubmitGate(MasterCodeStore store, MasterMeaningGate me
     }
 
     /// <summary>
-    /// 補助科目を使わない勘定科目の下に、補助科目は作れない（ADR-0038 §3 の 2 値）。
+    /// 補助科目を使わない勘定科目の下に、補助科目は作れない（docs/12 §2——ADR-0038 §3 の 2 値をマスタにも当てる読み）。
     /// </summary>
     /// <remarks>
     /// <b>2026-09-08 の回では明細の側しか塞いでいなかった</b>——
     /// マスタの画面からは、使わない設定の科目にも補助科目を足せた（2026-09-09 に塞いだ。qa/03 L-27）。
     /// </remarks>
     private async Task<IReadOnlyList<string>> SubAccountUnderPlainAccountAsync(
-        CodedMaster master, ModuleData data, IReadOnlyList<ModuleSubmitData> transactionData)
+        CodedMaster master, ModuleData data, bool adding, MeaningFindings findings, IReadOnlyList<ModuleSubmitData> transactionData)
     {
-        if (master.ModuleName != "SubAccount")
+        // **見るのは、新しい行と、別の勘定科目へ移ってくる行だけ**（2026-09-24 に改めた）。
+        // その科目に残ったままの行は、科目の側（<see cref="SubAccountsLeftUnderAsync"/>）が数える——ここでも見ると、
+        // 同じ食い違いを 2 度言い、片方は従っても通らない（科目の側は DB の行を数えるので、ここに従って移しても消えない）。
+        // **規則より前に作られた行**（オフの科目の下の補助科目。開発機に実在する）**も、移さない更新なら通す**——
+        // その行が使用中なら「勘定科目」は凍結されていて移せないので、見ると名前も「有効」も直せない行き止まりになる。
+        if (master.ModuleName != "SubAccount" || master.Parent is not CodedParent parent)
+        {
+            return [];
+        }
+
+        // **親は差分の字面から直に解く**——<see cref="ParentAsync"/> は数値で読めない更新を保存されている親へ落とす（重複の範囲のための作法）ので、
+        // 同じ保存で作る科目（仮の識別子）へ移す更新を、移す前の親で判定してしまう（2026-09-24 の自己レビュー。オフの新しい科目へ移せた）。
+        // **欄が無い・空なら、移っていない**（更新は差分しか届かない——qa/01 F-12。新しい行なら外部キーと必須の検査が止める）。
+        var key = ParentKey(parent, data);
+        if (string.IsNullOrEmpty(key))
+        {
+            return [];
+        }
+
+        // **新しい行は、更新の側に混ざっていても新しい行**（仮の識別子——<c>MasterMeaningGate</c> と同じ扱い）。
+        var id = Id(data);
+        var target = long.TryParse(key, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : (long?)null;
+        if (!adding && id is long existing && target is long moving && await StoredParentAsync(master, parent, existing) == moving)
         {
             return [];
         }
 
         // **科目が実在しないときは、ここで止めない**——外部キーが拒む。
         // 実在の断りは 1 か所（DB）に置き、ここは 2 値の規則だけを見る。
-        var parent = await ParentAsync(master, data, Id(data));
-        var host = parent.Id is long accountId
-            ? await store.SubAccountHostAsync(accountId)
-            : HostInSubmit(parent.Key, transactionData);
+        var host = target is long accountId
+            ? ChangedInSubmit(await store.SubAccountHostAsync(accountId), accountId, findings, transactionData)
+            : HostInSubmit(key, transactionData);
 
         // **結果（「補助科目を作れません」）は言わない**——見出し（「登録できません」）の繰り返しになる（docs/21 §2-6 の「各文が結果を繰り返さない」）。
         // **勘定科目を名指す**——束ねた断りの中では「この勘定科目」が何を指すか読めない。
@@ -368,36 +399,120 @@ public sealed class MasterSubmitGate(MasterCodeStore store, MasterMeaningGate me
             return [];
         }
 
-        // **名指しはあるものだけで組む**——取込は名前の欄を落とせる（同じ保存で作る科目は、差分に載った字しか無い）。
+        // **名指しはあるものだけで組む**——API と取込（未設計）は名前の欄を落としうる（同じ保存で作る科目は、差分に載った字しか無い）。
         var label = string.Join(" ", new[] { plain.Code, plain.Name }.Where(part => !string.IsNullOrEmpty(part)));
         return [$"「勘定科目」の「{label}」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。"];
     }
 
     /// <summary>
+    /// 既にある勘定科目の「補助科目を使う」を<b>同じ保存で変えているなら、変えたあとの値</b>で判定する（取込・API）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>DB の値だけで判定すると、変える前の値で決まる</b>——未使用の科目をオンにする行とその下に補助科目を足す行は、足す行が断られ、
+    /// オフにする行と足す行は両方通っていた（2026-09-24 の自己レビュー。docs/12 の保留リストにあった穴）。</para>
+    /// <para><b>凍結で断った変更は数えない</b>——使用中の科目の「補助科目を使う」は変えられない（ADR-0038 §2）ので、
+    /// DB の値が残る。変えたあとの値で判定すると、断りに従って元に戻した 2 回目に初めて 2 値の断りが出る
+    /// （docs/21 §2-6「前提の崩れた検査は飛ばす」の逆向き——前提そのものを凍結が決める）。</para>
+    /// </remarks>
+    /// <remarks>
+    /// <para><b>識別子は数で突き合わせる</b>——字面で比べると、補助科目の側が「05」のように書いた親と、勘定科目の行の「5」が別物になり、
+    /// 変えたあとの値が見えない（2026-09-24 の自己レビュー）。</para>
+    /// </remarks>
+    private static (bool UsesSubAccount, string? Code, string? Name)? ChangedInSubmit(
+        (bool UsesSubAccount, string? Code, string? Name)? stored, long accountId, MeaningFindings findings,
+        IReadOnlyList<ModuleSubmitData> transactionData)
+    {
+        var account = transactionData
+            .SelectMany(d => d.Update)
+            .FirstOrDefault(d => d.Name == "Account" && Id(d) == accountId);
+
+        return stored is not null
+               && account is not null
+               && !findings.FrozenFieldsOf(account).Contains("UsesSubAccount")
+               && Boolean(account, "UsesSubAccount") is bool uses
+            ? (uses, stored.Value.Code, stored.Value.Name)
+            : stored;
+    }
+
+    /// <summary>
+    /// <b>既にある勘定科目の「補助科目を使う」をオフにするとき、その下に補助科目が残っていれば断る</b>（docs/12 §2 のマスタの読みの、科目の側）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>2026-09-24 まで、この規則は補助科目の側からしか見ていなかった</b>——補助科目を持つ未使用の科目をオフにでき、
+    /// マスタの側の 2 値（docs/12 §2）が崩れていた（帳簿は計上の関門が守っていた）。</para>
+    /// <para><b>断るのは、保存されている値がオンで、それをオフにする保存だけ</b>——既にオフの科目（規則より前に作られた行を持つもの）に
+    /// 「オンのままにしてください」と言うと事実に反する（2026-09-24 の自己レビュー）。</para>
+    /// <para><b>数えるのは DB の行だけ</b>——同じ保存で補助科目を足す行・移ってくる行は、補助科目の側（<see cref="SubAccountUnderPlainAccountAsync"/>）が断るので、
+    /// ここでも数えると同じ食い違いを 2 度言う。<b>同じ保存で補助科目を別の科目へ移す行も数えたまま</b>断る——
+    /// <b>CLB が同じ保存の追加と更新をどの順に当てるかは実測していない</b>（qa/01 F-41 の ⑤）。この規則に DB のトリガを置くなら、
+    /// 科目の更新が先に当たっても拒まれない形にしておく。**守りの向きは補助科目の側と逆である**——あちらは同じ保存の科目の変更を判定に入れて通す
+    /// （オンにする科目の下に足す）が、こちらは同じ保存の補助科目の変更を判定に入れずに断る。
+    /// 断りの一手は「先に移す」で、別の保存に分ければ通る（API と取込（未設計）だけの形。画面では補助科目は勘定科目とは別の画面で保存する）。</para>
+    /// <para><b>無効の補助科目も数える</b>（<see cref="MasterCodeStore.CountSubAccountsUnderAsync"/>）。
+    /// <b>補助科目は画面から削除できない</b>（`SubAccount.mod.json` の <c>CanDelete</c> が <c>false</c>）ので、一手は「別の科目へ移す」だけを言う——
+    /// 未使用の科目の補助科目は未使用なので、「勘定科目」を変えられる（明細は科目と補助科目の組を持つ。<b>補助科目が明細の勘定科目に属する限り</b>——
+    /// この規則は関門だけが守るので、CLB を通さない書き込みで崩されると移せない行が生まれうる）。</para>
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> SubAccountsLeftUnderAsync(CodedMaster master, ModuleData data, long? id)
+    {
+        if (master.ModuleName != "Account"
+            || id is not long account
+            || Boolean(data, "UsesSubAccount") is not false
+            || await store.SubAccountHostAsync(account) is not { UsesSubAccount: true })
+        {
+            return [];
+        }
+
+        // **「この勘定科目」で言う**——画面は 1 回の保存で 1 つの科目しか送らない。API で複数の科目を束ねた断りでは何を指すか曖昧になるが、
+        // 意味の凍結の文（<see cref="MasterMeaningGate"/>）と同じ形に揃えた（2026-09-24 の自己レビューで挙がり、直さずに残した）。
+        // **無効の補助科目も数えると言う**——伝票の候補に出ない補助科目の数は、利用者が画面で数えても合わない。
+        // **直しに行く画面は「補助科目マスタ」と名指す**——メニューの「マスタ/」の下に無い補助科目も「〜マスタ」と呼ぶ（docs/21 §5。開発者の決定）。
+        // 2026-09-24 の自己レビューで一度メニューの道順（「会計」の「補助科目」の画面）に変えたが、その決定に反していたので戻した。
+        var count = await store.CountSubAccountsUnderAsync(account);
+        return count == 0
+            ? []
+            : [$"この勘定科目の下には補助科目が {count.ToString("N0", CultureInfo.InvariantCulture)} 件あります（「有効」がオフのものも数えています）。"
+               + "「補助科目を使う」はオンのままにしてください。"
+               + "オフにするなら、先に補助科目マスタで、それらの補助科目の「勘定科目」を「補助科目を使う」がオンの別の勘定科目に変えてください。"
+               + "要らない補助科目も、先に移してから、その補助科目の「有効」をオフにしてください。"];
+    }
+
+    /// <summary>
+    /// 保存されている補助科目の親（勘定科目）の識別子。<b>数で比べる</b>——差分の「05」と保存の「5」を同じ親と見る。
+    /// </summary>
+    private async Task<long?> StoredParentAsync(CodedMaster master, CodedParent parent, long id)
+        => long.TryParse(
+               Stored(await store.FindStoredAsync(master, id, [parent.Column]), parent.Column),
+               NumberStyles.Integer,
+               CultureInfo.InvariantCulture,
+               out var stored)
+            ? stored
+            : null;
+
+    /// <summary>
     /// 同じ保存の中で作られている勘定科目の「補助科目を使う」とコード・名前。見つからなければ <c>null</c>。
     /// </summary>
     /// <remarks>
-    /// <b>科目と補助科目を同じ保存で作る形（取込・API）では、親がまだ DB に無い</b>
-    /// （仮の識別子。qa/01 C-08）。DB を引くだけだと <b>ADR-0038 §3 の 2 値が丸ごと消える</b>——
+    /// <b>科目と補助科目を同じ保存で作る形（API。取込は未設計）では、親がまだ DB に無い</b>
+    /// （仮の識別子。qa/01 C-08）。DB を引くだけだと <b>マスタの側の 2 値（docs/12 §2）が丸ごと消える</b>——
     /// この規則には DB 側の受け皿が無い（<c>uses_sub_account</c> を見るトリガは明細の側だけ）ので、
     /// <b>ここが唯一の守りである</b>（2026-09-09 の自己レビュー）。
     /// </remarks>
+    /// <param name="key">親の字面。<b>空でない</b>——空なら呼び手が先に見送る（移っていない）。</param>
     private static (bool UsesSubAccount, string? Code, string? Name)? HostInSubmit(
-        string? key, IReadOnlyList<ModuleSubmitData> transactionData)
+        string key, IReadOnlyList<ModuleSubmitData> transactionData)
     {
-        if (string.IsNullOrEmpty(key))
-        {
-            return null;
-        }
-
         // **入れ物の名前ではなく、中身の名前で探す**（qa/02 R16-16 の型）。
         var parent = transactionData
             .SelectMany(d => d.Add.Concat(d.Update))
             .FirstOrDefault(d => d.Name == "Account" && IdText(d) == key);
 
-        return parent is null || Boolean(parent, "UsesSubAccount") is not bool uses
+        // **欄が載っていなければ、DB の既定と同じオフとみなす**（`uses_sub_account ... DEFAULT 0`）——
+        // 載っていない新しい科目はオフで作られる——CLB が欄を書かなければ DB の既定（0）、画面の初期値（false。qa/01 F-10）を書いても同じオフ（新しい行の送信の中身は未実測）。
+        // 見送ると、その下に補助科目ができる（2026-09-24 の自己レビュー）。
+        return parent is null
             ? null
-            : (uses, Text(parent, "Code"), Text(parent, "Name"));
+            : (Boolean(parent, "UsesSubAccount") ?? false, Text(parent, "Code"), Text(parent, "Name"));
     }
 
     /// <summary>
