@@ -18,16 +18,19 @@ using BusinessApp.AccountingCore.Server.Masters.Infrastructure;
 /// 会計コアのマスタ 4 画面には関門が 1 つも無く、コードの重複も「全社共通」の 2 件目も
 /// 税率区分の欠けも、全部この 1 文になっていた（qa/03 L-28。2026-09-04 の探索的テストで実測）。
 /// <b>ここは、その手前に置く網である。DB の制約を外すのではない。</b></para>
-/// <para><b><see cref="MasterMeaningGate"/> とは別の関門である。</b>
+/// <para><b><see cref="MasterMeaningGate"/> とは別の規則である。</b>
 /// あちらは「使用中の行の意味を変えられない」（ADR-0038）を見る。こちらは
-/// <b>値そのものが正しいか・重複していないか</b>を見る。<b>順は意味の凍結が先</b>——
-/// あちらは直す手立てが無い（新しい行を作るしかない）が、こちらは値を直せば通る。</para>
+/// <b>値そのものが正しいか・重複していないか</b>を見る。<b>断るのはここ 1 か所で、両方の理由を束ねて 1 回で返す</b>
+/// （docs/21 §2-6 の (b)）。<b>並びは意味の凍結が先</b>——
+/// あちらは変えた内容のままでは通す手が無い（元に戻すか、新しい行を作るしかない）が、こちらは値を直せば通る。</para>
 /// <para><b>追加も更新も見る。</b> 追加だけを守る関門は、正しい値で作ってから壊す経路を残す
 /// （<c>PartnerSubmitGate</c> と同じ理由）。<b>更新では触った欄しか届かない</b>ので
 /// （qa/01 F-12）、2 つの欄をまたぐ規則は保存されている側と組んで判定する。</para>
-/// <para><b>理由は 1 つだけ返す</b>（docs/21 §2-6）。</para>
+/// <para><b>理由は全部集めてから 1 回で返す</b>（docs/21 §2-6 の (b)。開発者の決定。2026-09-20）。
+/// <b>ただし 1 つの欄については最初に当たった 1 つだけを言う</b>（ADR-0047 の決定 10）——コードが空・書式違いなら、重複は数えない（<see cref="CodeProblemsAsync"/>）。
+/// <b>前提の崩れた検査も飛ばす</b>（Claude の判断。docs/21 §2-6）——意味の凍結で断った欄は見ない（<see cref="MeaningFindings"/>）。</para>
 /// </remarks>
-public sealed class MasterSubmitGate(MasterCodeStore store)
+public sealed class MasterSubmitGate(MasterCodeStore store, MasterMeaningGate meaning)
 {
     /// <summary>課税の区分（税率区分が要るもの）。<b>値は DDL の <c>CHECK</c> の写しである</b>（docs/20 §4）。</summary>
     private static readonly string[] TaxableTypes = ["taxable_sales", "taxable_purchase"];
@@ -65,7 +68,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
 
     /// <summary>部品の組み立て。</summary>
     public static MasterSubmitGate Create(IDbAccessor dbAccessor, string dataSourceName)
-        => new(new MasterCodeStore(dbAccessor, dataSourceName));
+        => new(new MasterCodeStore(dbAccessor, dataSourceName), MasterMeaningGate.Create(dbAccessor, dataSourceName));
 
     /// <summary>保存を包む。<paramref name="save"/> は CLB 本来の保存処理。</summary>
     public async Task<List<ModuleSubmitResult>> SubmitAsync(
@@ -75,6 +78,10 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         ArgumentNullException.ThrowIfNull(transactionData);
         ArgumentNullException.ThrowIfNull(save);
 
+        // **意味の凍結の理由を先に置く**（上の注記）。
+        var findings = await meaning.FindAsync(transactionData);
+        var reasons = new List<string>(findings.Reasons);
+
         // **入れ物の名前ではなく、中身の名前で担当を決める**（qa/02 R16-16 の型）。
         foreach (var (data, adding) in transactionData.SelectMany(
                      d => d.Add.Select(r => (Row: r, Adding: true))
@@ -82,32 +89,63 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
         {
             if (Coded.FirstOrDefault(m => m.ModuleName == data.Name) is CodedMaster master)
             {
-                await RejectAsync(master, data, adding, transactionData);
+                reasons.AddRange(await ReasonsForAsync(master, data, adding, findings.FrozenFieldsOf(data), transactionData));
             }
+        }
+
+        if (reasons.Count > 0)
+        {
+            throw new MasterRejectedException(reasons);
         }
 
         return await save();
     }
 
-    private async Task RejectAsync(
-        CodedMaster master, ModuleData data, bool adding,
+    /// <param name="frozen">
+    /// 意味の凍結が「変えられない」と断った欄。<b>その欄を入力に持つ検査は飛ばす</b>——
+    /// 変えられない値を検査して「こう直せ」と言うと、従っても通らない一手になる（<see cref="MeaningFindings"/>）。
+    /// </param>
+    private async Task<IReadOnlyList<string>> ReasonsForAsync(
+        CodedMaster master, ModuleData data, bool adding, IReadOnlySet<string> frozen,
         IReadOnlyList<ModuleSubmitData> transactionData)
     {
         var id = Id(data);
+        var reasons = new List<string>();
+        var parentFrozen = master.Parent is CodedParent parent && frozen.Contains(parent.FieldName);
+
+        // **補助科目の画面は「勘定科目」が最上段**なので、2 値の断りを先に言う（docs/21 §2-6「並びは画面の並び」）。
+        if (!parentFrozen)
+        {
+            reasons.AddRange(await SubAccountUnderPlainAccountAsync(master, data, transactionData));
+        }
 
         // **追加はコードを必ず伴う。** 画面は必ず送ってくるが、**取込は列ごと落とせる**
         // （`code` の無い CSV）——**取込こそこの関門が守る経路である**（2026-09-09 の自己レビュー）。
         // 更新は差分しか届かない（qa/01 F-12）ので、載っていないことが正常である。
         if (adding && !data.Fields.ContainsKey("Code"))
         {
-            throw new MasterRejectedException($"「{master.CodeLabel}」を入れてください。");
+            reasons.Add($"「{master.CodeLabel}」を入れてください。");
         }
 
-        await RejectBadCodeAsync(master, data, id);
-        RejectLongText(master, data);
-        await RejectSecondCompanyWideDepartmentAsync(master, data, id);
-        await RejectInconsistentTaxCategoryAsync(master, data, id);
-        await RejectSubAccountUnderPlainAccountAsync(master, data, transactionData);
+        // **コードの一意の範囲は親で決まる**（補助科目）ので、親を変えられない行ではコードの重複も数えない。
+        if (!frozen.Contains("Code") && !parentFrozen)
+        {
+            reasons.AddRange(await CodeProblemsAsync(master, data, id));
+        }
+
+        reasons.AddRange(LongTextProblems(master, data));
+
+        if (!frozen.Contains("IsCompanyWide"))
+        {
+            reasons.AddRange(await SecondCompanyWideDepartmentAsync(master, data, id));
+        }
+
+        if (!frozen.Contains("TaxationType") && !frozen.Contains("RateKind"))
+        {
+            reasons.AddRange(await InconsistentTaxCategoryAsync(master, data, id));
+        }
+
+        return reasons;
     }
 
     /// <summary>名前の長さ（docs/12 §2-2）。</summary>
@@ -124,7 +162,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// <b>比べるときだけ落とすと、関門が数えた長さと DDL が数える長さが食い違う</b>
     /// （qa/03 の L-14 の型。qa/02 の R45-02 で実際に踏んだ）。</para>
     /// </remarks>
-    private static void RejectLongText(CodedMaster master, ModuleData data)
+    private static IEnumerable<string> LongTextProblems(CodedMaster master, ModuleData data)
     {
         // **欄ごとに上限が違う**（名前は 30、カナは 60。旧 Q-26 の決定。2026-09-16）。
         // **記述子から回す**——ここで欄名を決め打ちにすると、カナを足した日に片方だけ守られる。
@@ -148,7 +186,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
 
             if (MasterTextLength.DescribeProblem(coded.Label, text.Value, coded.MaxLength) is string problem)
             {
-                throw new MasterRejectedException(problem);
+                yield return problem;
             }
         }
     }
@@ -160,26 +198,28 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// 移した先に同じコードがあれば重複になる。差分にはコードが載らない（qa/01 F-12）から、
     /// <b>保存されている字を読み直して数える</b>（2026-09-09 の自己レビュー。
     /// 親を読み直す穴と同じ家系で、こちらだけ残っていた）。
+    /// <para><b>空・書式違いなら、重複は数えない</b>——正規化できない字で DB を引いても、
+    /// 利用者が直す先は同じ欄なので、断りが 2 つに割れるだけである（1 つの欄については最初に当たった 1 つだけ——ADR-0047 の決定 10）。</para>
     /// </remarks>
-    private async Task RejectBadCodeAsync(CodedMaster master, ModuleData data, long? id)
+    private async Task<IReadOnlyList<string>> CodeProblemsAsync(CodedMaster master, ModuleData data, long? id)
     {
         var touched = Text(data, "Code") is string code ? MasterCode.Normalize(code) : null;
         var normalized = touched ?? await StoredCodeForParentMoveAsync(master, data, id);
         if (normalized is null)
         {
-            return;
+            return [];
         }
 
         if (touched is not null)
         {
             if (normalized.Length == 0)
             {
-                throw new MasterRejectedException($"「{master.CodeLabel}」を入れてください。");
+                return [$"「{master.CodeLabel}」を入れてください。"];
             }
 
             if (MasterCode.DescribeProblem(master.CodeLabel, normalized) is string problem)
             {
-                throw new MasterRejectedException(problem);
+                return [problem];
             }
 
             // **正規化した姿を差分に書き戻す。** 比べるときだけ落とすと、関門が「同じ」と通した値を
@@ -194,7 +234,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             master, normalized, id, (await ParentAsync(master, data, id)).Id);
         if (conflict is null)
         {
-            return;
+            return [];
         }
 
         // **ぶつかった相手の字を見せる。** 大小だけが違うとき、字を見比べないと理由が分からない。
@@ -211,8 +251,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             ? "別の勘定科目を選ぶか、コードを変えてください。"
             : "別のコードを入れてください。";
 
-        throw new MasterRejectedException(
-            $"「{master.CodeLabel}」の「{normalized}」は{reason}{howToFix}");
+        return [$"「{master.CodeLabel}」の「{normalized}」は{reason}{howToFix}"];
     }
 
     /// <summary>
@@ -238,24 +277,23 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// 見るのは DB に保存済みの行だけである。<b>同じ保存に「全社共通」の行を 2 つ載せる経路（取込・API）は関門では数えず、
     /// DDL の部分 UNIQUE インデックス（<c>ux_departments_company_wide</c>）が定型文で拒む</b>——画面は 1 行ずつしか保存しない。
     /// </remarks>
-    private async Task RejectSecondCompanyWideDepartmentAsync(CodedMaster master, ModuleData data, long? id)
+    private async Task<IReadOnlyList<string>> SecondCompanyWideDepartmentAsync(CodedMaster master, ModuleData data, long? id)
     {
         if (master.ModuleName != "Department" || Boolean(data, "IsCompanyWide") is not true)
         {
-            return;
+            return [];
         }
 
         var current = await store.CompanyWideDepartmentAsync(id);
         if (current is null)
         {
-            return;
+            return [];
         }
 
         // **ぶつかった相手を教える**（qa/02 R57-06）。コードの重複の断りは相手の字を見せているのに、
         // こちらだけ「いまなっている部門」と言うのは非対称で、利用者は一覧を探しに行くことになる。
-        throw new MasterRejectedException(
-            $"「全社共通」の部門は 1 つだけです。いま「全社共通」になっているのは部門名「{current.Value.Name}」（部門コード {current.Value.Code}）です。"
-            + "そちらをオフにしてから、こちらをオンにしてください。");
+        return [$"「全社共通」の部門は 1 つだけです。いま「全社共通」になっているのは部門名「{current.Value.Name}」（部門コード {current.Value.Code}）です。"
+                + "そちらをオフにしてから、こちらをオンにしてください。"];
     }
 
     /// <summary>
@@ -265,18 +303,18 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// <b>2 つの欄をまたぐので、触っていない側は保存されている値を引く</b>（qa/01 F-12）。
     /// <b>新規は届いた値だけで判定できる</b>——両方が必ず載っているからである。
     /// </remarks>
-    private async Task RejectInconsistentTaxCategoryAsync(CodedMaster master, ModuleData data, long? id)
+    private async Task<IReadOnlyList<string>> InconsistentTaxCategoryAsync(CodedMaster master, ModuleData data, long? id)
     {
         if (master.ModuleName != "TaxCategory")
         {
-            return;
+            return [];
         }
 
         var taxationType = Text(data, "TaxationType");
         var rateKind = Text(data, "RateKind");
         if (taxationType is null && rateKind is null)
         {
-            return;
+            return [];
         }
 
         if ((taxationType is null || rateKind is null) && id is long stored)
@@ -291,15 +329,12 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
 
         if (taxable && !hasRate)
         {
-            throw new MasterRejectedException(
-                "「課税区分」が「課税売上」「課税仕入」のときは「税率区分」が要ります。「税率区分」を選んでください。");
+            return ["「課税区分」が「課税売上」「課税仕入」のときは「税率区分」が要ります。「税率区分」を選んでください。"];
         }
 
-        if (!taxable && hasRate)
-        {
-            throw new MasterRejectedException(
-                "「課税区分」が「課税売上」「課税仕入」でないので、「税率区分」は空にしてください。");
-        }
+        return !taxable && hasRate
+            ? ["「課税区分」が「課税売上」「課税仕入」でないので、「税率区分」は空にしてください。"]
+            : [];
     }
 
     /// <summary>
@@ -309,31 +344,37 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// <b>2026-09-08 の回では明細の側しか塞いでいなかった</b>——
     /// マスタの画面からは、使わない設定の科目にも補助科目を足せた（2026-09-09 に塞いだ。qa/03 L-27）。
     /// </remarks>
-    private async Task RejectSubAccountUnderPlainAccountAsync(
+    private async Task<IReadOnlyList<string>> SubAccountUnderPlainAccountAsync(
         CodedMaster master, ModuleData data, IReadOnlyList<ModuleSubmitData> transactionData)
     {
         if (master.ModuleName != "SubAccount")
         {
-            return;
+            return [];
         }
 
         // **科目が実在しないときは、ここで止めない**——外部キーが拒む。
         // 実在の断りは 1 か所（DB）に置き、ここは 2 値の規則だけを見る。
         var parent = await ParentAsync(master, data, Id(data));
-        var uses = parent.Id is long accountId
-            ? await store.UsesSubAccountAsync(accountId)
-            : UsesSubAccountInSubmit(parent.Key, transactionData);
+        var host = parent.Id is long accountId
+            ? await store.SubAccountHostAsync(accountId)
+            : HostInSubmit(parent.Key, transactionData);
 
-        if (uses is false)
+        // **結果（「補助科目を作れません」）は言わない**——見出し（「登録できません」）の繰り返しになる（docs/21 §2-6 の「各文が結果を繰り返さない」）。
+        // **勘定科目を名指す**——束ねた断りの中では「この勘定科目」が何を指すか読めない。
+        // **一手は「別の勘定科目を選ぶ」**——「補助科目を使う」は使用中の科目では変えられない（ADR-0038 §2）ので、
+        // 「オンにしてください」は通らないことがある。
+        if (host is not { UsesSubAccount: false } plain)
         {
-            throw new MasterRejectedException(
-                "この勘定科目は「補助科目を使う」がオフなので、補助科目を作れません。"
-                + "先に勘定科目の「補助科目を使う」をオンにしてください。");
+            return [];
         }
+
+        // **名指しはあるものだけで組む**——取込は名前の欄を落とせる（同じ保存で作る科目は、差分に載った字しか無い）。
+        var label = string.Join(" ", new[] { plain.Code, plain.Name }.Where(part => !string.IsNullOrEmpty(part)));
+        return [$"「勘定科目」の「{label}」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。"];
     }
 
     /// <summary>
-    /// 同じ保存の中で作られている勘定科目が「補助科目を使う」か。見つからなければ <c>null</c>。
+    /// 同じ保存の中で作られている勘定科目の「補助科目を使う」とコード・名前。見つからなければ <c>null</c>。
     /// </summary>
     /// <remarks>
     /// <b>科目と補助科目を同じ保存で作る形（取込・API）では、親がまだ DB に無い</b>
@@ -341,7 +382,7 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
     /// この規則には DB 側の受け皿が無い（<c>uses_sub_account</c> を見るトリガは明細の側だけ）ので、
     /// <b>ここが唯一の守りである</b>（2026-09-09 の自己レビュー）。
     /// </remarks>
-    private static bool? UsesSubAccountInSubmit(
+    private static (bool UsesSubAccount, string? Code, string? Name)? HostInSubmit(
         string? key, IReadOnlyList<ModuleSubmitData> transactionData)
     {
         if (string.IsNullOrEmpty(key))
@@ -354,7 +395,9 @@ public sealed class MasterSubmitGate(MasterCodeStore store)
             .SelectMany(d => d.Add.Concat(d.Update))
             .FirstOrDefault(d => d.Name == "Account" && IdText(d) == key);
 
-        return parent is null ? null : Boolean(parent, "UsesSubAccount");
+        return parent is null || Boolean(parent, "UsesSubAccount") is not bool uses
+            ? null
+            : (uses, Text(parent, "Code"), Text(parent, "Name"));
     }
 
     /// <summary>

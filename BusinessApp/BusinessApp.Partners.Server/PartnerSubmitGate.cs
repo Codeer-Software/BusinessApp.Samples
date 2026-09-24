@@ -49,9 +49,15 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         ArgumentNullException.ThrowIfNull(transactionData);
         ArgumentNullException.ThrowIfNull(save);
 
+        var reasons = new List<string>();
         foreach (var (data, adding) in PartnersIn(transactionData))
         {
-            await RejectAsync(data, adding);
+            reasons.AddRange(await ReasonsForAsync(data, adding));
+        }
+
+        if (reasons.Count > 0)
+        {
+            throw new PartnerRejectedException(reasons);
         }
 
         return await save();
@@ -78,29 +84,73 @@ public sealed class PartnerSubmitGate(PartnerStore store)
                               .Concat(d.Update.Select(r => (Data: r, Adding: false))))
             .Where(x => x.Data.Name == ModuleName);
 
-    private async Task RejectAsync(ModuleData data, bool adding)
+    /// <summary>
+    /// 断る理由を<b>全部</b>集める（docs/21 §2-6 の (b)。開発者の決定。2026-09-20）。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>並びは画面の並びに合わせる</b>（取引先コード → 取引先名 → カナ → 種別 → 法人番号 → 名寄せの親 → 所在地）——
+    /// 並びが画面と食い違うと、利用者は「①…②…」を読みながら上と下を往復させられる。</para>
+    /// <para><b>1 つの欄については最初に当たった 1 つだけを言う</b>（ADR-0047 の決定 10）——コードが空・書式違いなら重複は数えない（<see cref="CodeProblemsAsync"/>）。
+    /// <b>前提の崩れた検査も飛ばす</b>（Claude の判断。docs/21 §2-6）——
+    /// 個人事業者に法人番号が入っているなら番号の書式は言わず、
+    /// <b>自分自身を親にした保存では、選んだ親を見る検査を飛ばす</b>（その親は付けられないので、親の種別や深さを言っても従いようがない）。
+    /// <b>自分が誰かの親であることは、選んだ親に依らない</b>ので、自分自身を親にした文の中で言う（<see cref="SelfParentProblemAsync"/>）。</para>
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> ReasonsForAsync(ModuleData data, bool adding)
     {
-        RejectSelfParent(data);
+        var reasons = new List<string>();
 
         // **追加はコードを必ず伴う。** 画面は必ず送ってくるが、**取込は列ごと落とせる**
         // （`code` の無い CSV）。素通しにすると DB の NOT NULL に当たり、
         // 利用者には定型文が出る（qa/03 L-28 に戻る。2026-09-09 の自己レビュー）。
         if (adding && !data.Fields.ContainsKey("Code"))
         {
-            throw new PartnerRejectedException("「取引先コード」を入れてください。");
+            reasons.Add("「取引先コード」を入れてください。");
         }
 
-        // **断る順は画面の並びに合わせる**（取引先コード → 取引先名 → カナ → 種別 → 法人番号 → 所在地）。
-        // (a) 型は 1 つずつしか返さない（docs/12 §2-1）ので、順が画面と食い違うと、
-        // **利用者は上と下を往復させられる**。
-        await RejectBadCodeAsync(data);
-        RejectLongText(data, AboveCorporateNumber);
-        RejectMalformedCorporateNumber(data);
-        RejectLongText(data, BelowCorporateNumber);
-        await RejectSoleProprietorWithCorporateNumberAsync(data);
-        await RejectMismatchedParentAsync(data);
-        await RejectMismatchedChildrenAsync(data);
-        await RejectDeepParentAsync(data);
+        reasons.AddRange(await CodeProblemsAsync(data));
+        reasons.AddRange(LongTextProblems(data, AboveCorporateNumber));
+
+        // 種別（子との食い違い）→ 法人番号 → 名寄せの親 → 所在地（画面の並び）。
+        var mismatchedChildren = await MismatchedChildrenAsync(data);
+        reasons.AddRange(mismatchedChildren);
+
+        // **個人事業者に法人番号が入っているなら、番号の書式は言わない**——「13 桁で入れ直せ」と「空にせよ」が
+        // 1 通の中で逆を言うことになる。
+        var soleProprietor = await SoleProprietorWithCorporateNumberAsync(data);
+        reasons.AddRange(soleProprietor.Count > 0 ? soleProprietor : CorporateNumberProblems(data));
+
+        if (await SelfParentProblemAsync(data) is string self)
+        {
+            reasons.Add(self);
+        }
+        else
+        {
+            // **選んだ親がさらに親を持つなら、その親との種別の食い違いは言わない**——その親は選べないので、
+            // 種別を合わせても通らない（2026-09-24 の自己レビュー）。
+            var parentWithParent = await ParentWithParentProblemAsync(data);
+            if (parentWithParent is null
+                && mismatchedChildren.Count == 0
+                && await MismatchedParentAsync(data) is string mismatchedParent)
+            {
+                // **子との食い違いを既に言ったなら、親との食い違いは重ねない**——同じ文である。
+                // 直す先は「この取引先の種別」か「相手の種別」で、どちらの相手でも同じ直し方になる。
+                reasons.Add(mismatchedParent);
+            }
+
+            if (parentWithParent is not null)
+            {
+                reasons.Add(parentWithParent);
+            }
+
+            if (await ParentOfOthersProblemAsync(data) is string parentOfOthers)
+            {
+                reasons.Add(parentOfOthers);
+            }
+        }
+
+        reasons.AddRange(LongTextProblems(data, BelowCorporateNumber));
+        return reasons;
     }
 
     /// <summary>名前・カナ・所在地の長さ（docs/12 §2-2）。</summary>
@@ -116,7 +166,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// <b>比べるときだけ落とすと、関門が数えた長さと DDL が数える長さが食い違う</b>
     /// （qa/03 の L-14 の型。qa/02 の R45-02 で実際に踏んだ）。</para>
     /// </remarks>
-    private static void RejectLongText(ModuleData data, (string Field, string Label, int Max)[] fields)
+    private static IEnumerable<string> LongTextProblems(ModuleData data, (string Field, string Label, int Max)[] fields)
     {
         foreach (var (field, label, max) in fields)
         {
@@ -136,7 +186,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
 
             if (MasterTextLength.DescribeProblem(label, text.Value, max) is string problem)
             {
-                throw new PartnerRejectedException(problem);
+                yield return problem;
             }
         }
     }
@@ -155,23 +205,25 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// <see cref="TextFieldData"/> を組むのでテストは緑のままである。<see cref="Reference"/> が
     /// 同じ戒めを書いているのに、こちらに残っていた（2026-09-09 の自己レビュー）。
     /// <b>届いているのに読めないなら、素通しではなく止める</b>——その判定は <see cref="Field{T}"/> が持つ。</para>
+    /// <para><b>空・書式違いなら、重複は数えない</b>——正規化できない字で DB を引いても、
+    /// 利用者が直す先は同じ欄なので、断りが 2 つに割れるだけである（1 つの欄については最初に当たった 1 つだけ——ADR-0047 の決定 10）。</para>
     /// </remarks>
-    private async Task RejectBadCodeAsync(ModuleData data)
+    private async Task<IReadOnlyList<string>> CodeProblemsAsync(ModuleData data)
     {
         if (Field<TextFieldData>(data, "Code") is not TextFieldData field)
         {
-            return;
+            return [];
         }
 
         var code = MasterCode.Normalize(field.Value);
         if (code.Length == 0)
         {
-            throw new PartnerRejectedException("「取引先コード」を入れてください。");
+            return ["「取引先コード」を入れてください。"];
         }
 
         if (MasterCode.DescribeProblem("取引先コード", code) is string problem)
         {
-            throw new PartnerRejectedException(problem);
+            return [problem];
         }
 
         field.Value = code;
@@ -179,7 +231,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         var conflict = await store.FindConflictingCodeAsync(code, Id(data) is long id ? new PartnerId(id) : null);
         if (conflict is null)
         {
-            return;
+            return [];
         }
 
         // **ぶつかった相手の字を見せる。** 大小だけが違うとき、字を見比べないと理由が分からない。
@@ -187,8 +239,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
             ? "既に使われています。"
             : $"大文字と小文字を区別しないので、既にある「{conflict}」と同じコードになります。";
 
-        throw new PartnerRejectedException(
-            $"「取引先コード」の「{code}」は{reason}別のコードを入れてください。");
+        return [$"「取引先コード」の「{code}」は{reason}別のコードを入れてください。"];
     }
 
     /// <summary>
@@ -209,7 +260,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// 「子を持つ取引先の種別を変えて食い違わせる」保存が素通りする——
     /// ADR-0028 の帰結が「親と子のどちらを直す場合も検査が要る」と名指ししていた方向である。</para>
     /// </remarks>
-    private async Task RejectMismatchedParentAsync(ModuleData data)
+    private async Task<string?> MismatchedParentAsync(ModuleData data)
     {
         var submittedType = Field<SelectFieldData>(data, "EntityType");
         var submittedParent = Submitted(data, "ParentPartner");
@@ -217,7 +268,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         // どちらも触っていない保存は、この組み合わせを新しく作れない。
         if (submittedType is null && !submittedParent)
         {
-            return;
+            return null;
         }
 
         var stored = Id(data) is long id ? await store.FindProfileAsync(new PartnerId(id)) : null;
@@ -235,13 +286,10 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         if (parentId is not PartnerId parent
             || await store.FindProfileAsync(parent) is not PartnerProfile parentProfile)
         {
-            return;
+            return null;
         }
 
-        if (AreIncompatible(type, parentProfile.EntityType))
-        {
-            throw MismatchedParent();
-        }
+        return AreIncompatible(type, parentProfile.EntityType) ? MismatchedParent : null;
     }
 
     /// <summary>
@@ -250,28 +298,27 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// <remarks>
     /// 種別を触っていない保存は見ない——触っていない行に分類を強制しない（docs/13 §1-2）。
     /// </remarks>
-    private async Task RejectMismatchedChildrenAsync(ModuleData data)
+    private async Task<IReadOnlyList<string>> MismatchedChildrenAsync(ModuleData data)
     {
         if (Field<SelectFieldData>(data, "EntityType") is not SelectFieldData submitted
             || Id(data) is not long id)
         {
-            return;
+            return [];
         }
 
         var type = DbValue.ToDefinedEnum<PartnerEntityType>(submitted.Value);
-        foreach (var child in await store.FindChildEntityTypesAsync(new PartnerId(id)))
-        {
-            if (AreIncompatible(type, child))
-            {
-                throw MismatchedParent();
-            }
-        }
+        return (await store.FindChildEntityTypesAsync(new PartnerId(id))).Any(child => AreIncompatible(type, child))
+            ? [MismatchedParent]
+            : [];
     }
 
-    /// <summary>種別の食い違いの差し戻し。<b>親から見ても子から見ても同じ文言で断る。</b></summary>
-    private static PartnerRejectedException MismatchedParent()
-        => new($"{PartnerEntityType.SoleProprietor.DisplayName()}と法人・人格のない社団等は、"
-               + "互いに名寄せの親にできません。同じ事業者なら、どちらかの種別が誤っています。");
+    /// <summary>
+    /// 種別の食い違いの差し戻し。<b>親から見ても子から見ても同じ文言で断る</b>——
+    /// 両方に当たった保存では 1 つだけ言う（<see cref="ReasonsForAsync"/>）。
+    /// </summary>
+    private static readonly string MismatchedParent =
+        $"{PartnerEntityType.SoleProprietor.DisplayName()}と法人・人格のない社団等は、"
+        + "互いに名寄せの親にできません。同じ事業者なら、どちらかの「種別」が誤っています。";
 
     /// <summary>
     /// 個人事業者と法人系の組か。<b>未分類（<c>null</c>）と「その他」は通す。</b>
@@ -284,73 +331,80 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         => type is PartnerEntityType.Corporation or PartnerEntityType.UnincorporatedAssociation;
 
     /// <summary>
-    /// 名寄せの親は必ず根である（深さ 1 の森。ADR-0028 §2）。
+    /// 名寄せの親は必ず根である（深さ 1 の森。ADR-0028 §2）——その 1 つ目: <b>選んだ親が、さらに親を持っている</b>。
     /// </summary>
     /// <remarks>
-    /// <para>止めるのは 2 つ——<b>選んだ親が、さらに親を持っている</b>ことと、
-    /// <b>自分が既に誰かの親になっているのに、自分に親を付けようとしている</b>こと。
-    /// この 2 つで循環は構造的に消える（深さ 2 以上が作れないため）。</para>
+    /// <para>止めるのは 2 つ——<b>選んだ親が、さらに親を持っている</b>こと（ここ）と、
+    /// <b>自分が既に誰かの親になっているのに、自分に親を付けようとしている</b>こと（<see cref="ParentOfOthersProblemAsync"/>）。
+    /// この 2 つで循環は構造的に消える（深さ 2 以上が作れないため）。<b>2 つとも当たれば、2 つとも言う</b>——どちらを直しても、もう片方が残る。</para>
     /// <para><b>親を触っていない保存は見ない。</b> 深さは親を付け替えたときにしか変わらず、
     /// 触っていない行まで見ると、既に矛盾している行（トリガより前に入ったもの）を
     /// <b>他の項目を直すだけでも保存できなくする</b>。</para>
     /// <para><b>新規作成の相手を親にしている場合は見ない</b>——仮の識別子は数値として読めず、
     /// そもそも生まれたばかりの行は親を持てない。</para>
     /// </remarks>
-    private async Task RejectDeepParentAsync(ModuleData data)
+    private async Task<string?> ParentWithParentProblemAsync(ModuleData data)
     {
         // **親を触っていない保存は見ない。** 深さは親を付け替えたときにしか変わらない。
         // 空欄に戻す保存（Reference が null）も通す——浅くする操作である。
         if (!Submitted(data, "ParentPartner")
             || Reference(data, "ParentPartner") is not long parent)
         {
-            return;
+            return null;
         }
 
         // **読めない相手は見ない。** 指した相手が居なければ、深さを判定する材料が無い
         // （外部キーが最後に拒む）。同じ保存で作られる相手は仮の識別子なので Reference が落とす。
-        if (await store.FindLineageAsync(new PartnerId(parent)) is PartnerLineage parentLineage
-            && parentLineage.ParentId is not null)
+        return await store.FindLineageAsync(new PartnerId(parent)) is PartnerLineage { ParentId: not null }
+            ? "「名寄せの親」には、さらに親を持つ取引先を選べません。同じ事業者なら、その取引先の親を選んでください。"
+            : null;
+    }
+
+    /// <summary>
+    /// 深さ 1 の森の 2 つ目: <b>自分が誰かの親なら、自分に親は付けられない</b>（<see cref="ParentWithParentProblemAsync"/>）。
+    /// </summary>
+    private async Task<string?> ParentOfOthersProblemAsync(ModuleData data)
+    {
+        if (!Submitted(data, "ParentPartner")
+            || Reference(data, "ParentPartner") is not long
+            || Id(data) is not long own)
         {
-            throw new PartnerRejectedException(
-                "名寄せの親には、さらに親を持つ取引先を選べません。"
-                + "同じ事業者なら、その取引先の親を選んでください。");
+            return null;
         }
 
-        // 自分が誰かの親なら、自分に親は付けられない。
-        if (Id(data) is not long own
-            || await store.FindLineageAsync(new PartnerId(own)) is not PartnerLineage lineage
-            || !lineage.HasChildren)
-        {
-            return;
-        }
-
-        throw new PartnerRejectedException(
-            "この取引先は他の取引先の名寄せの親になっているので、親を付けられません。"
-            + "先に、子になっている取引先の親を付け替えてください。");
+        return await store.FindLineageAsync(new PartnerId(own)) is PartnerLineage { HasChildren: true }
+            ? "この取引先は他の取引先の名寄せの親になっているので、「名寄せの親」は空欄にしてください。"
+              + "親を付けるなら、先に、子になっている取引先の「名寄せの親」を付け替えてください。"
+            : null;
     }
 
     /// <summary>自分自身を名寄せの親にできない（DDL の CHECK と同じ規則）。</summary>
     /// <remarks>
-    /// 新規作成の行はまだ識別子を持たないので、この形は起こりえない。
-    /// <b>更新には必ず識別子が載る</b>ので、保存されている値を読みに行く必要はない。
+    /// <para>新規作成の行はまだ識別子を持たないので、この形は起こりえない。
+    /// <b>更新には必ず識別子が載る</b>ので、選んだ親は保存されている値を読みに行く必要はない。</para>
+    /// <para><b>子を持つ取引先には、別の取引先も選べない</b>（<see cref="ParentOfOthersProblemAsync"/>）——
+    /// 「別の取引先を選ぶか」と言うと、従った 2 回目で断られる。だから文を分ける。</para>
     /// </remarks>
-    private static void RejectSelfParent(ModuleData data)
+    private async Task<string?> SelfParentProblemAsync(ModuleData data)
     {
-        if (Reference(data, "ParentPartner") is long parent && Id(data) is long id && parent == id)
+        if (Reference(data, "ParentPartner") is not long parent || Id(data) is not long id || parent != id)
         {
-            throw new PartnerRejectedException(
-                "その取引先自身を名寄せの親にはできません。別の取引先を選ぶか、空欄にしてください。");
+            return null;
         }
+
+        return await store.FindLineageAsync(new PartnerId(id)) is PartnerLineage { HasChildren: true }
+            ? "この取引先自身は「名寄せの親」に選べません。この取引先は他の取引先の名寄せの親になっているので、「名寄せの親」は空欄にしてください。"
+            : "この取引先自身は「名寄せの親」に選べません。同じ事業者の別の取引先があるならそれを選び、無いなら空欄にしてください。";
     }
 
     /// <summary>法人番号の書式と検査用数字。<b>空欄は通す</b>（任意。docs/13 §2-3）。</summary>
-    private static void RejectMalformedCorporateNumber(ModuleData data)
+    private static IEnumerable<string> CorporateNumberProblems(ModuleData data)
     {
         // CLB は変更されたフィールドしか送ってこない（qa/01 F-11）。
         // 送られていない項目は「変えていない」なので、検査しない。
         if (Field<TextFieldData>(data, "CorporateNumber") is not TextFieldData field)
         {
-            return;
+            return [];
         }
 
         var value = CorporateNumber.Normalize(field.Value);
@@ -362,7 +416,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         if (value.Length == 0)
         {
             field.Value = null;
-            return;
+            return [];
         }
 
         // **貼り付けで紛れ込んだ空白を落として保存する。** 落とさずに通すと、
@@ -370,10 +424,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         field.Value = value;
 
         // 判定と文言は CorporateNumber が 1 か所で持つ（自社情報の関門と同じものを通す）。
-        if (CorporateNumber.DescribeProblem(value) is string problem)
-        {
-            throw new PartnerRejectedException(problem);
-        }
+        return CorporateNumber.DescribeProblem(value) is string problem ? [problem] : [];
     }
 
     /// <summary>個人事業者に法人番号は指定されない（制度事実。docs/13 §1-2）。</summary>
@@ -381,7 +432,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
     /// <b>差分に無いほうは、保存されている値で補う。</b> 片方だけ直した保存で検査をやめると、
     /// 「先に個人事業者にしておいて、あとから法人番号を足す」で素通りする。
     /// </remarks>
-    private async Task RejectSoleProprietorWithCorporateNumberAsync(ModuleData data)
+    private async Task<IReadOnlyList<string>> SoleProprietorWithCorporateNumberAsync(ModuleData data)
     {
         var submittedType = Field<SelectFieldData>(data, "EntityType");
         var submittedNumber = Field<TextFieldData>(data, "CorporateNumber");
@@ -395,7 +446,7 @@ public sealed class PartnerSubmitGate(PartnerStore store)
         // **CHECK が緩んだ日には、この早期 return が意味を持つ。**
         if (submittedType is null && submittedNumber is null)
         {
-            return;
+            return [];
         }
 
         var stored = Id(data) is long id ? await store.FindProfileAsync(new PartnerId(id)) : null;
@@ -407,12 +458,10 @@ public sealed class PartnerSubmitGate(PartnerStore store)
             ? CorporateNumber.Normalize(stored?.CorporateNumber)
             : CorporateNumber.Normalize(submittedNumber.Value);
 
-        if (type == PartnerEntityType.SoleProprietor && number.Length > 0)
-        {
-            throw new PartnerRejectedException(
-                $"{PartnerEntityType.SoleProprietor.DisplayName()}に法人番号は指定されません。"
-                + "種別を確かめるか、法人番号を空欄にしてください。");
-        }
+        return type == PartnerEntityType.SoleProprietor && number.Length > 0
+            ? [$"{PartnerEntityType.SoleProprietor.DisplayName()}に法人番号は指定されません。"
+               + "取引先が個人事業者でないなら「種別」を直し、個人事業者なら「法人番号」を空欄にしてください。"]
+            : [];
     }
 
     /// <summary>保存しようとしている取引先の識別子。<b>新規なら仮の値が入る</b>ので、数値でなければ null。</summary>

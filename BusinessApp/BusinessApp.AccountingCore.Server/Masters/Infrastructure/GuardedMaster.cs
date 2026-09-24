@@ -15,6 +15,10 @@ namespace BusinessApp.AccountingCore.Server.Masters.Infrastructure;
 /// </param>
 /// <param name="UsageUnit">断りで数える単位の呼び名（既定は仕訳明細）。</param>
 /// <param name="UsageCounter">その単位の助数詞（既定は行）。</param>
+/// <param name="NewRowCaution">
+/// <b>新しい行を作る道に添える注意</b>（取引先だけ）。新しい取引先を作ると、同じ相手の残高と
+/// 登録番号の履歴が 2 つに分かれる——道を言うなら害も言う（2026-09-24 の自己レビュー）。
+/// </param>
 /// <param name="EntryColumn">
 /// <b>伝票（<c>journal_entries</c>）の側でもこのマスタを指す列</b>（取引先だけ）。
 /// <b>明細が空なら伝票の値が実効値になる</b>ので、明細だけを数えると
@@ -29,7 +33,8 @@ public sealed record GuardedMaster(
     IReadOnlyList<OneWayColumn>? OneWayColumns = null,
     string? EntryColumn = null,
     string UsageUnit = "仕訳明細",
-    string UsageCounter = "行")
+    string UsageCounter = "行",
+    string? NewRowCaution = null)
 {
     /// <summary>緩める向きだけを拒む列（未指定なら空）。</summary>
     public IReadOnlyList<OneWayColumn> OneWay => OneWayColumns ?? [];

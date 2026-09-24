@@ -242,11 +242,8 @@ public class MasterSubmitGateTests
             server,
             Adding(module, New(module, Text("Code", "Z9"), Text("Name", new string('あ', 31)))));
 
-        // **接頭の「登録できません。」はこの規則の持ち物ではない**ので、末尾だけを見る。
-        Assert.EndsWith(
-            $"「{label}」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。",
-            thrown.Message,
-            StringComparison.Ordinal);
+        // **全文で見る**——末尾だけを見ると、前に 2 つ目の違反を抱えた検体でも緑になる（関門は断りを束ねる。qa/03 L-67）。
+        Assert.Equal("登録できません。" + $"「{label}」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。", thrown.Message);
     }
 
     /// <summary>
@@ -267,15 +264,12 @@ public class MasterSubmitGateTests
         using var server = new AccountingServer();
 
         var fields = module == "SubAccount"
-            ? new[] { Text("Code", "Z9"), Text("Name", "名前"), Text("NameKana", new string('ア', 61)), Account(server, "1100") }
+            ? new[] { Text("Code", "Z9"), Text("Name", "名前"), Text("NameKana", new string('ア', 61)), Account(server, "1200") }
             : [Text("Code", "Z9"), Text("Name", "名前"), Text("NameKana", new string('ア', 61))];
 
         var thrown = await Rejected(server, Adding(module, New(module, fields)));
 
-        Assert.EndsWith(
-            "「カナ」は 60 文字以内です。いまは 61 文字あります。短くして入力し直してください。",
-            thrown.Message,
-            StringComparison.Ordinal);
+        Assert.Equal("登録できません。" + "「カナ」は 60 文字以内です。いまは 61 文字あります。短くして入力し直してください。", thrown.Message);
     }
 
     /// <summary>
@@ -296,6 +290,10 @@ public class MasterSubmitGateTests
     }
 
     /// <summary>補助科目も同じ上限で断る。<b>親を指すので別に書く。</b></summary>
+    /// <remarks>
+    /// <b>親は補助科目を使う科目（1200）にする。</b> 使わない科目（1100）に付けると 2 値の規則にも当たり、
+    /// 断りを束ねてからは理由が 2 つ並ぶ——<b>理由を 1 つしか返さなかった間は、検体が 2 つ目の違反を抱えていても見えなかった</b>（2026-09-24）。
+    /// </remarks>
     [Fact]
     public async Task 長すぎる補助科目名も断る()
     {
@@ -304,12 +302,9 @@ public class MasterSubmitGateTests
         var thrown = await Rejected(
             server,
             Adding("SubAccount", New(
-                "SubAccount", Text("Code", "Z9"), Text("Name", new string('あ', 31)), Account(server, "1100"))));
+                "SubAccount", Text("Code", "Z9"), Text("Name", new string('あ', 31)), Account(server, "1200"))));
 
-        Assert.EndsWith(
-            "「補助科目名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。",
-            thrown.Message,
-            StringComparison.Ordinal);
+        Assert.Equal("登録できません。" + "「補助科目名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。", thrown.Message);
     }
 
     /// <summary>上限ちょうどは通る。</summary>
@@ -378,10 +373,7 @@ public class MasterSubmitGateTests
             server,
             Updating("Account", Row("Account", server.AccountOf("1100").Value, Text("Name", new string('あ', 31)))));
 
-        Assert.EndsWith(
-            "「科目名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。",
-            thrown.Message,
-            StringComparison.Ordinal);
+        Assert.Equal("登録できません。" + "「科目名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。", thrown.Message);
     }
 
     /// <summary>
@@ -420,10 +412,7 @@ public class MasterSubmitGateTests
             server,
             Adding("FiscalYear", New("FiscalYear", Text("Code", "Z9"), Text("Label", new string('あ', 31)))));
 
-        Assert.EndsWith(
-            "「年度名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。",
-            thrown.Message,
-            StringComparison.Ordinal);
+        Assert.Equal("登録できません。" + "「年度名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。", thrown.Message);
 
         // **`Name` という欄は会計年度に無い**ので、そこへ入れても長さは見ない。
         Assert.True(await Submit(
@@ -483,10 +472,7 @@ public class MasterSubmitGateTests
         var thrown = await Rejected(
             server, Adding("Account", New("Account", Text("Code", "Z9"), Text("Name", "現\0金"))));
 
-        Assert.EndsWith(
-            "「科目名」の 2 文字目に、目に見えない文字が入っています。入力し直してください。",
-            thrown.Message,
-            StringComparison.Ordinal);
+        Assert.Equal("登録できません。" + "「科目名」の 2 文字目に、目に見えない文字が入っています。入力し直してください。", thrown.Message);
     }
 
     /// <summary>名前が読めない型で届いたら止める。</summary>
@@ -641,7 +627,12 @@ public class MasterSubmitGateTests
             Text("Name", "検証"),
             ("Account", new LinkFieldData { Value = server.AccountOf("1100").Value.ToString(CultureInfo.InvariantCulture) }))));
 
-        Assert.Contains("「補助科目を使う」がオフなので、補助科目を作れません", thrown.Message, StringComparison.Ordinal);
+        // **結果（「補助科目を作れません」）は言わない**——見出しの繰り返しになる（docs/21 §2-6 の (b)）。
+        // **勘定科目を名指し、「別の勘定科目を選ぶ」と言う**——束ねた断りの中では「この勘定科目」が何を指すか読めず、
+        // 「補助科目を使う」は使用中の科目では変えられないので「オンにして」は通らないことがある（2026-09-24 の自己レビュー）。
+        Assert.Equal(
+            "登録できません。「勘定科目」の「1100 現金」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。",
+            thrown.Message);
     }
 
     [Fact]
@@ -935,7 +926,7 @@ public class MasterSubmitGateTests
             server,
             new ModuleSubmitData { ModuleName = "Account", Add = [account, sub] });
 
-        Assert.Contains("「補助科目を使う」がオフなので、補助科目を作れません", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「勘定科目」の「9300 検証」は「補助科目を使う」がオフです。", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>勘定科目の欄が空の補助科目は、2 値を判定できない（外部キーが断る）。</summary>
@@ -1201,7 +1192,7 @@ public class MasterSubmitGateTests
 
         var thrown = await Rejected(server, Adding(module, New(module, Text("Name", "検証"))));
 
-        Assert.EndsWith($"「{label}」を入れてください。", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal("登録できません。" + $"「{label}」を入れてください。", thrown.Message);
     }
 
     /// <summary>親を触らない更新でも、補助科目の 2 値を見る（同じ穴の裏側）。</summary>
@@ -1215,7 +1206,7 @@ public class MasterSubmitGateTests
         var thrown = await Rejected(
             server, Updating("SubAccount", Row("SubAccount", target, Text("Name", "改名"))));
 
-        Assert.Contains("「補助科目を使う」がオフなので、補助科目を作れません", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「勘定科目」の「1100 現金」は「補助科目を使う」がオフです。", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1238,7 +1229,7 @@ public class MasterSubmitGateTests
             Text("Name", "検証"),
             ("Account", new IdFieldData { Value = cash }))));
 
-        Assert.Contains("「補助科目を使う」がオフなので、補助科目を作れません", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「勘定科目」の「1100 現金」は「補助科目を使う」がオフです。", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1446,6 +1437,75 @@ public class MasterSubmitGateTests
 
         Assert.True(await Submit(
             server, Updating("SubAccount", Row("SubAccount", sub, Text("Name", "本店（改）")))));
+    }
+
+    // --- 束ねる（docs/21 §2-6 の (b)） ---------------------------------------------------
+
+    /// <summary>
+    /// <b>違反を全部 1 度で言う。</b> 並びは画面の並び（勘定科目 → 補助科目コード → 補助科目名）。
+    /// </summary>
+    /// <remarks>
+    /// <b>2026-09-24 までは最初の 1 つで投げていた</b>（(a)）——利用者はコードを直して保存し直してから名前の断りを受け、
+    /// もう一度直してから 2 値の断りを受けた。<b>全文一致で見る</b>——件数・番号・並びのどれが崩れても赤になる。
+    /// </remarks>
+    [Fact]
+    public async Task 値の違反を全部一度で言う()
+    {
+        using var server = new AccountingServer();
+
+        var thrown = await Rejected(server, Adding("SubAccount", New(
+            "SubAccount", Text("Code", "S--1"), Text("Name", new string('あ', 31)), Account(server, "1100"))));
+
+        Assert.Equal(
+            "登録できません（3 件）。"
+            + "①「勘定科目」の「1100 現金」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。"
+            + "②「補助科目コード」の「-」「_」は続けて使えません。"
+            + "③「補助科目名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>コードの欄ごと落とした追加でも、2 値の断りが先</b>——「補助科目コード」の欄は「勘定科目」の下にある。
+    /// </summary>
+    /// <remarks>
+    /// コードの欄を落とせるのは取込と API だけだが、断りの並びは画面の並びで揃える（2026-09-24 の自己レビュー。
+    /// それまでは「「補助科目コード」を入れてください。」が 2 値の断りより先に並んでいた）。
+    /// </remarks>
+    [Fact]
+    public async Task コードを落とした追加でも勘定科目の断りを先に言う()
+    {
+        using var server = new AccountingServer();
+
+        var thrown = await Rejected(server, Adding("SubAccount", New(
+            "SubAccount", Text("Name", "本店"), Account(server, "1100"))));
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①「勘定科目」の「1100 現金」は「補助科目を使う」がオフです。「補助科目を使う」がオンの勘定科目を選んでください。"
+            + "②「補助科目コード」を入れてください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>画面から作れる組で、値の違反を 1 通に束ねる</b>——実機操作テストの MST-37 と同じ入力。
+    /// </summary>
+    /// <remarks>
+    /// 補助科目の画面の「勘定科目」の候補は「補助科目を使う」がオンの科目に絞ってあるので、上の検体（オフの科目）は画面では作れない。
+    /// <b>実機の手順が全文を突き合わせる相手</b>として、画面で作れる組を別に固める（2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 画面から作れる補助科目の違反を一度で言う()
+    {
+        using var server = new AccountingServer();
+
+        var thrown = await Rejected(server, Adding("SubAccount", New(
+            "SubAccount", Text("Code", "S--1"), Text("Name", new string('あ', 31)), Account(server, "1200"))));
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①「補助科目コード」の「-」「_」は続けて使えません。"
+            + "②「補助科目名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。",
+            thrown.Message);
     }
 
     /// <summary>引数を渡さなければ止まる。<b>引数名まで表明する。</b></summary>

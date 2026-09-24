@@ -14,5 +14,5 @@ public class CompanyProfileRejectedExceptionTests
     [Fact]
     public void 文言は見出しから始まる()
         => Assert.Equal("保存できません。会社名を入力してください。",
-            new CompanyProfileRejectedException("会社名を入力してください。").Message);
+            new CompanyProfileRejectedException(["会社名を入力してください。"]).Message);
 }

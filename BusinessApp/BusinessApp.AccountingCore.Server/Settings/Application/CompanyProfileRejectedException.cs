@@ -10,10 +10,11 @@ using BusinessApp.ServerSupport;
 /// 「計上できません。…」と<b>何ができなかったか</b>を先に言うのに、ここだけ理由から始まっていた。
 /// トーストは 1 種類の見た目で見せると決めており（ADR-0023）、文言の形も揃える。</para>
 /// <para><b>見出しは押したボタンで決まる</b>（qa/02 R24-23）。自社情報の画面のボタンは「保存」である。</para>
-/// <para><b>文言に改行を入れない。</b> トースト内の文字列は改行できない（CLB の仕様。qa/01 D-12）。</para>
+/// <para><b>理由は束ねて運ぶ</b>（docs/21 §2-6 の (b)）——関門は違反を全部集めてから 1 回で投げる。
+/// 形（「見出し（N 件）。①…②…」・改行を入れない）は <see cref="RejectionMessage"/> が持つ。</para>
 /// </remarks>
-public sealed class CompanyProfileRejectedException(string reason)
-    : RejectedException($"{Headline}。{reason}")
+public sealed class CompanyProfileRejectedException(IReadOnlyList<string> reasons)
+    : RejectedException(RejectionMessage.Compose(Headline, reasons))
 {
     /// <summary>自社情報の保存を止めたときの見出し。</summary>
     public const string Headline = "保存できません";

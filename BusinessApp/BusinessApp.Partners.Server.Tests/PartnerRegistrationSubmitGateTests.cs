@@ -122,6 +122,220 @@ public class PartnerRegistrationSubmitGateTests
         }
     }
 
+    // --- 束ねる（docs/21 §2-6 の (b)） ---------------------------------------------
+
+    /// <summary>断られた保存の文言。保存は呼ばれていないことも見る。</summary>
+    private static async Task<string> RejectedMessage(PartnerServer server, params ModuleSubmitData[] data)
+    {
+        var save = new SaveSpy();
+        var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
+            () => Gate(server).SubmitAsync(data, save.SaveAsync));
+        Assert.False(save.Called);
+        return thrown.Message;
+    }
+
+    /// <summary>
+    /// <b>行の違反を全部 1 度で言い、画面の並び（登録番号 → 登録年月日 → 取消・失効）で並べる。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>2026-09-24 までは最初の 1 つ（登録番号）で止めていた</b>（(a)）。
+    /// <b>終わりと理由の対（R-I1）と、終わりが始まりより前（R-I2）は両方言う</b>——別々の欄の誤りである。
+    /// </remarks>
+    [Fact]
+    public async Task 行の違反を全部一度で言う()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+
+        var message = await RejectedMessage(server, Adding(Registration(
+            "T123", partner, new DateOnly(2025, 1, 1), endedOn: new DateOnly(2024, 12, 31))));
+
+        Assert.Equal(
+            "登録できません（3 件）。"
+            + "①「登録番号」の形が違います。登録番号は「T」で始まる 14 桁（T のあとに数字 13 桁）です。入力し直してください。"
+            + "②「取消・失効年月日」と「取消・失効の理由」は、両方入力するか、両方空にしてください。"
+            + "③「取消・失効年月日」（2024/12/31）が「登録年月日」（2025/01/01）より前になっています。日付を確かめてください。",
+            message);
+    }
+
+    /// <summary>
+    /// <b>同じ日から始まる 2 件（R-I3）に当たった保存では、期間の重なりを言わない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 保存済みの終わりの無い登録（2025/01/01 から）と同じ日から始まる行を足す。期間の検査だけなら
+    /// 「終わりの無い登録のあとに入力した」（R-I5）も当たるが、<b>始まりの日が重なっているかぎり、
+    /// どちらの終わりを入れても通らない</b>——先に登録年月日を直させる。<b>登録番号の書式は別の欄なので一緒に言う。</b>
+    /// </remarks>
+    [Fact]
+    public async Task 同じ日から始まる二件に当たれば期間は言わない()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2025-01-01");
+
+        var message = await RejectedMessage(server, Adding(Registration("T123", partner, new DateOnly(2025, 1, 1))));
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①「登録番号」の形が違います。登録番号は「T」で始まる 14 桁（T のあとに数字 13 桁）です。入力し直してください。"
+            + "②この取引先には 2025/01/01 から始まる登録が既にあります。入力している登録の登録年月日が国税庁の公表サイトと違うなら「登録年月日」を直し、合っているなら、先にある登録を取引先の詳細の「登録番号の履歴」から直してください。",
+            message);
+    }
+
+    /// <summary>
+    /// <b>同じ日から始まる 2 件に当たっても、行の中だけで決まる規則は言う</b>（終わりと理由の対・R-I1）。
+    /// </summary>
+    /// <remarks>
+    /// 飛ばすのは重なり（R-I4・R-I5）だけ——R-I1 は始まりの日にも、どの取引先かにも依らない。
+    /// 飛ばすと、登録年月日を直した 2 回目で初めて「理由を選んで」と言われる（2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ日から始まる二件に当たっても行の中の規則は言う()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2025-01-01");
+
+        var message = await RejectedMessage(server, Adding(Registration(
+            ValidNo, partner, new DateOnly(2025, 1, 1), endedOn: new DateOnly(2025, 6, 30))));
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①この取引先には 2025/01/01 から始まる登録が既にあります。入力している登録の登録年月日が国税庁の公表サイトと違うなら「登録年月日」を直し、合っているなら、先にある登録を取引先の詳細の「登録番号の履歴」から直してください。"
+            + "②「取消・失効年月日」と「取消・失効の理由」は、両方入力するか、両方空にしてください。",
+            message);
+    }
+
+    /// <summary>
+    /// <b>付け替えを断った行は、同じ日から始まる 2 件に数えない</b>——移れない先の取引先の話になる。
+    /// </summary>
+    /// <remarks>
+    /// A の行を B へ付け替え、B の保存済みの行と同じ登録年月日にする（API の経路）。同じ日の 2 件の検査だけなら
+    /// 「この取引先には 2025/01/01 から始まる登録が既にあります」も当たるが、それは移れない B の話である
+    /// （(a) では付け替えの断りが先に投げていたので、暗黙に守られていた——2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 付け替えを断った行は同じ日の二件に数えない()
+    {
+        using var server = new PartnerServer();
+        var a = InsertPartner(server, "P861");
+        var b = InsertPartner(server, "P862");
+        var row = InsertRegistration(server, a, ValidNo, "2024-01-01");
+        InsertRegistration(server, b, "T9999999999999", "2025-01-01");
+
+        var message = await RejectedMessage(server, Updating(Registration(
+            partnerId: b, validFrom: new DateOnly(2025, 1, 1), id: row)));
+
+        Assert.Equal(
+            "登録できません。登録の「取引先」は、保存したあとは変更できません。別の取引先の登録にするときは、その取引先の画面で入力し直してください。",
+            message);
+    }
+
+    /// <summary>
+    /// <b>同じ日の 2 件に当たった取引先だけ、重なりを見ない</b>——別の取引先の重なりは言う。
+    /// </summary>
+    /// <remarks>
+    /// 取引先 1 には保存済みの終わりの無い行（2025/01/01 から）と同じ日の行を足し、取引先 2 には保存済みの終わりの無い行
+    /// （2024/01/01 から）のあとに終わりの無い行を足す（API・取込の経路——画面は 1 行ずつ保存する）。
+    /// </remarks>
+    [Fact]
+    public async Task 同じ日の二件に当たった取引先だけ重なりを見ない()
+    {
+        using var server = new PartnerServer();
+        var first = InsertPartner(server, "P871");
+        var second = InsertPartner(server, "P872");
+        InsertRegistration(server, first, ValidNo, "2025-01-01");
+        InsertRegistration(server, second, ValidNo, "2024-01-01");
+
+        var message = await RejectedMessage(server, Adding(
+            Registration(ValidNo, first, new DateOnly(2025, 1, 1)),
+            Registration(ValidNo, second, new DateOnly(2025, 1, 1))));
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①この取引先には 2025/01/01 から始まる登録が既にあります。入力している登録の登録年月日が国税庁の公表サイトと違うなら「登録年月日」を直し、合っているなら、先にある登録を取引先の詳細の「登録番号の履歴」から直してください。"
+            + "②登録の期間が重なっています。この取引先には「取消・失効年月日」が空の登録（2024/01/01 から）があり、"
+            + "入力している登録（2025/01/01 から）はそのあとに始まります。"
+            + "国税庁の公表サイトで、2024/01/01 からの登録の取消年月日か失効年月日が 2025/01/01 以前なら、"
+            + "先に取引先の詳細の「登録番号の履歴」でその行の「編集」を開き、"
+            + "その取消年月日か失効年月日をそのまま「取消・失効年月日」に入れて「取消・失効の理由」を選んでください。"
+            + "そうでなければ、入力している登録の「登録年月日」を確かめてください。",
+            message);
+    }
+
+    /// <summary>
+    /// <b>取引先が見つからなくても、行の中だけで決まる規則は言う</b>（R-I1 は取引先に依らない）。
+    /// </summary>
+    [Fact]
+    public async Task 取引先が見つからなくても行の中の規則は言う()
+    {
+        using var server = new PartnerServer();
+
+        var message = await RejectedMessage(server, Adding(Registration(
+            ValidNo, 9999, new DateOnly(2025, 1, 1), endedOn: new DateOnly(2025, 6, 30))));
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①取引先が見つかりません。取引先の詳細の「登録番号を追加する」から入り直してください。"
+            + "②「取消・失効年月日」と「取消・失効の理由」は、両方入力するか、両方空にしてください。",
+            message);
+    }
+
+    /// <summary>
+    /// <b>行そのものが崩れていれば、期間の重なりを言わない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 足す行は終わりが始まりより前（R-I2）。保存済みの終わりの無い登録（2024/06/01 から）のあとに始まるので、
+    /// 期間の検査だけなら R-I5 も当たるが、<b>崩れた日付の上で言う重なりは従いようがない</b>。
+    /// </remarks>
+    [Fact]
+    public async Task 崩れた行があれば重なりは言わない()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2024-06-01");
+
+        var message = await RejectedMessage(server, Adding(Registration(
+            ValidNo, partner, new DateOnly(2025, 1, 1), endedOn: new DateOnly(2024, 12, 31), endReason: "revoked")));
+
+        Assert.Equal(
+            "登録できません。「取消・失効年月日」（2024/12/31）が「登録年月日」（2025/01/01）より前になっています。日付を確かめてください。",
+            message);
+    }
+
+    /// <summary>
+    /// <b>別の早い行の重なりは別に言う。同じ早い行については、いちばん近いあとの行との組だけを言う。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>保存済み: C（2026/01/01 から、終わり無し）。同じ保存で足す: A（2024/01/01 から、終わり無し）と
+    /// B（2025/01/01〜2026/06/30）。</para>
+    /// <para>A は B の前で終わっていない（R-I5）、B は C と重なる（R-I4）——<b>直す先が 2 つある</b>。
+    /// A は C の前でも終わっていないが、<b>B までに終われば C の前でも終わる</b>ので言わない。</para>
+    /// <para>画面は 1 行ずつ保存する（docs/14 §5）ので、2 行が一度に来るのは API と取込（フェーズ 6）だけである。</para>
+    /// </remarks>
+    [Fact]
+    public async Task 別の早い行の重なりは別に言い同じ早い行は一つだけ言う()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        InsertRegistration(server, partner, ValidNo, "2026-01-01");
+
+        var message = await RejectedMessage(server, Adding(
+            Registration(ValidNo, partner, new DateOnly(2024, 1, 1)),
+            Registration(ValidNo, partner, new DateOnly(2025, 1, 1), endedOn: new DateOnly(2026, 6, 30), endReason: "revoked")));
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①登録の期間が重なっています。入力している登録（2024/01/01 から）は「取消・失効年月日」が空ですが、"
+            + "そのあとに 2025/01/01 からの登録があります。"
+            + "国税庁の公表サイトで、入力している登録の取消年月日か失効年月日が 2025/01/01 以前なら、"
+            + "その取消年月日か失効年月日をそのまま「取消・失効年月日」に入れて「取消・失効の理由」を選んでください。"
+            + "そうでなければ、入力している登録の「登録年月日」を確かめてください。"
+            + "②登録の期間が重なっています。2025/01/01 からの登録の「取消・失効年月日」（2026/06/30）が、"
+            + "次の登録の「登録年月日」（2026/01/01）より後になっています。「登録年月日」と「取消・失効年月日」を確かめてください。",
+            message);
+    }
+
     [Fact]
     public async Task 正しい登録は通す()
     {
@@ -202,10 +416,12 @@ public class PartnerRegistrationSubmitGateTests
             () => Gate(server).SubmitAsync(
                 [Adding(Registration(ValidNo, partner, new DateOnly(2023, 10, 1)))], save.SaveAsync));
 
-        Assert.Contains("2023/10/01", thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("既にあります", thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("先にある登録を直して", thrown.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("\n", thrown.Message, StringComparison.Ordinal);
+        // **全文で見る**——2 つの手を並べる断りは、選ぶ目安まで言っているかを見る（docs/21 §2-3。2026-09-24 の自己レビュー）。
+        Assert.Equal(
+            "登録できません。この取引先には 2023/10/01 から始まる登録が既にあります。"
+            + "入力している登録の登録年月日が国税庁の公表サイトと違うなら「登録年月日」を直し、"
+            + "合っているなら、先にある登録を取引先の詳細の「登録番号の履歴」から直してください。",
+            thrown.Message);
         Assert.False(save.Called);
     }
 
@@ -406,7 +622,11 @@ public class PartnerRegistrationSubmitGateTests
 
         var thrown = await Assert.ThrowsAsync<PartnerRegistrationRejectedException>(
             () => Gate(server).SubmitAsync([submit], save.SaveAsync));
-        Assert.Contains("2 件入力しています", thrown.Message, StringComparison.Ordinal);
+
+        // **全文で見る**——同じ日の 2 件に当たった取引先は重なりを見ない（どちらも終わりが無いので、重なりの検査だけなら R-I5 も当たる）。
+        Assert.Equal(
+            "登録できません。この取引先には 2023/10/01 から始まる登録を 2 件入力しています。どちらかの「登録年月日」を直してください。",
+            thrown.Message);
         Assert.False(save.Called);
         Assert.Equal(0L, server.Scalar<long>("select count(*) from partner_invoice_registrations"));
     }
@@ -541,8 +761,9 @@ public class PartnerRegistrationSubmitGateTests
             () => Gate(server).SubmitAsync(
                 [Updating(Registration(partnerId: other, id: row))], save.SaveAsync));
 
-        Assert.Contains("取引先は、保存したあとは変更できません", thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("その取引先の画面で入力し直して", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "登録できません。登録の「取引先」は、保存したあとは変更できません。別の取引先の登録にするときは、その取引先の画面で入力し直してください。",
+            thrown.Message);
         Assert.DoesNotContain("\n", thrown.Message, StringComparison.Ordinal);
         Assert.False(save.Called);
         Assert.Equal(owner, server.Scalar<long>(
@@ -1465,10 +1686,14 @@ public class PartnerRegistrationSubmitGateTests
                 }],
                 save.SaveAsync));
 
-        // **次の一手を画面の字で言う**——「一覧」は画面の見出しに無い字だった（2026-09-24 の自己レビュー）
+        // **次の一手を画面の字で言う**——「一覧」は画面の見出しに無い字だった（2026-09-24 の自己レビュー）。
+        // **見出しは操作で決まる**——削除を「登録できません」と断っていた（同日。見出しの網を広げて見つけた）。
+        // **「行は消さない」とは言わない**——帳簿に写っていない行は消せると決まっている（ADR-0063。実装はフェーズ 6）。
+        // **入力の誤りに取消・失効を記録させない**——一手を 2 つに分けて言う。
         Assert.Equal(
-            "登録できません。登録の行は削除できません。取消・失効は、取引先の詳細の「登録番号の履歴」でその行の「編集」を開き、"
-            + "「取消・失効年月日」を入れて「取消・失効の理由」を選んでください。",
+            "削除できません。入力を誤った行なら、取引先の詳細の「登録番号の履歴」でその行の「編集」を開き、正しい値に直してください。"
+            + "登録が取り消されたか失効したのなら、同じ「編集」で、国税庁の公表サイトの取消年月日か失効年月日をそのまま"
+            + "「取消・失効年月日」に入れて「取消・失効の理由」を選んでください。",
             thrown.Message);
         Assert.False(save.Called);
     }
@@ -1543,6 +1768,122 @@ public class PartnerRegistrationSubmitGateTests
 
         Assert.Equal("Partner", thrown.Field);
         Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>登録番号が別の型で届いたら止める</b>——書式の検査（R-I7）が黙って素通しにならない。
+    /// </summary>
+    /// <remarks>
+    /// DB は登録番号の書式を見ない（docs/14 §7）ので、ここが素通しになると壊れた番号が保存され、計上時の写しに焼き込まれる
+    /// （2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 想定していない型の登録番号なら止める()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var save = new SaveSpy();
+
+        var row = Registration(partnerId: partner, validFrom: new DateOnly(2025, 1, 1));
+        row.Fields["RegistrationNo"] = new SelectFieldData { Value = "T123" };
+
+        var thrown = await Assert.ThrowsAsync<UnreadableFieldException>(
+            () => Gate(server).SubmitAsync([Adding(row)], save.SaveAsync));
+
+        Assert.Equal("RegistrationNo", thrown.Field);
+        Assert.False(save.Called);
+    }
+
+    /// <summary>
+    /// <b>理由だけ残して終わりを消すと、対（R-I1）と重なり（R-I5）を 1 通で言う</b>——対は期間を崩さない。
+    /// </summary>
+    /// <remarks>
+    /// 画面で「取消・失効年月日」だけを消すのは自然な操作である。対の断りだけを先に返すと、従って両方を消した 2 回目で
+    /// 初めて「空にすると重なる。元に戻して」が出る——従っても通らない一手を先に並べたことになる（2026-09-24 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 理由だけ残して終わりを消すと対と重なりを一度で言う()
+    {
+        using var server = new PartnerServer();
+        var partner = InsertPartner(server);
+        var first = InsertRegistration(server, partner, ValidNo, "2023-10-01", "2024-04-01");
+        InsertRegistration(server, partner, "T9999999999999", "2024-04-01");
+
+        var message = await RejectedMessage(server, Updating(Registration(id: first, clearEndedOn: true)));
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①「取消・失効年月日」と「取消・失効の理由」は、両方入力するか、両方空にしてください。"
+            + "②登録の期間が重なっています。「取消・失効年月日」を空にすると、2024/04/01 からの登録と期間が重なります。"
+            + "「取消・失効年月日」と「取消・失効の理由」を元に戻してください。"
+            + "2024/04/01 からの登録のほうが誤りなら、先に取引先の詳細の「登録番号の履歴」でその行の「編集」から直してください。",
+            message);
+    }
+
+    /// <summary>
+    /// <b>付け替えを断った行でも、行の中だけで決まる規則は言う</b>——断りに従って取引先を戻せば、残りの変更はもとの取引先に当たる。
+    /// </summary>
+    [Fact]
+    public async Task 付け替えを断った行でも行の中の規則は言う()
+    {
+        using var server = new PartnerServer();
+        var a = InsertPartner(server, "P881");
+        var b = InsertPartner(server, "P882");
+        var row = InsertRegistration(server, a, ValidNo, "2024-01-01");
+
+        var message = await RejectedMessage(server, Updating(Registration(
+            partnerId: b, endedOn: new DateOnly(2024, 6, 30), id: row)));
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①登録の「取引先」は、保存したあとは変更できません。別の取引先の登録にするときは、その取引先の画面で入力し直してください。"
+            + "②「取消・失効年月日」と「取消・失効の理由」は、両方入力するか、両方空にしてください。",
+            message);
+    }
+
+    /// <summary>
+    /// <b>付け替えを断った行は、送られてきた取引先の側で同じ日の 2 件に数えない</b>——同じ保存で足す行と同じ日でも。
+    /// </summary>
+    /// <remarks>
+    /// 同じ保存の中の 2 件（<c>DuplicatesWithinAsync</c>）に、付け替えを断った行を入れると、移れない先の取引先の話になる。
+    /// </remarks>
+    [Fact]
+    public async Task 付け替えを断った行は同じ保存の新しい行とも同じ日の二件に数えない()
+    {
+        using var server = new PartnerServer();
+        var a = InsertPartner(server, "P883");
+        var b = InsertPartner(server, "P884");
+        var row = InsertRegistration(server, a, ValidNo, "2025-01-01");
+
+        var message = await RejectedMessage(
+            server,
+            new ModuleSubmitData
+            {
+                ModuleName = PartnerRegistrationSubmitGate.ModuleName,
+                Update = [Registration(partnerId: b, validFrom: new DateOnly(2025, 1, 1), id: row)],
+                Add = [Registration("T9999999999999", b, new DateOnly(2025, 1, 1))],
+            });
+
+        Assert.Equal(
+            "登録できません。登録の「取引先」は、保存したあとは変更できません。別の取引先の登録にするときは、その取引先の画面で入力し直してください。",
+            message);
+    }
+
+    /// <summary>
+    /// <b>取引先が見つからなければ、その取引先の重なりは言わない</b>——履歴を組み立てる相手がいない。
+    /// </summary>
+    [Fact]
+    public async Task 取引先が見つからなければ重なりは言わない()
+    {
+        using var server = new PartnerServer();
+
+        var message = await RejectedMessage(server, Adding(
+            Registration(ValidNo, 9999, new DateOnly(2025, 1, 1)),
+            Registration("T9999999999999", 9999, new DateOnly(2025, 6, 1))));
+
+        Assert.Equal(
+            "登録できません。取引先が見つかりません。取引先の詳細の「登録番号を追加する」から入り直してください。",
+            message);
     }
 
     /// <summary>取引先の欄が空文字で来たら、突き合わせの対象にしない。</summary>

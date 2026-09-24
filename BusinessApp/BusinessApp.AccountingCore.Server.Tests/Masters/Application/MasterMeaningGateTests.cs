@@ -90,8 +90,30 @@ public class MasterMeaningGateTests
             Updating("Account", Row("Account", cash, "Category", new SelectFieldData { Value = "expense" })));
 
         Assert.Equal(
-            "登録できません。この勘定科目は計上済みの仕訳明細 1 行で使われているので、「科目区分」は変えられません。"
-            + "新しい勘定科目を作って、以後の振替伝票ではそちらを選んでください。",
+            "登録できません。この勘定科目は計上済みの仕訳明細 1 行で使われています。「科目区分」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい勘定科目を作って、以後の振替伝票ではそちらを選んでください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>使用中の科目の「補助科目を使う」を変えると、全文で差し戻される</b>——実機操作テストの MST-14 が突き合わせる相手。
+    /// </summary>
+    /// <remarks>
+    /// 2026-09-24 の実機で、この字を <c>Assert.Equal</c> で固めた検体が無いと分かった（<c>変えた列を全部並べて断る</c> は <c>Contains</c> だけ）。
+    /// </remarks>
+    [Fact]
+    public async Task 使用中の科目の補助科目を使うを変えると差し戻される()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var cash = Id(server.AccountOf("1100").Value);
+
+        var thrown = await Rejected(server,
+            Updating("Account", Row("Account", cash, "UsesSubAccount", new BooleanFieldData { Value = true })));
+
+        Assert.Equal(
+            "登録できません。この勘定科目は計上済みの仕訳明細 1 行で使われています。「補助科目を使う」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい勘定科目を作って、以後の振替伝票ではそちらを選んでください。",
             thrown.Message);
     }
 
@@ -115,7 +137,7 @@ public class MasterMeaningGateTests
             Updating("Account", Row("Account", payable, "RequiresPartner", new BooleanFieldData { Value = false })));
 
         Assert.Equal(
-            "登録できません。この勘定科目は計上済みの仕訳明細 1 行で使われているので、「取引先を要する」をオフにできません。"
+            "登録できません。この勘定科目は計上済みの仕訳明細 1 行で使われています。「取引先を要する」はオフにできないので、オンのままにしてください。"
             + "オフにしている間に計上した明細は、取引先が空のまま帳簿に残ってしまいます。"
             + "この勘定科目を使う明細には「取引先」を選んでください。",
             thrown.Message);
@@ -171,7 +193,7 @@ public class MasterMeaningGateTests
         var thrown = await Rejected(server,
             Updating("Account", Row("Account", cash, "Code", new TextFieldData { Value = "1101" })));
 
-        Assert.Contains("仕訳明細 2 行で使われているので、「科目コード」は変えられません", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("仕訳明細 2 行で使われています。「科目コード」は変えられないので", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>件数は 3 桁区切りで書く（金額と同じ読み方。年間数千伝票のペルソナでは 4 桁になる）。</summary>
@@ -192,7 +214,7 @@ public class MasterMeaningGateTests
         var thrown = await Rejected(server,
             Updating("Account", Row("Account", Id(server.AccountOf("1100").Value), "Code", new TextFieldData { Value = "1101" })));
 
-        Assert.Contains("仕訳明細 1,000 行で使われているので", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("仕訳明細 1,000 行で使われています。", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>触った列が複数なら、全部を並べて 1 回で断る（直しては弾かれを繰り返させない）。<b>並びは画面の並び。</b></summary>
@@ -207,10 +229,15 @@ public class MasterMeaningGateTests
 
         var thrown = await Rejected(server, Updating("Account", cash));
 
-        Assert.Contains("「科目区分」・「補助科目を使う」・「評価勘定」は変えられません", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("「科目区分」・「補助科目を使う」・「評価勘定」は変えられないので", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>税区分の課税区分（qa/03 L-29 で実測したもう 1 つ）。<b>締めまで全文</b>を見る——4 マスタで成り立つ文か。</summary>
+    /// <remarks>
+    /// <b>「課税区分」を「課税売上」に変えると、値の規則（課税の区分には「税率区分」が要る）にも当たる。</b>
+    /// <b>それは言わない</b>——「課税区分」そのものが変えられないので、「「税率区分」を選んでください」は
+    /// <b>従っても通らない一手</b>である（<c>MeaningFindings</c>。docs/21 §2-6 の「前提の崩れた検査は飛ばす」）。
+    /// </remarks>
     [Fact]
     public async Task 使用中の税区分の課税区分を変えると差し戻される()
     {
@@ -222,8 +249,8 @@ public class MasterMeaningGateTests
             Updating("TaxCategory", Row("TaxCategory", tax, "TaxationType", new SelectFieldData { Value = "taxable_sales" })));
 
         Assert.Equal(
-            "登録できません。この税区分は計上済みの仕訳明細 2 行で使われているので、「課税区分」は変えられません。"
-            + "新しい税区分を作って、以後の振替伝票ではそちらを選んでください。",
+            "登録できません。この税区分は計上済みの仕訳明細 2 行で使われています。「課税区分」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい税区分を作って、以後の振替伝票ではそちらを選んでください。",
             thrown.Message);
     }
 
@@ -252,15 +279,15 @@ public class MasterMeaningGateTests
         var department = await Rejected(server,
             Updating("Department", Row("Department", Id(dept), "IsCompanyWide", new BooleanFieldData { Value = true })));
         Assert.Equal(
-            "登録できません。この部門は計上済みの仕訳明細 2 行で使われているので、「全社共通」は変えられません。"
-            + "新しい部門を作って、以後の振替伝票ではそちらを選んでください。",
+            "登録できません。この部門は計上済みの仕訳明細 2 行で使われています。「全社共通」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい部門を作って、以後の振替伝票ではそちらを選んでください。",
             department.Message);
 
         var subAccount = await Rejected(server,
             Updating("SubAccount", Row("SubAccount", Id(sub), "Account", new LinkFieldData { Value = Id(server.AccountOf("2200").Value) })));
         Assert.Equal(
-            "登録できません。この補助科目は計上済みの仕訳明細 1 行で使われているので、「勘定科目」は変えられません。"
-            + "新しい補助科目を作って、以後の振替伝票ではそちらを選んでください。",
+            "登録できません。この補助科目は計上済みの仕訳明細 1 行で使われています。「勘定科目」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい補助科目を作って、以後の振替伝票ではそちらを選んでください。",
             subAccount.Message);
     }
 
@@ -288,10 +315,10 @@ public class MasterMeaningGateTests
     /// ここが素通りすると、<b>その規則だけが静かに消える</b>（自己レビューで指摘された。2026-09-08）。
     /// </remarks>
     [Theory]
-    [InlineData("Category", "number", "は変えられません")]
-    [InlineData("IsContra", "empty-boolean", "は変えられません")]
-    [InlineData("RequiresPartner", "empty-boolean", "をオフにできません")]
-    [InlineData("RequiresPartner", "number", "をオフにできません")]
+    [InlineData("Category", "number", "は変えられないので")]
+    [InlineData("IsContra", "empty-boolean", "は変えられないので")]
+    [InlineData("RequiresPartner", "empty-boolean", "はオフにできないので")]
+    [InlineData("RequiresPartner", "number", "はオフにできないので")]
     public async Task 読めない値の欄は変えたと見なして止める(string field, string shape, string expected)
     {
         using var server = new AccountingServer();
@@ -308,15 +335,15 @@ public class MasterMeaningGateTests
     }
 
     /// <summary>
-    /// <b>意味を決める列と一方通行の列を同時に触ったら、意味のほうを断る。</b>
+    /// <b>意味を決める列と一方通行の列を同時に触ったら、1 つの文で両方を言い、意味のほうを先に言う。</b>
     /// </summary>
     /// <remarks>
-    /// マスタの関門は<b>理由を 1 つだけ返す</b>（docs/21 §2-6 の (a)）ので、どちらを見せるかを決めてある——
-    /// 意味を決める列は<b>直す手立てが無い</b>（新しい行を作るしかない）が、一方通行のほうは
+    /// マスタの関門は<b>理由を束ねて返す</b>（docs/21 §2-6 の (b)。2026-09-24 まで (a) で、意味のほうだけを返していた）。
+    /// 並びは決めてある——意味を決める列は<b>直す手立てが無い</b>（新しい行を作るしかない）が、一方通行のほうは
     /// <b>オンに戻せば通る</b>。<b>重いほうを先に見せる。</b>
     /// </remarks>
     [Fact]
-    public async Task 意味を決める列と一方通行の列を同時に変えたら意味のほうを断る()
+    public async Task 意味を決める列と一方通行の列を同時に変えたら一つの文で意味のほうから言う()
     {
         using var server = new AccountingServer();
         PostPayment(server);
@@ -326,8 +353,160 @@ public class MasterMeaningGateTests
 
         var thrown = await Rejected(server, Updating("Account", cash));
 
-        Assert.Contains("「科目区分」は変えられません", thrown.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("取引先", thrown.Message, StringComparison.Ordinal);
+        // **1 つの行には 1 つの文で言う**——2 つに分けると同じ書き出しが 2 回並び、しかも「新しい勘定科目を使え」と
+        // 「この勘定科目を使う明細には…」が食い違って読める（2026-09-24 の自己レビュー）。
+        // **一方通行の列の締め（その列が要る理由）は、意味を決める列を触ったときは言わない**——締めは新しい行を作る道になる。
+        Assert.Equal(
+            "登録できません。この勘定科目は計上済みの仕訳明細 1 行で使われています。"
+            + "「科目区分」は変えられないので、元に戻してください。"
+            + "「取引先を要する」はオフにできないので、オンのままにしてください。"
+            + "オフにしている間に計上した明細は、取引先が空のまま帳簿に残ってしまいます。"
+            + "変えた内容で使うなら、新しい勘定科目を作って、以後の振替伝票ではそちらを選んでください。"
+            + "新しい勘定科目でも「取引先を要する」はオンにしてください。",
+            thrown.Message);
+    }
+
+    // --- 値の断りと束ねる（docs/21 §2-6 の (b)。MeaningFindings） ------------------------------
+
+    /// <summary>
+    /// <b>意味の断りと値の断りを 1 度で言い、意味のほうを先に置く。</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>2026-09-24 までは 2 つの関門を順に通していた</b>ので、意味の凍結で断られた利用者は、
+    /// 直して保存し直してから名前の長さで断られた。
+    /// </remarks>
+    [Fact]
+    public async Task 意味の断りと値の断りを一度で言う()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var cash = Row("Account", Id(server.AccountOf("1100").Value), "Category", new SelectFieldData { Value = "expense" });
+        cash.Fields["Name"] = new TextFieldData { Value = new string('あ', 31) };
+
+        var thrown = await Rejected(server, Updating("Account", cash));
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①この勘定科目は計上済みの仕訳明細 1 行で使われています。「科目区分」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい勘定科目を作って、以後の振替伝票ではそちらを選んでください。"
+            + "②「科目名」は 30 文字以内です。いまは 31 文字あります。短くして入力し直してください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>変えられないコードの重複は言わない</b>——従っても通らない一手になる。
+    /// </summary>
+    /// <remarks>
+    /// 使用中の科目のコードを、既にある科目のコード（2200）に変える。値の検査だけなら「既に使われています。別のコードを入れてください」
+    /// が出るが、<b>コードそのものが変えられない</b>ので、別のコードを入れても通らない。
+    /// </remarks>
+    [Fact]
+    public async Task 変えられないコードの重複は言わない()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+
+        var thrown = await Rejected(server,
+            Updating("Account", Row("Account", Id(server.AccountOf("1100").Value), "Code", new TextFieldData { Value = "2200" })));
+
+        Assert.Equal(
+            "登録できません。この勘定科目は計上済みの仕訳明細 1 行で使われています。「科目コード」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい勘定科目を作って、以後の振替伝票ではそちらを選んでください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>凍結した欄は、その行の値の検査だけを消す</b>——同じ保存の別の行の同じ欄は見る。
+    /// </summary>
+    /// <remarks>
+    /// 使用中の科目 A のコードを変え（凍結）、未使用の科目 B のコードを既にあるコードにする（重複）。
+    /// <b>凍結した欄の覚え方を、行ではなくモジュール名で持つ誤実装だと</b>、A の凍結が B のコードの検査まで消し、
+    /// 「（2 件）」が 1 件になる（2026-09-24 の自己レビュー。<c>MeaningFindings</c> は行の参照で持つ）。
+    /// </remarks>
+    [Fact]
+    public async Task 凍結した欄は同じ保存の別の行の検査を消さない()
+    {
+        using var server = new AccountingServer();
+        PostPayment(server);
+        var cash = Row("Account", Id(server.AccountOf("1100").Value), "Code", new TextFieldData { Value = "2200" });
+        var other = Row("Account", Id(server.AccountOf("1220").Value), "Code", new TextFieldData { Value = "6070" });
+
+        var thrown = await Rejected(server, new ModuleSubmitData { ModuleName = "Account", Update = [cash, other] });
+
+        Assert.Equal(
+            "登録できません（2 件）。"
+            + "①この勘定科目は計上済みの仕訳明細 1 行で使われています。「科目コード」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい勘定科目を作って、以後の振替伝票ではそちらを選んでください。"
+            + "②「科目コード」の「6070」は既に使われています。別のコードを入れてください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>付け替えられない補助科目の、付け替え先の 2 値は言わない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 使用中の補助科目を、補助科目を使わない科目（1100 現金）へ付け替える。値の検査だけなら
+    /// 「この勘定科目は「補助科目を使う」がオフです」が出るが、<b>付け替えそのものが変えられない</b>。
+    /// </remarks>
+    [Fact]
+    public async Task 付け替えられない補助科目の付け替え先の2値は言わない()
+    {
+        using var server = new AccountingServer();
+        var sub = server.InsertSubAccount("1200");
+        // 補助科目つきの明細は、フィクスチャの InsertPosted が作れないので SQL で計上する
+        // （下書きで書いてから状態を進める。DDL のトリガが唯一許す順序）。
+        server.Execute($"""
+            insert into journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+            values (1, '2026-08-24', '2026-08-24', 'draft', 'normal', '支払', '2026-08-24 10:00:00');
+            insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, sub_account_id, amount, tax_category_id)
+            values ((select max(id) from journal_entries), 1, 'debit', (select id from accounts where code = '1200'), {sub}, 500, 1);
+            insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            values ((select max(id) from journal_entries), 2, 'credit', (select id from accounts where code = '2200'), 500, 1);
+            update journal_entries set status = 'posted', entry_no = 1, posted_at = '2026-08-24 11:00:00'
+             where id = (select max(id) from journal_entries);
+            """);
+
+        var thrown = await Rejected(server,
+            Updating("SubAccount", Row("SubAccount", Id(sub), "Account", new LinkFieldData { Value = Id(server.AccountOf("1100").Value) })));
+
+        Assert.Equal(
+            "登録できません。この補助科目は計上済みの仕訳明細 1 行で使われています。「勘定科目」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい補助科目を作って、以後の振替伝票ではそちらを選んでください。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>付け替えられない補助科目の、付け替え先でのコードの重複は言わない。</b>
+    /// </summary>
+    /// <remarks>
+    /// 使用中の補助科目（1200 の下の S7）を、同じコードの補助科目を持つ 1210 へ付け替える。値の検査だけなら
+    /// 「この勘定科目の中では既に使われています。別の勘定科目を選ぶか、コードを変えてください」も当たるが、
+    /// <b>付け替えそのものが変えられない</b>（コードの一意の範囲は親で決まる——親を変えられない行ではコードの重複も数えない）。
+    /// </remarks>
+    [Fact]
+    public async Task 付け替えられない補助科目の付け替え先でのコードの重複は言わない()
+    {
+        using var server = new AccountingServer();
+        var sub = server.InsertSubAccount("1200", "S7", "移す補助科目");
+        server.InsertSubAccount("1210", "S7", "同じコード");
+        server.Execute($"""
+            insert into journal_entries (fiscal_year_id, transaction_date, posting_date, status, entry_type, description, entered_at)
+            values (1, '2026-08-24', '2026-08-24', 'draft', 'normal', '支払', '2026-08-24 10:00:00');
+            insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, sub_account_id, amount, tax_category_id)
+            values ((select max(id) from journal_entries), 1, 'debit', (select id from accounts where code = '1200'), {sub}, 500, 1);
+            insert into journal_lines (journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id)
+            values ((select max(id) from journal_entries), 2, 'credit', (select id from accounts where code = '2200'), 500, 1);
+            update journal_entries set status = 'posted', entry_no = 1, posted_at = '2026-08-24 11:00:00'
+             where id = (select max(id) from journal_entries);
+            """);
+
+        var thrown = await Rejected(server,
+            Updating("SubAccount", Row("SubAccount", Id(sub), "Account", new LinkFieldData { Value = Id(server.AccountOf("1210").Value) })));
+
+        Assert.Equal(
+            "登録できません。この補助科目は計上済みの仕訳明細 1 行で使われています。「勘定科目」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい補助科目を作って、以後の振替伝票ではそちらを選んでください。",
+            thrown.Message);
     }
 
     /// <summary>
@@ -510,7 +689,13 @@ public class MasterMeaningGateTests
 
         var thrown = await Rejected(server,
             Updating("TaxCategory", Row("TaxCategory", tax, "RateKind", new SelectFieldData { Value = "standard" })));
-        Assert.Contains("「税率区分」は変えられません", thrown.Message, StringComparison.Ordinal);
+
+        // **全文で見る**——対象外の区分に税率区分を入れると、値の検査だけなら「「税率区分」は空にしてください」も当たる。
+        // 「税率区分」そのものが変えられないので、それは言わない（凍結した欄を値の検査が見ない——MeaningFindings）。
+        Assert.Equal(
+            "登録できません。この税区分は計上済みの仕訳明細 2 行で使われています。「税率区分」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい税区分を作って、以後の振替伝票ではそちらを選んでください。",
+            thrown.Message);
     }
 
     /// <summary>関係ないモジュールの更新は素通しする。</summary>
@@ -732,8 +917,44 @@ public class MasterMeaningGateTests
             server,
             Updating("Partner", Row("Partner", Id(partner), "Code", new TextFieldData { Value = "P999" })));
 
-        Assert.Contains("この取引先は計上済みの振替伝票 1 枚で使われている", thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("「取引先コード」は変えられません", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "登録できません。この取引先は計上済みの振替伝票 1 枚で使われています。「取引先コード」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい取引先を作って、以後の振替伝票ではそちらを選んでください。"
+            + "ただし、新しい取引先にすると、同じ相手の残高と登録番号の履歴が 2 つに分かれます。",
+            thrown.Message);
+    }
+
+    /// <summary>
+    /// <b>取引先だけは、意味の凍結と取引先の値の断りを束ねない</b>——凍結は会計コアの関門が先に断り、取引先の値の検査はその内側（取引先部品）にある。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>いまの振る舞いを固める</b>（docs/21 §2-6 の例外。2026-09-24 の自己レビューで 2 人が挙げた）。
+    /// 使用中の取引先のコードを変え、同じ保存で取引先名を長すぎる字にすると、<b>1 回目は凍結だけを言い</b>、
+    /// コードを戻した 2 回目に名前の長さを言う。</para>
+    /// <para><b>束ねない理由は docs/21 §2-6 の例外が持つ</b>（Claude の判断）。<b>この振る舞いを変える日は、この検体が赤くなる。</b></para>
+    /// </remarks>
+    [Fact]
+    public async Task 取引先の凍結は取引先の値の断りと束ねない()
+    {
+        using var server = new AccountingServer();
+        var partner = server.InsertPartner();
+        var entry = server.InsertDraft(
+            transactionDate: "2026-08-24", postingDate: "2026-08-24", description: "支払");
+        server.InsertLine(entry, 1, "debit", "2200", 1000);
+        server.InsertLine(entry, 2, "credit", "1100", 1000);
+        server.Execute($"update journal_lines set partner_id = {partner} where journal_entry_id = {entry.Value} and line_no = 1");
+        server.Execute(
+            $"update journal_entries set status = 'posted', entry_no = 1, posted_at = '2026-08-24 13:00:00' where id = {entry.Value}");
+
+        var row = Row("Partner", Id(partner), "Code", new TextFieldData { Value = "P999" });
+        row.Fields["Name"] = new TextFieldData { Value = new string('あ', 101) };
+        var thrown = await Rejected(server, Updating("Partner", row));
+
+        Assert.Equal(
+            "登録できません。この取引先は計上済みの振替伝票 1 枚で使われています。「取引先コード」は変えられないので、元に戻してください。"
+            + "変えた内容で使うなら、新しい取引先を作って、以後の振替伝票ではそちらを選んでください。"
+            + "ただし、新しい取引先にすると、同じ相手の残高と登録番号の履歴が 2 つに分かれます。",
+            thrown.Message);
     }
 
     /// <summary>

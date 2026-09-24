@@ -36,12 +36,13 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
         ArgumentNullException.ThrowIfNull(transactionData);
         ArgumentNullException.ThrowIfNull(save);
 
+        // **削除は束ねない**——別の操作（行を消す）で、他の違反と並べても直す先が無い。
         RejectDeletions(transactionData);
 
         var registrations = RegistrationsIn(transactionData).ToList();
         var rows = registrations.ConvertAll(r => r.Data);
 
-        // **この保存で登録年月日が動く行**は、保存済みの値で数えない（下の RejectDuplicateAsync）。
+        // **この保存で登録年月日が動く行**は、保存済みの値で数えない（下の DuplicateProblemAsync）。
         // 数えると、2 行の日付を入れ替える保存が「既にあります」で誤って止まる。
         // **日付が差分に無い行は入れない**——その行の日付は動かないので、
         // 新しく入る行はそれと衝突してはいけない。
@@ -51,13 +52,53 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
             .OfType<long>()
             .ToHashSet();
 
+        // **理由は全部集めてから 1 回で返す**（docs/21 §2-6 の (b)。開発者の決定。2026-09-20）。
+        // **前提の崩れた検査は飛ばす**（Claude の判断。docs/21 §2-6。2026-09-24 の自己レビューで範囲を詰めた）——
+        // ①**付け替えを断った行は、同じ日から始まる 2 件（R-I3）の検査に入れない**——R-I3 は送られてきた取引先で数えるので、
+        //   移れない先の取引先の話になる（従っても通らない）。
+        // ②**同じ日から始まる 2 件に当たった取引先は、重なり（R-I4・R-I5）を見ない**——重なりは始まりの日が重ならないことを
+        //   前提に組んである。**当たった取引先だけ**で、他の取引先の重なりは見る。
+        // ③**行の中だけで決まる規則**（登録年月日の必須・R-I1・R-I2）**は飛ばさない**——始まりの日の重なりに依らない。
+        //   **取引先の実在（R-I9）も飛ばさない**（R-I3 の結果に依らない）。**ただし取引先の鍵が引けない行は、③ も見ない**（`PeriodProblemsAsync`）。
+        // ⑤**期間そのものが崩れた取引先（登録年月日が空・R-I2）と、実在しない取引先では、重なり（R-I4・R-I5）を見ない**——期間が組めない。
+        //   **R-I1 は期間を崩さない**ので、重なりと一緒に言う（`PeriodProblemsAsync`）。
+        // ④**付け替えを断った行は、もとの取引先の履歴に入れて見る**——断りに従って取引先を戻せば、
+        //   この保存の残りの変更（日付・終わり）はもとの取引先に当たるから。送られてきた取引先の履歴には、その行が無い。
+        var reasons = new List<string>();
+        var repointed = new Dictionary<ModuleData, string>(ReferenceEqualityComparer.Instance);
+        var clashing = new HashSet<string>(StringComparer.Ordinal);
         foreach (var data in rows)
         {
-            await RejectAsync(data, moving);
+            reasons.AddRange(NumberProblems(data));
+            if (await RepointProblemAsync(data) is (string repoint, string storedPartner))
+            {
+                reasons.Add(repoint);
+                repointed[data] = storedPartner;
+            }
         }
 
-        await RejectDuplicatesWithinAsync(rows);
-        await RejectPeriodViolationsAsync(registrations);
+        var countable = rows.Where(data => !repointed.ContainsKey(data)).ToList();
+        foreach (var data in countable)
+        {
+            if (await DuplicateProblemAsync(data, moving) is (string partner, string duplicate))
+            {
+                reasons.Add(duplicate);
+                clashing.Add(partner);
+            }
+        }
+
+        foreach (var (partner, duplicate) in await DuplicatesWithinAsync(countable))
+        {
+            reasons.Add(duplicate);
+            clashing.Add(partner);
+        }
+
+        reasons.AddRange(await PeriodProblemsAsync(registrations, clashing, repointed));
+
+        if (reasons.Count > 0)
+        {
+            throw new PartnerRegistrationRejectedException(reasons);
+        }
 
         return await save();
     }
@@ -66,7 +107,7 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
     /// <b>同じ保存の中に</b>、同じ取引先の同じ日から始まる登録が 2 件ないかを見る。
     /// </summary>
     /// <remarks>
-    /// <para><see cref="RejectDuplicateAsync"/> は<b>保存済みの行としか突き合わせられない</b>。
+    /// <para><see cref="DuplicateProblemAsync"/> は<b>保存済みの行としか突き合わせられない</b>。
     /// 同じ保存で入る 2 件はどちらもまだ DB に無いので、片方ずつ見るかぎり両方が通る。</para>
     /// <para><b>DB も止められない。</b> <c>UNIQUE (partner_id, registration_no, valid_from)</c> は
     /// 登録番号まで含むので、<b>番号が違えば同じ日の 2 件が入る</b>。
@@ -79,9 +120,11 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
     /// 移設そのものはフェーズ 2.5 の C）。独立した一覧しか無いいまでも、
     /// <b>同じ取引先に 2 件を同時に足す経路は取込（フェーズ 6）で開く</b>ので、無駄にはならない。</para>
     /// </remarks>
-    private async Task RejectDuplicatesWithinAsync(IReadOnlyList<ModuleData> registrations)
+    /// <returns>当たった取引先の鍵と断り。</returns>
+    private async Task<IReadOnlyList<(string Partner, string Reason)>> DuplicatesWithinAsync(IReadOnlyList<ModuleData> registrations)
     {
         var seen = new HashSet<(string Partner, DateOnly ValidFrom)>();
+        var reasons = new List<(string Partner, string Reason)>();
 
         foreach (var data in registrations)
         {
@@ -97,11 +140,13 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
 
             if (!seen.Add((partner, validFrom)))
             {
-                throw new PartnerRegistrationRejectedException(
+                reasons.Add((partner,
                     $"この取引先には {validFrom:yyyy/MM/dd} から始まる登録を 2 件入力しています。"
-                    + "どちらかの「登録年月日」を直してください。");
+                    + "どちらかの「登録年月日」を直してください。"));
             }
         }
+
+        return reasons;
     }
 
     /// <summary>
@@ -196,43 +241,48 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
     /// <para>取消・失効は「終わり」を記録して残すものであって、行ごと消すものではない。
     /// 画面は <c>CanDelete: false</c> で消す手を出さないが、**画面の形は守りではない**
     /// （qa/01 F-24。API を直に叩く経路と取込（フェーズ 6）が同じ入口を通る）。
-    /// 削除を素通しすると、期間の検査（<see cref="RejectPeriodViolationsAsync"/>）が
+    /// 削除を素通しすると、期間の検査（<see cref="PeriodProblemsAsync"/>）が
     /// 消えるはずの行を「保存済み」として数え、誤って断ることにもなる。</para>
-    /// <para>誤って確定した余分な行に消す手を作るかは保留のまま（qa/02 R29-12）。
-    /// また、公表システムの差分には<b>処理区分 99（登録簿からの削除）</b>が来る
-    /// （2026-08-25 リサーチ §3-3）。取込がそれをどう表すかはフェーズ 6 の論点で、
-    /// この全拒否はそのとき見直す（docs/14 §5）。解くときは 14 §5 と一緒に動かす。</para>
+    /// <para><b>規則は「計上済みの明細が写していない行は消せる」と決まっている</b>（ADR-0063。開発者の決定。2026-09-16）。
+    /// <b>いまは規則より狭く、全部を断っている</b>——実装はフェーズ 6（公表システムの処理区分 99——登録簿からの削除——を
+    /// 取込が受ける形と同じ関門になるので、別に作ると 2 度作る。2026-08-25 リサーチ §3-3）。解くときは docs/14 §5 と一緒に動かす。</para>
     /// </remarks>
     private static void RejectDeletions(IReadOnlyList<ModuleSubmitData> transactionData)
     {
         if (transactionData.SelectMany(d => d.Delete).Any(d => d.ModuleName == ModuleName))
         {
+            // **結果（「削除できません」）は見出しが言う**——本文は次の一手だけ（docs/21 §2-6）。
+            // **「行は消さない」とは言わない**——帳簿に写っていない行は消せると決まっている（ADR-0063。実装はフェーズ 6）。
+            // **一手を 2 つに分ける**——入力の誤りに取消・失効の記録を付けさせると、架空の終わりが計上の写しに焼き込まれる
+            // （ADR-0063 が案 C を退けた理由「誤入力は登録の出来事ではない」）。
+            // **入れる日付は公表サイトの字で言う**（docs/21 §2-3）——「終わった」とだけ言うと、廃止日や期末日を入れて 1 日ずれる。
             throw new PartnerRegistrationRejectedException(
-                "登録の行は削除できません。取消・失効は、取引先の詳細の「登録番号の履歴」でその行の「編集」を開き、"
-                + "「取消・失効年月日」を入れて「取消・失効の理由」を選んでください。");
+                ["入力を誤った行なら、取引先の詳細の「登録番号の履歴」でその行の「編集」を開き、正しい値に直してください。"
+                 + "登録が取り消されたか失効したのなら、同じ「編集」で、国税庁の公表サイトの取消年月日か失効年月日をそのまま"
+                 + "「取消・失効年月日」に入れて「取消・失効の理由」を選んでください。"],
+                PartnerRegistrationRejectedException.DeletionHeadline);
         }
     }
 
-    private async Task RejectAsync(ModuleData data, IReadOnlySet<long> moving)
+    /// <summary>登録番号の書式（R-I7）。</summary>
+    private static IEnumerable<string> NumberProblems(ModuleData data)
     {
         // CLB は変更されたフィールドしか送ってこない（qa/01 F-11）。
         // 送られていない項目は「変えていない」なので、検査しない。
-        if (Field<TextFieldData>(data, "RegistrationNo") is TextFieldData field)
+        if (Field<TextFieldData>(data, "RegistrationNo") is not TextFieldData field)
         {
-            if (!InvoiceRegistrationNumber.IsWellFormed(field.Value))
-            {
-                throw new PartnerRegistrationRejectedException(
-                    $"「登録番号」の形が違います。{InvoiceRegistrationNumber.FormatDescription}"
-                    + "入力し直してください。");
-            }
-
-            // **貼り付けで紛れ込んだ空白を落として保存する。** 落とさずに通すと、
-            // 同じ番号が 2 通りの文字列で保存されて突合が壊れる（小文字を弾いたのと同じ理由）。
-            field.Value = InvoiceRegistrationNumber.Normalize(field.Value);
+            return [];
         }
 
-        await RejectRepointAsync(data);
-        await RejectDuplicateAsync(data, moving);
+        if (!InvoiceRegistrationNumber.IsWellFormed(field.Value))
+        {
+            return [$"「登録番号」の形が違います。{InvoiceRegistrationNumber.FormatDescription}入力し直してください。"];
+        }
+
+        // **貼り付けで紛れ込んだ空白を落として保存する。** 落とさずに通すと、
+        // 同じ番号が 2 通りの文字列で保存されて突合が壊れる（小文字を弾いたのと同じ理由）。
+        field.Value = InvoiceRegistrationNumber.Normalize(field.Value);
+        return [];
     }
 
     /// <summary>
@@ -250,33 +300,34 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
     /// <para><b>差分に無ければ何もしない。</b> CLB は変更されたフィールドしか送ってこない（qa/01 F-11）ので、
     /// 取引先を触っていない保存では、そもそも比べるものが無い。</para>
     /// </remarks>
-    private async Task RejectRepointAsync(ModuleData data)
+    /// <returns>断りと、もとの取引先の鍵。当たらなければ <c>null</c>。</returns>
+    private async Task<(string Reason, string StoredPartner)?> RepointProblemAsync(ModuleData data)
     {
         if (Id(data) is not long rowId || SubmittedPartner(data) is not string submitted)
         {
-            return;
+            return null;
         }
 
         // **保存済みの相手が引けないなら黙って通す。** 行が消えているだけで、
         // その保存は別の理由（外部キー）で失敗する。ここで別の言葉を被せない。
         if (await store.FindPartnerOfAsync(rowId) is not PartnerId stored)
         {
-            return;
+            return null;
         }
 
-        if (Key(stored.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)) != submitted)
-        {
-            throw new PartnerRegistrationRejectedException(
-                "登録の取引先は、保存したあとは変更できません。"
-                + "別の取引先の登録にするときは、その取引先の画面で入力し直してください。");
-        }
+        var storedKey = Key(stored.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))!;
+        return storedKey != submitted
+            ? ("登録の「取引先」は、保存したあとは変更できません。"
+               + "別の取引先の登録にするときは、その取引先の画面で入力し直してください。", storedKey)
+            : null;
     }
 
-    private async Task RejectDuplicateAsync(ModuleData data, IReadOnlySet<long> moving)
+    /// <returns>当たった取引先の鍵と断り。当たらなければ <c>null</c>。</returns>
+    private async Task<(string Partner, string Reason)?> DuplicateProblemAsync(ModuleData data, IReadOnlySet<long> moving)
     {
         if (Date(data, "ValidFrom") is not DateOnly validFrom)
         {
-            return;
+            return null;
         }
 
         // **取引先が差分に無ければ、直している行から引く。**
@@ -288,18 +339,18 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
 
         if (partnerId is not PartnerId partner)
         {
-            return;
+            return null;
         }
 
         // **自分自身と、同じ保存で日付が動く行は数えない**（番号ではなく行の識別子で見分ける）。
         // 動く行の保存済みの値は、この保存が終わった時点でもう無い。
         var occupied = await store.FindRegistrationIdsFromAsync(partner, validFrom);
-        if (occupied.Any(rowId => rowId != id && !moving.Contains(rowId)))
-        {
-            throw new PartnerRegistrationRejectedException(
-                $"この取引先には {validFrom:yyyy/MM/dd} から始まる登録が既にあります。"
-                + "「登録年月日」を直すか、先にある登録を直してください。");
-        }
+        return occupied.Any(rowId => rowId != id && !moving.Contains(rowId))
+            ? (Key(partner.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))!,
+               $"この取引先には {validFrom:yyyy/MM/dd} から始まる登録が既にあります。"
+               + "入力している登録の登録年月日が国税庁の公表サイトと違うなら「登録年月日」を直し、"
+               + "合っているなら、先にある登録を取引先の詳細の「登録番号の履歴」から直してください。")
+            : null;
     }
 
     /// <summary>
@@ -314,13 +365,20 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
     /// <para><b>咎めるのは、この保存が触った行が絡む違反だけ。</b> 保存済みの行どうしの違反
     /// （トリガ導入前に入ったデータ）で、無関係な保存を止めない。</para>
     /// </remarks>
-    private async Task RejectPeriodViolationsAsync(
-        IReadOnlyList<(ModuleData Data, bool IsAdd)> registrations)
+    /// <param name="clashing">同じ日から始まる 2 件（R-I3）に当たった取引先の鍵。<b>その取引先の重なりは見ない。</b></param>
+    /// <param name="repointed">付け替えを断った行と、もとの取引先の鍵。<b>その行はもとの取引先の履歴で見る。</b></param>
+    private async Task<IReadOnlyList<string>> PeriodProblemsAsync(
+        IReadOnlyList<(ModuleData Data, bool IsAdd)> registrations,
+        IReadOnlySet<string> clashing,
+        IReadOnlyDictionary<ModuleData, string> repointed)
     {
         var byPartner = new Dictionary<string, List<(ModuleData Data, bool IsAdd)>>();
         foreach (var item in registrations)
         {
-            if (await PartnerKeyAsync(item.Data) is not string partner)
+            var key = repointed.TryGetValue(item.Data, out var storedPartner)
+                ? storedPartner
+                : await PartnerKeyAsync(item.Data);
+            if (key is not string partner)
             {
                 continue;
             }
@@ -333,13 +391,31 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
             list.Add(item);
         }
 
+        var reasons = new List<string>();
         foreach (var (partner, batch) in byPartner)
         {
-            await RejectMissingPartnerAsync(partner, batch);
+            // **取引先が無くても、行の中だけで決まる規則は見る**（R-I1・R-I2 は取引先に依らない）。
+            // **重なりは見ない**——履歴を組み立てる相手がいない。
+            var missing = await MissingPartnerProblemAsync(partner, batch);
+            if (missing is not null)
+            {
+                reasons.Add(missing);
+            }
+
+            // **期間そのものが崩れていれば、重なりは見ない**——登録年月日が無い・終わりが始まりより前の行で
+            // 期間を比べても、従いようのない重なりを言うことになる。
+            // **終わりと理由の対（R-I1）は期間を崩さない**ので、重なりと一緒に言う——理由だけ残して終わりを消した保存に、
+            // 対の断りだけを先に返すと、従った 2 回目で初めて「空にすると重なる」が出る（2026-09-24 の自己レビュー）。
             var resulting = await ResultingRowsAsync(partner, batch);
-            RejectBrokenRows(resulting);
-            RejectOverlaps(resulting);
+            var broken = BrokenRowProblems(resulting).ToList();
+            reasons.AddRange(broken.Select(problem => problem.Reason));
+            if (missing is null && !broken.Any(problem => problem.BreaksPeriod) && !clashing.Contains(partner))
+            {
+                reasons.AddRange(OverlapProblems(resulting));
+            }
         }
+
+        return reasons;
     }
 
     /// <summary><b>実在しない取引先への新規の行</b>を言葉で断る。</summary>
@@ -351,12 +427,12 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
     /// <para>仮の識別子（同じ保存で作る取引先）は対象外。更新の行は保存済みの行に
     /// 紐づいた時点で取引先の実在が判っているので見ない。</para>
     /// </remarks>
-    private async Task RejectMissingPartnerAsync(
+    private async Task<string?> MissingPartnerProblemAsync(
         string partner, List<(ModuleData Data, bool IsAdd)> batch)
     {
         if (!batch.Any(b => b.IsAdd))
         {
-            return;
+            return null;
         }
 
         if (!long.TryParse(
@@ -365,14 +441,12 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
                 System.Globalization.CultureInfo.InvariantCulture,
                 out var id))
         {
-            return;
+            return null;
         }
 
-        if (await store.FindNameAsync(new PartnerId(id)) is null)
-        {
-            throw new PartnerRegistrationRejectedException(
-                "取引先が見つかりません。取引先の詳細の「登録番号を追加する」から入り直してください。");
-        }
+        return await store.FindNameAsync(new PartnerId(id)) is null
+            ? "取引先が見つかりません。取引先の詳細の「登録番号を追加する」から入り直してください。"
+            : null;
     }
 
     /// <summary>保存済みの行に、この保存の差分を重ねた「保存後の履歴」。</summary>
@@ -435,29 +509,32 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
 
     /// <summary>触った行そのものの検査（R-I1・R-I2 と、登録年月日の必須）。</summary>
     /// <remarks>
-    /// R-I1・R-I2 は DDL の CHECK も守っているが、CHECK の違反は生の SQL エラーで返る。
-    /// 利用者が編集できる欄になった（2026-09-02 の画面の作り直し）ので、ここで先に言葉で断る。
+    /// <para>R-I1・R-I2 は DDL の CHECK も守っているが、CHECK の違反は生の SQL エラーで返る。
+    /// 利用者が編集できる欄になった（2026-09-02 の画面の作り直し）ので、ここで先に言葉で断る。</para>
+    /// <para><b>登録年月日が無い行は、そこで止めて次の行へ移る</b>——終わりが始まりより前かは、始まりが無ければ比べられない。
+    /// <b>終わりと理由の対（R-I1）と、終わりが始まりより前（R-I2）は両方言う</b>——別々の欄の誤りで、片方を直してももう片方が残る。</para>
     /// </remarks>
-    private static void RejectBrokenRows(List<PeriodRow> resulting)
+    /// <returns>断りと、<b>期間そのものを崩すか</b>（崩すなら、その取引先の重なりは見ない）。</returns>
+    private static IEnumerable<(string Reason, bool BreaksPeriod)> BrokenRowProblems(List<PeriodRow> resulting)
     {
         foreach (var row in resulting.Where(r => r.Touched))
         {
             if (row.ValidFrom is not DateOnly validFrom)
             {
-                throw new PartnerRegistrationRejectedException("「登録年月日」を入力してください。");
+                yield return ("「登録年月日」を入力してください。", true);
+                continue;
             }
 
             if (row.EndedOn is null != !row.HasReason)
             {
-                throw new PartnerRegistrationRejectedException(
-                    "「取消・失効年月日」と「取消・失効の理由」は、両方入力するか、両方空にしてください。");
+                yield return ("「取消・失効年月日」と「取消・失効の理由」は、両方入力するか、両方空にしてください。", false);
             }
 
             if (row.EndedOn is DateOnly ended && ended < validFrom)
             {
-                throw new PartnerRegistrationRejectedException(
+                yield return (
                     $"「取消・失効年月日」（{ended:yyyy/MM/dd}）が「登録年月日」（{validFrom:yyyy/MM/dd}）より"
-                    + "前になっています。日付を確かめてください。");
+                    + "前になっています。日付を確かめてください。", true);
             }
         }
     }
@@ -472,9 +549,15 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
     /// トリガ導入（2026-09-02）前の違反データが間に挟まると、「隣が良ければ離れた 2 行も良い」
     /// という帰納が破れる（レビュー指摘）。行数は 1 取引先あたり多くて数件なので全ペアでよい。
     /// **古いデータどうしの違反は握りつぶす**（触らない保存を止めない）。
-    /// 同じ日から始まる 2 行はここには来ない（R-I3 の検査が先に断っている）。</para>
+    /// 同じ日から始まる 2 行は、ふつうはここに来ない（R-I3 に当たった取引先では、この検査ごと飛ばしている）。
+    /// <b>例外は、「取引先」を変えた行（R-I6 で断る。API だけ）が同じ保存で「登録年月日」も変え、もとの取引先の別の行と同じ日にした形</b>——
+    /// その行は R-I3 に数えないので、ここで重なりの文になる。<b>断ることは変わらない</b>（R-I6 の理由が既にある）ので、文の正確さのために数え分けてはいない。</para>
+    /// <para><b>早い行 1 つにつき、断りは 1 つだけ言う</b>——いちばん近いあとの行との組である。
+    /// 終わりをその行の始まりまでに入れれば、それより遅い行との組も同時に解ける。
+    /// 同じ早い行について遅い行を全部並べると、<b>同じ直し先の断りが行数だけ並ぶ</b>（docs/21 §2-6）。
+    /// <b>別の早い行の違反は別に言う</b>——直す先が違う。</para>
     /// </remarks>
-    private static void RejectOverlaps(List<PeriodRow> resulting)
+    private static IEnumerable<string> OverlapProblems(List<PeriodRow> resulting)
     {
         var ordered = resulting
             .Where(r => r.ValidFrom is not null)
@@ -482,36 +565,49 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
             .Select(r => (From: r.ValidFrom!.Value, r.EndedOn, r.Origin))
             .ToList();
 
-        foreach (var (a, b) in Pairs(ordered))
+        for (var i = 0; i < ordered.Count; i++)
         {
-            if (a.Origin == RowOrigin.Stored && b.Origin == RowOrigin.Stored)
+            for (var j = i + 1; j < ordered.Count; j++)
             {
-                continue;
-            }
-
-            if (a.EndedOn is not DateOnly aEnd)
-            {
-                throw new PartnerRegistrationRejectedException(OpenRowBefore(a.From, a.Origin, b.From));
-            }
-
-            if (b.From < aEnd)
-            {
-                throw new PartnerRegistrationRejectedException(
-                    $"登録の期間が重なっています。{a.From:yyyy/MM/dd} からの登録の「取消・失効年月日」（{aEnd:yyyy/MM/dd}）が、"
-                    + $"次の登録の「登録年月日」（{b.From:yyyy/MM/dd}）より後になっています。"
-                    + "「登録年月日」と「取消・失効年月日」を確かめてください。");
+                if (OverlapProblem(ordered[i], ordered[j]) is string problem)
+                {
+                    yield return problem;
+                    break;
+                }
             }
         }
     }
 
+    /// <summary>早い行 <paramref name="a"/> と遅い行 <paramref name="b"/> の組の断り。無ければ <c>null</c>。</summary>
+    private static string? OverlapProblem(
+        (DateOnly From, DateOnly? EndedOn, RowOrigin Origin) a,
+        (DateOnly From, DateOnly? EndedOn, RowOrigin Origin) b)
+    {
+        if (a.Origin == RowOrigin.Stored && b.Origin == RowOrigin.Stored)
+        {
+            return null;
+        }
+
+        if (a.EndedOn is not DateOnly aEnd)
+        {
+            return OpenRowBefore(a.From, a.Origin, b.From);
+        }
+
+        return b.From < aEnd
+            ? $"登録の期間が重なっています。{a.From:yyyy/MM/dd} からの登録の「取消・失効年月日」（{aEnd:yyyy/MM/dd}）が、"
+              + $"次の登録の「登録年月日」（{b.From:yyyy/MM/dd}）より後になっています。"
+              + "「登録年月日」と「取消・失効年月日」を確かめてください。"
+            : null;
+    }
+
     /// <summary>終わりのない行のあとに行がある（R-I5）ときの断り。<b>終わりのない行の由来で文を選ぶ。</b></summary>
     /// <remarks>
-    /// <para><b>名指す「あとの登録」は、終わりのない行の直後の行である</b>（<see cref="Pairs"/> が遅い行を昇順に回す）。
+    /// <para><b>名指す「あとの登録」は、終わりのない行の直後の行である</b>（<see cref="OverlapProblems"/> が遅い行を昇順に回し、最初の組で止める）。
     /// 終わりをその日までに入れれば、この組は隣接か重なりなしになる——だから日付を 1 つだけ言えばよい。</para>
     /// <para><b>終わりのない行がこの保存で触った行なら、いまの入力を直す文にする。</b>
     /// 「一覧の「編集」から開け」と言うと、新しく足す行は一覧に無く、編集中の行は既に開いている
     /// ——<b>文言どおりの次の一手が取れない</b>（2026-09-24 の全件の REG-24。qa/03 L-66）。</para>
-    /// <para><b>直し方を 2 つ並べるときは、選ぶ目安を利用者の知っている事実で言う。</b>
+    /// <para><b>直し方を 2 つ並べるときは、選ぶ目安を言う</b>（docs/21 §2-3）。
     /// 目安を言わずに「終わりを入れるか、登録年月日を確かめるか」と並べると、
     /// 登録年月日の打ち間違いなのに<b>いま使っている登録に誤った取消・失効年月日を入れて通してしまう</b>——
     /// 計上済みの写しは直せないので、取り返しがつかない（2026-09-24 の自己レビュー。3 人が独立に挙げた）。</para>
@@ -550,20 +646,6 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
                 + "その取消年月日か失効年月日をそのまま「取消・失効年月日」に入れて「取消・失効の理由」を選んでください。"
                 + "そうでなければ、入力している登録の「登録年月日」を確かめてください。",
         };
-
-    /// <summary>登録年月日順の列から、(早い行, 遅い行) の全ペア。</summary>
-    private static IEnumerable<((DateOnly From, DateOnly? EndedOn, RowOrigin Origin) A,
-                                (DateOnly From, DateOnly? EndedOn, RowOrigin Origin) B)> Pairs(
-        List<(DateOnly From, DateOnly? EndedOn, RowOrigin Origin)> ordered)
-    {
-        for (var i = 0; i < ordered.Count; i++)
-        {
-            for (var j = i + 1; j < ordered.Count; j++)
-            {
-                yield return (ordered[i], ordered[j]);
-            }
-        }
-    }
 
     /// <summary>保存後の履歴の 1 行。<c>Origin</c> はこの保存がその行に何をしたか。</summary>
     private readonly record struct PeriodRow(
@@ -620,6 +702,14 @@ public sealed class PartnerRegistrationSubmitGate(PartnerRegistrationStore store
             ? id
             : null;
 
+    /// <summary>差分の欄を型付きで読む。<b>載っていなければ <c>null</c>、載っているのに型が違えば止める。</b></summary>
+    /// <remarks>
+    /// <c>as T</c> のまま <c>null</c> を返すと「触られていない」と見分けがつかず、
+    /// <b>登録番号が別の型で届いた日に、書式の検査（R-I7）が黙って素通しになる</b>——DB は書式を見ないので、
+    /// 壊れた番号が保存され、計上時の写しに焼き込まれる（2026-09-24 の自己レビュー。<c>PartnerSubmitGate.Field</c> と同じ形）。
+    /// </remarks>
     private static T? Field<T>(ModuleData data, string name) where T : FieldDataBase
-        => data.Fields.TryGetValue(name, out var field) ? field as T : null;
+        => data.Fields.TryGetValue(name, out var field)
+            ? field as T ?? throw UnreadableFieldException.For(data.Name, name, field)
+            : null;
 }
