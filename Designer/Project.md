@@ -4,7 +4,7 @@ status: current
 scope: 会計コア
 audience: [開発]
 growth: append
-updated: 2026-09-16
+updated: 2026-09-25
 supersedes: []
 related: [CLAUDE.md, ../docs/README.md, ../docs/22_層と実行場所.md, ../docs/21_画面の原則.md, ../docs/decisions/0035-フレームは役割と部品の組で分け玄関を1枚置く.md]
 ---
@@ -199,7 +199,7 @@ CLB 全般の「静かな失敗」は `../docs/qa/01_CLB静かな失敗.md` に�
   `HasUserChanges()` の先頭で見る**——立てないと確認が重なり、「入力を続ける」を選ぶとサーバは済んでいるのに画面が残る。
   **8 モジュールに同じ 2 関数を写している**——`IsModified` / `GetModifiedFieldNames` はモジュールの状態で、別モジュールのメソッドは呼べず
   （[docs/qa/01 X-04](../docs/qa/01_CLB静かな失敗.md)）モジュールを引数にも取れない（同 B-06）ので、共通化の手段が無い。
-  **効くのはアプリの中の遷移だけ**（再読込・タブを閉じるは止めない。[docs/qa/04 J-50](../docs/qa/04_実機操作テスト.md)）。
+  **効くのはアプリの中の遷移だけ**（再読込・タブを閉じるは止めない。[docs/21 §1](../docs/21_画面の原則.md)）。
   削除の確認の文は種別で選ぶだけ——帰結の文言が増えるなら availability API へ移す（ADR-0008）
 - 2026-09-10: **条件つき必須の印**は、欄が 1 つの画面（税区分の「税率区分」）ならラベルの `required-label` ＋ 凡例で条件を言い、
   `MARK_WITHOUT_REQUIRED` に載せる。**明細の一覧（`ListField`）の欄は印を付ける場所が無い**——行の詳細レイアウトは

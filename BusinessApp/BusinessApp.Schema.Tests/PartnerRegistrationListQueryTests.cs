@@ -67,7 +67,7 @@ public class PartnerRegistrationListQueryTests
     /// <para><b>とくに <c>reg_id</c> が効く。</b> この列はデザインの編集リンク
     /// （<c>EditLink.IdVariable = RegId.Value</c>）が使う値である。
     /// <b>いまその列は画面に出ていない</b>——この一覧は読み取り専用で、入力の導線は
-    /// 取引先の詳細だけにしてある（docs/14 §4。qa/04 の R-04）。
+    /// 取引先の詳細だけにしてある（docs/14 §4。qa/04 の REG-01）。
     /// <b>出した日に取り違えていれば、別の登録行が開く。</b>
     /// <b>誰も見ていない列こそ、壊れても誰も気づかない。</b></para>
     /// <para><b>値が全部埋まった行と、任意の列が全部 NULL の行の 2 本を見る。</b>

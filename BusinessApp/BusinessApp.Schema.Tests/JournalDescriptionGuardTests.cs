@@ -149,7 +149,7 @@ public class JournalDescriptionGuardTests
 
         // **SqliteException でなければ落とす。** ThrowsAny だとヘルパ側の NullReference でも緑になる。
         var error = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, Post));
-        Assert.Contains("摘要のない仕訳は計上できない", error.Message, StringComparison.Ordinal);
+        Assert.Contains("摘要のない仕訳は計上できない。帳簿の記載事項「内容」を欠くため。", error.Message, StringComparison.Ordinal);
         return db;
     }
 }

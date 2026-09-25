@@ -264,10 +264,10 @@ public class PartnerSchemaTests
             """);
 
         // 先の行の終わりを伸ばして、後続の行に食い込ませる
-        Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
-            UPDATE partner_invoice_registrations SET ended_on = '2024-06-30'
-             WHERE registration_no = 'T1234567890123';
-            """));
+        Rejected.ByTrigger(
+            db,
+            "UPDATE partner_invoice_registrations SET ended_on = '2024-06-30' WHERE registration_no = 'T1234567890123';",
+            "登録の期間が重なっている。取消・失効年月日と登録年月日を見直す。");
     }
 
     /// <summary>軸は取引先ごと。別の取引先の期間とは重ねて数えない。</summary>
@@ -318,7 +318,7 @@ public class PartnerSchemaTests
                 (partner_id, registration_no, valid_from, ended_on, end_reason)
             VALUES (1, 'T9999999999999', '2020-01-01', '2023-10-02', 'expired');
             """));
-        Assert.Contains("登録の期間が重なっている", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("登録の期間が重なっている。取消・失効年月日と登録年月日を見直す。", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -358,11 +358,11 @@ public class PartnerSchemaTests
             SELECT id, 'T9999999999999', '2024-01-01' FROM partners WHERE code = 'P200';
             """);
 
-        Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, """
-            UPDATE partner_invoice_registrations
-               SET partner_id = (SELECT id FROM partners WHERE code = 'P200')
-             WHERE registration_no = 'T1234567890123';
-            """));
+        Rejected.ByTrigger(
+            db,
+            "UPDATE partner_invoice_registrations SET partner_id = (SELECT id FROM partners WHERE code = 'P200')"
+            + " WHERE registration_no = 'T1234567890123';",
+            "登録の期間が重なっている。取消・失効年月日と登録年月日を見直す。");
     }
 
     [Fact]
