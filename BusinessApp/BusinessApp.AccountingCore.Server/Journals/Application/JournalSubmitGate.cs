@@ -123,7 +123,12 @@ public sealed class JournalSubmitGate(
 
         // **見出しは操作で決める。** 計上待ちが 1 件でもあれば、利用者は「計上する」を押している。
         // 関門ごとに決めると、同じ違反でも捕まえた場所で言葉が変わる。
-        await RejectBeforeSaveAsync(transactionData, pending.Count > 0);
+        var lines = await StoredLinesAsync(transactionData);
+        await RejectBeforeSaveAsync(transactionData, lines, pending.Count > 0);
+
+        // **進める伝票は保存の前に決める。** 保存のあとの差分は、CLB が仮 ID を本物に書き換えているかもしれず、
+        // 新しい伝票の明細が「保存済みの伝票に足した明細」に見えて、作ったばかりの伝票の版を進めてしまう（2026-09-25 の自己レビュー）。
+        var advancing = EntriesToAdvance(transactionData, lines);
         var results = await save();
 
         // **保存が失敗していたら、計上へ進まない。**
@@ -136,6 +141,7 @@ public sealed class JournalSubmitGate(
             return results;
         }
 
+        await entryStore.AdvanceVersionsAsync(advancing);
         await PostAllAsync(pending, results);
 
         return results;
@@ -158,13 +164,20 @@ public sealed class JournalSubmitGate(
     /// </remarks>
     /// <param name="isPosting">計上として送られてきた伝票が 1 件でもあるか。</param>
     private async Task RejectBeforeSaveAsync(
-        IReadOnlyList<ModuleSubmitData> transactionData, bool isPosting)
+        IReadOnlyList<ModuleSubmitData> transactionData, IReadOnlyDictionary<long, StoredLine?> lines, bool isPosting)
     {
         var violations = new List<Violation>(JournalSubmitRequirements.Check(transactionData));
         violations.AddRange(await EntryTypeChangesAsync(transactionData));
-        var lines = await StoredLinesAsync(transactionData);
-        violations.AddRange(await ConcurrentChangesAsync(transactionData, lines));
-        violations.AddRange(await DuplicateLineNosAsync(transactionData, lines));
+        var concurrent = await ConcurrentChangesAsync(transactionData, lines);
+        violations.AddRange(concurrent);
+
+        // **同時操作で断るなら、行番号の重複は言わない**——画面が古いせいで同じ番号を振ったのであり、
+        // 行番号は閲覧専用なので「入力し直して」に従えない。開き直せば番号も振り直される（2026-09-25 の自己レビュー）。
+        // **明細を足すだけの保存には効かない**——版を運ばないので同時操作の断りが空のまま、足す行の番号が重なりうる（Claude の読み。実機では確かめていない——docs/04 §5）。
+        if (concurrent.Count == 0)
+        {
+            violations.AddRange(await DuplicateLineNosAsync(transactionData, lines));
+        }
 
         if (violations.HasError())
         {
@@ -237,19 +250,22 @@ public sealed class JournalSubmitGate(
                 continue;
             }
 
-            if (submitted is long known && known != version)
-            {
-                violations.Add(new Violation(JournalViolationCodes.ChangedByOthers, JournalLineRules.ChangedByOthers));
-                continue;
-            }
-
+            // **計上済みを版より先に見る。** 別の人が計上した伝票の版は進んでいるので、版を先に見ると
+            // 「変更しました。…もう一度操作してください」と言い、開き直しても消せない（2026-09-25 の自己レビュー）。
+            var stale = submitted is long known && known != version;
             var stored = await entryStore.LoadAsync(new JournalEntryId(id));
             if (stored.Status == EntryStatus.Posted)
             {
+                // 古い画面（下書きのまま）には取消・訂正のボタンが無いので、開き直すところから言う。
                 violations.Add(new Violation(
                     JournalViolationCodes.AlreadyPosted,
-                    $"伝票番号 {stored.EntryNo} は計上済みです。"
-                    + "取り消すか、訂正してください。"));
+                    stale
+                        ? JournalLineRules.PostedByOthersOnDelete
+                        : $"伝票番号 {stored.EntryNo} は計上済みです。取り消すか、訂正してください。"));
+            }
+            else if (stale)
+            {
+                violations.Add(new Violation(JournalViolationCodes.ChangedByOthers, JournalLineRules.ChangedByOthers));
             }
             else if (calendar.ResolvePeriod(stored.PostingDate) is not null
                      && !calendar.IsPostable(stored.PostingDate))
@@ -308,24 +324,25 @@ public sealed class JournalSubmitGate(
     }
 
     /// <summary>
-    /// 開いたあとに別の人が変えた・消した伝票（明細）を、保存の前に利用者の語で断る（qa/03 L-31）。
+    /// 開いたあとに別の人が変えた・消した・計上した伝票（明細）を、保存の前に利用者の語で断る（qa/03 L-31・ADR-0070）。
     /// </summary>
     /// <remarks>
     /// <para><b>楽観ロックそのものは CLB が効かせている</b>（<c>OptimisticLockingFieldDesign</c>）。ただし食い違いを
     /// 定型文「入力内容を確かめ…」でしか言わないので、<b>送られてきた版と保存されている版をここで突き合わせる</b>。
-    /// <b>版の欄が差分に無ければ判定しない</b>（画面の更新は必ず載せてくる。qa/01 F-12。載せない経路は CLB が最後の砦）。
+    /// <b>版の欄が差分に無ければ判定しない</b>（画面の更新は必ず載せてくる。qa/01 F-12）。
     /// 版の欄が<b>読めない型</b>で届いたら止める（<see cref="VersionOf"/>）。</para>
-    /// <para><b>明細だけを直した保存には、伝票の差分が無い</b>（2026-09-10 実測 1.3.20。qa/01 F-41）。
-    /// そのとき伝票の版は突き合わせようがなく（CLB も進めない）、ここで見るのは明細が在るかだけである。</para>
-    /// <para><b>明細には版が無い</b>ので、変える・消す明細が在るかだけを見る。消えた明細は<b>件数で束ねて 1 回</b>言う——
-    /// 差分に行番号は無いので行は指せず、行ごとに並べても同じ文が並ぶだけになる。
-    /// <b>伝票ごと消えていたら明細は数えない</b>——1 つの出来事に 2 つの断りを出さない（docs/21 §2-6）。</para>
+    /// <para><b>明細だけを直した保存には、伝票の差分が無い</b>（2026-09-10 実測 1.3.20。qa/01 F-41 ②）ので、伝票の版は突き合わせようがない。
+    /// <b>明細の版と明細の在りかは、明細の差分で見る</b>——明細の更新にも × の削除にも、画面は明細の版を載せてくる（2026-09-25 にブラウザで観測。ADR-0070）。
+    /// <b>明細の削除で CLB 自身が版を見るかは確かめていない</b>（CLB の DLL を読んだ自己レビューの担当は「見ない」と読んだ）ので、削除の食い違いもここで見る。</para>
+    /// <para>明細の断りは<b>件数を入れた 1 文</b>で言う——差分に行番号は無いので行は指せず、行ごとに並べても同じ文が並ぶだけになる。
+    /// <b>伝票が消えていたか、変えられていたら、明細のことは言わない</b>——どちらも、開き直すか一覧へ戻れば明細も見直せる。
+    /// <b>伝票が計上されていたら、何を直した保存でも、同時操作の断りとしては「計上されました」の 1 通にする</b>（入力の要件の断りは別に並びうる）——計上は明細の版を進めないので、
+    /// 明細だけの保存はここで見ないと関門を通り、計上済みの不変のトリガに当たる（そのときは定型文しか出ない——Claude の読み）。</para>
     /// </remarks>
     private async Task<List<Violation>> ConcurrentChangesAsync(
         IReadOnlyList<ModuleSubmitData> transactionData, IReadOnlyDictionary<long, StoredLine?> lines)
     {
         var violations = new List<Violation>();
-        var entryGone = false;
 
         foreach (var data in EntriesIn(transactionData, d => d.Update))
         {
@@ -339,21 +356,109 @@ public sealed class JournalSubmitGate(
             if (stored is null)
             {
                 violations.Add(new Violation(JournalViolationCodes.DeletedByOthers, JournalLineRules.DeletedByOthers));
-                entryGone = true;
             }
             else if (submitted != stored)
             {
-                violations.Add(new Violation(JournalViolationCodes.ChangedByOthers, JournalLineRules.ChangedByOthers));
+                violations.Add((await entryStore.LoadStatusesAsync([new JournalEntryId(id)])).GetValueOrDefault(id) == EntryStatus.Posted
+                    ? new Violation(JournalViolationCodes.AlreadyPosted, JournalLineRules.PostedByOthers)
+                    : new Violation(JournalViolationCodes.ChangedByOthers, JournalLineRules.ChangedByOthers));
             }
         }
 
+        if (violations.Count > 0)
+        {
+            return violations;
+        }
+
+        var parents = await entryStore.LoadStatusesAsync([.. SavedParentsOfAddedLines(transactionData).Distinct().Select(id => new JournalEntryId(id))]);
+        if (SavedParentsOfAddedLines(transactionData).Any(id => !parents.ContainsKey(id)))
+        {
+            violations.Add(new Violation(JournalViolationCodes.DeletedByOthers, JournalLineRules.DeletedByOthers));
+            return violations;
+        }
+
+        if (lines.Values.Any(line => line is StoredLine { EntryPosted: true }) || parents.Values.Contains(EntryStatus.Posted))
+        {
+            violations.Add(new Violation(JournalViolationCodes.AlreadyPosted, JournalLineRules.PostedByOthers));
+            return violations;
+        }
+
         var gone = lines.Count(line => line.Value is null);
-        if (gone > 0 && !entryGone)
+        if (gone > 0)
         {
             violations.Add(new Violation(JournalViolationCodes.DeletedByOthers, JournalLineRules.LinesDeletedByOthers(gone)));
         }
 
+        var changed = LinesChangedByOthers(transactionData, lines);
+        if (changed > 0)
+        {
+            violations.Add(new Violation(JournalViolationCodes.ChangedByOthers, JournalLineRules.LinesChangedByOthers(changed)));
+        }
+
         return violations;
+    }
+
+    /// <summary>送られてきた版が、保存されている版と食い違う明細の数（変更と削除。同じ明細を両方に載せても 1 行と数える）。</summary>
+    /// <remarks>
+    /// <b>版の欄が無いか新規の <c>NullValue</c> なら数えない</b>（伝票と同じ）。<b>消えた明細も数えない</b>——消えたほうで言う。
+    /// <b>古いか新しいかは問わない</b>——食い違えば、画面が見ている明細は保存されている明細ではない。
+    /// </remarks>
+    private static int LinesChangedByOthers(
+        IReadOnlyList<ModuleSubmitData> transactionData, IReadOnlyDictionary<long, StoredLine?> lines)
+    {
+        var updated = transactionData.SelectMany(d => d.Update).Where(d => d.Name == LineModuleName)
+            .Select(d => (Id: StoredId(GetId(d)), Version: VersionOf(LineModuleName, Field<FieldDataBase>(d, "OptimisticLocking"))));
+        var deleted = transactionData.SelectMany(d => d.Delete).Where(d => d.ModuleName == LineModuleName)
+            .Select(d => (Id: StoredId(d.Id), Version: VersionOf(LineModuleName, d.OptimisticLockingFieldData)));
+
+        return updated.Concat(deleted)
+            .Where(line => line.Id is long id && line.Version is long version
+                && lines[id] is StoredLine stored && stored.Version != version)
+            .Select(line => line.Id)
+            .Distinct()
+            .Count();
+    }
+
+    /// <summary>この保存が足す明細の親のうち、保存済みの伝票（仮 ID でない）の識別子。</summary>
+    /// <remarks>
+    /// <b>LINQ の <c>Select(StoredId)</c> で書かない</b>——同じクラスの中で同じ静的メソッドを同じデリゲート型へ変換する箇所どうしは、コンパイラの作る 1 つの静的フィールドのキャッシュを共有するので、
+    /// 先に呼ばれた別の箇所がキャッシュを作ると、ここの「まだ無い」側の分岐が一度も通らず、分岐のカバレッジが呼ばれる順に左右される
+    /// （2026-09-25 に踏んだ。ラムダに包むのは IDE0200 が拒む）。
+    /// </remarks>
+    private static List<long> SavedParentsOfAddedLines(IReadOnlyList<ModuleSubmitData> transactionData)
+    {
+        var parents = new List<long>();
+        foreach (var data in transactionData.SelectMany(d => d.Add))
+        {
+            if (data.Name == LineModuleName && ParentKey(data) is string key && StoredId(key) is long id)
+            {
+                parents.Add(id);
+            }
+        }
+
+        return parents;
+    }
+
+    /// <summary>
+    /// <b>保存が通ったら版を 1 つ進める伝票</b>——明細だけを変えた保存済みの伝票（ADR-0070 の決定 4）。<b>保存の前に決める。</b>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>明細だけの保存は伝票の差分を持たず、CLB は伝票の版を進めない</b>（qa/01 F-41 ②）。進めないと、
+    /// 古い画面のまま<b>計上する・伝票を削除する・摘要を直して保存する</b>人が、見ていない明細の変更の上に書く
+    /// ——その保存は伝票の版で比べるしかない。</para>
+    /// <para><b>伝票の差分がある保存の伝票は入れない</b>——CLB が自分で進めるので、ここでも進めると 2 つ進む。
+    /// <b>保存が失敗したら進めない</b>（<see cref="SubmitAsync"/> が先に返す）。
+    /// <b>保存した人の画面は、進めた版を持ち直していると読む</b>（CLB は保存のあとに伝票と明細を読み直す——ADR-0070 の観測。開き直さずに続けた保存が通った——2026-09-25 の実機、qa/04 の CNC-08）。</para>
+    /// </remarks>
+    private static List<JournalEntryId> EntriesToAdvance(
+        IReadOnlyList<ModuleSubmitData> transactionData, IReadOnlyDictionary<long, StoredLine?> lines)
+    {
+        var headers = EntriesIn(transactionData, d => d.Update).Select(d => StoredId(GetId(d))).OfType<long>().ToHashSet();
+
+        return [.. lines.Values.OfType<StoredLine>().Select(line => line.EntryId.Value).Concat(SavedParentsOfAddedLines(transactionData))
+            .Distinct()
+            .Where(id => !headers.Contains(id))
+            .Select(id => new JournalEntryId(id))];
     }
 
     /// <summary>送られてきた版。欄が無いか、値が版として読めなければ <c>null</c>。</summary>
@@ -447,19 +552,21 @@ public sealed class JournalSubmitGate(
             return numbers;
         }
 
+        // **消えた明細はここへ来ない**——同時操作の断りが先に言い、そのときは行番号を数えない（RejectBeforeSaveAsync）。
+        // だから差分が指す保存済みの明細は、どれも在る。
         foreach (var deleted in transactionData.SelectMany(d => d.Delete).Where(d => d.ModuleName == LineModuleName))
         {
-            if (StoredId(deleted.Id) is long id && lines[id] is StoredLine stored)
+            if (StoredId(deleted.Id) is long id)
             {
-                (await OfEntryAsync(EntryKey(stored.EntryId))).Deleted.Add(id);
+                (await OfEntryAsync(EntryKey(lines[id]!.Value.EntryId))).Deleted.Add(id);
             }
         }
 
         foreach (var data in transactionData.SelectMany(d => d.Update).Where(d => d.Name == LineModuleName))
         {
-            if (NumberOf(data, "LineNo") is int lineNo && StoredId(GetId(data)) is long id && lines[id] is StoredLine stored)
+            if (NumberOf(data, "LineNo") is int lineNo && StoredId(GetId(data)) is long id)
             {
-                (await OfEntryAsync(EntryKey(stored.EntryId))).Renumbered[id] = lineNo;
+                (await OfEntryAsync(EntryKey(lines[id]!.Value.EntryId))).Renumbered[id] = lineNo;
             }
         }
 

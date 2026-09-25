@@ -1027,7 +1027,7 @@ public class JournalSubmitGateTests
     }
 
     /// <summary>
-    /// 明細には版が無いので、在るかだけを見る（変更でも削除でも）。<b>消えた明細は件数で束ねて 1 回だけ言う</b>——
+    /// 変える・消す明細が在るかを見る（変更でも削除でも）。<b>消えた明細は件数を入れた 1 文で言う</b>——
     /// 差分に行番号は無いので行は指せない。同じ明細を変更と削除の両方に載せても 1 行と数える。
     /// </summary>
     [Fact]
@@ -1079,6 +1079,526 @@ public class JournalSubmitGateTests
 
         Assert.Equal([JournalLineRules.DeletedByOthers], error.Violations.Select(v => v.Message));
     }
+
+    /// <summary>
+    /// <b>開いたあとに別の人が変えた明細は、件数を入れた 1 文で断る</b>（2026-09-25。ADR-0070——明細に版が無く、
+    /// 同じ明細を 2 人が直すとあとの保存が黙って勝っていた）。変更と削除の両方を数え、同じ明細を両方に載せても 1 行と数える。
+    /// **対照**——開き直した版なら通る。
+    /// </summary>
+    /// <remarks>
+    /// <b>保存されている版を行ごとに変え（4・7・9・12）、送る版を「合う・古い・新しい・合う」に分けてある</b>——
+    /// 正しい実装は 2 行。1 行目の版と比べる実装と最大の版と比べる実装は 3 行、<c>!=</c> を <c>&gt;</c> や <c>&lt;</c> にした実装は 1 行、
+    /// 重ねて数える実装は 3 行になり、どれも区別できる（2026-09-25 の自己レビュー）。
+    /// </remarks>
+    [Fact]
+    public async Task 開いたあとに別の人が変えた明細は件数を入れた1文で断る()
+    {
+        using var server = new AccountingServer();
+        var id = LinesAt(server, 4, 7, 9, 12);
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([ChangingLines(server, id, 4, 6, 10, 12)], NothingSaved));
+
+        Assert.Equal(
+            "保存できません。明細 2 行が、あなたが開いたあとに別の人に変更されています。"
+            + "画面を開き直して、その変更を確かめてから、もう一度操作してください。",
+            error.Message);
+        Assert.Equal(JournalViolationCodes.ChangedByOthers, Assert.Single(error.Violations).Code);
+
+        // **対照**：開き直して（いまの版を読んで）同じ操作をすると通る。
+        var saved = false;
+        await server.SubmitAsync([ChangingLines(server, id, 4, 7, 9, 12)], () => { saved = true; return NothingSaved(); });
+        Assert.True(saved);
+    }
+
+    /// <summary>
+    /// <b>伝票の版が合っていても、明細の版が古ければ明細の断りを出す</b>——多重の守り。
+    /// 明細を変えた保存は伝票の版も進める（CLB か関門が）ので、関門の経路からこの状態は作れない（例外は明細の親の付け替え——ADR-0070 の帰結）。
+    /// </summary>
+    [Fact]
+    public async Task 伝票の版が合っていても明細の版が古ければ断る()
+    {
+        using var server = new AccountingServer();
+        var id = LinesAt(server, 2, 0, 0);
+        var entry = SubmitData.Entry(server.Text(id.Value));
+        entry.Fields["OptimisticLocking"] = Version(0);
+        var line = SubmitData.LineChanging(server.Text(server.LineIdOf(id, 1)), "Amount", new NumberFieldData { Value = 5 }, version: 1);
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync(
+                [SubmitData.Updating(entry), new ModuleSubmitData { ModuleName = "JournalLine", Update = [line] }], NothingSaved));
+
+        Assert.Equal(
+            ["明細 1 行が、あなたが開いたあとに別の人に変更されています。画面を開き直して、その変更を確かめてから、もう一度操作してください。"],
+            error.Violations.Select(v => v.Message));
+    }
+
+    /// <summary>
+    /// <b>伝票が変えられていたら、明細のことは言わない</b>——消えた明細も変えられた明細も。開き直せば明細も見直せる（同じ手を 2 回言わない）。
+    /// </summary>
+    [Fact]
+    public async Task 伝票が変えられていれば明細の断りは出さない()
+    {
+        using var server = new AccountingServer();
+        var id = LinesAt(server, 2, 0, 0);
+        server.Execute($"update journal_entries set optimistic_locking = 2 where id = {id.Value}");
+        var stale = SubmitData.Entry(server.Text(id.Value));
+        stale.Fields["OptimisticLocking"] = Version(1);
+        var changed = SubmitData.LineChanging(server.Text(server.LineIdOf(id, 1)), "Amount", new NumberFieldData { Value = 5 }, version: 1);
+        var gone = SubmitData.LineChanging("999", "Amount", new NumberFieldData { Value = 6 });
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync(
+                [SubmitData.Updating(stale), new ModuleSubmitData { ModuleName = "JournalLine", Update = [changed, gone] }], NothingSaved));
+
+        Assert.Equal(
+            ["この伝票は、あなたが開いたあとに別の人が変更しました。画面を開き直して、その変更を確かめてから、もう一度操作してください。"],
+            error.Violations.Select(v => v.Message));
+    }
+
+    /// <summary>
+    /// <b>消えた明細と変えられた明細は、別々に数えて両方言う</b>——直し方が違う（残っている明細を確かめる／変更を確かめる）。
+    /// </summary>
+    [Fact]
+    public async Task 消えた明細と変えられた明細は別々に数える()
+    {
+        using var server = new AccountingServer();
+        var id = LinesAt(server, 2, 0, 0);
+        var changed = SubmitData.LineChanging(server.Text(server.LineIdOf(id, 1)), "Amount", new NumberFieldData { Value = 5 }, version: 1);
+        var gone = SubmitData.LineChanging("999", "Amount", new NumberFieldData { Value = 6 });
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([new ModuleSubmitData { ModuleName = "JournalLine", Update = [changed, gone] }], NothingSaved));
+
+        Assert.Equal(
+            [
+                "明細 1 行が、あなたが開いたあとに別の人に削除されています。画面を開き直して、残っている明細を確かめてください。"
+                + "伝票そのものが無ければ、振替伝票の一覧に戻ってください。",
+                "明細 1 行が、あなたが開いたあとに別の人に変更されています。画面を開き直して、その変更を確かめてから、もう一度操作してください。",
+            ],
+            error.Violations.Select(v => v.Message));
+    }
+
+    /// <summary>
+    /// 明細の版の欄が差分に無いか、新規の <c>NullValue</c> なら判定しない（伝票と同じ）。**保存まで進んだことを見る。**
+    /// </summary>
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("null")]
+    public async Task 明細の版の欄が無いか新規の形なら判定しない(string shape)
+    {
+        using var server = new AccountingServer();
+        var id = LinesAt(server, 2, 0, 0);
+        var line = SubmitData.LineChanging(server.Text(server.LineIdOf(id, 1)), "Amount", new NumberFieldData { Value = 5 }, version: null);
+        if (shape == "null")
+        {
+            line.Fields["OptimisticLocking"] = new OptimisticLockingFieldData { Value = new NullValue() };
+        }
+
+        var saved = false;
+        await server.SubmitAsync(
+            [new ModuleSubmitData { ModuleName = "JournalLine", Update = [line] }], () => { saved = true; return NothingSaved(); });
+
+        Assert.True(saved);
+    }
+
+    /// <summary>明細の版の欄が<b>読めない型</b>で届いたら止める（伝票と同じ流儀。黙って判定を落とさない）。</summary>
+    [Fact]
+    public async Task 明細の版の欄が読めない型なら止まる()
+    {
+        using var server = new AccountingServer();
+        var id = LinesAt(server, 0, 0, 0);
+        var line = SubmitData.LineChanging(server.Text(server.LineIdOf(id, 1)), "Amount", new NumberFieldData { Value = 5 }, version: null);
+        line.Fields["OptimisticLocking"] = new TextFieldData { Value = "abc" };
+
+        await AssertUnreadable(server, new ModuleSubmitData { ModuleName = "JournalLine", Update = [line] }, "OptimisticLocking");
+    }
+
+    /// <summary>
+    /// <b>開いたあとに計上された伝票の明細を変える・消す・足す保存は、「計上されました」と断る</b>（ADR-0070）。
+    /// 計上は明細の版を進めないので、見ないと計上済みの不変のトリガに当たる。**足す明細の番号は保存済みの 2 と重ねる**——
+    /// 画面が古いと同じ番号を振るが、行番号の重複は言わない（1 通だけ）。
+    /// </summary>
+    [Theory]
+    [InlineData("update")]
+    [InlineData("delete")]
+    [InlineData("add")]
+    public async Task 開いたあとに計上された伝票の明細は計上されたと断る(string shape)
+    {
+        using var server = new AccountingServer();
+        var posted = server.InsertPosted(1, "計上済み", "2026-08-24", ("debit", "1100", 100), ("credit", "1100", 100));
+        var lineId = server.Text(server.LineIdOf(posted, 1));
+        var added = SubmitData.Line(2);
+        added.Fields["JournalEntryId"] = new IdFieldData { Value = server.Text(posted.Value) };
+        var submit = shape switch
+        {
+            "update" => new ModuleSubmitData
+            {
+                ModuleName = "JournalLine",
+                Update = [SubmitData.LineChanging(lineId, "Amount", new NumberFieldData { Value = 5 })],
+            },
+            "delete" => new ModuleSubmitData
+            {
+                ModuleName = "JournalLine",
+                Delete = [new ModuleDeleteInfo { Id = lineId, ModuleName = "JournalLine", OptimisticLockingFieldData = Version(0) }],
+            },
+            _ => new ModuleSubmitData { ModuleName = "JournalLine", Add = [added] },
+        };
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(() => server.SubmitAsync([submit], NothingSaved));
+
+        Assert.Equal(
+            "保存できません。この伝票は、あなたが開いたあとに計上されました。"
+            + "計上した伝票は変えられないので、画面を開き直して、直すときは「訂正する」を使ってください。",
+            error.Message);
+        Assert.Equal(JournalViolationCodes.AlreadyPosted, Assert.Single(error.Violations).Code);
+    }
+
+    /// <summary>
+    /// <b>計上されていたら、ほかの明細のことは言わない</b>——版の食い違った明細も消えた明細も、「計上されました」の 1 通に含まれる。
+    /// </summary>
+    [Fact]
+    public async Task 計上されていればほかの明細の断りは出さない()
+    {
+        using var server = new AccountingServer();
+        var posted = server.InsertPosted(1, "計上済み", "2026-08-24", ("debit", "1100", 100), ("credit", "1100", 100));
+        var stale = SubmitData.LineChanging(server.Text(server.LineIdOf(posted, 1)), "Amount", new NumberFieldData { Value = 5 }, version: 3);
+        var gone = SubmitData.LineChanging("999", "Amount", new NumberFieldData { Value = 6 });
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([new ModuleSubmitData { ModuleName = "JournalLine", Update = [stale, gone] }], NothingSaved));
+
+        Assert.Equal([JournalViolationCodes.AlreadyPosted], error.Violations.Select(v => v.Code));
+    }
+
+    /// <summary>
+    /// <b>伝票の差分を持つ保存でも、版が食い違った伝票が計上されていたら「計上されました」と言う</b>——
+    /// 「変更しました。もう一度操作してください」と言うと、開き直しても閲覧専用で操作できない。計上する操作なら見出しは「計上できません。」。
+    /// </summary>
+    [Theory]
+    [InlineData(null, "保存できません。")]
+    [InlineData("posted", "計上できません。")]
+    public async Task 版の食い違った伝票が計上されていれば計上されたと言う(string? status, string headline)
+    {
+        using var server = new AccountingServer();
+        var posted = await PostedAtVersionAsync(server, 3);
+        var stale = SubmitData.Entry(server.Text(posted.Value), status);
+        stale.Fields["OptimisticLocking"] = Version(2);
+        stale.Fields["Description"] = new TextFieldData { Value = "古い画面で直した摘要" };
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([SubmitData.Updating(stale)], NothingSaved));
+
+        Assert.Equal(
+            headline + "この伝票は、あなたが開いたあとに計上されました。"
+            + "計上した伝票は変えられないので、画面を開き直して、直すときは「訂正する」を使ってください。",
+            error.Message);
+    }
+
+    /// <summary>
+    /// <b>古い版で計上済みの伝票を削除しようとしたら、「開いたあとに計上されました」と言い、開き直すところから言う</b>
+    /// （版の食い違いより先に見る）——古い下書きの画面には取消・訂正のボタンが無い。
+    /// </summary>
+    [Fact]
+    public async Task 古い版で計上済みの伝票を削除すると開いたあとに計上されたと言う()
+    {
+        using var server = new AccountingServer();
+        var posted = await PostedAtVersionAsync(server, 3);
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([SubmitData.Deleting(server.Text(posted.Value), version: 2)], NothingSaved));
+
+        Assert.Equal(
+            ["この伝票は、あなたが開いたあとに計上されました。計上した伝票は削除できないので、画面を開き直して、取り消すか訂正してください。"],
+            error.Violations.Select(v => v.Message));
+    }
+
+    /// <summary>
+    /// <b>消えた伝票に明細を足す保存は、「削除しました」の 1 通で断る</b>——見ないと外部キーに当たり、定型文しか出ない。
+    /// **同じ保存に、消えた明細の変更も載せる**——伝票ごと消されると明細も消える（`DeleteTogether`）ので、画面では両方が届く。
+    /// </summary>
+    [Fact]
+    public async Task 消えた伝票に明細を足すと削除されたと断る()
+    {
+        using var server = new AccountingServer();
+        var added = SubmitData.Line(1);
+        added.Fields["JournalEntryId"] = new IdFieldData { Value = "999" };
+        var gone = SubmitData.LineChanging("998", "Amount", new NumberFieldData { Value = 5 });
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([new ModuleSubmitData { ModuleName = "JournalLine", Add = [added], Update = [gone] }], NothingSaved));
+
+        Assert.Equal(
+            ["この伝票は、あなたが開いたあとに別の人が削除しました。振替伝票の一覧に戻ってください。"
+             + "この内容が必要なら、新しい振替伝票として入力し直してください。"],
+            error.Violations.Select(v => v.Message));
+    }
+
+    /// <summary>
+    /// <b>明細だけを変えた保存のあと、伝票の版を 1 つ進める</b>（ADR-0070 の決定 4）——変更・削除・追加のどれでも。
+    /// **隣の伝票の版は動かさない。**
+    /// </summary>
+    [Theory]
+    [InlineData("update")]
+    [InlineData("delete")]
+    [InlineData("add")]
+    public async Task 明細だけを変えた保存のあと伝票の版を1つ進める(string shape)
+    {
+        using var server = new AccountingServer();
+        var neighbor = LinesAt(server, 0, 0, 0);
+        var id = LinesAt(server, 0, 0, 0);
+        var lineId = server.Text(server.LineIdOf(id, 1));
+        var added = SubmitData.Line(4);
+        added.Fields["JournalEntryId"] = new IdFieldData { Value = server.Text(id.Value) };
+        var submit = shape switch
+        {
+            "update" => new ModuleSubmitData
+            {
+                ModuleName = "JournalLine",
+                Update = [SubmitData.LineChanging(lineId, "Amount", new NumberFieldData { Value = 5 })],
+            },
+            "delete" => new ModuleSubmitData
+            {
+                ModuleName = "JournalLine",
+                Delete = [new ModuleDeleteInfo { Id = lineId, ModuleName = "JournalLine", OptimisticLockingFieldData = Version(0) }],
+            },
+            _ => new ModuleSubmitData { ModuleName = "JournalLine", Add = [added] },
+        };
+
+        await server.SubmitAsync([submit], NothingSaved);
+
+        Assert.Equal((1L, 0L), (VersionOfEntry(server, id), VersionOfEntry(server, neighbor)));
+    }
+
+    /// <summary>
+    /// <b>1 回の保存に「伝票の差分がある伝票」と「明細だけの伝票」が混ざっても、明細だけの伝票だけを進める。</b>
+    /// 伝票の差分がある伝票は CLB が進めるので、ここでも進めると 2 つ進む。
+    /// </summary>
+    [Fact]
+    public async Task 伝票の差分がある伝票は進めず明細だけの伝票だけを進める()
+    {
+        using var server = new AccountingServer();
+        var withEntry = LinesAt(server, 0, 0, 0);
+        var linesOnly = LinesAt(server, 0, 0, 0);
+        var entry = SubmitData.Entry(server.Text(withEntry.Value));
+        entry.Fields["OptimisticLocking"] = Version(0);
+        var lines = new ModuleSubmitData
+        {
+            ModuleName = "JournalLine",
+            Update =
+            [
+                SubmitData.LineChanging(server.Text(server.LineIdOf(withEntry, 1)), "Amount", new NumberFieldData { Value = 5 }),
+                SubmitData.LineChanging(server.Text(server.LineIdOf(linesOnly, 1)), "Amount", new NumberFieldData { Value = 6 }),
+            ],
+        };
+
+        await server.SubmitAsync([SubmitData.Updating(entry), lines], NothingSaved);
+
+        Assert.Equal((0L, 1L), (VersionOfEntry(server, withEntry), VersionOfEntry(server, linesOnly)));
+    }
+
+    /// <summary><b>保存が失敗したら、伝票の版を進めない。</b></summary>
+    [Fact]
+    public async Task 保存が失敗したら伝票の版を進めない()
+    {
+        using var server = new AccountingServer();
+        var id = LinesAt(server, 0, 0, 0);
+        var lines = new ModuleSubmitData
+        {
+            ModuleName = "JournalLine",
+            Update = [SubmitData.LineChanging(server.Text(server.LineIdOf(id, 1)), "Amount", new NumberFieldData { Value = 5 })],
+        };
+
+        await server.SubmitAsync(
+            [lines], () => Task.FromResult(new List<ModuleSubmitResult> { SubmitData.Failure("UNIQUE constraint failed") }));
+
+        Assert.Equal(0L, VersionOfEntry(server, id));
+    }
+
+    /// <summary>
+    /// <b>新しい伝票を明細ごと作った保存では、その伝票の版を進めない</b>——保存の中で CLB が明細の親の仮 ID を本物に書き換えても
+    /// （書き換えるかは実測していない）、進める伝票は保存の前に決めてある。進めると、作った本人の次の保存が断られる。
+    /// </summary>
+    [Fact]
+    public async Task 新しい伝票を明細ごと作った保存では伝票の版を進めない()
+    {
+        using var server = new AccountingServer();
+        var entry = SubmitData.NewEntry(TemporaryId, status: "draft");
+        var line = SubmitData.Line(1);
+        line.Fields["JournalEntryId"] = new IdFieldData { Value = TemporaryId };
+        var save = server.Saving(entry, Balanced);
+
+        await server.SubmitAsync(
+            [SubmitData.Adding(entry, line)],
+            async () =>
+            {
+                var results = await save();
+                line.Fields["JournalEntryId"] = new IdFieldData { Value = results[0].DestinationId };
+                return results;
+            });
+
+        Assert.Equal(0L, VersionOfEntry(server, new JournalEntryId(1)));
+    }
+
+    /// <summary>
+    /// <b>古い画面のまま計上しても、見ていない明細の変更の上には計上されない</b>（ADR-0070 の決定 4 の往復）——
+    /// 明細だけの保存で伝票の版が進むので、古い版の計上は断られ、開き直した版なら通る。
+    /// </summary>
+    [Fact]
+    public async Task 明細だけの保存のあとは古い版の計上を断り新しい版なら通る()
+    {
+        using var server = new AccountingServer();
+        var id = server.InsertDraft();
+        server.InsertLine(id, 1, "debit", "1100", 1000);
+        server.InsertLine(id, 2, "credit", "2200", 1000);
+        var first = server.LineIdOf(id, 1);
+        var second = server.LineIdOf(id, 2);
+
+        // 先に保存する側: 2 行の金額を直す（明細だけの保存。CLB が書くのを模す）
+        await server.SubmitAsync(
+            [new ModuleSubmitData
+            {
+                ModuleName = "JournalLine",
+                Update =
+                [
+                    SubmitData.LineChanging(server.Text(first), "Amount", new NumberFieldData { Value = 2000 }),
+                    SubmitData.LineChanging(server.Text(second), "Amount", new NumberFieldData { Value = 2000 }),
+                ],
+            }],
+            () =>
+            {
+                server.Execute($"update journal_lines set amount = 2000, optimistic_locking = 1 where journal_entry_id = {id.Value}");
+                return NothingSaved();
+            });
+
+        var stale = SubmitData.Entry(server.Text(id.Value), status: "posted");
+        stale.Fields["OptimisticLocking"] = Version(0);
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([SubmitData.Updating(stale)], NothingSaved));
+
+        Assert.Equal(
+            "計上できません。この伝票は、あなたが開いたあとに別の人が変更しました。"
+            + "画面を開き直して、その変更を確かめてから、もう一度操作してください。",
+            error.Message);
+        Assert.Equal("draft", server.Scalar<string>($"select status from journal_entries where id = {id.Value}"));
+
+        // **対照**：開き直して（版 1 を読んで）計上すると通り、計上されるのは先に保存された金額である。
+        var fresh = SubmitData.Entry(server.Text(id.Value), status: "posted");
+        fresh.Fields["OptimisticLocking"] = Version(1);
+        await server.SubmitAsync([SubmitData.Updating(fresh)], NothingSaved);
+
+        Assert.Equal(
+            ("posted", 4000L),
+            (server.Scalar<string>($"select status from journal_entries where id = {id.Value}"),
+             server.Scalar<long>($"select sum(amount) from journal_lines where journal_entry_id = {id.Value}")));
+    }
+
+    /// <summary>
+    /// <b>古い画面のまま伝票を削除しても、見ていない明細の変更ごとは消えない</b>（ADR-0070 の決定 4 の往復）——
+    /// 明細だけの保存で伝票の版が進むので、古い版の削除は断られ、開き直した版なら消える。
+    /// </summary>
+    [Fact]
+    public async Task 明細だけの保存のあとは古い版の削除を断り新しい版なら消える()
+    {
+        using var server = new AccountingServer();
+        var id = LinesAt(server, 0, 0);
+        await server.SubmitAsync(
+            [new ModuleSubmitData
+            {
+                ModuleName = "JournalLine",
+                Update = [SubmitData.LineChanging(server.Text(server.LineIdOf(id, 1)), "Amount", new NumberFieldData { Value = 5 })],
+            }],
+            NothingSaved);
+
+        var error = await Assert.ThrowsAsync<JournalPostingRejectedException>(
+            () => server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value), version: 0)], NothingSaved));
+        Assert.Equal([JournalLineRules.ChangedByOthers], error.Violations.Select(v => v.Message));
+
+        // **対照**：開き直して（版 1 を読んで）削除すると、関門は通す。
+        var passed = false;
+        await server.SubmitAsync([SubmitData.Deleting(server.Text(id.Value), version: 1)], () => { passed = true; return NothingSaved(); });
+        Assert.True(passed);
+    }
+
+    /// <summary>
+    /// <b>保存済みの明細を版の無い形で消す保存は、保存されている版が 0 でなくても判定しない</b>（変更の側と同じ）。
+    /// </summary>
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("null")]
+    public async Task 明細の削除の版の欄が無いか新規の形なら判定しない(string shape)
+    {
+        using var server = new AccountingServer();
+        var id = LinesAt(server, 3, 0);
+        var deletion = new ModuleDeleteInfo
+        {
+            Id = server.Text(server.LineIdOf(id, 1)),
+            ModuleName = "JournalLine",
+            OptimisticLockingFieldData = shape == "null" ? new OptimisticLockingFieldData { Value = new NullValue() } : null,
+        };
+
+        var saved = false;
+        await server.SubmitAsync(
+            [new ModuleSubmitData { ModuleName = "JournalLine", Delete = [deletion] }], () => { saved = true; return NothingSaved(); });
+
+        Assert.True(saved);
+    }
+
+    /// <summary>計上済みの伝票を、版を <paramref name="version"/> にしてから作る（計上済みの伝票の版は書き換えられないので、下書きのうちに書く）。</summary>
+    private static async Task<JournalEntryId> PostedAtVersionAsync(AccountingServer server, long version)
+    {
+        var id = server.InsertDraft();
+        server.InsertLine(id, 1, "debit", "1100", 1000);
+        server.InsertLine(id, 2, "credit", "2200", 1000);
+        server.Execute($"update journal_entries set optimistic_locking = {version} where id = {id.Value}");
+        var entry = SubmitData.Entry(server.Text(id.Value), status: "posted");
+        entry.Fields["OptimisticLocking"] = Version(version);
+        await server.SubmitAsync([SubmitData.Updating(entry)], NothingSaved);
+        return id;
+    }
+
+    /// <summary>明細の下書きを作り、明細の版を行ごとに <paramref name="versions"/> にする（行番号 1 から）。</summary>
+    private static JournalEntryId LinesAt(AccountingServer server, params long[] versions)
+    {
+        var id = server.InsertDraft();
+        for (var i = 0; i < versions.Length; i++)
+        {
+            server.InsertLine(id, i + 1, i % 2 == 0 ? "debit" : "credit", "1100", 100 * (i + 1));
+            server.Execute($"update journal_lines set optimistic_locking = {versions[i]} where id = {server.LineIdOf(id, i + 1)}");
+        }
+
+        return id;
+    }
+
+    /// <summary>
+    /// 4 行の明細を直す差分。1 行目と 2 行目は金額を変え、2〜4 行目は消す。送る版は行ごとに指定する。
+    /// </summary>
+    private static ModuleSubmitData ChangingLines(
+        AccountingServer server, JournalEntryId id, long first, long second, long third, long fourth)
+    {
+        string LineId(int lineNo) => server.Text(server.LineIdOf(id, lineNo));
+
+        ModuleDeleteInfo Deleting(int lineNo, long version) => new()
+        {
+            Id = LineId(lineNo),
+            ModuleName = "JournalLine",
+            OptimisticLockingFieldData = Version(version),
+        };
+
+        return new ModuleSubmitData
+        {
+            ModuleName = "JournalLine",
+            Update =
+            [
+                SubmitData.LineChanging(LineId(1), "Amount", new NumberFieldData { Value = 5 }, first),
+                SubmitData.LineChanging(LineId(2), "Amount", new NumberFieldData { Value = 6 }, second),
+            ],
+            Delete = [Deleting(2, second), Deleting(3, third), Deleting(4, fourth)],
+        };
+    }
+
+    private static long VersionOfEntry(AccountingServer server, JournalEntryId id)
+        => server.Scalar<long>($"select optimistic_locking from journal_entries where id = {id.Value}");
 
     /// <summary>
     /// 版の欄が差分に無いか、値が版として読めない（新規の <c>NullValue</c>・端数）なら判定しない

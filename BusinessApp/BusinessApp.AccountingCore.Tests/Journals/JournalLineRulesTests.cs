@@ -91,6 +91,7 @@ public class JournalLineRulesTests
             JournalLineRules.OriginalEntryNotEditable, JournalLineRules.ChangedByOthers,
             JournalLineRules.DeletedByOthers, JournalLineRules.AlreadyDeletedByOthers,
             JournalLineRules.LineNoDuplicatedAt(3), JournalLineRules.LinesDeletedByOthers(2),
+            JournalLineRules.LinesChangedByOthers(2), JournalLineRules.PostedByOthers, JournalLineRules.PostedByOthersOnDelete,
         ];
 
         // トースト内の文字列は改行できない（qa/01 D-12）。
@@ -102,9 +103,10 @@ public class JournalLineRulesTests
 
     /// <summary>件数と番号は文に埋める（行は指せないので、件数で束ねる）。</summary>
     [Fact]
-    public void 消えた明細は件数で_重なった番号は番号で言う()
+    public void 消えた明細と変えられた明細は件数で_重なった番号は番号で言う()
     {
         Assert.StartsWith("明細 2 行が、あなたが開いたあとに別の人に削除されています。", JournalLineRules.LinesDeletedByOthers(2), StringComparison.Ordinal);
+        Assert.StartsWith("明細 4 行が、あなたが開いたあとに別の人に変更されています。", JournalLineRules.LinesChangedByOthers(4), StringComparison.Ordinal);
         Assert.StartsWith("行番号 3 が 2 つの明細に付いています。", JournalLineRules.LineNoDuplicatedAt(3), StringComparison.Ordinal);
     }
 

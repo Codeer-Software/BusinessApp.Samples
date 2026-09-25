@@ -227,7 +227,7 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
     /// </summary>
     /// <remarks>
     /// <b>同時操作の断りのために読む</b>（qa/03 L-31）。CLB は版の食い違いを定型文でしか言わないので、
-    /// 関門が保存の前に版を突き合わせて、利用者の語で断る。**書くのは CLB だけ**（<c>OptimisticLockingFieldDesign</c>）。
+    /// 関門が保存の前に版を突き合わせて、利用者の語で断る。<b>書くのは CLB と、明細だけの保存のあとの関門</b>（<see cref="AdvanceVersionsAsync"/>。ADR-0070）。
     /// </remarks>
     public async Task<long?> FindVersionAsync(JournalEntryId id)
     {
@@ -244,15 +244,72 @@ public sealed class JournalEntryStore(IDbAccessor dbAccessor, string dataSourceN
         return [.. rows.Select(r => new StoredLineNo(DbValue.ToLong(r["id"]), (int)DbValue.ToLong(r["line_no"])))];
     }
 
-    /// <summary>明細の識別子から、それが属する伝票と行番号。無ければ <c>null</c>（削除されている）。</summary>
+    /// <summary>明細の識別子から、それが属する伝票・行番号・版と、伝票が計上済みか。無ければ <c>null</c>（削除されている）。</summary>
+    /// <remarks>版（<c>optimistic_locking</c>）と伝票の状態は、同時操作の断りのために読む。<b>明細の版を書くのは CLB だけ</b>（ADR-0070）。</remarks>
     public async Task<StoredLine?> FindLineAsync(long lineId)
     {
-        var rows = await QueryAsync("select journal_entry_id, line_no from journal_lines where id = @p1", lineId);
+        var rows = await QueryAsync(
+            """
+            select l.journal_entry_id, l.line_no, l.optimistic_locking, e.status
+              from journal_lines l
+              join journal_entries e on e.id = l.journal_entry_id
+             where l.id = @p1
+            """,
+            lineId);
 
         return rows.Count == 0
             ? null
-            : new StoredLine(new JournalEntryId(DbValue.ToLong(rows[0]["journal_entry_id"])), (int)DbValue.ToLong(rows[0]["line_no"]));
+            : new StoredLine(
+                new JournalEntryId(DbValue.ToLong(rows[0]["journal_entry_id"])),
+                (int)DbValue.ToLong(rows[0]["line_no"]),
+                DbValue.ToLong(rows[0]["optimistic_locking"]),
+                DbValue.ToEnum<EntryStatus>(rows[0]["status"]) == EntryStatus.Posted);
     }
+
+    /// <summary>挙げた伝票の状態（識別子 → 状態）。<b>無い伝票は載らない</b>（削除されている）。</summary>
+    /// <remarks>同時操作の断りのために読む——明細を足す先の親が消えていないか・計上されていないか、版の食い違った伝票が計上されたのか。</remarks>
+    public async Task<IReadOnlyDictionary<long, EntryStatus>> LoadStatusesAsync(IReadOnlyCollection<JournalEntryId> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        if (ids.Count == 0)
+        {
+            return new Dictionary<long, EntryStatus>();
+        }
+
+        var rows = await dbAccessor.QueryAsync(
+            dataSourceName,
+            $"select id, status from journal_entries where id in ({Placeholders(ids.Count)})",
+            ids.Select((id, i) => (Name: $"@p{i + 1}", Value: Param(id.Value))).ToDictionary(p => p.Name, p => p.Value));
+
+        return rows.ToDictionary(row => DbValue.ToLong(row["id"]), row => DbValue.ToEnum<EntryStatus>(row["status"]));
+    }
+
+    /// <summary>
+    /// <b>挙げた下書きの伝票の版を 1 つずつ進める</b>——明細だけを変えた保存のあとに、保存の関門が呼ぶ（ADR-0070）。
+    /// </summary>
+    /// <remarks>
+    /// <b>下書きにしか当てない。</b> 明細を変えられるのは下書きだけで、計上済みの伝票はトリガが守る。
+    /// <b>伝票の版を書くのは、ほかは CLB だけ</b>（<c>OptimisticLockingFieldDesign</c>）。
+    /// <b>1 本の文で書く</b>——伝票ごとに待つと、呼び手の保存の包みが伝票の数だけ往復する。
+    /// </remarks>
+    public async Task AdvanceVersionsAsync(IReadOnlyCollection<JournalEntryId> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        await dbAccessor.ExecuteAsync(
+            dataSourceName,
+            "update journal_entries set optimistic_locking = optimistic_locking + 1"
+            + $" where status = 'draft' and id in ({Placeholders(ids.Count)})",
+            ids.Select((id, i) => (Name: $"@p{i + 1}", Value: (object?)id.Value)).ToDictionary(p => p.Name, p => p.Value));
+    }
+
+    /// <summary><c>@p1, @p2, …</c>。<b>値は埋めない</b>——字面に入るのは番号だけで、値はパラメータで渡す。</summary>
+    private static string Placeholders(int count)
+        => string.Join(", ", Enumerable.Range(1, count).Select(i => $"@p{i}"));
 
     /// <summary>この原仕訳を訂正する計上済みの再計上が既にあるか（二重訂正の検出）。</summary>
     public Task<bool> HasCorrectionAsync(JournalEntryId originalId) => HasCorrectionAsync(originalId, "posted");
@@ -462,5 +519,5 @@ public readonly record struct PostedReversal(JournalEntryId Id, int EntryNo, Dat
 /// <summary>保存されている明細の識別子と行番号。</summary>
 public readonly record struct StoredLineNo(long LineId, int LineNo);
 
-/// <summary>保存されている明細が属する伝票と行番号。</summary>
-public readonly record struct StoredLine(JournalEntryId EntryId, int LineNo);
+/// <summary>保存されている明細が属する伝票・行番号・版（<c>optimistic_locking</c>）と、伝票が計上済みか。</summary>
+public readonly record struct StoredLine(JournalEntryId EntryId, int LineNo, long Version, bool EntryPosted);

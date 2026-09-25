@@ -161,13 +161,20 @@ internal static class SubmitData
     /// </summary>
     /// <remarks>
     /// <b>これが実機で届く更新の形である</b>（qa/01 F-12）——明細を 1 か所直した保存では、
-    /// 他の項目も、同じ伝票の他の行も差分に載らない。
+    /// 他の項目も、同じ伝票の他の行も差分に載らない。<b>明細の版（<c>OptimisticLocking</c>）は必ず載る</b>
+    /// （2026-09-25 実測。qa/01 F-41 ③。ADR-0070）ので、既定で載せる——作ったばかりの明細は 0。
+    /// 版の無い形（画面を通らない経路）は <paramref name="version"/> に <c>null</c> を渡す。
     /// </remarks>
-    public static ModuleData LineChanging(string id, string fieldName, FieldDataBase value)
+    public static ModuleData LineChanging(string id, string fieldName, FieldDataBase value, long? version = 0)
     {
         var data = new ModuleData { Name = "JournalLine" };
         data.Fields["Id"] = new IdFieldData { Value = id };
         data.Fields[fieldName] = value;
+        if (version is long known)
+        {
+            data.Fields["OptimisticLocking"] = new OptimisticLockingFieldData { Value = new DecimalValue { Value = known } };
+        }
+
         return data;
     }
 

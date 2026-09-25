@@ -7,6 +7,17 @@
   "CanDelete": true,
   "Fields": [
     {
+      "DbColumn": "optimistic_locking",
+      "IncrementVersion": true,
+      "Name": "OptimisticLocking",
+      "IgnoreModification": false,
+      "OnValidateInput": "",
+      "IsFocusSkip": false,
+      "NextFocusField": "",
+      "OnFocusMoving": "",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.OptimisticLockingFieldDesign"
+    },
+    {
       "DbColumn": "id",
       "Placeholder": "",
       "IsManualInput": false,
