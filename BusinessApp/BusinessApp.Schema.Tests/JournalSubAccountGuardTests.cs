@@ -309,7 +309,7 @@ public class JournalSubAccountGuardTests
         var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(
             db, "UPDATE journal_entries SET description = '触った' WHERE id = 1"));
 
-        Assert.Contains("計上済みの仕訳は変更できない", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("計上済みの仕訳は変更できない。訂正・取消は反対仕訳で行う。", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]

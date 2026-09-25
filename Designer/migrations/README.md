@@ -16,7 +16,7 @@ related: [../ddl/README.md, ../../docs/decisions/0020-スキーマは現在形�
 ```powershell
 pwsh -NoProfile -File tools/clb/migrate.ps1 -Status   # 適用状況
 pwsh -NoProfile -File tools/clb/migrate.ps1 -Apply    # 未適用を番号順に適用
-pwsh -NoProfile -File tools/clb/migrate.ps1 -Verify   # 稼働 DB と ddl/ の同値・未適用の有無・適用済みのチェックサム（コミット前フックが流す）
+pwsh -NoProfile -File tools/clb/migrate.ps1 -Verify   # 稼働 DB と ddl/ の同値・ベンダーが配る行の同値・未適用の有無・適用済みのチェックサム（コミット前フックが流す）
 ```
 
 適用後は**サーバとデザイナの再起動が要る**（列定義が static にキャッシュされるため）。

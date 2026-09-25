@@ -299,7 +299,7 @@ public class MasterCodeGuardTests
                 foreach (var kind in new[] { "insert", "update" })
                 {
                     data.Add(table, kind, "", "が空である。");
-                    data.Add(table, kind, "１１００", "に使えない字が入っている。");
+                    data.Add(table, kind, "１１００", "に使えない字が入っている。半角の英数字と「-」「_」だけを使う。");
                     data.Add(table, kind, "-A", "の先頭に「-」「_」は置けない。");
                     data.Add(table, kind, "A-", "の末尾に「-」「_」は置けない。");
                     data.Add(table, kind, "A--B", "の「-」「_」は続けて使えない。");

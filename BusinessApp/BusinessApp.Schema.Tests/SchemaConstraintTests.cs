@@ -83,7 +83,7 @@ public class SchemaConstraintTests
             INSERT INTO journal_entries (description, fiscal_year_id, entry_no, transaction_date, posting_date, status, entry_type, entered_at, posted_at)
                 VALUES ('5 月分の現金売上', 1, 2, '2026-05-21', '2026-05-21', 'posted', 'normal', '2026-05-21 10:00:00', '2026-05-21 10:00:00');
             """,
-            "仕訳は下書きとして作る。");
+            "仕訳は下書きとして作る。計上は検証を通してから状態を進める。");
     }
 
     [Fact]

@@ -501,9 +501,9 @@ internal sealed class AccountingServer : IDisposable
     /// <b>補助科目を使わない科目に補助科目が付いた計上済みの伝票</b>を 1 件作る（ADR-0038 §3）。
     /// </summary>
     /// <remarks>
-    /// <b>いまの製品では作れない形である。</b> 規則より前に計上された行が稼働 DB に 1 行あり
-    /// （伝票 36。qa/04 の 2026-09-08）、<b>その伝票を取り消せることがこの規則の免除の根拠</b>なので、
-    /// 検体が要る。そのときだけ計上のトリガを外す（<see cref="TestDatabase.WithoutTrigger"/>）。
+    /// <b>いまの製品では作れず、利用者の DB にも現れない形である</b>（規則は利用者が本番で記帳を始める前に入った）。
+    /// 開発機の DB にはあった（伝票 36。qa/04 の 2026-09-08 に取り消した）。<b>取消はこの規則で止めない免除を実装している限り、
+    /// それを撃つ検体が要る</b>。そのときだけ計上のトリガを外す（<see cref="TestDatabase.WithoutTrigger"/>）。
     /// </remarks>
     public JournalEntryId InsertPostedWithSubAccountOnUnusedAccount(int entryNo, string transactionDate)
     {
@@ -546,8 +546,9 @@ internal sealed class AccountingServer : IDisposable
     /// <b>取引先を要する科目に取引先の無い計上済みの伝票</b>を 1 件作る（docs/15 §1-2）。
     /// </summary>
     /// <remarks>
-    /// <b>いまの製品では作れない形である。</b> 規則より前に計上された行が稼働 DB に実在し
-    /// （件数と数え方は qa/04）、
+    /// <b>いまの製品でも作れる形である</b>——「取引先を要する」がオフの科目で取引先なしに計上してから、オンにすればよい
+    /// （オンにする向きは使用中でも通る。docs/15 §1-2）。ここでは手数を省くため、既に立っている買掛金にトリガを外して計上する。
+    /// 規則より前に計上された行は稼働 DB にも実在し（件数と数え方は qa/04）、
     /// <b>それらを取り消せることがこの規則の免除の根拠</b>なので、検体が要る。
     /// そのときだけ計上のトリガを外す（<see cref="TestDatabase.WithoutTrigger"/>）。
     /// </remarks>

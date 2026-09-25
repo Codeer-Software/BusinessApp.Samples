@@ -51,9 +51,9 @@ public class JournalImmutabilityTests
     /// 「見張っている」ことの証拠にならない（2026-09-14 の制約ノックアウトで生き残った。qa/03 の L-45）。
     /// </remarks>
     [Theory]
-    [InlineData("UPDATE journal_entries SET description = '改ざん' WHERE id = 1", "計上済みの仕訳は変更できない。")]
-    [InlineData("UPDATE journal_entries SET status = 'draft' WHERE id = 1", "計上済みの仕訳は変更できない。")]
-    [InlineData("DELETE FROM journal_entries WHERE id = 1", "計上済みの仕訳は削除できない。")]
+    [InlineData("UPDATE journal_entries SET description = '改ざん' WHERE id = 1", "計上済みの仕訳は変更できない。訂正・取消は反対仕訳で行う。")]
+    [InlineData("UPDATE journal_entries SET status = 'draft' WHERE id = 1", "計上済みの仕訳は変更できない。訂正・取消は反対仕訳で行う。")]
+    [InlineData("DELETE FROM journal_entries WHERE id = 1", "計上済みの仕訳は削除できない。訂正・取消は反対仕訳で行う。")]
     // **その場の更新は「移動できない」のほうが鳴る。** どちらのトリガも WHEN が真になり
     // （OLD も NEW も同じ計上済みの伝票）、**後に作られたほうから鳴る**（発火順は SQLite の仕様上 undefined。
     // 実測は 2026-09-14）。**`trg_journal_lines_posted_no_update` を単独で撃つ検体は下にある。**
@@ -123,7 +123,7 @@ public class JournalImmutabilityTests
 
         // **どの制約で落ちたかまで見る。** 例外の型だけだと、seed の形が変わって
         // 別の制約（UNIQUE(journal_entry_id, line_no) など）に当たっても緑のままになる。
-        Assert.Contains("計上済みの仕訳へ明細を移動できない", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("計上済みの仕訳へ明細を移動できない。", thrown.Message, StringComparison.Ordinal);
 
         // 計上済みは増えず、下書きの側も残っている（＝文が丸ごと巻き戻った）。
         Assert.Equal(2L, TestDatabase.ScalarOf<long>(
@@ -140,7 +140,7 @@ public class JournalImmutabilityTests
         var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(
             db, "UPDATE journal_lines SET journal_entry_id = 2 WHERE journal_entry_id = 1"));
 
-        Assert.Contains("計上済みの仕訳明細は変更できない", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("計上済みの仕訳明細は変更できない。", thrown.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -155,17 +155,17 @@ public class JournalImmutabilityTests
     [InlineData(
         "INSERT OR REPLACE INTO journal_entries (id, fiscal_year_id, transaction_date, posting_date, status, entry_type, entered_at) "
         + "VALUES (1, 1, '2026-05-20', '2026-05-20', 'draft', 'normal', '2026-05-20 10:00:00')",
-        "計上済みの仕訳を上書きできない")]
+        "計上済みの仕訳を上書きできない。訂正・取消は反対仕訳で行う。")]
     [InlineData(
         "UPDATE OR REPLACE journal_entries SET idempotency_key = 'K1' WHERE id = 2",
-        "計上済みの仕訳を上書きできない")]
+        "計上済みの仕訳を上書きできない。訂正・取消は反対仕訳で行う。")]
     [InlineData(
         "INSERT OR REPLACE INTO journal_lines (id, journal_entry_id, line_no, debit_credit, account_id, amount, tax_category_id) "
         + "VALUES (1, 2, 5, 'debit', 1, 7, 1)",
-        "計上済みの仕訳明細を上書きできない")]
+        "計上済みの仕訳明細を上書きできない。")]
     [InlineData(
         "UPDATE OR REPLACE journal_lines SET id = 1 WHERE id = 3",
-        "計上済みの仕訳明細を上書きできない")]
+        "計上済みの仕訳明細を上書きできない。")]
     public void REPLACEで計上済みを置き換えられない(string sql, string message)
     {
         using var db = WithPostedAndDraft();
@@ -415,7 +415,7 @@ public class JournalImmutabilityTests
     // 計上済みの伝票ごと消す（通れば両方 0 になる）。
     [InlineData(
         "DELETE FROM journal_entries WHERE id = 1",
-        "計上済みの仕訳は削除できない。")]
+        "計上済みの仕訳は削除できない。訂正・取消は反対仕訳で行う。")]
     public void 計上済みの仕訳は帳簿ぜんたいでも貸借が一致する(string sql, string message)
     {
         using var db = WithPostedAndDraft();
@@ -496,7 +496,7 @@ public class JournalImmutabilityTests
         Rejected.ByTrigger(
             db,
             "UPDATE journal_entries SET entry_type = 'opening' WHERE id = 1;",
-            "仕訳の種別は変更できない。");
+            "仕訳の種別は変更できない。種別を変えるなら下書きを作り直す。");
     }
 
     /// <summary>

@@ -11,6 +11,10 @@ using Microsoft.Data.Sqlite;
 /// <para>関門（<c>MasterMeaningGate</c>）が本体で、こちらは<b>取込・CLI・SQL の直打ちのどれからでも通る最後の守り</b>である（ADR-0038 §4）。</para>
 /// <para><b>どの制約で落ちたかまで見て、DB が変わっていないことを読み戻す。</b> 例外の型だけだと、
 /// 別の制約に当たっても緑のままになる（<c>JournalImmutabilityTests</c> と同じ作法）。</para>
+/// <para><b>断りは RAISE の文を丸ごと期待に書く</b>——次の一手（「新しい勘定科目を作る。」）まで言う断りだからである
+/// （qa/03 の L-66）。前半だけを書くと、次の一手が変わっても緑のままになる。
+/// L-66 の処方は完全一致だが、SQLite の例外の文言は RAISE の文の前後に字が付くので、文を丸ごと含むかを見る。
+/// 誰がこの字を見ているかは docs/qa/04 §3 の前書き。</para>
 /// </remarks>
 public class MasterMeaningGuardTests
 {
@@ -20,22 +24,21 @@ public class MasterMeaningGuardTests
     /// 補助科目は計上済みの明細を持つ検体が別なので、下の別テストで踏む。
     /// </summary>
     [Theory]
-    [InlineData("UPDATE accounts SET category = 'expense' WHERE id = 1", "勘定科目の意味", "SELECT category FROM accounts WHERE id = 1", "asset")]
-    [InlineData("UPDATE accounts SET code = '1101' WHERE id = 1", "勘定科目の意味", "SELECT code FROM accounts WHERE id = 1", "1100")]
-    [InlineData("UPDATE accounts SET is_contra = 1 WHERE id = 1", "勘定科目の意味", "SELECT is_contra FROM accounts WHERE id = 1", "0")]
-    [InlineData("UPDATE accounts SET uses_sub_account = 1 WHERE id = 1", "勘定科目の意味", "SELECT uses_sub_account FROM accounts WHERE id = 1", "0")]
-    [InlineData("UPDATE departments SET code = 'D09' WHERE id = 2", "部門の意味", "SELECT code FROM departments WHERE id = 2", "D01")]
-    [InlineData("UPDATE departments SET is_company_wide = 1 WHERE id = 2", "部門の意味", "SELECT is_company_wide FROM departments WHERE id = 2", "0")]
-    [InlineData("UPDATE tax_categories SET taxation_type = 'non_taxable_sales' WHERE id = 1", "税区分の意味", "SELECT taxation_type FROM tax_categories WHERE id = 1", "out_of_scope")]
-    [InlineData("UPDATE tax_categories SET rate_kind = 'standard' WHERE id = 1", "税区分の意味", "SELECT rate_kind FROM tax_categories WHERE id = 1", "")]
-    [InlineData("UPDATE tax_categories SET code = 'OUT2' WHERE id = 1", "税区分の意味", "SELECT code FROM tax_categories WHERE id = 1", "OUT")]
+    [InlineData("UPDATE accounts SET category = 'expense' WHERE id = 1", "計上済みの仕訳明細が使っている勘定科目の意味は変更できない。新しい勘定科目を作る。", "SELECT category FROM accounts WHERE id = 1", "asset")]
+    [InlineData("UPDATE accounts SET code = '1101' WHERE id = 1", "計上済みの仕訳明細が使っている勘定科目の意味は変更できない。新しい勘定科目を作る。", "SELECT code FROM accounts WHERE id = 1", "1100")]
+    [InlineData("UPDATE accounts SET is_contra = 1 WHERE id = 1", "計上済みの仕訳明細が使っている勘定科目の意味は変更できない。新しい勘定科目を作る。", "SELECT is_contra FROM accounts WHERE id = 1", "0")]
+    [InlineData("UPDATE accounts SET uses_sub_account = 1 WHERE id = 1", "計上済みの仕訳明細が使っている勘定科目の意味は変更できない。新しい勘定科目を作る。", "SELECT uses_sub_account FROM accounts WHERE id = 1", "0")]
+    [InlineData("UPDATE departments SET code = 'D09' WHERE id = 2", "計上済みの仕訳明細が使っている部門の意味は変更できない。新しい部門を作る。", "SELECT code FROM departments WHERE id = 2", "D01")]
+    [InlineData("UPDATE departments SET is_company_wide = 1 WHERE id = 2", "計上済みの仕訳明細が使っている部門の意味は変更できない。新しい部門を作る。", "SELECT is_company_wide FROM departments WHERE id = 2", "0")]
+    [InlineData("UPDATE tax_categories SET taxation_type = 'non_taxable_sales' WHERE id = 1", "計上済みの仕訳明細が使っている税区分の意味は変更できない。新しい税区分を作る。", "SELECT taxation_type FROM tax_categories WHERE id = 1", "out_of_scope")]
+    [InlineData("UPDATE tax_categories SET rate_kind = 'standard' WHERE id = 1", "計上済みの仕訳明細が使っている税区分の意味は変更できない。新しい税区分を作る。", "SELECT rate_kind FROM tax_categories WHERE id = 1", "")]
+    [InlineData("UPDATE tax_categories SET code = 'OUT2' WHERE id = 1", "計上済みの仕訳明細が使っている税区分の意味は変更できない。新しい税区分を作る。", "SELECT code FROM tax_categories WHERE id = 1", "OUT")]
     public void 使用中のマスタの意味を決める列は変えられない(string sql, string reason, string readBack, string unchanged)
     {
         using var db = SchemaSeed.CreateWithPostedEntry();
 
-        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, sql));
+        Rejected.ByTrigger(db, sql, reason);
 
-        Assert.Contains(reason, thrown.Message, StringComparison.Ordinal);
         Assert.Equal(unchanged, TestDatabase.ScalarOf<object>(db, readBack) is DBNull or null ? "" : TestDatabase.ScalarOf<object>(db, readBack)?.ToString());
     }
 
@@ -53,10 +56,11 @@ public class MasterMeaningGuardTests
         using var db = SchemaSeed.CreateWithPostedEntry();
         TestDatabase.Execute(db, "UPDATE accounts SET requires_partner = 1 WHERE id = 1");
 
-        var thrown = Assert.Throws<SqliteException>(
-            () => TestDatabase.Execute(db, "UPDATE accounts SET requires_partner = 0 WHERE id = 1"));
+        Rejected.ByTrigger(
+            db,
+            "UPDATE accounts SET requires_partner = 0 WHERE id = 1",
+            "計上済みの仕訳明細が使っている勘定科目では、「取引先を要する」をオフにできない。");
 
-        Assert.Contains("「取引先を要する」をオフにできない", thrown.Message, StringComparison.Ordinal);
         Assert.Equal(1L, TestDatabase.ScalarOf<long>(db, "SELECT requires_partner FROM accounts WHERE id = 1"));
     }
 
@@ -204,9 +208,8 @@ public class MasterMeaningGuardTests
     {
         using var db = WithPostedSubAccountLine();
 
-        var thrown = Assert.Throws<SqliteException>(() => TestDatabase.Execute(db, sql));
+        Rejected.ByTrigger(db, sql, "計上済みの仕訳明細が使っている補助科目の意味は変更できない。新しい補助科目を作る。");
 
-        Assert.Contains("補助科目の意味", thrown.Message, StringComparison.Ordinal);
         Assert.Equal(unchanged, TestDatabase.ScalarOf<object>(db, readBack)?.ToString());
 
         TestDatabase.Execute(db, "UPDATE sub_accounts SET name = '本店（改名）' WHERE id = 1");
@@ -352,7 +355,7 @@ public class MasterMeaningGuardTests
         var thrown = Assert.Throws<SqliteException>(
             () => TestDatabase.Execute(db, $"UPDATE partners SET code = 'P999' WHERE id = {TargetPartner}"));
 
-        Assert.Contains("取引先のコードは変更できない", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("計上済みの仕訳が使っている取引先のコードは変更できない。新しい取引先を作る。", thrown.Message, StringComparison.Ordinal);
         Assert.Equal("P004", TestDatabase.ScalarOf<string>(db, $"SELECT code FROM partners WHERE id = {TargetPartner}"));
     }
 
