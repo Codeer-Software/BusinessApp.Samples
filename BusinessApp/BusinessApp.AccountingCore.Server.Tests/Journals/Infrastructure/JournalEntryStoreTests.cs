@@ -428,21 +428,90 @@ public class JournalEntryStoreTests
         Assert.Empty(await server.EntryStore.LoadLineNosAsync(new JournalEntryId(999)));
     }
 
-    /// <summary>明細の識別子から、属する伝票と行番号を引ける。無ければ <c>null</c>。</summary>
+    /// <summary>明細の識別子から、属する伝票・行番号・版と、伝票が計上済みかを引ける。無ければ <c>null</c>。</summary>
+    /// <remarks>
+    /// <b>値をどれも別にしてある</b>——明細の識別子 3・伝票の識別子 2・行番号 5・版 7。取り違えて読んでも同じ値だと緑になる。
+    /// </remarks>
     [Fact]
-    public async Task 明細から伝票と行番号を引ける()
+    public async Task 明細から伝票と行番号と版と計上済みかを引ける()
     {
         using var server = new AccountingServer();
         var other = server.InsertDraft();
         server.InsertLine(other, 1, "debit", "1100", 100);
+        server.InsertLine(other, 2, "credit", "1100", 100);
         var id = server.InsertDraft();
         server.InsertLine(id, 5, "debit", "1100", 100);
+        var lineId = server.LineIdOf(id, 5);
+        server.Execute($"update journal_lines set optimistic_locking = 7 where id = {lineId}");
+        var posted = server.InsertPosted(1, "計上済み", "2026-08-24", ("debit", "1100", 100), ("credit", "1100", 100));
 
-        var line = await server.EntryStore.FindLineAsync(2);
-
-        Assert.Equal(new StoredLine(id, 5), line);
+        Assert.Equal((3L, 2L), (lineId, id.Value));
+        Assert.Equal(new StoredLine(id, 5, 7, false), await server.EntryStore.FindLineAsync(lineId));
+        Assert.Equal(new StoredLine(posted, 1, 0, true), await server.EntryStore.FindLineAsync(server.LineIdOf(posted, 1)));
         Assert.Null(await server.EntryStore.FindLineAsync(999));
     }
+
+    /// <summary>挙げた伝票の状態を引ける。<b>無い伝票は載らない</b>。</summary>
+    [Fact]
+    public async Task 挙げた伝票の状態を引ける()
+    {
+        using var server = new AccountingServer();
+        var draft = server.InsertDraft();
+        var posted = server.InsertPosted(1, "計上済み", "2026-08-24", ("debit", "1100", 100), ("credit", "1100", 100));
+
+        var statuses = await server.EntryStore.LoadStatusesAsync([draft, posted, new JournalEntryId(999)]);
+
+        Assert.Equal(
+            [(draft.Value, EntryStatus.Draft), (posted.Value, EntryStatus.Posted)],
+            statuses.OrderBy(pair => pair.Key).Select(pair => (pair.Key, pair.Value)));
+    }
+
+    /// <summary>
+    /// <b>挙げる伝票が無ければ、DB に問い合わせない</b>——状態を引くのも版を進めるのも、保存のたびに呼ばれるので、往復を増やさない。
+    /// </summary>
+    [Fact]
+    public async Task 挙げる伝票が無ければ問い合わせない()
+    {
+        using var server = new AccountingServer();
+        var statements = 0;
+        server.FailBeforeStatement = sql =>
+        {
+            statements++;
+            return null;
+        };
+
+        var statuses = await server.EntryStore.LoadStatusesAsync([]);
+        await server.EntryStore.AdvanceVersionsAsync([]);
+
+        Assert.Equal((0, 0), (statuses.Count, statements));
+    }
+
+    /// <summary>
+    /// <b>挙げた下書きの伝票の版だけを 1 つずつ進める</b>（ADR-0070）。計上済みの伝票と、挙げていない下書きは動かさない。
+    /// </summary>
+    /// <remarks><b>進める前の版を伝票ごとに変えてある</b>（3・5）——同じ値だと、取り違えて進めても合う。</remarks>
+    [Fact]
+    public async Task 挙げた下書きの伝票の版だけを1つずつ進める()
+    {
+        using var server = new AccountingServer();
+        var first = server.InsertDraft();
+        var second = server.InsertDraft();
+        var neighbor = server.InsertDraft();
+        server.Execute($"update journal_entries set optimistic_locking = 3 where id = {first.Value}");
+        server.Execute($"update journal_entries set optimistic_locking = 5 where id = {second.Value}");
+        var posted = server.InsertPosted(1, "計上済み", "2026-08-24", ("debit", "1100", 100), ("credit", "1100", 100));
+        var before = VersionOf(server, posted);
+
+        await server.EntryStore.AdvanceVersionsAsync([first, second, posted]);
+        await server.EntryStore.AdvanceVersionsAsync([]);
+
+        Assert.Equal(
+            (4L, 6L, 0L, before),
+            (VersionOf(server, first), VersionOf(server, second), VersionOf(server, neighbor), VersionOf(server, posted)));
+    }
+
+    private static long VersionOf(AccountingServer server, JournalEntryId id)
+        => server.Scalar<long>($"select optimistic_locking from journal_entries where id = {id.Value}");
 
     [Fact]
     public async Task 種別だけを読める()

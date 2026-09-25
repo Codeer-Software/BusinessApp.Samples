@@ -41,6 +41,8 @@ CREATE TABLE journal_entries (
     -- 会計コアが認証部品なしでは立ち上がらなくなる。CLB の予約名として値は自動で入る。
     creator                     INTEGER,
     updater                     INTEGER,
+    -- 同時操作の版（楽観ロック）。**明細を含む伝票全体の版である**——伝票の差分を持つ保存では CLB が進め、
+    -- 明細だけの保存のあとは保存の関門が進める（docs/decisions/0070 の決定 4）。
     optimistic_locking          INTEGER NOT NULL DEFAULT 0,
 
     -- 計上した人（認証部品のユーザー識別子。creator と同じ理由で外部キーを張らない）。
@@ -136,6 +138,11 @@ CREATE TABLE journal_lines (
     -- 引く日付は tax_point（課税仕入れを行った日）。**tax_point が空なら伝票の取引日で引く**
     -- （docs/14 §6。画面が tax_point を入力させないので、無ければ写さないにすると永久に空になる）。
     registration_no_snapshot    TEXT,
+
+    -- 明細の同時操作の版（楽観ロック）。**その明細の差分が載った保存のたびに CLB の OptimisticLockingFieldDesign が進める**
+    -- （明細に触れない保存では動かない）。
+    -- 無いと、同じ明細を 2 人が直したときにあとの保存が黙って勝つ（2026-09-25 に実機で起きた。docs/decisions/0070）。
+    optimistic_locking          INTEGER NOT NULL DEFAULT 0,
 
     UNIQUE (journal_entry_id, line_no),
     -- 消費税行だけが親行を持ち、消費税行は必ず親行を持つ
